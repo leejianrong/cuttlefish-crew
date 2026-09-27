@@ -144,6 +144,15 @@ missing feature). `run-team --steerable` works the same way, per role
 A real run also needs a model credential for whichever LLM provider and
 agent backend are selected (e.g. `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`).
 
+### Hosting (feasibility, not yet deployed)
+
+A `Dockerfile` and `fly.toml.example` (ADR-0015) exist for a Fly.io-hosted
+`cuttlefish serve` -- built and verified locally against a real Docker
+daemon, never deployed to Fly's own service. One Fly app per tenant is the
+recommended shape (see the ADR for why); rename `fly.toml.example` to
+`fly.toml` and `fly launch`/`fly deploy` when you're ready to actually
+provision one.
+
 ## Contributing
 
 This repo is built by an AI coding agent under human supervision, one
