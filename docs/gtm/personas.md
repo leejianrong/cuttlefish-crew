@@ -72,3 +72,127 @@ own named, resumable, remotely-steerable team. Any copy implying per-role
 backend mixing needs a caveat, or a real follow-up engineering card (not
 proposed here — out of scope for a persona write-up, just named so
 KAN-1716 doesn't inherit the overstatement).
+
+## P2 — Non-technical solo founder shipping with coding agents (KAN-1698)
+
+**Story**: As a non-technical solo founder using Claude Code/Codex to build
+my product, I want a fleet manager that turns "build me X" into a tracked,
+reviewable unit of work I can approve without CLI fluency, so I can direct
+development safely without reading code.
+
+**Verified against the current codebase (2026-09-28)**:
+
+- **A reviewable, approvable unit of work with no CLI needed — real.**
+  `--require-approval`/`ApprovalDecision` (KAN-1711, ADR-0016) blocks a
+  round from finalizing until a human decides; the dashboard's
+  `RoleSteerCard.svelte` renders a point-and-click Approve/Reject panel
+  whenever a role's status is `"blocked"` (verified directly:
+  `RoleSteerCard.svelte:108` gates the panel on `status === "blocked"`) —
+  Approve needs no comment, Reject requires one (`RoleSteerCard.svelte:39`'s
+  own comment explains why: a comment-less reject would just round-trip a
+  400). No terminal required for the day-to-day approve/reject loop.
+- **Registering and starting a project with no CLI needed — also real.**
+  `RegisterProjectForm.svelte` posts directly to `POST /api/projects` with
+  name/root/roles/allow/budget fields — an operator never has to type a
+  `cuttlefish` command to stand up a new project's crew once a daemon is
+  already running.
+- **The honest remaining gap: getting the daemon itself running still is a
+  CLI step.** `cuttlefish serve` (or the systemd unit that supervises it,
+  ADR-0014) is how a fleet daemon starts existing today — there's no
+  installer/onboarding flow yet that a non-technical founder could complete
+  without ever opening a terminal once. That's exactly the gap KAN-1719
+  (hosted MVP) is scoped to close ("sign up and get a running fleet daemon"
+  rather than self-host); until it ships, this persona's "without CLI
+  fluency" claim is true for *operating* a project day to day, not yet for
+  *getting started* from zero.
+
+## P3 — Solo digital designer / video editor (KAN-1699, plausible expansion)
+
+**Story**: As a solo designer/editor, I want a crew of agents that can
+execute production tasks (batch-export assets, apply a style guide, render
+social crops) across several client folders, with the same dashboard/
+approval model as the coding case.
+
+**Key finding this card asked to validate**: does this need a new
+`AgentBackend`, or does the existing allowlist mechanism already reach
+non-coding shell tools (ffmpeg, ImageMagick) with no special-casing?
+
+**Verified directly against the source (2026-09-28), not assumed**:
+
+- `cuttlefish.delegate.policy.write_policy_file` — the function that turns
+  an operator's declared `--allow`/`Project.allow` into kopicode's own
+  permission-gate file — takes `allow: list[list[str]] | None` and
+  literally `json.dumps`s it into kopicode's grammar with **zero
+  command-name filtering of any kind** (`policy.py:35-48`). There's no
+  built-in notion of "this is a coding tool" versus "this isn't" anywhere
+  in that path — an allow entry of `["convert", "*"]` or `["ffmpeg", "-i",
+  "*"]` is written and honored exactly the same way `["git", "commit"]` is.
+- Every backend's own `delegate()` threads the identical `allow:
+  list[list[str]] | None` shape straight through
+  (`cuttlefish.agents.kopicode`, `cuttlefish.agents.claude_code`,
+  `cuttlefish.agents.codex` all take the same parameter, unchanged) — none
+  of the three backends adds its own coding-specific restriction on top.
+- `ffmpeg`/ImageMagick's `convert` are both real, ordinary binaries on this
+  machine (`/usr/bin/ffmpeg`, `/usr/bin/convert`) — nothing about running
+  them through this mechanism is hypothetical at the plumbing level.
+- **What this does *not* verify**: an actual end-to-end run where a
+  backend's own LLM decides, unprompted, to invoke `convert`/`ffmpeg` for a
+  "batch-export/apply a style guide/render a social crop" task. That needs
+  a real paid LLM call through kopicode/Claude Code/Codex, which needs the
+  same credentials `.env`/`CUTTLEFISH_SECRETS_KEY` already gate — deliberately
+  not exercised in this pass (CLAUDE.md's own secrets boundary), so treat
+  "no new AgentBackend needed" as **verified at the policy/plumbing layer,
+  not yet at the full agentic-task layer**. The card's own ask ("validate
+  with one real non-code workflow") is only half done — a real run,
+  ideally by Jian directly against one of his own client folders with his
+  own already-authenticated `kopicode`/`claude`/`codex` login, is the
+  remaining step before positioning copy calls this persona "validated."
+- Packaging/marketing implication holds regardless: this persona's gap is
+  UX and copy (a non-coder shouldn't have to read this project's own
+  developer-facing docs to know it works for JPEGs, not just source files),
+  not new infrastructure.
+
+## P4 — Small agency/team bridging solo to multi-operator (KAN-1700)
+
+**Story**: As a small agency owner with a few contractors each juggling
+multiple client projects, I want one dashboard showing every project's
+crew status company-wide even though different humans nominally own
+different projects.
+
+**Verified against the current codebase (2026-09-28)**:
+
+- The portfolio dashboard itself is real and already company-wide in
+  shape — one `cuttlefish serve` process's `/api/projects` lists every
+  registered project regardless of who registered it, no per-project owner
+  field or filter exists to *not* show one to another operator.
+- That's exactly the gap, not a feature, for this persona: `cuttlefish
+  serve`'s non-loopback auth (`SessionAuth`, ADR-0011) is honestly
+  documented as "single-operator auth, not multi-tenancy — one shared
+  password, one class of session token, no per-user accounts or roles."
+  Every contractor who can log in sees and can steer/approve/stop *every*
+  project, not just their own client's. There is no isolation between
+  operators today at all.
+- This confirms the card's own framing precisely: it's a bridge persona
+  that surfaces the multi-tenancy/isolation question (ADR-0002's addendum,
+  trigger 2) *before* the full enterprise story (P5 below) forces it — it
+  doesn't answer that question. Positioning copy for this persona should
+  say "one dashboard for your whole team to see" (true) and stop short of
+  "each contractor only sees their own clients" (not built) or "safe for
+  agencies with contractors you don't fully trust with each other's client
+  data" (actively false today).
+
+## P5 — North star, phase-2: every employee manages a crew (KAN-1701)
+
+**Story**: As an employee at a company, I want my own dashboard managing my
+personal crew of agents against my assigned work, with company-wide
+visibility, budgets, and governance for my manager.
+
+**Deliberately not validated against the codebase — this is stated
+ambition, not a near-term build target.** It requires exactly what P4 named
+as missing (multi-tenancy/isolation between operators) plus SSO/RBAC and
+org-level budget rollups on top — the identical org-chart/governance
+surface the positioning decision ([[project_paperclip_positioning]], "crew
+not company") explicitly declined to chase as a near-term differentiator
+against Paperclip. Worth stating in GTM materials as "where this could go,"
+never as "what cuttlefish-crew does today" — revisit only once the solo/
+solopreneur wedge (P1-P3) is proven, per the card's own text, not before.
