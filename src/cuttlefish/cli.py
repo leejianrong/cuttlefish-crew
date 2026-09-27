@@ -17,6 +17,7 @@ import asyncio
 import json
 import os
 import shlex
+import subprocess
 import sys
 import uuid
 from pathlib import Path
@@ -72,6 +73,36 @@ def _resolve_dashboard_dir(explicit: str | None) -> Path | None:
     if explicit is not None:
         return Path(explicit)
     return DEFAULT_DASHBOARD_DIR if (DEFAULT_DASHBOARD_DIR / "index.html").exists() else None
+
+
+def _resolve_tailscale_host() -> str:
+    """This machine's own Tailscale IPv4 address (``tailscale ip -4``, ADR-0013)
+    -- `cuttlefish serve --tailscale`'s own bind target, so an operator never
+    has to hand-copy an ever-changing ``100.x.y.z`` address. Raises
+    `RuntimeError` with an actionable message (not a bare `CalledProcessError`)
+    for every way this can fail: no `tailscale` binary, `tailscaled` not
+    running, or this machine not logged into a tailnet at all (`tailscale up`).
+    """
+    try:
+        result = subprocess.run(
+            ["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=5
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "--tailscale needs the `tailscale` CLI on PATH -- "
+            "install it first (https://tailscale.com/download)"
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("--tailscale: `tailscale ip -4` timed out") from None
+    if result.returncode != 0:
+        raise RuntimeError(
+            "--tailscale: `tailscale ip -4` failed -- is tailscaled running and "
+            f"this machine logged in (`tailscale up`)? stderr: {result.stderr.strip()}"
+        )
+    host = result.stdout.strip()
+    if not host:
+        raise RuntimeError("--tailscale: `tailscale ip -4` printed no address")
+    return host
 
 
 def _parse_allow(values: list[str] | None) -> list[list[str]]:
@@ -408,10 +439,17 @@ async def _serve(args: argparse.Namespace) -> int:
                     f"(team {attempt.team_id}): {attempt.error}",
                     file=sys.stderr,
                 )
+        host = args.host
+        if args.tailscale:
+            try:
+                host = _resolve_tailscale_host()
+            except RuntimeError as exc:
+                print(f"cuttlefish serve: {exc}", file=sys.stderr)
+                return EXIT_TASK_FAILED
         try:
             await run_daemon(
                 daemon,
-                host=args.host,
+                host=host,
                 port=args.port,
                 password=os.environ.get("CUTTLEFISH_SERVE_PASSWORD"),
                 cors_origins=args.allow_origin or (),
@@ -626,6 +664,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     serve_parser.add_argument("--port", type=int, default=DEFAULT_FLEET_PORT)
+    serve_parser.add_argument(
+        "--tailscale",
+        action="store_true",
+        help=(
+            "Bind directly to this machine's own Tailscale IPv4 address "
+            "(`tailscale ip -4`), the recommended remote-access path (ADR-0013) -- "
+            "overrides --host. Still needs CUTTLEFISH_SERVE_PASSWORD, since this "
+            "is a non-loopback bind; a browser navigating straight to the printed "
+            "URL works with no --allow-origin needed. Deliberately not fronted by "
+            "`tailscale serve`'s own reverse proxy (ADR-0013: it forwards the "
+            "original tailnet Host header verbatim, which a loopback-bound "
+            "cuttlefish serve would reject outright)."
+        ),
+    )
     serve_parser.add_argument(
         "--allow-origin",
         action="append",

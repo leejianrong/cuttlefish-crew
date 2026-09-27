@@ -20,7 +20,7 @@ doc comment all beat a paragraph here.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the current problem, scope, and shape
   (the cuttlefish-crew pivot direction, built on top of V1/V2's original MVP)
-- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0012
+- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0013
 - [`docs/SLICES.md`](docs/SLICES.md) — the build order this was built against
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed, including gaps a live run surfaced after the fact
@@ -115,8 +115,21 @@ process now, not two — it builds the dashboard once, then `cuttlefish serve`
 alone serves both; developing the frontend itself (hot reload) still means
 running `frontend`'s own `npm run dev` and `cuttlefish serve` separately.
 
-The remaining CUT-E9 cards (KAN-1708 Tailscale/tunnel mode, KAN-1709 daemon
-process supervision, KAN-1710 a Fly.io feasibility spike) are not yet started.
+KAN-1708 (ADR-0013) is also complete and merged: `cuttlefish serve --tailscale`
+binds directly to this machine's own tailnet IPv4 address
+(`cuttlefish._resolve_tailscale_host`, `tailscale ip -4`), reusing ADR-0011's
+non-loopback/password mode as-is — deliberately *not* fronted by `tailscale
+serve`'s own reverse proxy, which forwards the original tailnet `Host` header
+verbatim to a loopback backend (verified directly against Tailscale's own
+source) and would break satay's own loopback `Host` check. `SessionAuth`'s
+`allowed_origins` always includes the daemon's own bind origin
+(`cuttlefish.fleet.server._self_origin`) in addition to `--allow-origin`, so
+opening the printed URL directly on the tailnet needs no extra flag. Unverified
+against a real, live tailnet (no `tailscale` binary/account in this
+environment) — named honestly in ADR-0013, not glossed over.
+
+The remaining CUT-E9 cards (KAN-1709 daemon process supervision, KAN-1710 a
+Fly.io feasibility spike) are not yet started.
 
 ## Known, accepted gaps — don't re-litigate
 
@@ -191,6 +204,16 @@ process supervision, KAN-1710 a Fly.io feasibility spike) are not yet started.
   (`package_data`, a wheel or container image). That packaging story is real
   future work, tied to whatever KAN-1710's Fly.io feasibility spike decides,
   not solved here.
+- `cuttlefish serve --tailscale` (ADR-0013) is plain HTTP, not HTTPS — an
+  accepted gap, not an oversight: Tailscale's own WireGuard mesh already
+  encrypts every packet between tailnet peers, so this is a browser-padlock
+  limitation, not an unencrypted wire. It is also deliberately incompatible
+  with `tailscale serve`'s own reverse proxy in front of a *loopback*-bound
+  `cuttlefish serve` — `tailscale serve` forwards the original tailnet `Host`
+  header verbatim (verified against Tailscale's own source), which satay's
+  own loopback `Host` check (ADR-0014) rejects. None of ADR-0013 has been
+  checked against a real, live tailnet in this environment (no `tailscale`
+  binary/account available here) — named honestly, not glossed over.
 
 ## Workflow conventions
 

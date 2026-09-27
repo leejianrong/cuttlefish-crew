@@ -135,6 +135,16 @@ def test_resolve_dashboard_dir_is_none_when_no_build_exists(
     assert _resolve_dashboard_dir(None) is None
 
 
+def test_serve_tailscale_defaults_to_false() -> None:
+    args = build_parser().parse_args(["serve"])
+    assert args.tailscale is False
+
+
+def test_serve_accepts_the_tailscale_flag() -> None:
+    args = build_parser().parse_args(["serve", "--tailscale"])
+    assert args.tailscale is True
+
+
 def test_run_team_role_defaults_to_none_when_omitted() -> None:
     args = build_parser().parse_args(["run-team"])
     assert args.role is None

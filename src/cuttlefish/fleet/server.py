@@ -294,6 +294,18 @@ def create_app(
     return app
 
 
+def _self_origin(host: str, port: int) -> str:
+    """The origin a browser sees navigating directly to this bind (ADR-0013) --
+    always trusted in a non-loopback bind, in addition to `--allow-origin` and
+    the loopback carve-out. Safe against DNS rebinding for the same reason the
+    loopback carve-out already is: rebinding forges which *address* a request
+    reaches, never the `Origin` header itself (derived from the page's own
+    domain, the attacker's, not the rebound target) -- an exact match here can
+    only happen from a browser actually pointed at this daemon on purpose.
+    """
+    return f"http://{host}:{port}"
+
+
 def find_free_port(host: str, preferred: int, *, attempts: int = 20) -> int:
     """The first free port at or after `preferred` on `host` -- a plain
     `socket.bind` probe, pure stdlib (dev-playbook guidance: don't depend on
@@ -340,6 +352,10 @@ async def run_daemon(
     non-loopback and `password` is missing, or if `password` is too weak
     (`SessionAuth`'s own `WeakPasswordError`) -- refusing to start rather than
     silently falling back to the loopback guard for a bind that isn't loopback.
+    A browser navigating directly to `http://{host}:{port}` always works with
+    no `--allow-origin` needed at all (`_self_origin`, ADR-0013) -- the
+    recommended shape for `--tailscale` (this machine's own tailnet address,
+    resolved by the CLI, not this function).
 
     `dashboard_dir` (ADR-0012, KAN-1707): the CLI's own job to resolve (an
     explicit `--dashboard-dir` or a silent, best-effort default) -- by the time
@@ -374,7 +390,10 @@ async def run_daemon(
                 "binding a non-loopback host requires CUTTLEFISH_SERVE_PASSWORD "
                 "(ADR-0011) -- refusing to expose the daemon with no real auth"
             )
-        login = SessionAuth(password=password, allowed_origins=frozenset(cors_origins))
+        login = SessionAuth(
+            password=password,
+            allowed_origins=frozenset({*cors_origins, _self_origin(host, resolved_port)}),
+        )
         security = login
         print(
             f"cuttlefish serve: http://{host}:{resolved_port}  "

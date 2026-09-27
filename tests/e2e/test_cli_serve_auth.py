@@ -36,3 +36,20 @@ def test_non_loopback_host_with_a_weak_password_fails_fast(
     exit_code = cli.main(["serve", "--host", "0.0.0.0", "--port", "0"])
     assert exit_code == cli.EXIT_TASK_FAILED
     assert "CUTTLEFISH_SERVE_PASSWORD" in capsys.readouterr().err
+
+
+def test_tailscale_flag_fails_fast_when_resolution_fails(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0013 (KAN-1708): `--tailscale` surfaces `_resolve_tailscale_host`'s own
+    `RuntimeError` through the real CLI entry point, not just in isolation --
+    verified here without a real `tailscale` binary (there is none in this
+    environment), by monkeypatching the resolver itself."""
+
+    def _fails() -> str:
+        raise RuntimeError("--tailscale needs the `tailscale` CLI on PATH")
+
+    monkeypatch.setattr(cli, "_resolve_tailscale_host", _fails)
+    exit_code = cli.main(["serve", "--tailscale", "--port", "0"])
+    assert exit_code == cli.EXIT_TASK_FAILED
+    assert "tailscale" in capsys.readouterr().err.lower()
