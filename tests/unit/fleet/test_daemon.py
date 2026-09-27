@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from cuttlefish.episodic.events import TaskSubmitted, TeamResumed
+from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RunningTeam, _build_role_inputs
 from cuttlefish.projects.store import PersistedRole, ProjectStore, RoleDefinition
 
@@ -140,3 +142,49 @@ async def test_resume_pending_skips_a_project_already_running(tmp_path: Path) ->
     assert await daemon.resume_pending() == []
 
     task.cancel()
+
+
+# -- _mark_resumed (ADR-0010/KAN-1705) ------------------------------------------
+
+
+def test_mark_resumed_journals_the_highest_existing_seq(tmp_path: Path) -> None:
+    daemon = _daemon(tmp_path)
+    root = tmp_path / "alpha"
+    root.mkdir()
+    project = daemon.projects.register(name="alpha", root=str(root))
+
+    episodic_path = root / ".cuttlefish" / "episodic.db"
+    store = EpisodicStore.open(episodic_path)
+    store.append("team-1", TaskSubmitted(text="do it"))
+    store.append("team-1", TaskSubmitted(text="do it more", role="builder"))
+    store.close()
+
+    daemon._mark_resumed(project, "team-1")
+
+    store = EpisodicStore.open(episodic_path)
+    events = list(store.read("team-1"))
+    store.close()
+
+    assert len(events) == 3
+    assert isinstance(events[-1].payload, TeamResumed)
+    assert events[-1].payload.resumed_from_seq == 2
+
+
+def test_mark_resumed_on_an_empty_journal_resumes_from_seq_zero(tmp_path: Path) -> None:
+    """A team whose crash landed before its very first journal write still gets a
+    marker -- `resumed_from_seq=0` reads honestly as "nothing was ever recorded",
+    not a missing/broken marker."""
+    daemon = _daemon(tmp_path)
+    root = tmp_path / "alpha"
+    root.mkdir()
+    project = daemon.projects.register(name="alpha", root=str(root))
+
+    daemon._mark_resumed(project, "team-1")
+
+    store = EpisodicStore.open(root / ".cuttlefish" / "episodic.db")
+    events = list(store.read("team-1"))
+    store.close()
+
+    assert len(events) == 1
+    assert isinstance(events[0].payload, TeamResumed)
+    assert events[0].payload.resumed_from_seq == 0

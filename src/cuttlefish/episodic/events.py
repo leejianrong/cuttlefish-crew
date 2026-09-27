@@ -198,6 +198,30 @@ class SteeringMessage:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class TeamResumed:
+    """A daemon restart found this run still non-terminal and re-drove it via
+    satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
+    directly (not through a satay workflow — there is no workflow context at
+    `cuttlefish.fleet.daemon.FleetDaemon.resume_pending`'s own call site, the same
+    "write straight to the store" posture its sibling reads already hold to)
+    right before the resumed run's own next event, so an operator can actually
+    see continuity working rather than just trust it (KAN-1705).
+
+    ``resumed_from_seq`` is the highest seq this journal already held the moment
+    the daemon found it — exactly the "resumed after crash at seq N" marker the
+    ticket asks for, distinguishing a real gap (the old process died here) from a
+    round that's merely still journaling slowly.
+    """
+
+    EVENT_TYPE: ClassVar[str] = "TeamResumed"
+
+    resumed_from_seq: int
+    # Team-wide, not per-role (ADR-0007) -- a resume re-drives the whole run's
+    # own workflow, not one role's delegation in isolation.
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class UnknownPayload:
     """A payload whose event type this build does not recognise, preserved verbatim.
 
@@ -225,6 +249,7 @@ EventPayload = (
     | TaskCompleted
     | TaskFailed
     | SteeringMessage
+    | TeamResumed
     | UnknownPayload
 )
 
@@ -243,6 +268,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         TaskCompleted,
         TaskFailed,
         SteeringMessage,
+        TeamResumed,
     )
 }
 

@@ -16,6 +16,21 @@
   let startError = $state<string | null>(null);
   let taskTexts = $state<Record<string, string>>({});
 
+  // ADR-0010/KAN-1705: continuity, made visible rather than just trusted -- a
+  // per-role timeline of handover checkpoints (RoleSteerCard renders each
+  // role's own slice), and every TeamResumed marker this team's journal holds,
+  // surfaced as its own banner above the role cards, not buried in the log.
+  const handoversByRole = $derived.by(() => {
+    const grouped: Record<string, EpisodicEventView[]> = {};
+    for (const event of events) {
+      if (event.event_type !== "HandoverWritten") continue;
+      const role = (event.payload.role as string | null) ?? "";
+      (grouped[role] ??= []).push(event);
+    }
+    return grouped;
+  });
+  const resumedEvents = $derived(events.filter((event) => event.event_type === "TeamResumed"));
+
   async function refresh() {
     project = await client.getProject(projectId);
     events = (await client.getEvents(projectId)).events;
@@ -64,13 +79,27 @@
       <p class="root mono">{project.root}</p>
     </header>
 
+    {#if resumedEvents.length > 0}
+      <p class="resumed-banner">
+        &#8635; this project's team was resumed after a restart {resumedEvents.length > 1
+          ? `(${resumedEvents.length} times)`
+          : ""} -- see "Recent activity" below for exactly where each pickup happened.
+      </p>
+    {/if}
+
     {#if project.running}
       <OfficeScene
         roles={Object.entries(project.status).map(([name, status]) => ({ name, status }))}
       />
       <section class="roles">
         {#each Object.entries(project.status) as [role, status] (role)}
-          <RoleSteerCard {client} {projectId} {role} {status} />
+          <RoleSteerCard
+            {client}
+            {projectId}
+            {role}
+            {status}
+            handovers={handoversByRole[role] ?? []}
+          />
         {/each}
       </section>
       <button class="stop" onclick={stop}>Stop team</button>
@@ -156,6 +185,17 @@
     flex-direction: column;
     gap: 0.85rem;
     margin: 0.9rem 0 1.25rem;
+  }
+
+  .resumed-banner {
+    background: var(--status-blocked-bg);
+    color: var(--status-blocked-fg);
+    border: 1px solid var(--status-blocked-fg);
+    border-radius: 8px;
+    padding: 0.6rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
   }
 
   .stop {

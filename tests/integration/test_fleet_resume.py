@@ -26,6 +26,7 @@ from satay.testing.faults import FaultInjector, SimulatedCrash
 
 from cuttlefish import runtime
 from cuttlefish.config import prepare_run
+from cuttlefish.episodic.events import TeamResumed
 from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.projects.store import PersistedRole, ProjectStore
 from cuttlefish.team import RoleInput, TeamInput, run_team
@@ -110,5 +111,13 @@ async def test_resume_pending_redrives_a_team_a_simulated_daemon_restart_left_ru
     # from the journal, not written a second time.
     assert kinds.count("TaskSubmitted") == 1
     assert kinds[-1] == "TaskFailed"  # missing credential -> a real, fast, no-cost failure
+
+    # ADR-0010/KAN-1705: an explicit, distinct marker -- not silently indistinguishable
+    # from ordinary progress -- right at the gap the crash actually left (only
+    # TaskSubmitted, seq 1, was journaled before the simulated crash).
+    assert kinds.count("TeamResumed") == 1
+    resumed_event = events[kinds.index("TeamResumed")]
+    assert isinstance(resumed_event.payload, TeamResumed)
+    assert resumed_event.payload.resumed_from_seq == 1
 
     project_store.close()
