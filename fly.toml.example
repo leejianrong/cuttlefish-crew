@@ -1,0 +1,60 @@
+# KAN-1710 (ADR-0015) feasibility reference -- rename to fly.toml and run
+# `fly launch --no-deploy` / `fly deploy` yourself when you're ready to
+# actually provision this; not deployed by this spike.
+#
+# app name is a placeholder -- `fly launch` picks a real one (or assigns one)
+# interactively; edit before deploying for real.
+app = "cuttlefish-crew-REPLACE-ME"
+primary_region = "sin"  # pick whatever region is actually closest to you
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  # Relocates cuttlefish's own default state (~/.cuttlefish/projects.db,
+  # secrets.db) onto the persistent volume below with no code change --
+  # ProjectStore/SecretsStore both resolve relative to HOME by default.
+  HOME = "/data"
+
+[[mounts]]
+  source = "cuttlefish_data"
+  destination = "/data"
+  # A single Fly volume is attached to exactly one machine -- this app must
+  # stay a single machine, never horizontally scaled (see ADR-0015: satay's
+  # own single-writer-per-store discipline, ADR-0009/ADR-0012, already
+  # requires this; Fly's own volume model doesn't add a new constraint here,
+  # it just has to be respected). Registered projects' own `--root` must also
+  # live under /data (e.g. /data/projects/<name>) -- their own
+  # `.cuttlefish`/`.satay` stores live relative to that root, not HOME, and
+  # would otherwise be lost on every restart even with HOME itself persisted.
+
+[http_service]
+  internal_port = 8420
+  force_https = true
+  # Scale-to-zero is a real, free cost lever here, not just a generic Fly
+  # feature: a stopped-and-restarted machine is functionally identical to a
+  # supervised process restart (ADR-0014), which cuttlefish's own
+  # crash/restart-safe design (ADR-0010, FleetDaemon.resume_pending) already
+  # handles correctly. Set min_machines_running = 1 instead if "always-on" is
+  # more important than cost for a given trial.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+
+# Secrets (CUTTLEFISH_SERVE_PASSWORD, CUTTLEFISH_SECRETS_KEY, any backend
+# credential like ANTHROPIC_API_KEY) are never set here -- `fly secrets set
+# CUTTLEFISH_SERVE_PASSWORD=...`, Fly's own encrypted-at-rest secret store,
+# injected as env vars at runtime exactly the way ADR-0011 already expects.
+#
+# --allow-origin (ADR-0011/ADR-0013): Fly's edge terminates TLS at its own
+# `<app>.fly.dev` hostname before forwarding plain HTTP to `internal_port`
+# above -- the daemon's own bind is still `0.0.0.0:8420` internally, so
+# ADR-0013's self-origin-trust default (computed from that internal bind)
+# does NOT cover the externally-visible origin. Add
+# `--allow-origin https://<app>.fly.dev` (or your own custom domain) to the
+# Dockerfile's CMD, or this fly.toml's own [processes], or the dashboard
+# won't be reachable through Fly's edge at all.

@@ -20,7 +20,7 @@ doc comment all beat a paragraph here.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the current problem, scope, and shape
   (the cuttlefish-crew pivot direction, built on top of V1/V2's original MVP)
-- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0014
+- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0015
 - [`docs/SLICES.md`](docs/SLICES.md) — the build order this was built against
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed, including gaps a live run surfaced after the fact
@@ -141,8 +141,26 @@ state intact on the restarted process — not a genuinely in-flight team's
 resume specifically (that composition is `FleetDaemon.resume_pending`'s own
 already-tested scope, not re-derived here); fully cleaned up afterward.
 
-The remaining CUT-E9 card (KAN-1710, a Fly.io feasibility spike) is not yet
-started.
+KAN-1710 (ADR-0015) closes out CUT-E9 (Slice E is now fully complete): a
+`Dockerfile` (three stages — frontend build, kopicode-from-source build
+mirroring CI's own approach, the Python runtime) and `fly.toml.example`, both
+built and run only *locally* against a real Docker daemon in this sandbox —
+never deployed to Fly's actual service (Jian's own explicit scope decision,
+since `flyctl` was already authenticated to his real account and provisioning
+real infrastructure needed his sign-off, not an autonomous default). Two real
+bugs found and fixed by actually building the image: a missing `README.md`
+copy broke `hatchling`'s own build (`pyproject.toml`'s `readme` field), and
+the original `CMD`'s plain `uv run` re-synced the *full* dependency group
+(including `dev`) from the network on every container start — fixed with
+`uv run --no-sync`. Findings: one Fly app per tenant (this architecture's
+single-writer-per-store discipline has no shared-multi-tenant story to
+build), a single persistent volume with `HOME` *and* every registered
+project's own `--root` living under it, Fly's own secrets composing cleanly
+with ADR-0011's env-var password, free TLS at Fly's edge (solving ADR-0013's
+"no TLS" gap for this case specifically), `--allow-origin` for the external
+`<app>.fly.dev` origin being mandatory (ADR-0013's self-origin-trust default
+doesn't cover it), and scale-to-zero composing correctly with ADR-0010's own
+crash-safety story. Feeds F4's hosted-service pricing/wrapper card directly.
 
 ## Known, accepted gaps — don't re-litigate
 
@@ -224,6 +242,13 @@ started.
   decisions. A `--user` unit also needs `loginctl enable-linger $USER` to
   survive the operator logging out, or it stops with their last session —
   the install script checks and warns, but does not enable it itself.
+- `Dockerfile`/`fly.toml.example` (ADR-0015) have never been deployed to
+  Fly.io's actual service — built and run only locally, against a real
+  Docker daemon, never against Fly's live API/edge/billing. A real deploy,
+  DNS, and F4's own pricing wrapper around it are still open. One Fly app
+  per tenant is the recommended shape, not a shared multi-tenant instance —
+  this architecture's single-writer-per-store discipline has no shared-
+  tenant story built (ADR-0002's own standing position, unchanged).
 - `cuttlefish serve --tailscale` (ADR-0013) is plain HTTP, not HTTPS — an
   accepted gap, not an oversight: Tailscale's own WireGuard mesh already
   encrypts every packet between tailnet peers, so this is a browser-padlock
