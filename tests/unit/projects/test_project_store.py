@@ -69,6 +69,73 @@ def test_a_projects_db_predating_the_allow_column_is_migrated_in_place(tmp_path:
     store.close()
 
 
+def test_register_defaults_budget_to_no_ceiling(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="demo", root=str(tmp_path / "demo"))
+    assert project.max_tokens is None
+    assert project.max_cost_usd is None
+    store.close()
+
+
+def test_register_get_round_trips_budget(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(
+        name="demo", root=str(tmp_path / "demo"), max_tokens=50_000, max_cost_usd=5.0
+    )
+    fetched = store.get(project.id)
+    assert fetched.max_tokens == 50_000
+    assert fetched.max_cost_usd == 5.0
+    store.close()
+
+
+def test_update_budget_replaces_both_fields(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="demo", root=str(tmp_path / "demo"), max_tokens=1000)
+    updated = store.update_budget(project.id, max_tokens=2000, max_cost_usd=1.5)
+    assert updated.max_tokens == 2000
+    assert updated.max_cost_usd == 1.5
+    store.close()
+
+
+def test_update_budget_can_clear_a_ceiling_back_to_none(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="demo", root=str(tmp_path / "demo"), max_tokens=1000)
+    updated = store.update_budget(project.id, max_tokens=None, max_cost_usd=None)
+    assert updated.max_tokens is None
+    assert updated.max_cost_usd is None
+    store.close()
+
+
+def test_a_projects_db_predating_the_budget_columns_is_migrated_in_place(tmp_path: Path) -> None:
+    """`max_tokens`/`max_cost_usd` were added for KAN-1712/ADR-0017 -- an operator's
+    existing, on-disk `projects.db` predates them. Simulate that against the
+    *pre-budget* schema (which already has every earlier migrated column) so a
+    real upgrade path is exercised, not just a fresh database that never lacked
+    the column in the first place."""
+    import sqlite3
+
+    db_path = tmp_path / "projects.db"
+    legacy = sqlite3.connect(db_path)
+    legacy.execute(
+        "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, root TEXT NOT NULL, "
+        "secrets_scope TEXT NOT NULL, roles_json TEXT NOT NULL, last_team_id TEXT, "
+        "allow_json TEXT NOT NULL DEFAULT '[]', last_team_roles_json TEXT NOT NULL DEFAULT '[]', "
+        "last_team_require_approval INTEGER NOT NULL DEFAULT 0)"
+    )
+    legacy.execute(
+        "INSERT INTO projects (id, name, root, secrets_scope, roles_json, last_team_id) "
+        "VALUES ('p1', 'demo', '/tmp/demo', 'demo', '[]', NULL)"
+    )
+    legacy.commit()
+    legacy.close()
+
+    store = ProjectStore.open(db_path)
+    project = store.get("p1")
+    assert project.max_tokens is None
+    assert project.max_cost_usd is None
+    store.close()
+
+
 def test_register_get_round_trips_roles_with_personas(tmp_path: Path) -> None:
     store = _store(tmp_path)
     roles = (

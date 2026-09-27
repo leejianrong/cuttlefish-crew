@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { EpisodicEventView, FleetClient, RoleStatus } from "../api";
+  import type { EpisodicEventView, FleetClient, ProjectBudget, RoleStatus, RoleUsage } from "../api";
   import StatusChip from "./StatusChip.svelte";
 
   let {
@@ -8,6 +8,8 @@
     role,
     status,
     handovers = [],
+    usage = { tokens: 0, cost_usd: 0 },
+    budget = { max_tokens: null, max_cost_usd: null },
   }: {
     client: FleetClient;
     projectId: string;
@@ -16,7 +18,19 @@
     /** This role's own `HandoverWritten` checkpoints, oldest first (ADR-0010/KAN-1705) --
      * continuity made visible, not just trusted. */
     handovers?: EpisodicEventView[];
+    /** This role's own cumulative usage so far (KAN-1712/ADR-0017). */
+    usage?: RoleUsage;
+    /** The project's own configured ceiling, if any (KAN-1712/ADR-0017) -- checked
+     * independently per role, so every role card compares against the same one. */
+    budget?: ProjectBudget;
   } = $props();
+
+  const tokensOverBudget = $derived(
+    budget.max_tokens !== null && usage.tokens >= budget.max_tokens,
+  );
+  const costOverBudget = $derived(
+    budget.max_cost_usd !== null && usage.cost_usd >= budget.max_cost_usd,
+  );
 
   let message = $state("");
   let sending = $state(false);
@@ -69,6 +83,16 @@
     <span class="role-name">{role}</span>
     <StatusChip {status} />
   </div>
+  <p class="usage" class:over={tokensOverBudget || costOverBudget}>
+    {usage.tokens.toLocaleString()} tokens{budget.max_tokens !== null
+      ? ` / ${budget.max_tokens.toLocaleString()}`
+      : ""}
+    {#if usage.cost_usd > 0 || budget.max_cost_usd !== null}
+      &middot; ${usage.cost_usd.toFixed(4)}{budget.max_cost_usd !== null
+        ? ` / $${budget.max_cost_usd.toFixed(2)}`
+        : ""}
+    {/if}
+  </p>
   <div class="steer">
     <textarea
       bind:value={message}
@@ -84,8 +108,9 @@
   {#if status === "blocked"}
     <div class="approval">
       <p class="hint">
-        If {role} is waiting on a review gate (KAN-1711), decide here -- harmless if it's
-        just the ordinary steering pause instead.
+        If {role} is waiting on a review gate (KAN-1711) or just crossed its own
+        token/cost ceiling (KAN-1712), decide here -- harmless if it's just the
+        ordinary steering pause instead.
       </p>
       <textarea
         bind:value={approvalComment}
@@ -145,6 +170,18 @@
   }
 
   .role-name {
+    font-weight: 600;
+  }
+
+  .usage {
+    margin: 0 0 0.75rem;
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .usage.over {
+    color: var(--status-failed-fg);
     font-weight: 600;
   }
 

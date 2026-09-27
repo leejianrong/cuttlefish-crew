@@ -28,6 +28,8 @@ import satay
 
 from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
+from cuttlefish.budget import cumulative_usage
+from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
 from cuttlefish.episodic.events import (
     ApprovalDecision,
@@ -39,12 +41,13 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    decode_payload,
 )
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, maybe_handover
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 from cuttlefish.steering import DEFAULT_STEERING_GRACE_SECONDS, compose_steered_text, steering_key
 from cuttlefish.tasks.delegate import delegate_to_agent_backend
-from cuttlefish.tasks.journal import journal
+from cuttlefish.tasks.journal import journal, read_episodic_events
 
 
 class RoleInput(TypedDict):
@@ -81,6 +84,12 @@ class TeamInput(TypedDict):
     per-role semantics (blocks, no timeout, for ``cuttlefish approve <team-id>
     --role NAME``/``--reject "<comment>"`` once a round finalizes with nothing
     steering it away).
+
+    ``max_tokens``/``max_cost_usd`` (KAN-1712) are optional, default to
+    ``None`` (no ceiling), and apply team-wide — checked independently per
+    role against that role's own cumulative usage, never pooled across roles.
+    See ``cuttlefish.workflow.TaskInput`` for the identical per-round
+    hard-stop semantics.
     """
 
     team_id: str
@@ -91,6 +100,8 @@ class TeamInput(TypedDict):
     steerable: NotRequired[bool]
     steering_grace: NotRequired[float]
     require_approval: NotRequired[bool]
+    max_tokens: NotRequired[int]
+    max_cost_usd: NotRequired[float]
 
 
 def _needs_sequential_dispatch(active_names: list[str], agent_backend: str) -> bool:
@@ -178,6 +189,8 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     steerable = team_input.get("steerable", False)
     steering_grace = team_input.get("steering_grace", DEFAULT_STEERING_GRACE_SECONDS)
     require_approval = team_input.get("require_approval", False)
+    max_tokens = team_input.get("max_tokens")
+    max_cost_usd = team_input.get("max_cost_usd")
 
     for role in roles:
         await journal(team_id, TaskSubmitted(text=role["text"], role=role["name"]))
@@ -243,16 +256,32 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 await journal(
                     team_id,
                     DelegationCompleted(
-                        summary=outcome.summary, edited_paths=outcome.edited_paths, role=name
+                        summary=outcome.summary,
+                        edited_paths=outcome.edited_paths,
+                        role=name,
+                        tokens=outcome.tokens,
+                        cost_usd=outcome.cost_usd,
                     ),
                 )
             elif outcome.kind == "refused":
                 await journal(
-                    team_id, DelegationRefused(reason=outcome.reason or outcome.summary, role=name)
+                    team_id,
+                    DelegationRefused(
+                        reason=outcome.reason or outcome.summary,
+                        role=name,
+                        tokens=outcome.tokens,
+                        cost_usd=outcome.cost_usd,
+                    ),
                 )
             else:
                 await journal(
-                    team_id, DelegationFailed(reason=outcome.reason or outcome.summary, role=name)
+                    team_id,
+                    DelegationFailed(
+                        reason=outcome.reason or outcome.summary,
+                        role=name,
+                        tokens=outcome.tokens,
+                        cost_usd=outcome.cost_usd,
+                    ),
                 )
             final_outcome[name] = outcome
 
@@ -271,7 +300,19 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             # reproduced live via the fleet daemon (always `steerable=True`).
             redirect_text: str | None = None
 
-            if require_approval:
+            # KAN-1712/ADR-0017: see run_task's identical block -- a role that
+            # just crossed its own configured token/cost ceiling forces the
+            # same approval wait `require_approval` uses, never a second one.
+            raw_events = await read_episodic_events(team_id)
+            decoded_payloads = [
+                decode_payload(raw["event_type"], raw["data"]) for raw in raw_events
+            ]
+            usage_totals = cumulative_usage(decoded_payloads, role=name)
+            budget_hit = budget_exceeded(
+                usage_totals, max_tokens=max_tokens, max_cost_usd=max_cost_usd
+            )
+
+            if require_approval or budget_hit:
                 # No timeout -- see run_task's identical wait for why.
                 decision = await satay.wait_for_event(
                     ApprovalDecision,

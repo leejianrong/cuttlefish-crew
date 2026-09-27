@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from cuttlefish.episodic.events import DelegationCompleted, DelegationRefused
+from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError
 from cuttlefish.projects.store import ProjectStore, RoleDefinition
 
@@ -86,6 +88,47 @@ def test_status_for_a_project_with_no_declared_roles_and_no_team_yet_is_empty(
     daemon = _new_daemon(tmp_path)
     project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
     assert daemon.status(project.id) == {}
+
+
+def test_usage_before_any_start_is_zero_for_every_registered_role(tmp_path: Path) -> None:
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(
+        name="alpha",
+        root=str(tmp_path / "alpha"),
+        roles=(RoleDefinition(name="builder"), RoleDefinition(name="reviewer")),
+    )
+    usage = daemon.usage(project.id)
+    assert usage["builder"].tokens == 0
+    assert usage["builder"].cost_usd == 0.0
+    assert usage["reviewer"].tokens == 0
+
+
+def test_usage_sums_a_roles_own_journaled_delegation_outcomes(tmp_path: Path) -> None:
+    """`usage` reads the identical journal `status` already reads (KAN-1712/
+    ADR-0017) -- proven here against a hand-journaled record, the same
+    `EpisodicStore.open(<root>/.cuttlefish/episodic.db)` shape
+    `tests/unit/fleet/test_daemon.py`'s own resume tests already use."""
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(
+        name="alpha",
+        root=str(tmp_path / "alpha"),
+        roles=(RoleDefinition(name="builder"),),
+    )
+    daemon.projects.record_team_started(project.id, "team-1")
+
+    episodic_path = Path(project.root) / ".cuttlefish" / "episodic.db"
+    store = EpisodicStore.open(episodic_path)
+    store.append(
+        "team-1", DelegationCompleted(summary="ok", tokens=100, cost_usd=0.01, role="builder")
+    )
+    store.append(
+        "team-1", DelegationRefused(reason="denied", tokens=10, cost_usd=None, role="builder")
+    )
+    store.close()
+
+    usage = daemon.usage(project.id)
+    assert usage["builder"].tokens == 110
+    assert usage["builder"].cost_usd == 0.01
 
 
 async def test_steer_with_no_running_team_raises(tmp_path: Path) -> None:

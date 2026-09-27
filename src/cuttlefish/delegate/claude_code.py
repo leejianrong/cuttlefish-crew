@@ -145,6 +145,8 @@ def classify_stream(
     # own classify_stream checks deny_reasons before exit_code: verified live
     # (2026-09-20) that a fully denied session still reports is_error=false,
     # subtype="success" — permission_denials is the only reliable signal.
+    tokens, cost_usd = _usage_from_result(result_event)
+
     denials = result_event.get("permission_denials")
     if isinstance(denials, list) and denials:
         reasons = [
@@ -156,6 +158,8 @@ def classify_stream(
             kind="refused",
             summary="Claude Code's permission gate declined every action it needed",
             reason="; ".join(reasons) if reasons else "denied",
+            tokens=tokens,
+            cost_usd=cost_usd,
         )
 
     subtype = result_event.get("subtype", "unknown")
@@ -164,6 +168,8 @@ def classify_stream(
             kind="failed",
             summary=f"Claude Code did not finish cleanly ({subtype})",
             reason=str(result_event.get("result") or subtype),
+            tokens=tokens,
+            cost_usd=cost_usd,
         )
 
     result_text = result_event.get("result")
@@ -173,8 +179,43 @@ def classify_stream(
         else f"Claude Code finished ({subtype})"
     )
     if edited_paths:
-        return DelegationOutcome(kind="completed", summary=summary, edited_paths=edited_paths)
-    return DelegationOutcome(kind="completed", summary=summary)
+        return DelegationOutcome(
+            kind="completed",
+            summary=summary,
+            edited_paths=edited_paths,
+            tokens=tokens,
+            cost_usd=cost_usd,
+        )
+    return DelegationOutcome(kind="completed", summary=summary, tokens=tokens, cost_usd=cost_usd)
+
+
+#: `result`'s own `usage` fields this module sums into one total token count
+#: (KAN-1712/ADR-0017) -- input/output plus both cache categories, since all
+#: four are tokens the call actually processed, not only the ones a plain
+#: input/output split would count.
+_USAGE_TOKEN_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "cache_creation_input_tokens",
+    "cache_read_input_tokens",
+)
+
+
+def _usage_from_result(result_event: Mapping[str, Any]) -> tuple[int | None, float | None]:
+    """`(tokens, cost_usd)` off one `result` event, or `(None, None)` for either
+    when the field isn't there at all -- verified live (2026-09-27, `claude`
+    2.1.283) that a real `result` event carries both `usage` and
+    `total_cost_usd` directly, so this never has to estimate either.
+    """
+    usage = result_event.get("usage")
+    tokens = (
+        sum(int(usage.get(field) or 0) for field in _USAGE_TOKEN_FIELDS)
+        if isinstance(usage, Mapping)
+        else None
+    )
+    cost_raw = result_event.get("total_cost_usd")
+    cost_usd = float(cost_raw) if isinstance(cost_raw, int | float) else None
+    return tokens, cost_usd
 
 
 def _edited_path_from_block(block: object) -> str | None:

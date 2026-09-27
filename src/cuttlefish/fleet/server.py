@@ -69,6 +69,11 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "allow": [list(command) for command in project.allow],
         "running": daemon.is_running(project.id),
         "status": daemon.status(project.id),
+        "budget": {"max_tokens": project.max_tokens, "max_cost_usd": project.max_cost_usd},
+        "usage": {
+            name: {"tokens": totals.tokens, "cost_usd": totals.cost_usd}
+            for name, totals in daemon.usage(project.id).items()
+        },
     }
 
 
@@ -89,6 +94,19 @@ def _roles_from_body(body: dict[str, Any]) -> tuple[RoleDefinition, ...]:
 
 def _allow_from_body(body: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
     return tuple(tuple(command) for command in body.get("allow", []))
+
+
+def _budget_from_body(body: dict[str, Any]) -> tuple[int | None, float | None]:
+    """`(max_tokens, max_cost_usd)` off a request body (KAN-1712/ADR-0017) -- a
+    missing key means "unset" (`None`), the same "omitted means unset" reading
+    every other optional field on this surface already gets."""
+    max_tokens = body.get("max_tokens")
+    if max_tokens is not None and not isinstance(max_tokens, int):
+        raise HTTPException(400, "'max_tokens', if given, must be an integer")
+    max_cost_usd = body.get("max_cost_usd")
+    if max_cost_usd is not None and not isinstance(max_cost_usd, int | float):
+        raise HTTPException(400, "'max_cost_usd', if given, must be a number")
+    return max_tokens, float(max_cost_usd) if max_cost_usd is not None else None
 
 
 async def _json_body(request: Request) -> dict[str, Any]:
@@ -193,12 +211,15 @@ def create_app(
         name, root = body.get("name"), body.get("root")
         if not name or not root:
             raise HTTPException(400, "'name' and 'root' are required")
+        max_tokens, max_cost_usd = _budget_from_body(body)
         project = daemon.projects.register(
             name=name,
             root=root,
             secrets_scope=body.get("secrets_scope"),
             roles=_roles_from_body(body),
             allow=_allow_from_body(body),
+            max_tokens=max_tokens,
+            max_cost_usd=max_cost_usd,
         )
         return _project_json(daemon, project.id)
 
@@ -231,6 +252,18 @@ def create_app(
         body = await _json_body(request)
         try:
             daemon.projects.update_allow(project_id, _allow_from_body(body))
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/budget")
+    async def update_budget(project_id: str, request: Request) -> dict[str, Any]:
+        body = await _json_body(request)
+        max_tokens, max_cost_usd = _budget_from_body(body)
+        try:
+            daemon.projects.update_budget(
+                project_id, max_tokens=max_tokens, max_cost_usd=max_cost_usd
+            )
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc

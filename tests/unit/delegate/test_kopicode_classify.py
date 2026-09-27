@@ -162,3 +162,33 @@ def test_an_allow_decision_is_not_treated_as_a_denial() -> None:
         ]
     )
     assert outcome.kind == "completed"
+
+
+def test_provider_response_sizes_are_summed_into_tokens() -> None:
+    # KAN-1712/ADR-0017: kopicode's own `internal/engine/event.go` copies only
+    # `Tokens.Total` into a `provider_response` line's `size` field (verified
+    # directly against kopicode's source) -- summed across every such line in
+    # the session, since a multi-turn session makes more than one call.
+    outcome = classify_stream(
+        [
+            {"kind": "provider_response", "reason": "stop", "source": "z-ai", "size": 120},
+            {"kind": "edit_applied", "path": "a.py"},
+            {"kind": "provider_response", "reason": "stop", "source": "z-ai", "size": 45},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert outcome.kind == "completed"
+    assert outcome.tokens == 165
+    assert outcome.cost_usd is None  # kopicode reports no dollar figure at all
+
+
+def test_zero_provider_response_lines_is_zero_tokens_not_none() -> None:
+    # An immediate denial before any provider call still burned zero tokens --
+    # a real, known answer, not "we don't know."
+    outcome = classify_stream(
+        [
+            {"kind": "permission_decided", "decision": "deny", "reason": "no shell"},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert outcome.tokens == 0

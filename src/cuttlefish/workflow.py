@@ -16,6 +16,8 @@ import satay
 
 from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationError
+from cuttlefish.budget import cumulative_usage
+from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
 from cuttlefish.episodic.events import (
     ApprovalDecision,
@@ -27,12 +29,13 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    decode_payload,
 )
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, maybe_handover
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 from cuttlefish.steering import DEFAULT_STEERING_GRACE_SECONDS, compose_steered_text, steering_key
 from cuttlefish.tasks.delegate import delegate_to_agent_backend
-from cuttlefish.tasks.journal import journal
+from cuttlefish.tasks.journal import journal, read_episodic_events
 
 
 class TaskInput(TypedDict):
@@ -76,6 +79,16 @@ class TaskInput(TypedDict):
     one more round, the rejection's own comment folded in exactly the way a
     steering message already is — the two mechanisms share one redirect path,
     see ``run_task``'s own body.
+
+    ``max_tokens``/``max_cost_usd`` (KAN-1712) are optional and default to
+    ``None`` — no ceiling, today's exact behaviour. Either, once set, is
+    checked every round against this run's own cumulative usage
+    (``cuttlefish.budget.cumulative_usage``, summed from every
+    ``DelegationCompleted``/``DelegationRefused``/``DelegationFailed`` this
+    task has journaled so far): crossing it forces the *same* round-boundary
+    decision wait ``require_approval`` uses — it does not add a second wait,
+    for the identical satay-level reason ``require_approval`` already replaces
+    rather than composes with steering (see this workflow's own body).
     """
 
     task_id: str
@@ -88,6 +101,8 @@ class TaskInput(TypedDict):
     steerable: NotRequired[bool]
     steering_grace: NotRequired[float]
     require_approval: NotRequired[bool]
+    max_tokens: NotRequired[int]
+    max_cost_usd: NotRequired[float]
 
 
 @satay.workflow
@@ -102,6 +117,8 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
     steerable = task_input.get("steerable", False)
     steering_grace = task_input.get("steering_grace", DEFAULT_STEERING_GRACE_SECONDS)
     require_approval = task_input.get("require_approval", False)
+    max_tokens = task_input.get("max_tokens")
+    max_cost_usd = task_input.get("max_cost_usd")
 
     await journal(task_id, TaskSubmitted(text=text))
     await maybe_handover(task_id, token_budget=token_budget)
@@ -158,12 +175,31 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
         if outcome.kind == "completed":
             await journal(
                 task_id,
-                DelegationCompleted(summary=outcome.summary, edited_paths=outcome.edited_paths),
+                DelegationCompleted(
+                    summary=outcome.summary,
+                    edited_paths=outcome.edited_paths,
+                    tokens=outcome.tokens,
+                    cost_usd=outcome.cost_usd,
+                ),
             )
         elif outcome.kind == "refused":
-            await journal(task_id, DelegationRefused(reason=outcome.reason or outcome.summary))
+            await journal(
+                task_id,
+                DelegationRefused(
+                    reason=outcome.reason or outcome.summary,
+                    tokens=outcome.tokens,
+                    cost_usd=outcome.cost_usd,
+                ),
+            )
         else:
-            await journal(task_id, DelegationFailed(reason=outcome.reason or outcome.summary))
+            await journal(
+                task_id,
+                DelegationFailed(
+                    reason=outcome.reason or outcome.summary,
+                    tokens=outcome.tokens,
+                    cost_usd=outcome.cost_usd,
+                ),
+            )
 
         # ADR-0010/KAN-1704: checked every round, not only before the loop starts
         # and after it ends -- a long steered run is exactly the case a mid-loop
@@ -198,7 +234,18 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
         # `steerable=True`), not a synthetic case.
         redirect_text: str | None = None
 
-        if require_approval:
+        # KAN-1712/ADR-0017: a configured token/cost ceiling this role just
+        # crossed forces the identical approval wait `require_approval` uses --
+        # never a second wait, the same satay-level identity-collision reason
+        # `require_approval` already documents. Computed from the full journal
+        # this round just wrote to, exactly like `maybe_handover`'s own
+        # durable read-back.
+        raw_events = await read_episodic_events(task_id)
+        decoded_payloads = [decode_payload(raw["event_type"], raw["data"]) for raw in raw_events]
+        usage_totals = cumulative_usage(decoded_payloads, role=None)
+        budget_hit = budget_exceeded(usage_totals, max_tokens=max_tokens, max_cost_usd=max_cost_usd)
+
+        if require_approval or budget_hit:
             # No timeout: an approval gate that could silently time out into
             # "approved" would not be a gate at all (KAN-1711's own "table
             # stakes" framing -- Paperclip's own equivalent blocks until a human

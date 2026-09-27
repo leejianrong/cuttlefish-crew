@@ -8,6 +8,8 @@
   let root = $state("");
   let rolesText = $state("builder: ships fast, terse commits\nreviewer: skeptical, flags risk");
   let allowText = $state("");
+  let maxTokensText = $state("");
+  let maxCostUsdText = $state("");
   let submitting = $state(false);
   let error = $state<string | null>(null);
 
@@ -44,10 +46,14 @@
         root,
         roles: parseRoles(rolesText),
         allow: parseAllow(allowText),
+        max_tokens: maxTokensText.trim() ? Number(maxTokensText) : null,
+        max_cost_usd: maxCostUsdText.trim() ? Number(maxCostUsdText) : null,
       });
       name = "";
       root = "";
       allowText = "";
+      maxTokensText = "";
+      maxCostUsdText = "";
       open = false;
       onRegistered();
     } catch {
@@ -81,6 +87,16 @@
       by default)
       <textarea bind:value={allowText} rows="2"></textarea>
     </label>
+    <div class="row">
+      <label>
+        Max tokens per role (KAN-1712, optional)
+        <input type="number" min="0" bind:value={maxTokensText} placeholder="no ceiling" />
+      </label>
+      <label>
+        Max cost per role, USD (optional)
+        <input type="number" min="0" step="0.01" bind:value={maxCostUsdText} placeholder="no ceiling" />
+      </label>
+    </div>
     {#if error}
       <p class="error">{error}</p>
     {/if}

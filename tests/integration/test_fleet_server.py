@@ -98,6 +98,63 @@ def test_update_allow_for_an_unknown_project_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_register_with_budget_round_trips(client: TestClient, tmp_path: Path) -> None:
+    response = client.post(
+        "/api/projects",
+        json={
+            "name": "demo",
+            "root": str(tmp_path / "demo"),
+            "max_tokens": 50_000,
+            "max_cost_usd": 5.0,
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["budget"] == {"max_tokens": 50_000, "max_cost_usd": 5.0}
+
+    fetched = client.get(f"/api/projects/{body['id']}").json()
+    assert fetched["budget"] == {"max_tokens": 50_000, "max_cost_usd": 5.0}
+
+
+def test_register_with_no_budget_defaults_to_no_ceiling(client: TestClient, tmp_path: Path) -> None:
+    response = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    body = response.json()
+    assert body["budget"] == {"max_tokens": None, "max_cost_usd": None}
+    assert body["usage"] == {}
+
+
+def test_update_budget_replaces_both_fields(client: TestClient, tmp_path: Path) -> None:
+    created = client.post(
+        "/api/projects",
+        json={"name": "demo", "root": str(tmp_path / "demo"), "max_tokens": 1000},
+    )
+    project_id = created.json()["id"]
+
+    response = client.patch(
+        f"/api/projects/{project_id}/budget",
+        json={"max_tokens": 2000, "max_cost_usd": 1.5},
+    )
+    assert response.status_code == 200
+    assert response.json()["budget"] == {"max_tokens": 2000, "max_cost_usd": 1.5}
+
+
+def test_update_budget_for_an_unknown_project_is_404(client: TestClient) -> None:
+    response = client.patch("/api/projects/no-such-id/budget", json={"max_tokens": 100})
+    assert response.status_code == 404
+
+
+def test_update_budget_with_a_non_numeric_max_tokens_is_400(
+    client: TestClient, tmp_path: Path
+) -> None:
+    created = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    project_id = created.json()["id"]
+
+    response = client.patch(
+        f"/api/projects/{project_id}/budget", json={"max_tokens": "not a number"}
+    )
+    assert response.status_code == 400
+
+
 def test_register_requires_name_and_root(client: TestClient) -> None:
     response = client.post("/api/projects", json={"name": "demo"})
     assert response.status_code == 400

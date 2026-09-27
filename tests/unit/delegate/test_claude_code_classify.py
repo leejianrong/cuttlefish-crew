@@ -121,3 +121,61 @@ def test_an_edited_path_outside_root_is_kept_absolute_rather_than_raising() -> N
         root="/scratch/project",
     )
     assert outcome.edited_paths == ["/somewhere/else/hello.txt"]
+
+
+def test_usage_and_cost_are_read_off_the_result_event() -> None:
+    # KAN-1712/ADR-0017: shaped exactly like a real `result` event captured live
+    # (2026-09-27, claude 2.1.283) -- all four usage categories summed into one
+    # token total, `total_cost_usd` copied through as `cost_usd`.
+    outcome = classify_stream(
+        [
+            _result(
+                usage={
+                    "input_tokens": 2,
+                    "output_tokens": 20,
+                    "cache_creation_input_tokens": 13642,
+                    "cache_read_input_tokens": 16786,
+                },
+                total_cost_usd=0.0581292,
+            )
+        ]
+    )
+    assert outcome.tokens == 2 + 20 + 13642 + 16786
+    assert outcome.cost_usd == 0.0581292
+
+
+def test_usage_and_cost_are_none_when_the_result_event_has_neither() -> None:
+    outcome = classify_stream([_result()])
+    assert outcome.tokens is None
+    assert outcome.cost_usd is None
+
+
+def test_usage_and_cost_carry_through_on_a_refused_outcome() -> None:
+    outcome = classify_stream(
+        [
+            _result(
+                permission_denials=[{"tool_name": "Write"}],
+                usage={"input_tokens": 5, "output_tokens": 3},
+                total_cost_usd=0.001,
+            )
+        ]
+    )
+    assert outcome.kind == "refused"
+    assert outcome.tokens == 8
+    assert outcome.cost_usd == 0.001
+
+
+def test_usage_and_cost_carry_through_on_a_failed_outcome() -> None:
+    outcome = classify_stream(
+        [
+            _result(
+                is_error=True,
+                subtype="error_max_turns",
+                usage={"input_tokens": 5, "output_tokens": 3},
+                total_cost_usd=0.001,
+            )
+        ]
+    )
+    assert outcome.kind == "failed"
+    assert outcome.tokens == 8
+    assert outcome.cost_usd == 0.001

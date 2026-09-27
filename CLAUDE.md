@@ -185,6 +185,30 @@ the dashboard's own approval panel (which only renders for `"blocked"`)
 invisible for exactly the role that most needed it. Both fixes have dedicated
 regression tests and were re-verified live afterward.
 
+KAN-1712 (ADR-0017) is also complete and merged: per-role/per-project token and
+cost tracking, riding entirely on `DelegationOutcome`'s own new `tokens`/
+`cost_usd` fields (`ClaudeCodeBackend` reports both, verified live against the
+real `result` event's `usage`/`total_cost_usd`; `KopicodeBackend` reports
+`tokens` only, summed from `provider_response` lines its own headless surface
+was silently dropping before this slice — kopicode reports no dollar figure at
+all, verified against its own source, so `cost_usd` stays honestly `None`
+rather than a fabricated pricing-table estimate) and the identical
+`DelegationCompleted`/`DelegationRefused`/`DelegationFailed` episodic events
+every round already journals, no new event type. `cuttlefish.budget` sums a
+role's cumulative usage and compares it to an optional, run-scoped
+`max_tokens`/`max_cost_usd` ceiling (`run`/`run-team --max-tokens`/
+`--max-cost-usd`, a `Project`'s own persisted budget for daemon-started teams,
+mirroring `allow`'s Q53 precedent); crossing it forces the exact
+`ApprovalDecision` wait `--require-approval` already uses — never a new wire
+type, sidestepping ADR-0016's own wait-identity collision by construction.
+`FleetDaemon.usage`/`PATCH /api/projects/{id}/budget`/`RoleSteerCard.svelte`'s
+own usage line surface this on the dashboard, reusing the identical
+Approve/Reject panel a budget-triggered block needs no new UI to answer.
+Live-verified in an isolated `$HOME` against a real `cuttlefish serve`: a
+zero-token-ceiling project blocked on its very first round, rendered
+`BLOCKED` with an over-budget usage line, and finalized correctly once
+approved through the dashboard.
+
 ## Known, accepted gaps — don't re-litigate
 
 - satay-runtime's own `durable_wait_for_event` identity (`event#{ordinal}`,
@@ -238,6 +262,18 @@ regression tests and were re-verified live afterward.
   still holds every secret it's given in the clear, inside its own sandbox
   or subprocess. A credential-broker/proxy is real future work, deliberately
   deferred. `docs/QUESTIONS.md` Q34, ADR-0006.
+- `KopicodeBackend`'s own `DelegationOutcome.cost_usd` is always `None` --
+  kopicode's headless `run --print` surface reports a summed token total per
+  session (`provider_response`'s own `size` field) but no dollar figure at
+  all, verified against its own source (`internal/engine/event.go`). A
+  per-model pricing table to estimate one was considered and rejected as a
+  stale-by-construction guess, not built. ADR-0017.
+- A `max_tokens`/`max_cost_usd` ceiling (KAN-1712, ADR-0017) is checked
+  against the *current run's own* cumulative usage, never a lifetime or
+  calendar-window total across every run a project has started -- the
+  identical run-scoped shape `token_budget`'s own handover checkpoint
+  already uses. A longer-window budget is real future work, deliberately
+  deferred until a persona actually needs one. ADR-0017.
 - A daemon-launched team (`cuttlefish serve`) declares no project secrets
   beyond a backend's own ambient credential names — a project needing
   `--secret`-declared names still runs via the CLI directly, not the

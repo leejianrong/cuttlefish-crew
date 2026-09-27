@@ -44,7 +44,9 @@ CREATE TABLE IF NOT EXISTS projects (
     last_team_id TEXT,
     allow_json TEXT NOT NULL DEFAULT '[]',
     last_team_roles_json TEXT NOT NULL DEFAULT '[]',
-    last_team_require_approval INTEGER NOT NULL DEFAULT 0
+    last_team_require_approval INTEGER NOT NULL DEFAULT 0,
+    max_tokens INTEGER,
+    max_cost_usd REAL
 )
 """
 
@@ -73,6 +75,16 @@ _ADD_LAST_TEAM_ROLES_COLUMN = (
 _ADD_LAST_TEAM_REQUIRE_APPROVAL_COLUMN = (
     "ALTER TABLE projects ADD COLUMN last_team_require_approval INTEGER NOT NULL DEFAULT 0"
 )
+
+#: `max_tokens`/`max_cost_usd` were added for KAN-1712/ADR-0017 -- a project's own
+#: run-scoped usage ceiling (Q53's own precedent: reviewed once here, not retyped
+#: per `FleetDaemon.start` call, since a daemon-started team has no CLI flag of its
+#: own to carry it). Both nullable and default `NULL` ("no ceiling") rather than a
+#: migrated `NOT NULL DEFAULT 0` -- `0` is a real, meaningful configuration here
+#: (`cuttlefish.budget.exceeded`'s own docstring), so an existing row predating
+#: this column must decode to "unset," never to "stop immediately."
+_ADD_MAX_TOKENS_COLUMN = "ALTER TABLE projects ADD COLUMN max_tokens INTEGER"
+_ADD_MAX_COST_USD_COLUMN = "ALTER TABLE projects ADD COLUMN max_cost_usd REAL"
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,6 +139,8 @@ class Project:
     allow: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     last_team_roles: tuple[PersistedRole, ...] = field(default_factory=tuple)
     last_team_require_approval: bool = False
+    max_tokens: int | None = None
+    max_cost_usd: float | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -188,6 +202,8 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         allow=_decode_allow(row["allow_json"]),
         last_team_roles=_decode_persisted_roles(row["last_team_roles_json"]),
         last_team_require_approval=bool(row["last_team_require_approval"]),
+        max_tokens=row["max_tokens"],
+        max_cost_usd=row["max_cost_usd"],
     )
 
 
@@ -205,6 +221,10 @@ class ProjectStore:
             self._conn.execute(_ADD_LAST_TEAM_ROLES_COLUMN)
         if "last_team_require_approval" not in columns:
             self._conn.execute(_ADD_LAST_TEAM_REQUIRE_APPROVAL_COLUMN)
+        if "max_tokens" not in columns:
+            self._conn.execute(_ADD_MAX_TOKENS_COLUMN)
+        if "max_cost_usd" not in columns:
+            self._conn.execute(_ADD_MAX_COST_USD_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -237,6 +257,8 @@ class ProjectStore:
         secrets_scope: str | None = None,
         roles: tuple[RoleDefinition, ...] = (),
         allow: tuple[tuple[str, ...], ...] = (),
+        max_tokens: int | None = None,
+        max_cost_usd: float | None = None,
     ) -> Project:
         """Register a new project. `secrets_scope` defaults to `name` (Q38)."""
         project = Project(
@@ -246,12 +268,14 @@ class ProjectStore:
             secrets_scope=secrets_scope if secrets_scope is not None else name,
             roles=roles,
             allow=allow,
+            max_tokens=max_tokens,
+            max_cost_usd=max_cost_usd,
         )
         self._conn.execute(
             "INSERT INTO projects "
             "(id, name, root, secrets_scope, roles_json, last_team_id, allow_json, "
-            "last_team_roles_json) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "last_team_roles_json, max_tokens, max_cost_usd) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.id,
                 project.name,
@@ -261,6 +285,8 @@ class ProjectStore:
                 project.last_team_id,
                 _encode_allow(project.allow),
                 _encode_persisted_roles(project.last_team_roles),
+                project.max_tokens,
+                project.max_cost_usd,
             ),
         )
         self._conn.commit()
@@ -288,6 +314,20 @@ class ProjectStore:
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute(
             "UPDATE projects SET allow_json = ? WHERE id = ?", (_encode_allow(allow), project_id)
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_budget(
+        self, project_id: str, *, max_tokens: int | None, max_cost_usd: float | None
+    ) -> Project:
+        """Set (or clear, with `None`) this project's own run-scoped usage ceiling
+        (KAN-1712/ADR-0017) -- the same "reviewed once, not retyped per start call"
+        precedent `update_allow` already holds to."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET max_tokens = ?, max_cost_usd = ? WHERE id = ?",
+            (max_tokens, max_cost_usd, project_id),
         )
         self._conn.commit()
         return self.get(project_id)
