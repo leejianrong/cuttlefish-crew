@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help dev demo lint type check test test-all test-sandbox-live ci install-hooks \
-	install-systemd-service frontend-install frontend-check frontend-test frontend-build
+	install-systemd-service frontend-install frontend-check frontend-test frontend-build docs
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -64,6 +64,11 @@ frontend-build: ## Production build of frontend/ to frontend/dist/
 	cd frontend && npm run build
 
 ci: check test-all frontend-check frontend-test frontend-build ## Everything CI gates on (lint + mypy + full suite + frontend)
+
+# docs-site/ (KAN-1718) is a separate source tree from docs/ -- curated,
+# user-facing content only, never the internal ADR/QUESTIONS/gtm material.
+docs: ## Build the docs site locally (zensical build --strict) to site/
+	uvx zensical build --clean --strict
 
 install-hooks: ## Install the pre-push git hook
 	./scripts/install-hooks.sh
