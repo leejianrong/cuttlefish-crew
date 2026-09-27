@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from cuttlefish.cli import ConfigError, _parse_allow, _parse_roles, build_parser
+from cuttlefish.cli import (
+    ConfigError,
+    _parse_allow,
+    _parse_roles,
+    _resolve_dashboard_dir,
+    build_parser,
+)
 
 
 def test_parse_allow_defaults_to_empty() -> None:
@@ -92,6 +100,39 @@ def test_serve_accepts_repeated_allow_origin_flags() -> None:
 def test_serve_host_defaults_to_loopback() -> None:
     args = build_parser().parse_args(["serve"])
     assert args.host == "127.0.0.1"
+
+
+def test_serve_dashboard_dir_defaults_to_none_when_omitted() -> None:
+    args = build_parser().parse_args(["serve"])
+    assert args.dashboard_dir is None
+
+
+def test_serve_accepts_an_explicit_dashboard_dir() -> None:
+    args = build_parser().parse_args(["serve", "--dashboard-dir", "frontend/dist"])
+    assert args.dashboard_dir == "frontend/dist"
+
+
+def test_resolve_dashboard_dir_returns_the_explicit_path_verbatim(tmp_path: Path) -> None:
+    # Deliberately not asserting existence here -- an explicit, missing path is
+    # `run_daemon`'s own job to reject (ADR-0012), not this resolver's.
+    missing = tmp_path / "nope"
+    assert _resolve_dashboard_dir(str(missing)) == missing
+
+
+def test_resolve_dashboard_dir_auto_detects_frontend_dist(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "frontend" / "dist").mkdir(parents=True)
+    (tmp_path / "frontend" / "dist" / "index.html").write_text("<html></html>")
+    monkeypatch.chdir(tmp_path)
+    assert _resolve_dashboard_dir(None) == Path("frontend/dist")
+
+
+def test_resolve_dashboard_dir_is_none_when_no_build_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    assert _resolve_dashboard_dir(None) is None
 
 
 def test_run_team_role_defaults_to_none_when_omitted() -> None:

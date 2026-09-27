@@ -59,10 +59,11 @@ for smoke-testing the CLI itself with no live credential.
 make demo
 ```
 
-Starts a fleet daemon and the dashboard's dev server together, and prints
-the URL/token to paste into its connect screen. No daemon at hand yet? The
-connect screen links straight to a sprite gallery that needs no connection
-at all.
+Builds the dashboard once, then runs `cuttlefish serve` alone -- one process
+serves both the JSON API and the dashboard itself (ADR-0012), and prints one
+URL to open with the token to paste into its connect screen. No daemon at
+hand yet? The connect screen links straight to a sprite gallery that needs no
+connection at all.
 
 ## Usage
 
