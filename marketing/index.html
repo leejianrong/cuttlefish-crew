@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cuttlefish-crew — a fleet manager for coding agents</title>
+<meta name="description" content="Register your software projects, name a small crew of coding agents for each one, and direct all of it from one dashboard — durably, resumably, remotely.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0a1220;
+    --ink-panel: #111b2e;
+    --ink-panel-2: #16223a;
+    --kelp-line: #223350;
+    --foam: #edf3f5;
+    --foam-dim: #9fb1c4;
+    --glow: #3fd7c4;
+    --glow-dim: #1f4a45;
+    --amber: #ffb15e;
+    --coral: #ff6b5e;
+    --green: #5bd88a;
+    --slate: #5b6270;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--foam);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+    font-weight: 700;
+    line-height: 1.1;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  code, .mono {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  a { color: var(--glow); }
+  a:focus-visible, button:focus-visible, .copy-btn:focus-visible {
+    outline: 2px solid var(--glow);
+    outline-offset: 3px;
+  }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---- nav ---- */
+  nav.wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 28px;
+    padding-bottom: 28px;
+  }
+  .wordmark {
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+    color: var(--foam);
+    text-decoration: none;
+  }
+  .wordmark::before { content: "🦑 "; }
+  .nav-links { display: flex; gap: 24px; align-items: center; }
+  .nav-links a { color: var(--foam-dim); text-decoration: none; font-size: 0.95rem; }
+  .nav-links a:hover { color: var(--foam); }
+
+  /* ---- hero ---- */
+  .hero {
+    padding: 40px 0 80px;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 56px;
+    align-items: center;
+  }
+  .hero h1 {
+    font-size: clamp(2.1rem, 4vw, 3rem);
+  }
+  .hero h1 .accent { color: var(--glow); }
+  .hero p.sub {
+    color: var(--foam-dim);
+    font-size: 1.15rem;
+    max-width: 44ch;
+    margin: 20px 0 28px;
+  }
+  .install {
+    display: flex;
+    align-items: stretch;
+    background: #060b14;
+    border: 1px solid var(--kelp-line);
+    border-radius: 10px;
+    overflow: hidden;
+    max-width: 480px;
+  }
+  .install code {
+    flex: 1;
+    padding: 13px 16px;
+    font-size: 0.88rem;
+    color: var(--foam);
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+  .copy-btn {
+    border: none;
+    border-left: 1px solid var(--kelp-line);
+    background: var(--ink-panel-2);
+    color: var(--foam-dim);
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.8rem;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--foam); background: #1c2a45; }
+
+  .hero-links { margin-top: 16px; display: flex; gap: 20px; }
+  .hero-links a { color: var(--foam-dim); font-size: 0.92rem; text-decoration: none; }
+  .hero-links a:hover { color: var(--glow); }
+
+  .chrome {
+    border-radius: var(--radius);
+    background: var(--ink-panel);
+    border: 1px solid var(--kelp-line);
+    box-shadow: 0 24px 60px -20px rgba(0,0,0,0.55);
+    overflow: hidden;
+  }
+  .chrome-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 12px;
+    background: var(--ink-panel-2);
+    border-bottom: 1px solid var(--kelp-line);
+  }
+  .chrome-bar span {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--kelp-line);
+  }
+  .chrome video, .chrome img { display: block; width: 100%; }
+
+  /* ---- quote ---- */
+  .quote {
+    text-align: center;
+    padding: 64px 0;
+    border-top: 1px solid var(--kelp-line);
+    border-bottom: 1px solid var(--kelp-line);
+  }
+  .quote h2 {
+    font-size: clamp(1.6rem, 3.2vw, 2.4rem);
+  }
+  .quote p {
+    color: var(--foam-dim);
+    max-width: 52ch;
+    margin: 16px auto 0;
+    font-size: 1.05rem;
+  }
+
+  /* ---- signature: sprite legend ---- */
+  .legend {
+    padding: 80px 0;
+    text-align: center;
+  }
+  .legend h2 { font-size: clamp(1.5rem, 3vw, 2rem); max-width: 26ch; margin: 0 auto; }
+  .legend p.lede {
+    color: var(--foam-dim);
+    max-width: 50ch;
+    margin: 16px auto 40px;
+  }
+  .legend .chrome { max-width: 800px; margin: 0 auto; text-align: left; }
+  .legend .chrome img { animation: legend-in 900ms ease both; }
+  @keyframes legend-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* ---- features ---- */
+  .features {
+    padding: 20px 0 88px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 32px;
+  }
+  .feature h3 { font-size: 1.15rem; margin-bottom: 10px; }
+  .feature p { color: var(--foam-dim); font-size: 0.98rem; margin: 0; }
+  .feature .dot {
+    width: 10px; height: 10px; border-radius: 2px;
+    display: inline-block; margin-bottom: 16px;
+  }
+
+  /* ---- try it ---- */
+  .try {
+    padding: 72px 0 96px;
+    text-align: center;
+    border-top: 1px solid var(--kelp-line);
+  }
+  .try h2 { font-size: clamp(1.5rem, 3vw, 2rem); }
+  .try .install { margin: 28px auto 0; }
+  .try-links { margin-top: 20px; }
+  .try-links a { color: var(--foam-dim); text-decoration: none; font-size: 0.95rem; }
+  .try-links a:hover { color: var(--glow); }
+
+  footer {
+    border-top: 1px solid var(--kelp-line);
+    padding: 28px 0 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--foam-dim);
+    font-size: 0.88rem;
+  }
+  footer .flinks { display: flex; gap: 20px; }
+  footer a { color: var(--foam-dim); text-decoration: none; }
+  footer a:hover { color: var(--foam); }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: 1fr; padding-top: 8px; }
+    .features { grid-template-columns: 1fr; }
+    footer { flex-direction: column; gap: 12px; text-align: center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .legend .chrome img { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="wrap">
+  <a class="wordmark" href="#">cuttlefish-crew</a>
+  <div class="nav-links">
+    <a href="https://github.com/leejianrong/cuttlefish-crew">GitHub</a>
+    <a href="docs/">Docs</a>
+  </div>
+</nav>
+
+<header class="wrap hero">
+  <div>
+    <h1>Run a crew of coding agents,<br>not a spreadsheet of<br><span class="accent">terminal tabs</span>.</h1>
+    <p class="sub">Register your software projects, name a small team of agents for each one, and direct all of it from one dashboard — durably, resumably, remotely.</p>
+    <div class="install">
+      <code id="install-cmd">git clone https://github.com/leejianrong/cuttlefish-crew.git &amp;&amp; cd cuttlefish-crew &amp;&amp; uv sync</code>
+      <button class="copy-btn" id="copy-btn" type="button">copy</button>
+    </div>
+    <div class="hero-links">
+      <a href="docs/quickstart/">Quickstart →</a>
+      <a href="https://github.com/leejianrong/cuttlefish-crew">Source on GitHub →</a>
+    </div>
+  </div>
+  <div class="chrome">
+    <div class="chrome-bar"><span></span><span></span><span></span></div>
+    <video src="assets/demo.mp4" autoplay muted loop playsinline aria-label="Screen recording: registering projects, opening the sprite gallery, and starting a team from the cuttlefish-crew dashboard"></video>
+  </div>
+</header>
+
+<section class="quote wrap">
+  <h2>A crew, not a company.</h2>
+  <p>No org chart. No hiring workflow. No performance reviews. Just a handful of named agents, each with its own job, directed from one place.</p>
+</section>
+
+<section class="legend wrap">
+  <h2>Cuttlefish change color to say what they're doing.</h2>
+  <p class="lede">So does every role in your crew — a role's status is always one glance away, never a log file you have to go dig through.</p>
+  <div class="chrome">
+    <div class="chrome-bar"><span></span><span></span><span></span></div>
+    <img src="assets/sprite-legend.png" width="760" height="390" alt="Five pixel-art sprite states from the cuttlefish-crew dashboard: queued (slate, declared but not started), working (teal, a round in flight), blocked (amber, the backend refused and needs a human), done (green, reached TaskCompleted), and failed (coral, reached TaskFailed)">
+  </div>
+</section>
+
+<section class="features wrap">
+  <div class="feature">
+    <span class="dot" style="background:var(--glow)"></span>
+    <h3>Crashes don't cost you the run</h3>
+    <p>The core loop is a durable workflow from the first commit that runs a task — kill the process mid-run, restart it, and it resumes exactly where it left off.</p>
+  </div>
+  <div class="feature">
+    <span class="dot" style="background:var(--amber)"></span>
+    <h3>Bring your own agent</h3>
+    <p>Delegate real coding work to kopicode, headless Claude Code, or headless Codex — your choice per project, not locked to one vendor's coding tool.</p>
+  </div>
+  <div class="feature">
+    <span class="dot" style="background:var(--coral)"></span>
+    <h3>One dashboard, every project</h3>
+    <p>Register 10 projects or 100. Watch every crew's status, steer a role mid-task, or require your sign-off before a round finishes — all from one screen.</p>
+  </div>
+</section>
+
+<section class="try wrap">
+  <h2>Try it in the next two minutes</h2>
+  <div class="install">
+    <code>uv run cuttlefish run "add a .gitignore entry"</code>
+    <button class="copy-btn" data-copy='uv run cuttlefish run "add a .gitignore entry"' type="button">copy</button>
+  </div>
+  <div class="try-links">
+    <a href="docs/quickstart/">Full quickstart, including the dashboard →</a>
+  </div>
+</section>
+
+<footer class="wrap">
+  <span>Apache-2.0</span>
+  <div class="flinks">
+    <a href="https://github.com/leejianrong/cuttlefish-crew">GitHub</a>
+    <a href="docs/">Docs</a>
+    <a href="docs/architecture/">Architecture</a>
+  </div>
+</footer>
+
+<script>
+  function copy(text, btn) {
+    navigator.clipboard?.writeText(text).then(() => {
+      const original = btn.textContent;
+      btn.textContent = "copied";
+      setTimeout(() => { btn.textContent = original; }, 1600);
+    });
+  }
+  document.getElementById("copy-btn").addEventListener("click", (e) => {
+    copy(document.getElementById("install-cmd").textContent, e.currentTarget);
+  });
+  document.querySelectorAll(".copy-btn[data-copy]").forEach((btn) => {
+    btn.addEventListener("click", (e) => copy(btn.getAttribute("data-copy"), e.currentTarget));
+  });
+</script>
+
+</body>
+</html>
