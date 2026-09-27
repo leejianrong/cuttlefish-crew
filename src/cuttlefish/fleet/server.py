@@ -9,13 +9,17 @@ posture satay's own control API holds (ADR-0014), reused directly via
 `satay.control.SecurityPolicy`/`generate_token`/`ensure_loopback_bind` rather than
 reimplemented, since this daemon is a strictly higher-value target than a single
 task's own control API: it can steer *every* registered project at once.
+
+A non-loopback bind (ADR-0011, KAN-1706) switches onto a completely separate guard,
+`cuttlefish.fleet.auth.SessionAuth` -- `create_app` treats either through the
+`SecurityCheck` protocol and never needs to know which one is active.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import socket
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from typing import Any
 
 import satay.control
@@ -25,6 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
 from cuttlefish.episodic.store import EpisodicEvent
+from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
 from cuttlefish.projects.store import ProjectNotFoundError, RoleDefinition
 
@@ -35,6 +40,11 @@ TOKEN_HEADER = "x-cuttlefish-token"
 #: Arbitrary, unregistered with IANA -- an operator with a real conflict overrides
 #: it with `--port`, the same escape hatch `satay dev`'s own default port has.
 DEFAULT_FLEET_PORT = 8420
+
+#: Reachable with no credential at all in either auth mode (ADR-0011): the
+#: dashboard must be able to tell which mode is active, and log in, before it
+#: has ever held a token or session.
+_PUBLIC_PATHS = frozenset({"/api/auth-mode", "/api/login"})
 
 
 def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
@@ -88,21 +98,34 @@ async def _json_body(request: Request) -> dict[str, Any]:
     return body
 
 
-def create_app(daemon: FleetDaemon, *, security: satay.control.SecurityPolicy) -> FastAPI:
+def create_app(
+    daemon: FleetDaemon,
+    *,
+    security: SecurityCheck,
+    login: SessionAuth | None = None,
+    cors_origins: Collection[str] = (),
+) -> FastAPI:
+    """`login` is only non-`None` in non-loopback/password mode (ADR-0011) -- it
+    both backs `POST /api/login` and doubles as `security` in that mode, since
+    `SessionAuth` implements `SecurityCheck` itself. `cors_origins` is the
+    operator's own `--allow-origin` list, added to the loopback-only regex below
+    rather than replacing it.
+    """
     app = FastAPI(title="cuttlefish-crew fleet daemon")
 
     @app.middleware("http")
     async def _check_security(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        try:
-            security.check(
-                token=request.headers.get(TOKEN_HEADER),
-                host=request.headers.get("host"),
-                origin=request.headers.get("origin"),
-            )
-        except satay.control.AuthError as exc:
-            return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
+        if request.url.path not in _PUBLIC_PATHS:
+            try:
+                security.check(
+                    token=request.headers.get(TOKEN_HEADER),
+                    host=request.headers.get("host"),
+                    origin=request.headers.get("origin"),
+                )
+            except satay.control.AuthError as exc:
+                return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
         return await call_next(request)
 
     # Registered *after* `_check_security` so it wraps *outside* it (Starlette
@@ -113,14 +136,34 @@ def create_app(daemon: FleetDaemon, *, security: satay.control.SecurityPolicy) -
     # The dashboard frontend (`frontend/`) is a separate origin during development
     # (Vite's own dev server, a different port); CORS only lets a browser's JS
     # *read* the response -- `_check_security` above is still the actual auth
-    # boundary. Loopback-only, matching this whole surface's own posture
-    # (ADR-0014) -- never a wildcard origin.
+    # boundary. Loopback-only by default (ADR-0014); `cors_origins` (ADR-0011)
+    # adds the operator's own explicit non-loopback allow-list on top -- never a
+    # wildcard either way.
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=r"https?://(127\.0\.0\.1|\[::1\]|localhost)(:\d+)?",
+        allow_origins=sorted(cors_origins),
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.get("/api/auth-mode")
+    async def auth_mode() -> dict[str, str]:
+        return {"mode": "password" if login is not None else "token"}
+
+    @app.post("/api/login")
+    async def login_route(request: Request) -> dict[str, Any]:
+        if login is None:
+            raise HTTPException(404, "password login is not enabled for this daemon")
+        body = await _json_body(request)
+        password = body.get("password")
+        if not password:
+            raise HTTPException(400, "'password' is required")
+        try:
+            token = login.login(password)
+        except satay.control.AuthError as exc:
+            raise HTTPException(exc.status, exc.detail) from exc
+        return {"token": token, "expires_in": login.ttl_seconds}
 
     @app.get("/api/projects")
     async def list_projects() -> dict[str, Any]:
@@ -247,22 +290,55 @@ def find_free_port(host: str, preferred: int, *, attempts: int = 20) -> int:
 
 
 async def run_daemon(
-    daemon: FleetDaemon, *, host: str = "127.0.0.1", port: int = DEFAULT_FLEET_PORT
+    daemon: FleetDaemon,
+    *,
+    host: str = "127.0.0.1",
+    port: int = DEFAULT_FLEET_PORT,
+    password: str | None = None,
+    cors_origins: Collection[str] = (),
 ) -> None:
     """Serve `daemon`'s HTTP surface until cancelled (`cuttlefish serve`).
 
-    Prints the generated token once, to stdout -- the only place it's ever shown,
-    the same posture `cuttlefish run --steerable` already holds for its own token.
+    Loopback `host` (the default): unchanged from before ADR-0011 -- a fresh
+    static token, printed once to stdout, the only place it's ever shown, the
+    same posture `cuttlefish run --steerable` already holds for its own token.
+
+    Non-loopback `host` (ADR-0011, KAN-1706): `password` (from
+    `CUTTLEFISH_SERVE_PASSWORD`, the CLI's own job to read -- never accepted
+    here as a plain argument) is required, and switches the whole daemon onto
+    `cuttlefish.fleet.auth.SessionAuth` instead. Raises `ValueError` if `host` is
+    non-loopback and `password` is missing, or if `password` is too weak
+    (`SessionAuth`'s own `WeakPasswordError`) -- refusing to start rather than
+    silently falling back to the loopback guard for a bind that isn't loopback.
     """
-    satay.control.ensure_loopback_bind(host)
     resolved_port = find_free_port(host, port)
-    token = satay.control.generate_token()
-    app = create_app(daemon, security=satay.control.SecurityPolicy(token=token))
-    # flush=True: a long-running daemon's stdout is commonly redirected to a log
-    # file rather than a TTY, where Python fully buffers by default -- an operator
-    # piping this to a file must still be able to read the token immediately,
-    # not only once enough further output accumulates to flush the buffer.
-    print(f"cuttlefish serve: http://{host}:{resolved_port}  {TOKEN_HEADER}: {token}", flush=True)
+    login: SessionAuth | None = None
+    security: SecurityCheck
+    if satay.control.is_loopback_host(host):
+        satay.control.ensure_loopback_bind(host)
+        token = satay.control.generate_token()
+        security = satay.control.SecurityPolicy(token=token)
+        # flush=True: a long-running daemon's stdout is commonly redirected to a
+        # log file rather than a TTY, where Python fully buffers by default -- an
+        # operator piping this to a file must still be able to read the token
+        # immediately, not only once enough further output accumulates to flush.
+        print(
+            f"cuttlefish serve: http://{host}:{resolved_port}  {TOKEN_HEADER}: {token}", flush=True
+        )
+    else:
+        if not password:
+            raise ValueError(
+                "binding a non-loopback host requires CUTTLEFISH_SERVE_PASSWORD "
+                "(ADR-0011) -- refusing to expose the daemon with no real auth"
+            )
+        login = SessionAuth(password=password, allowed_origins=frozenset(cors_origins))
+        security = login
+        print(
+            f"cuttlefish serve: http://{host}:{resolved_port}  "
+            "(non-loopback -- POST /api/login with CUTTLEFISH_SERVE_PASSWORD, ADR-0011)",
+            flush=True,
+        )
+    app = create_app(daemon, security=security, login=login, cors_origins=cors_origins)
     config = uvicorn.Config(app, host=host, port=resolved_port, log_level="warning")
     server = uvicorn.Server(config)
     await server.serve()

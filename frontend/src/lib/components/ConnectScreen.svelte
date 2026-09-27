@@ -1,29 +1,59 @@
 <script lang="ts">
-  import { FleetClient, FleetApiError, FleetUnreachableError } from "../api";
+  import {
+    FleetClient,
+    FleetApiError,
+    FleetUnreachableError,
+    fetchAuthMode,
+    login as loginRequest,
+    type AuthMode,
+  } from "../api";
 
   let {
     onConnected,
     onShowGallery,
   }: { onConnected: (client: FleetClient) => void; onShowGallery: () => void } = $props();
 
+  // ADR-0011: a daemon's own `/api/auth-mode` says whether it wants the classic
+  // loopback-mode static token or a non-loopback bind's password login -- checked
+  // once the operator supplies a base URL, before either credential field renders,
+  // so the form never has to guess which one to ask for.
+  let step = $state<"url" | "credential">("url");
+  let mode = $state<AuthMode | null>(null);
   let baseUrl = $state("http://127.0.0.1:8420");
-  let token = $state("");
+  let credential = $state("");
   let connecting = $state(false);
   let error = $state<string | null>(null);
+
+  async function checkBaseUrl(event: SubmitEvent) {
+    event.preventDefault();
+    connecting = true;
+    error = null;
+    try {
+      mode = await fetchAuthMode(baseUrl.replace(/\/$/, ""));
+      step = "credential";
+    } catch (err) {
+      error = err instanceof FleetUnreachableError ? err.message : "something went wrong";
+    } finally {
+      connecting = false;
+    }
+  }
 
   async function connect(event: SubmitEvent) {
     event.preventDefault();
     connecting = true;
     error = null;
-    const client = new FleetClient(baseUrl.replace(/\/$/, ""), token.trim());
+    const trimmedBaseUrl = baseUrl.replace(/\/$/, "");
     try {
+      const token =
+        mode === "password" ? await loginRequest(trimmedBaseUrl, credential) : credential.trim();
+      const client = new FleetClient(trimmedBaseUrl, token);
       await client.listProjects();
       onConnected(client);
     } catch (err) {
       if (err instanceof FleetUnreachableError) {
         error = err.message;
       } else if (err instanceof FleetApiError) {
-        error = err.status === 401 ? "that token was rejected" : err.message;
+        error = err.status === 401 ? credentialRejectedMessage() : err.message;
       } else {
         error = "something went wrong connecting";
       }
@@ -31,38 +61,85 @@
       connecting = false;
     }
   }
+
+  function credentialRejectedMessage(): string {
+    return mode === "password" ? "that password was rejected" : "that token was rejected";
+  }
+
+  function backToUrl() {
+    step = "url";
+    mode = null;
+    credential = "";
+    error = null;
+  }
 </script>
 
 <div class="wrap">
-  <form onsubmit={connect}>
-    <h1>cuttlefish-crew</h1>
-    <p class="hint">
-      Connect to a running <code>cuttlefish serve</code> -- its base URL and token are
-      printed to that process's own stdout at startup.
-    </p>
+  {#if step === "url"}
+    <form onsubmit={checkBaseUrl}>
+      <h1>cuttlefish-crew</h1>
+      <p class="hint">
+        Connect to a running <code>cuttlefish serve</code> -- its base URL is printed to that
+        process's own stdout at startup.
+      </p>
 
-    <label>
-      Base URL
-      <input type="text" bind:value={baseUrl} placeholder="http://127.0.0.1:8420" required />
-    </label>
+      <label>
+        Base URL
+        <input type="text" bind:value={baseUrl} placeholder="http://127.0.0.1:8420" required />
+      </label>
 
-    <label>
-      Token
-      <input type="password" bind:value={token} placeholder="x-cuttlefish-token" required />
-    </label>
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
+      <button type="submit" disabled={connecting}>
+        {connecting ? "Checking…" : "Continue"}
+      </button>
 
-    <button type="submit" disabled={connecting}>
-      {connecting ? "Connecting…" : "Connect"}
-    </button>
+      <button type="button" class="gallery-link" onclick={onShowGallery}>
+        No daemon running yet? See the sprites first &rarr;
+      </button>
+    </form>
+  {:else}
+    <form onsubmit={connect}>
+      <h1>cuttlefish-crew</h1>
+      {#if mode === "password"}
+        <p class="hint">
+          This daemon is bound non-loopback and needs its own login (ADR-0011) -- the password is
+          whatever <code>CUTTLEFISH_SERVE_PASSWORD</code> was set to when it started.
+        </p>
+        <label>
+          Password
+          <input
+            type="password"
+            bind:value={credential}
+            placeholder="CUTTLEFISH_SERVE_PASSWORD"
+            required
+          />
+        </label>
+      {:else}
+        <p class="hint">
+          Its token is printed to that process's own stdout at startup.
+        </p>
+        <label>
+          Token
+          <input type="password" bind:value={credential} placeholder="x-cuttlefish-token" required />
+        </label>
+      {/if}
 
-    <button type="button" class="gallery-link" onclick={onShowGallery}>
-      No daemon running yet? See the sprites first &rarr;
-    </button>
-  </form>
+      {#if error}
+        <p class="error">{error}</p>
+      {/if}
+
+      <button type="submit" disabled={connecting}>
+        {connecting ? "Connecting…" : "Connect"}
+      </button>
+
+      <button type="button" class="gallery-link" onclick={backToUrl}>
+        &larr; back
+      </button>
+    </form>
+  {/if}
 </div>
 
 <style>

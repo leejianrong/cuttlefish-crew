@@ -20,7 +20,7 @@ doc comment all beat a paragraph here.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the current problem, scope, and shape
   (the cuttlefish-crew pivot direction, built on top of V1/V2's original MVP)
-- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0009
+- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0011
 - [`docs/SLICES.md`](docs/SLICES.md) — the build order this was built against
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed, including gaps a live run surfaced after the fact
@@ -81,7 +81,29 @@ kopicode-backed (every role in a team already shares one `root`), avoiding
 kopicode's own per-working-tree lock collision (Q44) rather than failing
 closed on it.
 
-Slice E (runner/hosting) is next per the roadmap, not yet started.
+Context/session continuity (CUT-E8, ADR-0010) is complete and merged: `cuttlefish
+run`/`run-team` and `FleetDaemon.resume_pending()` resume a non-terminal run by
+calling `satay.start` with its original `run_id` instead of always minting a
+fresh one, closing both the CLI-crash and daemon-restart resume gaps with the
+one primitive satay's own replay engine already provides; `compose_steered_text`
+now folds in the latest `HandoverWritten` summary instead of an unbounded raw
+`round_summaries` list; the dashboard surfaces a `TeamResumed` marker and a
+per-role checkpoint timeline.
+
+Slice E (remote access & always-on hosting, CUT-E9) has started: KAN-1706 (ADR-
+0011) is complete and merged — a non-loopback `cuttlefish serve --host <addr>`
+bind requires `CUTTLEFISH_SERVE_PASSWORD` and switches onto
+`cuttlefish.fleet.auth.SessionAuth` (a password login minting short-lived,
+HMAC-signed session tokens, in-memory lockout after repeated failures) instead
+of the loopback default's shared, printed-once static token
+(`satay.control.SecurityPolicy`, unchanged); `--allow-origin` (repeatable) adds
+explicit non-loopback browser origins to the dashboard's existing loopback-only
+CORS allow-list. The dashboard's `ConnectScreen` calls the new, credential-less
+`GET /api/auth-mode` once a base URL is entered, then renders a password field
+(`POST /api/login`) or the classic token field accordingly. The remaining
+CUT-E9 cards (KAN-1707 serve-the-dashboard-from-the-daemon, KAN-1708 Tailscale/
+tunnel mode, KAN-1709 daemon process supervision, KAN-1710 a Fly.io feasibility
+spike) are not yet started.
 
 ## Known, accepted gaps — don't re-litigate
 
@@ -140,6 +162,16 @@ Slice E (runner/hosting) is next per the roadmap, not yet started.
   not (yet) render a "zoomed-out, one giant map of every project" scene —
   the portfolio view's own small-multiples cards are still the zoomed-out
   layer, unchanged in shape since D1. `docs/SLICES.md` slice D2.
+- Non-loopback `cuttlefish serve` (ADR-0011) is single-operator auth, not
+  multi-tenancy — one shared password, one class of session token, no
+  per-user accounts or roles. Its `Origin` check keeps a loopback carve-out
+  (same-machine dev traffic is always allowed) but deliberately drops the
+  `Host`-header DNS-rebinding check ADR-0014's loopback guard has, since a
+  non-loopback bind's legitimate `Host` values can't be reduced to "loopback
+  only" — the explicit `--allow-origin` list and the session token are the
+  real guard there instead. Reaching it beyond a LAN still needs the
+  operator's own tunnel/VPN (KAN-1708) or a real deployment (KAN-1710); this
+  card only adds the auth a non-loopback bind needs once one exists.
 
 ## Workflow conventions
 

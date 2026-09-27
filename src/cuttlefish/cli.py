@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import shlex
 import sys
 import uuid
@@ -28,7 +29,7 @@ from dotenv import load_dotenv
 from cuttlefish import runtime
 from cuttlefish.config import ConfigError, prepare_run, secrets_db_path
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, run_daemon
+from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
 from cuttlefish.projects.store import Project, ProjectStore, RoleDefinition
 from cuttlefish.secrets.store import (
@@ -395,7 +396,17 @@ async def _serve(args: argparse.Namespace) -> int:
                     f"(team {attempt.team_id}): {attempt.error}",
                     file=sys.stderr,
                 )
-        await run_daemon(daemon, host=args.host, port=args.port)
+        try:
+            await run_daemon(
+                daemon,
+                host=args.host,
+                port=args.port,
+                password=os.environ.get("CUTTLEFISH_SERVE_PASSWORD"),
+                cors_origins=args.allow_origin or (),
+            )
+        except (ValueError, WeakPasswordError) as exc:
+            print(f"cuttlefish serve: {exc}", file=sys.stderr)
+            return EXIT_TASK_FAILED
     finally:
         store.close()
     return EXIT_OK
@@ -591,8 +602,28 @@ def build_parser() -> argparse.ArgumentParser:
     serve_parser = subparsers.add_parser(
         "serve", help="Start the fleet daemon: launches and owns every registered project's team"
     )
-    serve_parser.add_argument("--host", default="127.0.0.1", help="Loopback-only (ADR-0014)")
+    serve_parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help=(
+            "Loopback by default (ADR-0014). A non-loopback host (a LAN IP, a "
+            "Tailscale address, 0.0.0.0) requires CUTTLEFISH_SERVE_PASSWORD in the "
+            "environment and switches to password/session auth (ADR-0011) -- never "
+            "a CLI flag, so the password never lands in shell history or `ps`."
+        ),
+    )
     serve_parser.add_argument("--port", type=int, default=DEFAULT_FLEET_PORT)
+    serve_parser.add_argument(
+        "--allow-origin",
+        action="append",
+        metavar="ORIGIN",
+        help=(
+            "A browser origin (e.g. https://my-machine.ts.net) the dashboard may be "
+            "served from when --host is non-loopback (ADR-0011). Repeatable. Ignored "
+            "in loopback mode, which already allows same-machine origins. Default: "
+            "none -- only same-machine browser access works until this is set."
+        ),
+    )
 
     return parser
 

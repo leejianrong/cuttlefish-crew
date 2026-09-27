@@ -53,6 +53,49 @@ export class FleetUnreachableError extends Error {
   }
 }
 
+/** Which auth mode a running `cuttlefish serve` is in (ADR-0011): "token" is the
+ * default loopback mode's static, printed-once bearer token; "password" is a
+ * non-loopback bind's login/session mode, `POST /api/login` mints the session
+ * token used the same way from then on. */
+export type AuthMode = "token" | "password";
+
+/** `GET /api/auth-mode` is one of two routes reachable with no credential at all
+ * (`POST /api/login` is the other) -- a plain `fetch`, not `FleetClient.request`,
+ * since there is no token yet to attach. */
+export async function fetchAuthMode(baseUrl: string): Promise<AuthMode> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/auth-mode`);
+  } catch {
+    throw new FleetUnreachableError(baseUrl);
+  }
+  if (!response.ok) {
+    throw new FleetApiError(response.status, response.statusText);
+  }
+  return ((await response.json()) as { mode: AuthMode }).mode;
+}
+
+/** `POST /api/login` (password mode only) -- exchanges the operator's password
+ * for a short-lived session token, used exactly like the static token from then
+ * on (the same `x-cuttlefish-token` header). */
+export async function login(baseUrl: string, password: string): Promise<string> {
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl}/api/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ password }),
+    });
+  } catch {
+    throw new FleetUnreachableError(baseUrl);
+  }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ detail: response.statusText }));
+    throw new FleetApiError(response.status, body.detail ?? response.statusText);
+  }
+  return ((await response.json()) as { token: string }).token;
+}
+
 export class FleetClient {
   constructor(
     public readonly baseUrl: string,
