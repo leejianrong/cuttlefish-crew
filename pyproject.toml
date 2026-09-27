@@ -132,6 +132,8 @@ markers = [
     "requires_docker: needs a local docker daemon on PATH; skips itself otherwise",
     "requires_claude_code: needs a real claude binary on PATH; skips itself otherwise",
     "requires_claude_code_live: needs a real, authenticated claude binary and costs real money; opt-in via CUTTLEFISH_TEST_CLAUDE_CODE_LIVE=1, never runs otherwise",
+    "requires_codex: needs a real codex binary on PATH; skips itself otherwise",
+    "requires_codex_live: needs a real, authenticated codex binary and costs real money; opt-in via CUTTLEFISH_TEST_CODEX_LIVE=1, never runs otherwise",
 ]
 
 [tool.coverage.run]

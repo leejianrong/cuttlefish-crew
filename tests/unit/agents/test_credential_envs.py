@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from cuttlefish.agents.claude_code import _credential_envs as claude_code_credential_envs
+from cuttlefish.agents.codex import _credential_envs as codex_credential_envs
 from cuttlefish.agents.kopicode import _credential_envs as kopicode_credential_envs
 
 
@@ -67,3 +68,22 @@ def test_claude_code_prefers_a_resolved_secret_over_the_ambient_env_var(
     result = claude_code_credential_envs({"ANTHROPIC_API_KEY": "from-project-secret"})
 
     assert result == {"ANTHROPIC_API_KEY": "from-project-secret"}
+
+
+def test_codex_only_ever_resolves_its_own_openai_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "irrelevant-to-codex")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    assert codex_credential_envs({}) == {}
+
+
+def test_codex_prefers_a_resolved_secret_over_the_ambient_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "from-env")
+
+    result = codex_credential_envs({"OPENAI_API_KEY": "from-project-secret"})
+
+    assert result == {"OPENAI_API_KEY": "from-project-secret"}

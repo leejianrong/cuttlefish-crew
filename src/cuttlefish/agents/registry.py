@@ -17,7 +17,9 @@ class UnknownBackendError(Exception):
     """A configured agent-backend name that doesn't match any known AgentBackend."""
 
 
-def resolve_backend(name: str, *, kopicode_binary: str, claude_code_binary: str) -> AgentBackend:
+def resolve_backend(
+    name: str, *, kopicode_binary: str, claude_code_binary: str, codex_binary: str = "codex"
+) -> AgentBackend:
     if name == "kopicode":
         from cuttlefish.agents.kopicode import KopicodeBackend
 
@@ -26,6 +28,10 @@ def resolve_backend(name: str, *, kopicode_binary: str, claude_code_binary: str)
         from cuttlefish.agents.claude_code import ClaudeCodeBackend
 
         return ClaudeCodeBackend(claude_code_binary)
+    if name == "codex":
+        from cuttlefish.agents.codex import CodexBackend
+
+        return CodexBackend(codex_binary)
     raise UnknownBackendError(
-        f"unknown agent backend {name!r}; expected 'kopicode' or 'claude-code'"
+        f"unknown agent backend {name!r}; expected 'kopicode', 'claude-code', or 'codex'"
     )

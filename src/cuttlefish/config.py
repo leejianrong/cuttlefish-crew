@@ -32,6 +32,8 @@ KOPICODE_BIN_ENV = "CUTTLEFISH_KOPICODE_BIN"
 DEFAULT_KOPICODE_BIN = "kopicode"
 CLAUDE_CODE_BIN_ENV = "CUTTLEFISH_CLAUDE_CODE_BIN"
 DEFAULT_CLAUDE_CODE_BIN = "claude"
+CODEX_BIN_ENV = "CUTTLEFISH_CODEX_BIN"
+DEFAULT_CODEX_BIN = "codex"
 AGENT_BACKEND_ENV = "CUTTLEFISH_AGENT_BACKEND"
 DEFAULT_AGENT_BACKEND = "kopicode"
 LLM_PROVIDER_ENV = "CUTTLEFISH_LLM_PROVIDER"
@@ -52,14 +54,19 @@ def resolve_claude_code_binary() -> str:
     return os.environ.get(CLAUDE_CODE_BIN_ENV, DEFAULT_CLAUDE_CODE_BIN)
 
 
+def resolve_codex_binary() -> str:
+    return os.environ.get(CODEX_BIN_ENV, DEFAULT_CODEX_BIN)
+
+
 def resolve_agent_backend() -> str:
     """Which :class:`~cuttlefish.agents.backend.AgentBackend` a delegation runs
     through (ADR-0005) — "kopicode" by default, matching V1/V2's only backend.
     """
     choice = os.environ.get(AGENT_BACKEND_ENV, DEFAULT_AGENT_BACKEND)
-    if choice not in ("kopicode", "claude-code"):
+    if choice not in ("kopicode", "claude-code", "codex"):
         raise ConfigError(
-            f"unknown {AGENT_BACKEND_ENV}={choice!r}; expected 'kopicode' or 'claude-code'"
+            f"unknown {AGENT_BACKEND_ENV}={choice!r}; "
+            "expected 'kopicode', 'claude-code', or 'codex'"
         )
     return choice
 
@@ -187,6 +194,7 @@ class PreparedRun:
 
     kopicode_binary: str
     claude_code_binary: str
+    codex_binary: str
     agent_backend: str
     llm_provider: LlmProvider
     sandbox_provider: SandboxProvider | None
@@ -204,6 +212,7 @@ class PreparedRun:
             llm_provider=self.llm_provider,
             kopicode_binary=self.kopicode_binary,
             claude_code_binary=self.claude_code_binary,
+            codex_binary=self.codex_binary,
             agent_backend=self.agent_backend,
             sandbox_provider=self.sandbox_provider,
             secrets_store=self.secrets_store,
@@ -227,6 +236,7 @@ def prepare_run(
     resolved_base_dir = base_dir if base_dir is not None else Path.cwd()
     kopicode_binary = resolve_kopicode_binary()
     claude_code_binary = resolve_claude_code_binary()
+    codex_binary = resolve_codex_binary()
 
     from cuttlefish.agents.registry import resolve_backend
 
@@ -235,10 +245,15 @@ def prepare_run(
         agent_backend = resolve_agent_backend()
         if agent_backend == "kopicode":
             check_binary_on_path(kopicode_binary, env_hint=KOPICODE_BIN_ENV)
-        else:
+        elif agent_backend == "claude-code":
             check_binary_on_path(claude_code_binary, env_hint=CLAUDE_CODE_BIN_ENV)
+        else:
+            check_binary_on_path(codex_binary, env_hint=CODEX_BIN_ENV)
         backend = resolve_backend(
-            agent_backend, kopicode_binary=kopicode_binary, claude_code_binary=claude_code_binary
+            agent_backend,
+            kopicode_binary=kopicode_binary,
+            claude_code_binary=claude_code_binary,
+            codex_binary=codex_binary,
         )
         llm_provider = resolve_llm_provider()
         sandbox_provider = resolve_sandbox_provider()
@@ -267,6 +282,7 @@ def prepare_run(
     return PreparedRun(
         kopicode_binary=kopicode_binary,
         claude_code_binary=claude_code_binary,
+        codex_binary=codex_binary,
         agent_backend=agent_backend,
         llm_provider=llm_provider,
         sandbox_provider=sandbox_provider,
