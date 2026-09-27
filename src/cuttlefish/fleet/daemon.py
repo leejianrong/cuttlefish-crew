@@ -35,7 +35,12 @@ from cuttlefish.episodic.events import TeamResumed
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
-from cuttlefish.steering import SteeringDeliveryError, cancel_run, send_steering_message
+from cuttlefish.steering import (
+    SteeringDeliveryError,
+    cancel_run,
+    send_approval_decision,
+    send_steering_message,
+)
 from cuttlefish.team import RoleInput, TeamInput, run_team
 
 
@@ -154,7 +159,9 @@ class FleetDaemon:
     def is_running(self, project_id: str) -> bool:
         return self.running(project_id) is not None
 
-    async def start(self, project_id: str, roles: list[RoleStart]) -> str:
+    async def start(
+        self, project_id: str, roles: list[RoleStart], *, require_approval: bool = False
+    ) -> str:
         """Start `project_id`'s team with `roles`. Returns the new team id.
 
         Every daemon-launched team is unconditionally steerable (ADR-0008's own
@@ -163,6 +170,11 @@ class FleetDaemon:
         backend's own ambient credential names (`AgentBackend.CREDENTIAL_ENV_VARS`)
         -- a project needing `--secret`-declared names still runs via the CLI
         directly this slice, a real, named simplification, not an oversight.
+
+        `require_approval` (KAN-1711) is team-wide, opt-in per start call (unlike
+        `steerable`, which every daemon-started team already gets unconditionally)
+        -- an operator choosing whether *this* run needs a formal review gate, not
+        a project-wide default.
         """
         project = self._projects.get(project_id)
         if self.is_running(project_id):
@@ -170,12 +182,22 @@ class FleetDaemon:
 
         team_id = uuid.uuid4().hex
         role_inputs = _build_role_inputs(project, roles)
-        await self._launch_team(project, team_id, role_inputs)
-        self._projects.record_team_started(project_id, team_id, _to_persisted_roles(role_inputs))
+        await self._launch_team(project, team_id, role_inputs, require_approval=require_approval)
+        self._projects.record_team_started(
+            project_id,
+            team_id,
+            _to_persisted_roles(role_inputs),
+            require_approval=require_approval,
+        )
         return team_id
 
     async def _launch_team(
-        self, project: Project, team_id: str, role_inputs: list[RoleInput]
+        self,
+        project: Project,
+        team_id: str,
+        role_inputs: list[RoleInput],
+        *,
+        require_approval: bool = False,
     ) -> None:
         """Drive `run_team` for `project` under `team_id`/`role_inputs`, shared by
         `start` (a fresh `team_id`, never seen by satay before) and `resume_pending`
@@ -200,6 +222,7 @@ class FleetDaemon:
                     "project": project.secrets_scope,
                     "roles": role_inputs,
                     "steerable": True,
+                    "require_approval": require_approval,
                 }
                 async with satay.control.run_app(data_dir=Path(project.root) / ".satay") as app:
                     if not ready.done():
@@ -295,7 +318,12 @@ class FleetDaemon:
             role_inputs = _persisted_roles_to_inputs(project.last_team_roles)
             self._mark_resumed(project, team_id)
             try:
-                await self._launch_team(project, team_id, role_inputs)
+                await self._launch_team(
+                    project,
+                    team_id,
+                    role_inputs,
+                    require_approval=project.last_team_require_approval,
+                )
             except FleetError as exc:
                 attempts.append(ResumeAttempt(project.id, project.name, team_id, error=str(exc)))
                 continue
@@ -335,6 +363,28 @@ class FleetDaemon:
                 task_id=running.team_id,
                 role=role,
                 text=text,
+            )
+        except SteeringDeliveryError as exc:
+            raise FleetError(str(exc)) from exc
+
+    async def approve(
+        self, project_id: str, role: str, *, approved: bool, comment: str | None = None
+    ) -> None:
+        """Deliver one approve/reject decision to `project_id`'s running team
+        (KAN-1711) -- see `stop`'s own docstring for the identical
+        `asyncio.to_thread` same-loop-deadlock reason."""
+        running = self.running(project_id)
+        if running is None:
+            raise FleetError(f"project {project_id!r} has no running team to decide on")
+        try:
+            await asyncio.to_thread(
+                send_approval_decision,
+                base_url=running.base_url,
+                token=running.token,
+                task_id=running.team_id,
+                role=role,
+                approved=approved,
+                comment=comment,
             )
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc

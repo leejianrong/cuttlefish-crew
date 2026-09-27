@@ -15,6 +15,7 @@
   let starting = $state(false);
   let startError = $state<string | null>(null);
   let taskTexts = $state<Record<string, string>>({});
+  let requireApproval = $state(false);
 
   // ADR-0010/KAN-1705: continuity, made visible rather than just trusted -- a
   // per-role timeline of handover checkpoints (RoleSteerCard renders each
@@ -54,7 +55,7 @@
     starting = true;
     startError = null;
     try {
-      await client.startProject(projectId, roles);
+      await client.startProject(projectId, roles, requireApproval);
       taskTexts = {};
       await refresh();
     } catch {
@@ -127,6 +128,10 @@
               ></textarea>
             </label>
           {/each}
+          <label class="approval-toggle">
+            <input type="checkbox" bind:checked={requireApproval} />
+            Require my approval before each round finishes (KAN-1711)
+          </label>
           {#if startError}
             <p class="error">{startError}</p>
           {/if}
@@ -229,6 +234,19 @@
   label {
     display: block;
     margin-bottom: 1rem;
+  }
+
+  .approval-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: normal;
+  }
+
+  .approval-toggle input {
+    width: auto;
   }
 
   .role-label {

@@ -18,6 +18,7 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationError
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
 from cuttlefish.episodic.events import (
+    ApprovalDecision,
     DelegationCompleted,
     DelegationFailed,
     DelegationRefused,
@@ -66,6 +67,15 @@ class TaskInput(TypedDict):
     ``steering_grace`` overrides ``steering.DEFAULT_STEERING_GRACE_SECONDS`` — a
     test lowers it to assert a "no one steered" finalization deterministically
     rather than waiting out a real several-second grace window.
+
+    ``require_approval`` (KAN-1711) is optional and defaults to ``False`` — when
+    set, a round that nobody steered away from does not finalize on its own:
+    the workflow blocks (no timeout) for an ``ApprovalDecision``
+    (``cuttlefish approve <task-id>``/``--reject "<comment>"``). Approved
+    finalizes with that round's own outcome, identically to today. Rejected runs
+    one more round, the rejection's own comment folded in exactly the way a
+    steering message already is — the two mechanisms share one redirect path,
+    see ``run_task``'s own body.
     """
 
     task_id: str
@@ -77,6 +87,7 @@ class TaskInput(TypedDict):
     secret_names: NotRequired[list[str]]
     steerable: NotRequired[bool]
     steering_grace: NotRequired[float]
+    require_approval: NotRequired[bool]
 
 
 @satay.workflow
@@ -90,6 +101,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
     secret_names = task_input.get("secret_names", [])
     steerable = task_input.get("steerable", False)
     steering_grace = task_input.get("steering_grace", DEFAULT_STEERING_GRACE_SECONDS)
+    require_approval = task_input.get("require_approval", False)
 
     await journal(task_id, TaskSubmitted(text=text))
     await maybe_handover(task_id, token_budget=token_budget)
@@ -162,24 +174,63 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
         if await maybe_handover(task_id, token_budget=token_budget):
             round_summaries.clear()
 
-        if not steerable:
+        # A round finalizes unless something actively redirects it -- either a
+        # proactive steering message (opt-in, ADR-0008) or, if require_approval is
+        # set, an explicit rejection (KAN-1711). `redirect_text` is that
+        # redirect's own text, shared by both mechanisms so only one "start
+        # another round" code path exists below.
+        #
+        # require_approval *replaces* the steering wait for this round rather than
+        # composing with it -- never both in the same round. Two reasons, one
+        # load-bearing: (1) design -- KAN-1711's own "replacing today's ad-hoc
+        # steering-only redirect" framing means the gate *is* the round-boundary
+        # decision once it's on, and a rejection's own mandatory comment already
+        # carries whatever an operator would otherwise have steered with, so the
+        # two channels would be redundant, not complementary. (2) a real bug this
+        # finding prevents: satay's own per-event-type wait identity is a bare
+        # ordinal (`event#N`, `satay/replay/engine.py`'s `durable_wait_for_event`)
+        # with no type discriminator baked in -- the Nth-ever wait of type A and
+        # the Nth-ever wait of type B collide on the *same* identity. Awaiting
+        # `SteeringMessage` then `ApprovalDecision` in the same round (both at
+        # their own first-ever ordinal) hit exactly this: the steering wait's own
+        # fired timeout got misread as the approval wait's, resolving it to `None`
+        # immediately -- reproduced live via the fleet daemon (which always sets
+        # `steerable=True`), not a synthetic case.
+        redirect_text: str | None = None
+
+        if require_approval:
+            # No timeout: an approval gate that could silently time out into
+            # "approved" would not be a gate at all (KAN-1711's own "table
+            # stakes" framing -- Paperclip's own equivalent blocks until a human
+            # actually decides, not until a clock runs out).
+            decision = await satay.wait_for_event(
+                ApprovalDecision,
+                key=steering_key(task_id, None),
+                timeout=None,
+            )
+            assert decision is not None  # no timeout was given
+            await journal(task_id, decision)
+            if not decision.approved:
+                redirect_text = decision.comment or "(rejected, no comment given)"
+        elif steerable:
+            steer_event = await satay.wait_for_event(
+                SteeringMessage,
+                key=steering_key(task_id, None),
+                timeout=steering_grace,
+            )
+            if steer_event is not None:
+                await journal(task_id, steer_event)
+                redirect_text = steer_event.text
+
+        if redirect_text is None:
             break
 
-        steer_event = await satay.wait_for_event(
-            SteeringMessage,
-            key=steering_key(task_id, None),
-            timeout=steering_grace,
-        )
-        if steer_event is None:
-            break
-
-        await journal(task_id, steer_event)
         round_summaries.append(
             outcome.summary if outcome.kind == "completed" else (outcome.reason or outcome.summary)
         )
         handover_summary = await latest_handover_summary(task_id)
         current_text = compose_steered_text(
-            text, round_summaries, steer_event.text, handover_summary=handover_summary
+            text, round_summaries, redirect_text, handover_summary=handover_summary
         )
 
     await maybe_handover(task_id, token_budget=token_budget)

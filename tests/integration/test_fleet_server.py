@@ -172,6 +172,60 @@ def test_steer_a_project_with_no_running_team_is_409(client: TestClient, tmp_pat
     assert response.status_code == 409
 
 
+def test_approve_a_project_with_no_running_team_is_409(client: TestClient, tmp_path: Path) -> None:
+    created = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    project_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/approve", json={"role": "builder", "approved": True}
+    )
+    assert response.status_code == 409
+
+
+def test_approve_with_no_body_is_400_not_500(client: TestClient, tmp_path: Path) -> None:
+    created = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    project_id = created.json()["id"]
+
+    response = client.post(f"/api/projects/{project_id}/approve", content=b"")
+    assert response.status_code == 400
+
+
+def test_approve_with_malformed_json_is_400_not_500(client: TestClient, tmp_path: Path) -> None:
+    created = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    project_id = created.json()["id"]
+
+    response = client.post(f"/api/projects/{project_id}/approve", content=b"not json at all")
+    assert response.status_code == 400
+
+
+def test_approve_with_no_role_is_400(client: TestClient, tmp_path: Path) -> None:
+    created = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    project_id = created.json()["id"]
+
+    response = client.post(f"/api/projects/{project_id}/approve", json={"approved": True})
+    assert response.status_code == 400
+
+
+def test_approve_with_a_non_bool_approved_is_400(client: TestClient, tmp_path: Path) -> None:
+    created = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    project_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/approve", json={"role": "builder", "approved": "yes"}
+    )
+    assert response.status_code == 400
+
+
+def test_rejecting_with_no_comment_is_400(client: TestClient, tmp_path: Path) -> None:
+    created = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    project_id = created.json()["id"]
+
+    response = client.post(
+        f"/api/projects/{project_id}/approve", json={"role": "builder", "approved": False}
+    )
+    assert response.status_code == 400
+
+
 def test_start_an_unregistered_project_is_404(client: TestClient) -> None:
     response = client.post(
         "/api/projects/no-such-id/start", json={"roles": [{"name": "builder", "text": "do it"}]}

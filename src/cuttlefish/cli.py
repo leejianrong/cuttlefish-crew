@@ -7,7 +7,10 @@ to read afterward — both derived from exactly the same journal, never a second
 transcript (ADR-0004). ``run --steerable``/``run-team --steerable`` expose a local
 control API for the run's lifetime and ``cuttlefish steer <task-id> "<message>"``
 delivers to it — redirecting a still-running task at the boundary between
-delegation rounds, not mid-flight (ADR-0008).
+delegation rounds, not mid-flight (ADR-0008). ``run --require-approval``/``run-team
+--require-approval`` (KAN-1711) additionally block a round from finalizing at all
+until ``cuttlefish approve <task-id>`` (or ``--reject "<comment>"``) decides it —
+a formal review gate, not just an optional redirect.
 """
 
 from __future__ import annotations
@@ -44,6 +47,7 @@ from cuttlefish.steering import (
     SteeringDeliveryError,
     read_steering_pointer,
     remove_steering_pointer,
+    send_approval_decision,
     send_steering_message,
     write_steering_pointer,
 )
@@ -141,10 +145,18 @@ async def _run(args: argparse.Namespace) -> int:
         "project": project,
         "secret_names": secret_names,
         "steerable": args.steerable,
+        "require_approval": args.require_approval,
     }
 
+    # A control API + pointer file is needed for either external channel this
+    # task might be reachable over -- `--steerable`'s own optional redirect, or
+    # `--require-approval`'s mandatory review gate (KAN-1711) -- not only the
+    # first of the two, or a require_approval-only run would have no way for
+    # `cuttlefish approve` to ever reach it.
+    needs_control_api = args.steerable or args.require_approval
+
     try:
-        if args.steerable:
+        if needs_control_api:
             async with satay.control.run_app() as app:
                 print(
                     json.dumps(
@@ -220,10 +232,15 @@ async def _run_team(args: argparse.Namespace) -> int:
         "roles": role_inputs,
         "token_budget": args.token_budget,
         "steerable": args.steerable,
+        "require_approval": args.require_approval,
     }
 
+    # See _run's identical comment -- a require_approval-only team still needs
+    # the control API/pointer file `cuttlefish approve` reaches it through.
+    needs_control_api = args.steerable or args.require_approval
+
     try:
-        if args.steerable:
+        if needs_control_api:
             async with satay.control.run_app() as app:
                 print(
                     json.dumps(
@@ -295,6 +312,52 @@ def _steer(args: argparse.Namespace) -> int:
         return EXIT_TASK_FAILED
 
     print(f"cuttlefish: steering message sent to {args.task_id!r}")
+    return EXIT_OK
+
+
+def _approve(args: argparse.Namespace) -> int:
+    """Deliver one approve/reject decision to a still-running `--require-approval`
+    task or team role (KAN-1711) -- the same pointer-file/HTTP-client shape
+    `_steer` already uses, since either flag opens the identical control API.
+
+    ``--reject`` requires its own value be non-empty (a mandatory comment,
+    matching Paperclip's own "reject with a mandatory comment" shape) -- an
+    empty string is a config error, not silently sent as "no comment".
+    """
+    # A malformed --reject is a config error regardless of whether task_id is
+    # even reachable -- checked first so a typo'd task id never masks it.
+    if args.reject is not None and not args.reject.strip():
+        print("cuttlefish: --reject needs a non-empty comment", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+
+    pointer = read_steering_pointer(args.task_id)
+    if pointer is None:
+        print(
+            f"cuttlefish: no reachable task {args.task_id!r} is currently running "
+            "(it may not be --require-approval/--steerable, or may have already finished)",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+
+    approved = args.reject is None
+    comment = args.reject.strip() if args.reject is not None else None
+
+    base_url, token = pointer
+    try:
+        send_approval_decision(
+            base_url=base_url,
+            token=token,
+            task_id=args.task_id,
+            role=args.role,
+            approved=approved,
+            comment=comment,
+        )
+    except SteeringDeliveryError as exc:
+        print(f"cuttlefish: {exc}", file=sys.stderr)
+        return EXIT_TASK_FAILED
+
+    verb = "approved" if approved else "rejected"
+    print(f"cuttlefish: {verb} {args.task_id!r}")
     return EXIT_OK
 
 
@@ -516,6 +579,16 @@ def build_parser() -> argparse.ArgumentParser:
             "it at the boundary between delegation rounds. Off by default."
         ),
     )
+    run_parser.add_argument(
+        "--require-approval",
+        action="store_true",
+        help=(
+            "A round never finalizes on its own (KAN-1711) -- blocks until "
+            '`cuttlefish approve TASK_ID`/`--reject "<comment>"` decides it. '
+            "Also opens the control API (like --steerable) if not already open. "
+            "Off by default."
+        ),
+    )
 
     run_team_parser = subparsers.add_parser(
         "run-team", help="Run several named roles concurrently against one project (ADR-0007)"
@@ -568,6 +641,15 @@ def build_parser() -> argparse.ArgumentParser:
             "--steerable`, applying to every role. Off by default."
         ),
     )
+    run_team_parser.add_argument(
+        "--require-approval",
+        action="store_true",
+        help=(
+            "A role's round never finalizes on its own (KAN-1711), applying to "
+            "every role -- blocks until `cuttlefish approve TEAM_ID --role NAME`/"
+            '`--reject "<comment>"` decides it. Off by default.'
+        ),
+    )
 
     show_parser = subparsers.add_parser("show", help="Render one task's full episodic record")
     show_parser.add_argument("task_id", help="The task id (the satay run id it was started with)")
@@ -581,6 +663,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--role",
         default=None,
         help="Which team role to steer (required for a run-team task; omit for a plain run task)",
+    )
+
+    approve_parser = subparsers.add_parser(
+        "approve",
+        help="Approve or reject a still-running --require-approval task or team role (KAN-1711)",
+    )
+    approve_parser.add_argument("task_id", help="The task id (or team id) to decide on")
+    approve_parser.add_argument(
+        "--role",
+        default=None,
+        help="Which team role to decide on (required for run-team; omit for a plain run task)",
+    )
+    approve_parser.add_argument(
+        "--reject",
+        default=None,
+        metavar="COMMENT",
+        help=(
+            "Reject instead of approve, with this mandatory comment explaining why. "
+            "Omit entirely to approve (no comment needed)."
+        ),
     )
 
     secrets_parser = subparsers.add_parser(
@@ -718,6 +820,8 @@ def main(argv: list[str] | None = None) -> int:
         return _secrets(args)
     if args.command == "steer":
         return _steer(args)
+    if args.command == "approve":
+        return _approve(args)
     if args.command == "projects":
         return _projects(args)
     if args.command == "serve":

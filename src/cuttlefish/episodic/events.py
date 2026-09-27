@@ -198,6 +198,32 @@ class SteeringMessage:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ApprovalDecision:
+    """An operator's approve/reject-with-comment decision on a just-finished
+    delegation round (KAN-1711) -- the round-boundary review gate Paperclip's own
+    "agent tries to close a ticket -> routed to a human reviewer" flow also uses,
+    not a live per-action pause.
+
+    Doubles as satay's own wire payload type for delivery, the same dual-purpose
+    pattern `SteeringMessage` already established (ADR-0008): `cuttlefish.steering`'s
+    `satay.wait_for_event`/`send_event` calls derive their inbox key's type name
+    from this class's own `__module__`/`__qualname__`. `comment` is mandatory on a
+    rejection (`cuttlefish approve --reject "<comment>"` enforces this on the
+    sending side) and optional on an approval -- an approval needing no
+    justification is the ordinary case, matching typical code-review conventions
+    (e.g. GitHub's own "Approve" vs. "Request changes," the latter requiring a body).
+    """
+
+    EVENT_TYPE: ClassVar[str] = "ApprovalDecision"
+
+    approved: bool
+    comment: str | None = None
+    # Which team role this decision targets (ADR-0007's own discipline) -- None for
+    # a plain, non-team task.
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamResumed:
     """A daemon restart found this run still non-terminal and re-drove it via
     satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
@@ -249,6 +275,7 @@ EventPayload = (
     | TaskCompleted
     | TaskFailed
     | SteeringMessage
+    | ApprovalDecision
     | TeamResumed
     | UnknownPayload
 )
@@ -268,6 +295,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         TaskCompleted,
         TaskFailed,
         SteeringMessage,
+        ApprovalDecision,
         TeamResumed,
     )
 }

@@ -53,6 +53,19 @@ def test_delegation_refused_is_blocked() -> None:
     assert role_statuses(events, ["builder"]) == {"builder": "blocked"}
 
 
+def test_a_bare_delegation_failed_with_no_task_failed_yet_is_blocked_not_failed() -> None:
+    """KAN-1711, found live: a require_approval-gated round that just failed is
+    genuinely still open (awaiting a decision) until `TaskFailed` actually
+    lands -- the dashboard's own approval panel only renders for `"blocked"`,
+    so mapping this straight to `"failed"` made it invisible for exactly the
+    role it most needed to appear for."""
+    events = _events(
+        DelegationStarted(task_text="do it", root="/tmp", role="builder"),
+        DelegationFailed(reason="boom", role="builder"),
+    )
+    assert role_statuses(events, ["builder"]) == {"builder": "blocked"}
+
+
 def test_task_completed_is_done() -> None:
     events = _events(
         DelegationStarted(task_text="do it", root="/tmp", role="builder"),

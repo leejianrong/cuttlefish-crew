@@ -1,15 +1,24 @@
-"""Steering: redirecting a still-running task or team role (ADR-0008).
+"""Steering and approval-gating: redirecting, or reviewing, a still-running task
+or team role (ADR-0008, KAN-1711).
 
-Round-boundary, not mid-flight — see that ADR for why an in-flight backend
+Round-boundary, not mid-flight — see ADR-0008 for why an in-flight backend
 invocation can't be interrupted (no live input channel a headless coding-agent
 surface offers, and racing ``satay.wait_for_event`` against an in-flight task via
 ``satay.gather`` is an unverified composition of satay's own primitives). This
-module holds the pieces every side of that design shares: the wire key scheme and
-amended-prompt shape ``cuttlefish.workflow``/``cuttlefish.team`` use when polling for
-a queued message, and the local pointer file + HTTP client ``cuttlefish.cli``'s
-`steer` command uses to actually deliver one. Kept in one place because a mismatch
-between how a sender resolves a key and how a workflow's own wait resolves it would
-silently misroute a message to nowhere.
+module holds the pieces every side of both designs share: the wire key scheme
+and amended-prompt shape ``cuttlefish.workflow``/``cuttlefish.team`` use when
+polling for a queued steering message or approval decision, and the local
+pointer file + HTTP client ``cuttlefish.cli``'s `steer`/`approve` commands use to
+actually deliver one. Kept in one place because a mismatch between how a sender
+resolves a key and how a workflow's own wait resolves it would silently misroute
+a message to nowhere.
+
+Approval-gating (KAN-1711) reuses every piece of this module as-is: the same
+``steering_key`` (satay matches an inbox entry by ``(event_type, key)``, so
+``SteeringMessage`` and ``ApprovalDecision`` sharing one key string never
+collide), the same pointer file (a run needing either is reachable the same
+way), and the same HTTP-POST-to-satay's-control-API delivery shape -- only the
+wire event type and payload shape differ (`send_approval_decision`, below).
 """
 
 from __future__ import annotations
@@ -32,6 +41,10 @@ DEFAULT_STEERING_GRACE_SECONDS = 5.0
 #: literal here because `cuttlefish.cli`'s HTTP client sends this same string over
 #: the wire without ever importing satay's own primitives.
 STEERING_EVENT_TYPE = "cuttlefish.episodic.events.SteeringMessage"
+
+#: Same idea, for `cuttlefish.episodic.events.ApprovalDecision` (KAN-1711) -- a
+#: round-boundary approve/reject-with-comment gate, not a live per-action pause.
+APPROVAL_EVENT_TYPE = "cuttlefish.episodic.events.ApprovalDecision"
 
 
 def steering_key(task_id: str, role: str | None) -> str:
@@ -75,10 +88,10 @@ def compose_steered_text(
 
 
 def steering_pointer_path(task_id: str) -> Path:
-    """Where `cuttlefish run --steerable` publishes `task_id`'s `base_url`/`token`
-    for a second CLI invocation (`cuttlefish steer`) to find (ADR-0008) -- one file
-    per in-flight steerable task, not a registry service; removed once the run
-    reaches a terminal state.
+    """Where `cuttlefish run --steerable`/`--require-approval` publishes `task_id`'s
+    `base_url`/`token` for a second CLI invocation (`cuttlefish steer`/`approve`) to
+    find (ADR-0008, KAN-1711) -- one file per in-flight task reachable either way,
+    not a registry service; removed once the run reaches a terminal state.
     """
     return Path.cwd() / ".cuttlefish" / "steering" / f"{task_id}.json"
 
@@ -143,6 +156,43 @@ def send_steering_message(
             response.read()
     except urllib.error.HTTPError as exc:
         raise SteeringDeliveryError(f"{base_url} rejected the steering message: {exc}") from exc
+    except urllib.error.URLError as exc:
+        raise SteeringDeliveryError(f"couldn't reach {base_url}: {exc}") from exc
+
+
+def send_approval_decision(
+    *,
+    base_url: str,
+    token: str,
+    task_id: str,
+    role: str | None,
+    approved: bool,
+    comment: str | None = None,
+) -> None:
+    """POST one `ApprovalDecision` to a running task's control API (KAN-1711) --
+    the identical shape `send_steering_message` already uses, same key scheme
+    (`steering_key`), different event type/payload. See that function's own
+    docstring for the blocking-call/`asyncio.to_thread` discipline, unchanged here.
+    """
+    key = steering_key(task_id, role)
+    body = json.dumps(
+        {
+            "event_type": APPROVAL_EVENT_TYPE,
+            "key": key,
+            "payload": {"approved": approved, "comment": comment, "role": role},
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{base_url}/runs/{task_id}/events",
+        data=body,
+        method="POST",
+        headers={"content-type": "application/json", "x-satay-token": token},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10) as response:  # localhost-only control API
+            response.read()
+    except urllib.error.HTTPError as exc:
+        raise SteeringDeliveryError(f"{base_url} rejected the approval decision: {exc}") from exc
     except urllib.error.URLError as exc:
         raise SteeringDeliveryError(f"couldn't reach {base_url}: {exc}") from exc
 

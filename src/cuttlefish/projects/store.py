@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS projects (
     roles_json TEXT NOT NULL,
     last_team_id TEXT,
     allow_json TEXT NOT NULL DEFAULT '[]',
-    last_team_roles_json TEXT NOT NULL DEFAULT '[]'
+    last_team_roles_json TEXT NOT NULL DEFAULT '[]',
+    last_team_require_approval INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -63,6 +64,14 @@ _ADD_ALLOW_COLUMN = "ALTER TABLE projects ADD COLUMN allow_json TEXT NOT NULL DE
 #: Migrated the same way `allow_json` was.
 _ADD_LAST_TEAM_ROLES_COLUMN = (
     "ALTER TABLE projects ADD COLUMN last_team_roles_json TEXT NOT NULL DEFAULT '[]'"
+)
+
+#: `last_team_require_approval` was added for KAN-1711 -- the same resume-fidelity
+#: reason `last_team_roles_json` was: `TeamInput.require_approval` is team-wide
+#: config a daemon restart must rebuild identically, not something the journal
+#: itself records. Migrated the same way.
+_ADD_LAST_TEAM_REQUIRE_APPROVAL_COLUMN = (
+    "ALTER TABLE projects ADD COLUMN last_team_require_approval INTEGER NOT NULL DEFAULT 0"
 )
 
 
@@ -117,6 +126,7 @@ class Project:
     last_team_id: str | None = None
     allow: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     last_team_roles: tuple[PersistedRole, ...] = field(default_factory=tuple)
+    last_team_require_approval: bool = False
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -177,6 +187,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         last_team_id=row["last_team_id"],
         allow=_decode_allow(row["allow_json"]),
         last_team_roles=_decode_persisted_roles(row["last_team_roles_json"]),
+        last_team_require_approval=bool(row["last_team_require_approval"]),
     )
 
 
@@ -192,6 +203,8 @@ class ProjectStore:
             self._conn.execute(_ADD_ALLOW_COLUMN)
         if "last_team_roles_json" not in columns:
             self._conn.execute(_ADD_LAST_TEAM_ROLES_COLUMN)
+        if "last_team_require_approval" not in columns:
+            self._conn.execute(_ADD_LAST_TEAM_REQUIRE_APPROVAL_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -280,16 +293,24 @@ class ProjectStore:
         return self.get(project_id)
 
     def record_team_started(
-        self, project_id: str, team_id: str, roles: Sequence[PersistedRole] = ()
+        self,
+        project_id: str,
+        team_id: str,
+        roles: Sequence[PersistedRole] = (),
+        *,
+        require_approval: bool = False,
     ) -> None:
         """`roles` defaults to `()` for a caller with nothing to persist (e.g. a
         plain CLI-driven team, which has no daemon restart to survive) — a project
         started that way just isn't resumable later (`FleetDaemon.resume_pending`
-        skips any project with no persisted `last_team_roles`, ADR-0010)."""
+        skips any project with no persisted `last_team_roles`, ADR-0010).
+        `require_approval` (KAN-1711) persists team-wide, the same resume-fidelity
+        reason `roles` does."""
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute(
-            "UPDATE projects SET last_team_id = ?, last_team_roles_json = ? WHERE id = ?",
-            (team_id, _encode_persisted_roles(tuple(roles)), project_id),
+            "UPDATE projects SET last_team_id = ?, last_team_roles_json = ?, "
+            "last_team_require_approval = ? WHERE id = ?",
+            (team_id, _encode_persisted_roles(tuple(roles)), int(require_approval), project_id),
         )
         self._conn.commit()
 

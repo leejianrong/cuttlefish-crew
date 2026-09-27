@@ -149,6 +149,55 @@ def test_record_team_started_replaces_the_previous_persisted_roles(tmp_path: Pat
     store.close()
 
 
+def test_record_team_started_persists_require_approval(tmp_path: Path) -> None:
+    """KAN-1711: the same resume-fidelity reason `last_team_roles` is persisted --
+    a daemon restart must rebuild the identical `TeamInput.require_approval` its
+    last start used."""
+    store = _store(tmp_path)
+    project = store.register(name="demo", root=str(tmp_path / "demo"))
+    store.record_team_started(project.id, "team-123", require_approval=True)
+    assert store.get(project.id).last_team_require_approval is True
+    store.close()
+
+
+def test_record_team_started_require_approval_defaults_to_false(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="demo", root=str(tmp_path / "demo"))
+    store.record_team_started(project.id, "team-123")
+    assert store.get(project.id).last_team_require_approval is False
+    store.close()
+
+
+def test_a_projects_db_predating_last_team_require_approval_is_migrated_in_place(
+    tmp_path: Path,
+) -> None:
+    """`last_team_require_approval` was added for KAN-1711, after
+    `last_team_roles_json` -- an operator's existing, on-disk `projects.db` may
+    predate it."""
+    import sqlite3
+
+    db_path = tmp_path / "projects.db"
+    legacy = sqlite3.connect(db_path)
+    legacy.execute(
+        "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, root TEXT NOT NULL, "
+        "secrets_scope TEXT NOT NULL, roles_json TEXT NOT NULL, last_team_id TEXT, "
+        "allow_json TEXT NOT NULL DEFAULT '[]', "
+        "last_team_roles_json TEXT NOT NULL DEFAULT '[]')"
+    )
+    legacy.execute(
+        "INSERT INTO projects (id, name, root, secrets_scope, roles_json, last_team_id) "
+        "VALUES ('p1', 'demo', '/tmp/demo', 'demo', '[]', 'old-team')"
+    )
+    legacy.commit()
+    legacy.close()
+
+    store = ProjectStore.open(db_path)
+    project = store.get("p1")
+    assert project.last_team_id == "old-team"
+    assert project.last_team_require_approval is False
+    store.close()
+
+
 def test_a_projects_db_predating_last_team_roles_is_migrated_in_place(tmp_path: Path) -> None:
     """`last_team_roles_json` was added for KAN-1703, after `allow_json` -- an
     operator's existing, on-disk `projects.db` may predate either or both."""

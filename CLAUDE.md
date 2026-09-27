@@ -20,7 +20,7 @@ doc comment all beat a paragraph here.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the current problem, scope, and shape
   (the cuttlefish-crew pivot direction, built on top of V1/V2's original MVP)
-- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0015
+- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0016
 - [`docs/SLICES.md`](docs/SLICES.md) — the build order this was built against
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed, including gaps a live run surfaced after the fact
@@ -162,8 +162,45 @@ with ADR-0011's env-var password, free TLS at Fly's edge (solving ADR-0013's
 doesn't cover it), and scale-to-zero composing correctly with ADR-0010's own
 crash-safety story. Feeds F4's hosted-service pricing/wrapper card directly.
 
+CUT-E10 (closing the Paperclip functionality gaps) has started: KAN-1711
+(ADR-0016) is complete and merged — a round-boundary approval gate
+(`cuttlefish approve <task-id> [--role NAME] [--reject "<comment>"]`, a
+dashboard Approve/Reject panel, `--require-approval` on `run`/`run-team`,
+`FleetDaemon`/`ProjectStore` persistence of the flag for resume-fidelity) that
+blocks a round from finalizing — no timeout — until an operator decides,
+matching Paperclip's own issue-boundary review-gate shape. `ApprovalDecision`
+is a new episodic event, delivered over the identical `SteeringMessage`
+pointer-file/HTTP channel ADR-0008 already built. Two real bugs found only by
+running this in a real browser against a real daemon, neither caught by an
+extensive synthetic test suite beforehand: (1) a genuine satay-level
+wait-identity collision (`event#N`, a bare ordinal with no type
+discriminator, `satay/replay/engine.py`) when both a `SteeringMessage` and an
+`ApprovalDecision` wait were awaited in the same round — exactly what every
+daemon-started team does, since `steerable=True` is unconditional there
+(ADR-0009); fixed by making `require_approval` *replace* the steering wait
+for a gated round rather than compose with it, a real design simplification,
+not just a workaround. (2) `cuttlefish.fleet.status._status_from` mapped a
+bare `DelegationFailed` straight to `"failed"` instead of `"blocked"`, making
+the dashboard's own approval panel (which only renders for `"blocked"`)
+invisible for exactly the role that most needed it. Both fixes have dedicated
+regression tests and were re-verified live afterward.
+
 ## Known, accepted gaps — don't re-litigate
 
+- satay-runtime's own `durable_wait_for_event` identity (`event#{ordinal}`,
+  `satay/replay/engine.py`) discards the event type before building the final
+  identity string, only keeping it in the *counter* that produces the
+  ordinal — two different event types both at their own first-ever ordinal
+  within one workflow execution collide on the identical identity (ADR-0016
+  found this live, reproduced via `require_approval`+`steerable` in the same
+  round). Cuttlefish's own fix (never await two event types in one round) is
+  a real, sufficient, and arguably better design on cuttlefish's own side —
+  not filed upstream against satay-runtime this slice, since it isn't
+  blocking anything further and a durable-identity format change is exactly
+  the kind of thing satay's own code-version/nondeterminism-policy machinery
+  would need to gate carefully, not a quick ask. Worth raising with
+  satay-runtime separately if a future feature genuinely needs to await two
+  distinct event types in one round.
 - Steering (`cuttlefish steer`) redirects at a delegation round's boundary,
   not mid-flight — a message sent while a real coding-agent invocation is
   running waits for that invocation's own natural end before it's ever
