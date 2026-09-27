@@ -234,6 +234,30 @@ sub-fields read as a breakdown, not an additive pool); `cost_usd` stays
 shape exactly. Live-verified: a real edit landing and a real sandbox refusal
 both correctly classified against the real binary before merging.
 
+KAN-1714 (ADR-0019) is also complete and merged: `cuttlefish.agents.outcome
+.ToolCallRecord`/`cuttlefish.episodic.events.ToolCallRecorded` add per-tool-
+call tracing underneath each round's own single verdict -- no new store,
+riding on the exact per-call data every backend's own `classify_stream` was
+already parsing and discarding. Each backend's own pairing was verified live,
+not assumed: kopicode's `tool_call_parsed`/`tool_result` FIFO-pair one call at
+a time (a `permission_decided`/deny since the last result marks the *next*
+one `"denied"` rather than a generic error); Claude Code's `tool_use`/
+`tool_result` content blocks pair by `tool_use_id`, not FIFO order (unverified
+either way, so the id is used instead), with the final `result` event's own
+`permission_denials` upgrading matching calls to `"denied"` in a second pass;
+Codex's `item.completed` already carries an item's final state, no
+started/completed pairing needed, and a rejected patch never produces a
+`file_change` item at all (ADR-0018's own finding). `run_task`/`run_team` both
+journal one `ToolCallRecorded` per call right after that round's own outcome
+event; `EventLog.svelte` renders each with a status-based tint (denied/
+error), reusing the existing per-row event-log shape rather than a new
+grouped UI. Deliberately does not feed
+`cuttlefish.handover`'s own context-compaction window -- a named scope
+boundary, not an oversight. Live-verified end to end (a real kopicode call
+through a real running `cuttlefish serve`, an isolated `$HOME`): a successful
+`write_file` and a denied `run_shell` both landed as separate, correctly
+tinted `ToolCallRecorded` rows in the dashboard's own event log.
+
 ## Known, accepted gaps — don't re-litigate
 
 - satay-runtime's own `durable_wait_for_event` identity (`event#{ordinal}`,
@@ -277,6 +301,11 @@ both correctly classified against the real binary before merging.
   Codex's own event stream has no structured denial signal at all, verified
   live. Could silently stop matching if a future Codex release rewords that
   log line. ADR-0018.
+- `ToolCallRecorded` events (KAN-1714) don't feed `cuttlefish.handover`'s own
+  context-compaction window, and the dashboard's event log renders one row
+  per call with no collapsing/grouping -- both deliberate scope boundaries
+  named in ADR-0019, not oversights; revisit only if a real run's own
+  per-round call volume makes either genuinely hard to use.
 - satay-runtime is one process, one writer *per store* — but the fleet
   daemon now runs several *projects'* teams concurrently in one process
   anyway (slice D1, ADR-0009): each project gets its own

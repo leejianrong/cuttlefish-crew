@@ -15,9 +15,9 @@ import asyncio
 import json
 import os
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, Literal
 
-from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCallRecord
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.episodic.redact import DEFAULT_SECRET_ENV_VARS, Redactor
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
@@ -84,6 +84,17 @@ def classify_stream(
     # (internal/engine/dispatch.go's dispatch loop), so the print stream never
     # interleaves two calls' events.
     pending_whole_file_writes: list[str | None] = []
+    # Every tool_call_parsed, held until its own matching tool_result -- the
+    # identical FIFO safety the whole-file-write queue above already relies on,
+    # generalised to every tool (KAN-1714/ADR-0019), verified live: exactly one
+    # tool_result follows each tool_call_parsed before the next one starts.
+    pending_tool_calls: list[tuple[str, str]] = []
+    tool_calls: list[ToolCallRecord] = []
+    # Set by a `permission_decided`/deny and consumed by the *next* tool_result
+    # -- verified live that a denial's own tool_result still carries a non-empty
+    # `reason` (kopicode's ErrorKind), which alone can't distinguish "denied"
+    # from a genuine execution error.
+    last_denied = False
 
     for event in events:
         kind = event.get("kind")
@@ -91,18 +102,38 @@ def classify_stream(
             path = event.get("path")
             if isinstance(path, str) and path:
                 edited_paths.append(path)
-        elif kind == _KIND_TOOL_CALL_PARSED and event.get("tool") in _WHOLE_FILE_WRITE_TOOLS:
-            pending_whole_file_writes.append(_path_from_tool_detail(event.get("detail")))
-        elif kind == _KIND_TOOL_RESULT and event.get("tool") in _WHOLE_FILE_WRITE_TOOLS:
-            if pending_whole_file_writes:
+        elif kind == _KIND_TOOL_CALL_PARSED:
+            tool = event.get("tool")
+            detail = event.get("detail")
+            if isinstance(tool, str) and isinstance(detail, str):
+                pending_tool_calls.append((tool, detail))
+            if tool in _WHOLE_FILE_WRITE_TOOLS:
+                pending_whole_file_writes.append(_path_from_tool_detail(detail))
+        elif kind == _KIND_TOOL_RESULT:
+            tool = event.get("tool")
+            # tool_result's `reason` carries journal.ToolResult.ErrorKind and is
+            # omitted entirely when empty (cmd/kopicode/print.go: "zero fields
+            # are omitted") — its presence is what marks this call as failed.
+            reason = event.get("reason")
+            if pending_tool_calls:
+                pending_tool, pending_detail = pending_tool_calls.pop(0)
+                if not reason:
+                    status: Literal["ok", "denied", "error"] = "ok"
+                elif last_denied:
+                    status = "denied"
+                else:
+                    status = "error"
+                tool_calls.append(
+                    ToolCallRecord(tool=pending_tool, detail=pending_detail, status=status)
+                )
+            last_denied = False
+            if tool in _WHOLE_FILE_WRITE_TOOLS and pending_whole_file_writes:
                 path = pending_whole_file_writes.pop(0)
-                # tool_result's `reason` carries journal.ToolResult.ErrorKind and is
-                # omitted entirely when empty (cmd/kopicode/print.go: "zero fields
-                # are omitted") — its presence is what marks this call as failed.
-                if path and not event.get("reason"):
+                if path and not reason:
                     edited_paths.append(path)
         elif kind == _KIND_PERMISSION_DECIDED:
             if event.get("decision") == _DECISION_DENY:
+                last_denied = True
                 reason = event.get("reason")
                 deny_reasons.append(reason if isinstance(reason, str) else "denied")
         elif kind == _KIND_SESSION_ENDED:
@@ -124,6 +155,7 @@ def classify_stream(
             summary=f"kopicode edited {len(edited_paths)} file(s) ({stop_reason})",
             edited_paths=edited_paths,
             tokens=total_tokens,
+            tool_calls=tool_calls,
         )
     if deny_reasons:
         return DelegationOutcome(
@@ -131,12 +163,14 @@ def classify_stream(
             summary="kopicode's permission gate declined every action it needed",
             reason="; ".join(deny_reasons),
             tokens=total_tokens,
+            tool_calls=tool_calls,
         )
     if exit_code == _EXIT_CODE_SUCCESS:
         return DelegationOutcome(
             kind="completed",
             summary=f"kopicode finished with no edit needed ({stop_reason})",
             tokens=total_tokens,
+            tool_calls=tool_calls,
         )
     reason = f"exit_code={exit_code} reason={stop_reason}"
     if stderr_tail:
@@ -146,6 +180,7 @@ def classify_stream(
         summary=f"kopicode did not finish cleanly ({stop_reason})",
         reason=reason,
         tokens=total_tokens,
+        tool_calls=tool_calls,
     )
 
 

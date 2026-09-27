@@ -41,6 +41,7 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    ToolCallRecorded,
     decode_payload,
 )
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, maybe_handover
@@ -284,6 +285,17 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                     ),
                 )
             final_outcome[name] = outcome
+
+            # KAN-1714/ADR-0019: see run_task's identical block -- every
+            # individual tool call this role's own round made, journaled
+            # right after that round's single verdict.
+            for call in outcome.tool_calls:
+                await journal(
+                    team_id,
+                    ToolCallRecorded(
+                        tool=call.tool, detail=call.detail, status=call.status, role=name
+                    ),
+                )
 
             # ADR-0010/KAN-1704: checked every round, per role, not only at a
             # role's own start and end -- see run_task's identical fix for why.

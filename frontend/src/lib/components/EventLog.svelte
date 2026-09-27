@@ -29,6 +29,8 @@
         return `failed: ${p.error}`;
       case "TeamResumed":
         return `a daemon restart found this run still in progress and resumed it -- the journal picks back up from seq ${p.resumed_from_seq}`;
+      case "ToolCallRecorded":
+        return `${p.tool} (${p.status}): ${p.detail}`;
       default:
         return JSON.stringify(p);
     }
@@ -47,7 +49,14 @@
         <span class="text">{summarize(event)}</span>
       </div>
     {:else}
-      <div class="row" class:handover={event.event_type === "HandoverWritten"}>
+      <div
+        class="row"
+        class:handover={event.event_type === "HandoverWritten"}
+        class:tool-denied={event.event_type === "ToolCallRecorded" &&
+          event.payload.status === "denied"}
+        class:tool-error={event.event_type === "ToolCallRecorded" &&
+          event.payload.status === "error"}
+      >
         <span class="ts mono">{new Date(event.ts).toLocaleTimeString()}</span>
         {#if event.payload.role}
           <span class="role mono">{event.payload.role}</span>
@@ -115,6 +124,17 @@
 
   .row.handover .type {
     color: var(--accent);
+  }
+
+  /* KAN-1714/ADR-0019: a per-call trace row, tinted by its own outcome so a
+     denied/errored call is spottable while scanning, the same subtle-tint
+     precedent `.row.handover` already sets rather than a louder banner. */
+  .row.tool-denied .type {
+    color: var(--status-blocked-fg);
+  }
+
+  .row.tool-error .type {
+    color: var(--status-failed-fg);
   }
 
   /* Distinct from ordinary progress on purpose -- a full-width banner, not just

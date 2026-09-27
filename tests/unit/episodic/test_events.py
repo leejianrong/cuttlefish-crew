@@ -17,6 +17,7 @@ from cuttlefish.episodic.events import (
     TaskFailed,
     TaskSubmitted,
     TeamResumed,
+    ToolCallRecorded,
     UnknownPayload,
     decode_payload,
     encode_payload,
@@ -50,6 +51,8 @@ KNOWN_PAYLOADS: list[EventPayload] = [
     TaskCompleted(result="done"),
     TaskFailed(error="delegation refused"),
     TeamResumed(resumed_from_seq=3),
+    ToolCallRecorded(tool="write_file", detail='{"path":"a.txt"}', status="ok"),
+    ToolCallRecorded(tool="run_shell", detail='{"command":"ls"}', status="denied", role="builder"),
 ]
 
 

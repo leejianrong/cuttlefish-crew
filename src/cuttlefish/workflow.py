@@ -29,6 +29,7 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    ToolCallRecorded,
     decode_payload,
 )
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, maybe_handover
@@ -199,6 +200,14 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
                     tokens=outcome.tokens,
                     cost_usd=outcome.cost_usd,
                 ),
+            )
+
+        # KAN-1714/ADR-0019: every individual tool call this round made,
+        # journaled right after that round's own single verdict -- never a
+        # replacement for it, the per-call detail underneath one outcome.
+        for call in outcome.tool_calls:
+            await journal(
+                task_id, ToolCallRecorded(tool=call.tool, detail=call.detail, status=call.status)
             )
 
         # ADR-0010/KAN-1704: checked every round, not only before the loop starts

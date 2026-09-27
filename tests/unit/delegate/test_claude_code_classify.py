@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from cuttlefish.agents.outcome import DelegationError
+from cuttlefish.agents.outcome import DelegationError, ToolCallRecord
 from cuttlefish.delegate.claude_code import classify_stream
 
 
@@ -26,6 +26,24 @@ def _assistant_tool_use(name: str, file_path: str) -> dict[str, object]:
             "content": [{"type": "tool_use", "name": name, "input": {"file_path": file_path}}]
         },
     }
+
+
+def _assistant_tool_call(
+    call_id: str, name: str, tool_input: dict[str, object]
+) -> dict[str, object]:
+    return {
+        "type": "assistant",
+        "message": {
+            "content": [{"type": "tool_use", "id": call_id, "name": name, "input": tool_input}]
+        },
+    }
+
+
+def _user_tool_result(call_id: str, *, is_error: bool = False) -> dict[str, object]:
+    block: dict[str, object] = {"tool_use_id": call_id, "type": "tool_result", "content": "done"}
+    if is_error:
+        block["is_error"] = True
+    return {"type": "user", "message": {"role": "user", "content": [block]}}
 
 
 def _result(**overrides: object) -> dict[str, object]:
@@ -179,3 +197,67 @@ def test_usage_and_cost_carry_through_on_a_failed_outcome() -> None:
     assert outcome.kind == "failed"
     assert outcome.tokens == 8
     assert outcome.cost_usd == 0.001
+
+
+def test_a_successful_tool_call_is_recorded_as_ok() -> None:
+    # KAN-1714/ADR-0019: paired by tool_use_id, verified live as the real join
+    # key both blocks carry.
+    outcome = classify_stream(
+        [
+            _assistant_tool_call("toolu_1", "Bash", {"command": "ls"}),
+            _user_tool_result("toolu_1"),
+            _result(),
+        ]
+    )
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="Bash", detail='{"command": "ls"}', status="ok")
+    ]
+
+
+def test_a_failed_tool_call_is_recorded_as_error() -> None:
+    outcome = classify_stream(
+        [
+            _assistant_tool_call("toolu_1", "Bash", {"command": "false"}),
+            _user_tool_result("toolu_1", is_error=True),
+            _result(),
+        ]
+    )
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="Bash", detail='{"command": "false"}', status="error")
+    ]
+
+
+def test_a_call_named_in_permission_denials_is_upgraded_to_denied() -> None:
+    # The per-call is_error flag alone can't distinguish a permission denial
+    # from a genuine execution failure -- only the final result event's own
+    # permission_denials list can, so the upgrade happens in a second pass.
+    outcome = classify_stream(
+        [
+            _assistant_tool_call("toolu_1", "Bash", {"command": "rm -rf /"}),
+            _user_tool_result("toolu_1", is_error=True),
+            _result(permission_denials=[{"tool_name": "Bash", "tool_use_id": "toolu_1"}]),
+        ]
+    )
+    assert outcome.kind == "refused"
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="Bash", detail='{"command": "rm -rf /"}', status="denied")
+    ]
+
+
+def test_multiple_tool_calls_are_recorded_in_order() -> None:
+    outcome = classify_stream(
+        [
+            _assistant_tool_call("toolu_1", "Bash", {"command": "echo hi"}),
+            _user_tool_result("toolu_1"),
+            _assistant_tool_call("toolu_2", "Write", {"file_path": "a.txt", "content": "hi"}),
+            _user_tool_result("toolu_2"),
+            _result(),
+        ]
+    )
+    assert [tc.tool for tc in outcome.tool_calls] == ["Bash", "Write"]
+    assert [tc.status for tc in outcome.tool_calls] == ["ok", "ok"]
+
+
+def test_a_tool_result_with_no_matching_pending_call_is_ignored() -> None:
+    outcome = classify_stream([_user_tool_result("toolu_unknown"), _result()])
+    assert outcome.tool_calls == []

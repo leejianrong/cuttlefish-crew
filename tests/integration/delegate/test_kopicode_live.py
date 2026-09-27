@@ -60,3 +60,5 @@ async def test_a_real_write_lands_and_is_classified_as_completed(tmp_path: Path)
     assert outcome.kind == "completed"
     assert outcome.edited_paths == ["LIVE_TEST.txt"]
     assert (root / "LIVE_TEST.txt").read_text().strip() == "cuttlefish live test"
+    # KAN-1714/ADR-0019: a real write is also recorded as a real tool call.
+    assert any(call.status == "ok" for call in outcome.tool_calls)

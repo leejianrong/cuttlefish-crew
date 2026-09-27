@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 
+from cuttlefish.agents.outcome import ToolCallRecord
 from cuttlefish.delegate.kopicode import DelegationError, classify_stream
 
 
@@ -192,3 +193,63 @@ def test_zero_provider_response_lines_is_zero_tokens_not_none() -> None:
         ]
     )
     assert outcome.tokens == 0
+
+
+def test_a_successful_tool_call_is_recorded_as_ok() -> None:
+    # KAN-1714/ADR-0019: verified live -- tool_call_parsed/tool_result pairing
+    # generalises past the existing edit-detection-only tracking.
+    outcome = classify_stream(
+        [
+            {"kind": "tool_call_parsed", "tool": "write_file", "detail": '{"path":"a.txt"}'},
+            {"kind": "tool_result", "tool": "write_file"},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="write_file", detail='{"path":"a.txt"}', status="ok")
+    ]
+
+
+def test_a_denied_tool_call_is_recorded_as_denied_not_error() -> None:
+    # Verified live: a denial's own tool_result still carries a non-empty
+    # `reason` (ErrorKind) -- the preceding permission_decided/deny is what
+    # distinguishes "denied" from a genuine execution error.
+    outcome = classify_stream(
+        [
+            {"kind": "tool_call_parsed", "tool": "run_shell", "detail": '{"command":"ls"}'},
+            {"kind": "permission_decided", "decision": "deny", "reason": "no shell"},
+            {"kind": "tool_result", "tool": "run_shell", "reason": "task"},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="run_shell", detail='{"command":"ls"}', status="denied")
+    ]
+
+
+def test_a_failed_tool_call_with_no_denial_is_recorded_as_error() -> None:
+    outcome = classify_stream(
+        [
+            {"kind": "tool_call_parsed", "tool": "edit_file", "detail": '{"path":"a.py"}'},
+            {"kind": "tool_result", "tool": "edit_file", "reason": "no_match"},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="edit_file", detail='{"path":"a.py"}', status="error")
+    ]
+
+
+def test_multiple_tool_calls_are_recorded_in_order() -> None:
+    outcome = classify_stream(
+        [
+            {"kind": "tool_call_parsed", "tool": "write_file", "detail": '{"path":"a.txt"}'},
+            {"kind": "tool_result", "tool": "write_file"},
+            {"kind": "tool_call_parsed", "tool": "run_shell", "detail": '{"command":"ls"}'},
+            {"kind": "permission_decided", "decision": "deny", "reason": "no shell"},
+            {"kind": "tool_result", "tool": "run_shell", "reason": "task"},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert [tc.tool for tc in outcome.tool_calls] == ["write_file", "run_shell"]
+    assert [tc.status for tc in outcome.tool_calls] == ["ok", "denied"]
