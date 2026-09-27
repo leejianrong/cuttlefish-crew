@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 .PHONY: help dev demo lint type check test test-all test-sandbox-live ci install-hooks \
-	frontend-install frontend-check frontend-test frontend-build
+	install-systemd-service frontend-install frontend-check frontend-test frontend-build
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -67,3 +67,9 @@ ci: check test-all frontend-check frontend-test frontend-build ## Everything CI 
 
 install-hooks: ## Install the pre-push git hook
 	./scripts/install-hooks.sh
+
+# ADR-0014 (KAN-1709): a systemd --user unit, so cuttlefish serve auto-restarts
+# if it dies instead of needing a human to notice. Does not start it -- review
+# the installed unit first, then follow the printed next-step commands.
+install-systemd-service: ## Install (not start) cuttlefish serve as a systemd --user unit
+	./scripts/install-systemd-service.sh

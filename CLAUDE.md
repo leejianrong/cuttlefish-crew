@@ -20,7 +20,7 @@ doc comment all beat a paragraph here.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the current problem, scope, and shape
   (the cuttlefish-crew pivot direction, built on top of V1/V2's original MVP)
-- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0013
+- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0014
 - [`docs/SLICES.md`](docs/SLICES.md) — the build order this was built against
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed, including gaps a live run surfaced after the fact
@@ -128,8 +128,21 @@ opening the printed URL directly on the tailnet needs no extra flag. Unverified
 against a real, live tailnet (no `tailscale` binary/account in this
 environment) — named honestly in ADR-0013, not glossed over.
 
-The remaining CUT-E9 cards (KAN-1709 daemon process supervision, KAN-1710 a
-Fly.io feasibility spike) are not yet started.
+KAN-1709 (ADR-0014) is also complete and merged: `scripts/install-systemd-service.sh`
+(`make install-systemd-service`) installs `cuttlefish serve` as a systemd
+`--user` unit (`Restart=on-failure`), so it auto-restarts instead of needing a
+human to notice it died — the infra half of ADR-0009's own named daemon-
+restart gap, composing with KAN-1703's already-shipped `resume_pending`
+(the continuity half). Docker/container restart policies are deferred to
+KAN-1710, which needs a `Dockerfile` for its own, separate reason. Live-
+verified in this sandbox: the real installed unit, `kill -9`'d and confirmed
+auto-restarting with a fresh `MainPID` within seconds, registered-project
+state intact on the restarted process — not a genuinely in-flight team's
+resume specifically (that composition is `FleetDaemon.resume_pending`'s own
+already-tested scope, not re-derived here); fully cleaned up afterward.
+
+The remaining CUT-E9 card (KAN-1710, a Fly.io feasibility spike) is not yet
+started.
 
 ## Known, accepted gaps — don't re-litigate
 
@@ -204,6 +217,13 @@ Fly.io feasibility spike) are not yet started.
   (`package_data`, a wheel or container image). That packaging story is real
   future work, tied to whatever KAN-1710's Fly.io feasibility spike decides,
   not solved here.
+- `scripts/install-systemd-service.sh` (ADR-0014) only ships a systemd
+  `--user` unit — a Docker/container restart-policy equivalent is real,
+  deferred future work, tied to whatever `Dockerfile` KAN-1710's Fly.io spike
+  produces, not built here to avoid duplicating that spike's own packaging
+  decisions. A `--user` unit also needs `loginctl enable-linger $USER` to
+  survive the operator logging out, or it stops with their last session —
+  the install script checks and warns, but does not enable it itself.
 - `cuttlefish serve --tailscale` (ADR-0013) is plain HTTP, not HTTPS — an
   accepted gap, not an oversight: Tailscale's own WireGuard mesh already
   encrypts every packet between tailnet peers, so this is a browser-padlock

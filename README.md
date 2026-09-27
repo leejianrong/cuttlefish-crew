@@ -65,6 +65,13 @@ URL to open with the token to paste into its connect screen. No daemon at
 hand yet? The connect screen links straight to a sprite gallery that needs no
 connection at all.
 
+Reach it from another device on your [Tailscale](https://tailscale.com)
+tailnet with `cuttlefish serve --tailscale` (needs `CUTTLEFISH_SERVE_PASSWORD`
+set -- ADR-0011/ADR-0013). Keep it running across crashes/reboots with
+`make install-systemd-service` (ADR-0014), a systemd `--user` unit with
+`Restart=on-failure` -- reviews and prints the exact next commands, never
+starts anything on its own.
+
 ## Usage
 
 Declare which shell commands a delegation may run (default: none — only
