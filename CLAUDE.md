@@ -258,6 +258,27 @@ through a real running `cuttlefish serve`, an isolated `$HOME`): a successful
 `write_file` and a denied `run_shell` both landed as separate, correctly
 tinted `ToolCallRecorded` rows in the dashboard's own event log.
 
+KAN-1764 (ADR-0020) closes out CUT-E10 (raised by Jian directly, alongside
+the Codex backend card): `cuttlefish mcp` is an MCP server (stdio transport,
+the official `mcp` SDK v2.2.0) wrapping an already-running `cuttlefish
+serve`'s own HTTP API -- a separate client process, never the daemon itself
+and never started by it. Eight tools (`list_projects`/`get_project`/
+`register_project`/`start_project`/`stop_project`/`steer_project`/
+`approve_project`/`get_events`) map close to 1:1 onto `cuttlefish.fleet
+.server`'s own routes, each one blocking `urllib` call off the event loop
+via `asyncio.to_thread` -- the identical shape `cuttlefish.steering`'s own
+HTTP client already uses. No new auth mechanism: this process just holds
+and forwards whichever `x-cuttlefish-token` it's given (`--base-url`/
+`--token`, or `CUTTLEFISH_MCP_BASE_URL`/`CUTTLEFISH_MCP_TOKEN`), the
+identical bearer token the dashboard already authenticates with (ADR-0011).
+A deliberately smaller surface than the daemon's full HTTP API -- no
+`update_roles`/`update_allow`/`update_budget`/`deregister` equivalents,
+since those are reviewed-once configuration, not moment-to-moment workflow
+verbs. Live-verified end to end: a real `mcp.client` session driving a real
+`cuttlefish mcp` subprocess over stdio, registering a project, starting a
+real kopicode team, and reading its real episodic journal back through
+`get_events` -- not just built and unit-tested.
+
 ## Known, accepted gaps — don't re-litigate
 
 - satay-runtime's own `durable_wait_for_event` identity (`event#{ordinal}`,
@@ -306,6 +327,11 @@ tinted `ToolCallRecorded` rows in the dashboard's own event log.
   per call with no collapsing/grouping -- both deliberate scope boundaries
   named in ADR-0019, not oversights; revisit only if a real run's own
   per-round call volume makes either genuinely hard to use.
+- `cuttlefish mcp` (KAN-1764) has no login flow of its own -- a non-loopback
+  `SessionAuth` token (ADR-0011) it was launched with still expires
+  (`DEFAULT_SESSION_TTL_SECONDS`, 12 hours), needing a restart with a fresh
+  token once it does. The loopback default's own static token never
+  expires, so this doesn't affect the common single-operator case. ADR-0020.
 - satay-runtime is one process, one writer *per store* — but the fleet
   daemon now runs several *projects'* teams concurrently in one process
   anyway (slice D1, ADR-0009): each project gets its own
