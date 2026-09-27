@@ -77,6 +77,23 @@ def test_run_team_accepts_repeated_role_flags() -> None:
     assert args.role == ["builder:implement it", "reviewer:review it"]
 
 
+def test_serve_allow_origin_defaults_to_none_when_omitted() -> None:
+    args = build_parser().parse_args(["serve"])
+    assert args.allow_origin is None
+
+
+def test_serve_accepts_repeated_allow_origin_flags() -> None:
+    args = build_parser().parse_args(
+        ["serve", "--allow-origin", "https://a.example", "--allow-origin", "https://b.example"]
+    )
+    assert args.allow_origin == ["https://a.example", "https://b.example"]
+
+
+def test_serve_host_defaults_to_loopback() -> None:
+    args = build_parser().parse_args(["serve"])
+    assert args.host == "127.0.0.1"
+
+
 def test_run_team_role_defaults_to_none_when_omitted() -> None:
     args = build_parser().parse_args(["run-team"])
     assert args.role is None

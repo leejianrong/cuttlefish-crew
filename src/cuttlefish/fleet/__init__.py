@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cuttlefish.fleet.auth import SecurityCheck, SessionAuth, WeakPasswordError
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart, RunningTeam
 from cuttlefish.fleet.server import (
     DEFAULT_FLEET_PORT,
@@ -20,6 +21,9 @@ __all__ = [
     "RoleStart",
     "RoleStatus",
     "RunningTeam",
+    "SecurityCheck",
+    "SessionAuth",
+    "WeakPasswordError",
     "create_app",
     "find_free_port",
     "role_statuses",
