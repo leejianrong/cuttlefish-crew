@@ -8,9 +8,9 @@ for viewing a real demo remotely. Built on
 workflow execution, delegating coding work through a pluggable
 `AgentBackend` seam —
 [kopicode](https://github.com/leejianrong/kopicode) is the reference
-backend, headless Claude Code the second. Python, `uv`, `ruff`,
-`mypy --strict`, `pytest` — the same toolchain conventions as satay-runtime,
-since this project depends on it directly.
+backend, headless Claude Code the second, headless Codex the third. Python,
+`uv`, `ruff`, `mypy --strict`, `pytest` — the same toolchain conventions as
+satay-runtime, since this project depends on it directly.
 
 ## Trust the code over the docs
 
@@ -209,6 +209,31 @@ zero-token-ceiling project blocked on its very first round, rendered
 `BLOCKED` with an over-budget usage line, and finalized correctly once
 approved through the dashboard.
 
+KAN-1713 (ADR-0018) is also complete and merged: `cuttlefish.agents.codex
+.CodexBackend` is a third `AgentBackend`, proving the pluggable seam (ADR-0005)
+generalizes a second time. Every fact behind it was verified live against the
+real `codex` binary (2026-09-28, `codex-cli` 0.155.1), not assumed — three real
+findings shaped the design: Codex's own `--sandbox {read-only,workspace-write,
+danger-full-access}` has no per-command filtering at all (coarser than either
+existing backend's own policy mapping, an honest gap named rather than
+papered over); a permission denial produces no structured event on its own
+`--json` stream, only an unstructured stderr log line, so `classify_stream`
+falls back to a stderr substring heuristic when no edit landed (a genuine
+`turn.failed` event *does* exist and is used for real failures, the same
+clean signal the other two backends already have); and `codex exec` does not
+read `OPENAI_API_KEY` as an ambient credential at invocation time at all
+(verified live with a real, if fake, key producing an identical 401 to no key
+at all) — a strictly harder version of `ClaudeCodeBackend`'s own already-
+accepted OAuth gap (Q37), so sandboxed Codex delegation fails closed on
+auth, not solved this slice. `DelegationOutcome.tokens` sums `usage
+.input_tokens`/`output_tokens` only (verified live that the cache/reasoning
+sub-fields read as a breakdown, not an additive pool); `cost_usd` stays
+`None` always, the identical honest gap kopicode's own backend already holds
+(ADR-0017) — Codex reports no dollar figure at all. `CUTTLEFISH_AGENT_BACKEND
+=codex`/`CUTTLEFISH_CODEX_BIN` select it, mirroring Claude Code's own config
+shape exactly. Live-verified: a real edit landing and a real sandbox refusal
+both correctly classified against the real binary before merging.
+
 ## Known, accepted gaps — don't re-litigate
 
 - satay-runtime's own `durable_wait_for_event` identity (`event#{ordinal}`,
@@ -239,6 +264,19 @@ approved through the dashboard.
 - Its declared-allowlist-to-`--allowedTools` mapping is an honest
   approximation, not full parity with kopicode's KAN-987 policy gate.
   `docs/QUESTIONS.md` Q36.
+- `CodexBackend`'s sandboxed path fails closed on a 401 for every operator,
+  not just an unauthenticated one -- verified live that `codex exec` does
+  not read `OPENAI_API_KEY` as an ambient credential at all, a strictly
+  harder version of `ClaudeCodeBackend`'s own OAuth gap above. ADR-0018.
+- `CodexBackend`'s declared-allowlist-to-`--sandbox` mapping is binary
+  (`read-only` or `workspace-write`, whatever was actually declared) --
+  Codex's own sandbox flag has no per-command filtering at all, coarser
+  than either other backend's own approximation. ADR-0018.
+- `CodexBackend`'s "refused" classification, when no edit lands, is a
+  substring heuristic on an undocumented stderr log line (`"rejected"`) --
+  Codex's own event stream has no structured denial signal at all, verified
+  live. Could silently stop matching if a future Codex release rewords that
+  log line. ADR-0018.
 - satay-runtime is one process, one writer *per store* — but the fleet
   daemon now runs several *projects'* teams concurrently in one process
   anyway (slice D1, ADR-0009): each project gets its own

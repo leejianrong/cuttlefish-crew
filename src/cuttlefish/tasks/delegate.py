@@ -49,6 +49,7 @@ async def delegate_to_agent_backend(
         runtime_.agent_backend,
         kopicode_binary=runtime_.kopicode_binary,
         claude_code_binary=runtime_.claude_code_binary,
+        codex_binary=runtime_.codex_binary,
     )
     names = sorted(set(secret_names or []) | set(backend.CREDENTIAL_ENV_VARS))
     secrets_store = runtime_.secrets_store

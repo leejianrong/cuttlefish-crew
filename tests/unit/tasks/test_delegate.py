@@ -58,6 +58,24 @@ async def test_the_claude_code_backend_is_used_when_configured(tmp_path: Path) -
     store.close()
 
 
+async def test_the_codex_backend_is_used_when_configured(tmp_path: Path) -> None:
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary="kopicode",
+            codex_binary="codex-binary-that-does-not-exist",
+            agent_backend="codex",
+        )
+    )
+
+    with pytest.raises(DelegationError, match="Codex binary"):
+        await delegate_to_agent_backend("add a .gitignore entry", str(tmp_path))
+
+    store.close()
+
+
 async def test_secrets_are_resolved_from_the_store_scoped_to_the_declared_project(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

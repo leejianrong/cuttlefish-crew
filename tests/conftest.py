@@ -34,6 +34,15 @@ var. It costs real money on every run once enabled, the same posture
 state at all — only ``CUTTLEFISH_TEST_CLAUDE_CODE_LIVE=1``, set deliberately,
 turns it on.
 
+``requires_codex``/``requires_codex_live`` (ADR-0018) mirror
+``requires_claude_code``/``requires_claude_code_live`` exactly, for the
+identical reason: Codex's own headless auth is a persisted
+``~/.codex/auth.json`` (ChatGPT OAuth or an explicit API-key login), not an
+environment variable ``codex exec`` reads at invocation time (verified live,
+2026-09-28 — see ``cuttlefish.delegate.codex``'s own module doc comment), so
+presence can't be inferred from env state either. Only
+``CUTTLEFISH_TEST_CODEX_LIVE=1``, set deliberately, turns on the paid tests.
+
 ``load_dotenv()`` runs once here, at collection time, for the same reason
 ``cli.py`` loads it once at import rather than per call: a test file that only
 imports ``cuttlefish.delegate`` never imports ``cli``, so nothing else in the test
@@ -81,6 +90,14 @@ def pytest_collection_modifyitems(items: Sequence[pytest.Item]) -> None:
     )
     claude_code_live_enabled = os.environ.get("CUTTLEFISH_TEST_CLAUDE_CODE_LIVE") == "1"
 
+    skip_codex = pytest.mark.skip(reason="codex is not on PATH (ADR-0018)")
+    has_codex = shutil.which("codex") is not None
+
+    skip_codex_live = pytest.mark.skip(
+        reason="CUTTLEFISH_TEST_CODEX_LIVE=1 not set -- costs real money, opt-in only"
+    )
+    codex_live_enabled = os.environ.get("CUTTLEFISH_TEST_CODEX_LIVE") == "1"
+
     for item in items:
         if not has_kopicode and item.get_closest_marker("requires_kopicode") is not None:
             item.add_marker(skip_kopicode)
@@ -96,3 +113,8 @@ def pytest_collection_modifyitems(items: Sequence[pytest.Item]) -> None:
         claude_live_marker = item.get_closest_marker("requires_claude_code_live")
         if not claude_code_live_enabled and claude_live_marker is not None:
             item.add_marker(skip_claude_code_live)
+        if not has_codex and item.get_closest_marker("requires_codex") is not None:
+            item.add_marker(skip_codex)
+        codex_live_marker = item.get_closest_marker("requires_codex_live")
+        if not codex_live_enabled and codex_live_marker is not None:
+            item.add_marker(skip_codex_live)
