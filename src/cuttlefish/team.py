@@ -30,6 +30,7 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
 from cuttlefish.episodic.events import (
+    ApprovalDecision,
     DelegationCompleted,
     DelegationFailed,
     DelegationRefused,
@@ -74,6 +75,12 @@ class TeamInput(TypedDict):
     own reasoning for why). ``steering_grace`` overrides
     ``steering.DEFAULT_STEERING_GRACE_SECONDS`` team-wide, the same test-only
     escape hatch ``cuttlefish.workflow.TaskInput`` has.
+
+    ``require_approval`` (KAN-1711) is optional, defaults to ``False``, and
+    applies team-wide — see ``cuttlefish.workflow.TaskInput`` for the identical
+    per-role semantics (blocks, no timeout, for ``cuttlefish approve <team-id>
+    --role NAME``/``--reject "<comment>"`` once a round finalizes with nothing
+    steering it away).
     """
 
     team_id: str
@@ -83,6 +90,7 @@ class TeamInput(TypedDict):
     token_budget: NotRequired[int]
     steerable: NotRequired[bool]
     steering_grace: NotRequired[float]
+    require_approval: NotRequired[bool]
 
 
 def _needs_sequential_dispatch(active_names: list[str], agent_backend: str) -> bool:
@@ -169,6 +177,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     token_budget = team_input.get("token_budget", DEFAULT_TOKEN_BUDGET)
     steerable = team_input.get("steerable", False)
     steering_grace = team_input.get("steering_grace", DEFAULT_STEERING_GRACE_SECONDS)
+    require_approval = team_input.get("require_approval", False)
 
     for role in roles:
         await journal(team_id, TaskSubmitted(text=role["text"], role=role["name"]))
@@ -252,18 +261,40 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             if await maybe_handover(team_id, token_budget=token_budget, role=name):
                 round_summaries[name].clear()
 
-            if not steerable:
+            # A round finalizes unless something actively redirects it -- either a
+            # proactive steering message (opt-in, ADR-0008) or, if
+            # require_approval is set, an explicit rejection (KAN-1711).
+            # require_approval *replaces* the steering wait for this role's round
+            # rather than composing with it -- see run_task's identical block for
+            # both the design reason and the real satay-level identity-collision
+            # bug (bare `event#N` ordinals, no type discriminator) this avoids,
+            # reproduced live via the fleet daemon (always `steerable=True`).
+            redirect_text: str | None = None
+
+            if require_approval:
+                # No timeout -- see run_task's identical wait for why.
+                decision = await satay.wait_for_event(
+                    ApprovalDecision,
+                    key=steering_key(team_id, name),
+                    timeout=None,
+                )
+                assert decision is not None  # no timeout was given
+                await journal(team_id, decision)
+                if not decision.approved:
+                    redirect_text = decision.comment or "(rejected, no comment given)"
+            elif steerable:
+                steer_event = await satay.wait_for_event(
+                    SteeringMessage,
+                    key=steering_key(team_id, name),
+                    timeout=steering_grace,
+                )
+                if steer_event is not None:
+                    await journal(team_id, steer_event)
+                    redirect_text = steer_event.text
+
+            if redirect_text is None:
                 continue
 
-            steer_event = await satay.wait_for_event(
-                SteeringMessage,
-                key=steering_key(team_id, name),
-                timeout=steering_grace,
-            )
-            if steer_event is None:
-                continue
-
-            await journal(team_id, steer_event)
             summary = (
                 outcome.summary
                 if outcome.kind == "completed"
@@ -274,7 +305,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             current_text[name] = compose_steered_text(
                 role_by_name[name]["text"],
                 round_summaries[name],
-                steer_event.text,
+                redirect_text,
                 handover_summary=handover_summary,
             )
             del final_outcome[name]

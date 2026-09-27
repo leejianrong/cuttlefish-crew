@@ -130,6 +130,17 @@ first (see `docs/adr/0008-...md` for why that's the honest limit, not a
 missing feature). `run-team --steerable` works the same way, per role
 (`cuttlefish steer <team-id> "<message>" --role NAME`).
 
+Require sign-off before a round is ever treated as finished
+(`--require-approval` in place of `--steerable`; `approve` in place of
+`steer`) -- a formal review gate, not just an optional redirect (ADR-0016):
+
+```bash
+uv run cuttlefish run --require-approval "add a .gitignore entry"
+# in another terminal, while the above is still running:
+uv run cuttlefish approve <task-id>                                  # finalize it
+uv run cuttlefish approve <task-id> --reject "use .dockerignore instead"  # one more round
+```
+
 ## Configuration
 
 | Variable | Default | What it does |

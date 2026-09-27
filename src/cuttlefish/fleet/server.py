@@ -248,8 +248,9 @@ def create_app(
         ]
         if not roles:
             raise HTTPException(400, "'roles' must have at least one {name, text}")
+        require_approval = bool(body.get("require_approval", False))
         try:
-            team_id = await daemon.start(project_id, roles)
+            team_id = await daemon.start(project_id, roles, require_approval=require_approval)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except FleetError as exc:
@@ -274,6 +275,25 @@ def create_app(
             raise HTTPException(400, "'role' and 'text' are required")
         try:
             await daemon.steer(project_id, role, text)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"status": "sent"}
+
+    @app.post("/api/projects/{project_id}/approve")
+    async def approve_project(project_id: str, request: Request) -> dict[str, Any]:
+        body = await _json_body(request)
+        role, approved = body.get("role"), body.get("approved")
+        if not role or not isinstance(approved, bool):
+            raise HTTPException(400, "'role' (str) and 'approved' (bool) are required")
+        comment = body.get("comment")
+        if comment is not None and not isinstance(comment, str):
+            raise HTTPException(400, "'comment', if given, must be a string")
+        if not approved and not comment:
+            raise HTTPException(400, "a rejection needs a non-empty 'comment'")
+        try:
+            await daemon.approve(project_id, role, approved=approved, comment=comment)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except FleetError as exc:

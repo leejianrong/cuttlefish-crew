@@ -22,6 +22,13 @@
   let sending = $state(false);
   let sent = $state(false);
 
+  // KAN-1711: a comment-less "Approve" always works; "Reject" needs one (the
+  // daemon's own /approve route enforces this too -- mirrored here just to
+  // disable the button rather than round-trip a 400 for an empty comment).
+  let approvalComment = $state("");
+  let deciding = $state(false);
+  let decided = $state<"approved" | "rejected" | null>(null);
+
   async function send() {
     if (!message.trim()) return;
     sending = true;
@@ -39,6 +46,20 @@
   function onKeydown(event: KeyboardEvent) {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       send();
+    }
+  }
+
+  async function decide(approved: boolean) {
+    if (!approved && !approvalComment.trim()) return;
+    deciding = true;
+    decided = null;
+    try {
+      await client.approveProject(projectId, role, approved, approvalComment.trim() || undefined);
+      approvalComment = "";
+      decided = approved ? "approved" : "rejected";
+      setTimeout(() => (decided = null), 2000);
+    } finally {
+      deciding = false;
     }
   }
 </script>
@@ -59,6 +80,32 @@
       {sent ? "Sent" : sending ? "Sending…" : "Send"}
     </button>
   </div>
+
+  {#if status === "blocked"}
+    <div class="approval">
+      <p class="hint">
+        If {role} is waiting on a review gate (KAN-1711), decide here -- harmless if it's
+        just the ordinary steering pause instead.
+      </p>
+      <textarea
+        bind:value={approvalComment}
+        placeholder="Comment (required to reject, optional to approve)"
+        rows="2"
+      ></textarea>
+      <div class="approval-actions">
+        <button class="approve" onclick={() => decide(true)} disabled={deciding}>
+          {decided === "approved" ? "Approved" : "Approve"}
+        </button>
+        <button
+          class="reject"
+          onclick={() => decide(false)}
+          disabled={deciding || !approvalComment.trim()}
+        >
+          {decided === "rejected" ? "Rejected" : "Reject"}
+        </button>
+      </div>
+    </div>
+  {/if}
 
   {#if handovers.length > 0}
     <details class="continuity">
@@ -129,6 +176,38 @@
 
   button:disabled {
     opacity: 0.5;
+  }
+
+  .approval {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--border);
+  }
+
+  .approval .hint {
+    color: var(--text-faint);
+    font-size: 0.78rem;
+    margin: 0 0 0.5rem;
+  }
+
+  .approval textarea {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+
+  .approval-actions {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  button.approve {
+    background: var(--status-done-bg);
+    color: var(--status-done-fg);
+  }
+
+  button.reject {
+    background: var(--status-failed-bg);
+    color: var(--status-failed-fg);
   }
 
   .continuity {

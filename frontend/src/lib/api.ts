@@ -166,10 +166,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}`, { method: "DELETE" });
   }
 
-  startProject(id: string, roles: RoleStart[]): Promise<{ team_id: string }> {
+  startProject(
+    id: string,
+    roles: RoleStart[],
+    requireApproval = false,
+  ): Promise<{ team_id: string }> {
     return this.request(`/api/projects/${id}/start`, {
       method: "POST",
-      body: JSON.stringify({ roles }),
+      body: JSON.stringify({ roles, require_approval: requireApproval }),
     });
   }
 
@@ -181,6 +185,21 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/steer`, {
       method: "POST",
       body: JSON.stringify({ role, text }),
+    });
+  }
+
+  /** KAN-1711: `comment` is mandatory when `approved` is false (the daemon's own
+   * `/approve` route rejects a comment-less rejection with a 400) and optional
+   * otherwise. */
+  approveProject(
+    id: string,
+    role: string,
+    approved: boolean,
+    comment?: string,
+  ): Promise<{ status: string }> {
+    return this.request(`/api/projects/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ role, approved, comment: comment ?? null }),
     });
   }
 }

@@ -95,6 +95,13 @@ async def test_steer_with_no_running_team_raises(tmp_path: Path) -> None:
         await daemon.steer(project.id, "builder", "hello")
 
 
+async def test_approve_with_no_running_team_raises(tmp_path: Path) -> None:
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    with pytest.raises(FleetError):
+        await daemon.approve(project.id, "builder", approved=True)
+
+
 async def test_stop_with_no_running_team_raises(tmp_path: Path) -> None:
     daemon = _new_daemon(tmp_path)
     project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
