@@ -1,0 +1,23 @@
+# Template for a systemd --user unit (ADR-0014, KAN-1709) -- installed by
+# scripts/install-systemd-service.sh, which fills in this machine's own repo
+# root and uv binary path below, writing the result to
+# ~/.config/systemd/user/cuttlefish-serve.service. Editing the installed copy
+# directly (not this template) is the normal way to add flags below.
+[Unit]
+Description=cuttlefish-crew fleet daemon
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@REPO_ROOT@
+# Add flags here as needed, e.g. --tailscale, --dashboard-dir frontend/dist.
+# For a non-loopback bind (--host/--tailscale, ADR-0011), also add:
+#   EnvironmentFile=%h/.config/cuttlefish/serve.env
+# containing a line CUTTLEFISH_SERVE_PASSWORD=... (readable only by you --
+# `chmod 600` it; never commit it anywhere).
+ExecStart=@UV_BIN@ run --project @REPO_ROOT@ cuttlefish serve
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target
