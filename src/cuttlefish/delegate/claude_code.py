@@ -52,18 +52,20 @@ operator.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import shlex
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCallRecord
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
 
 #: stream-json's per-line `type` values this module reads.
 _TYPE_ASSISTANT = "assistant"
+_TYPE_USER = "user"
 _TYPE_RESULT = "result"
 
 #: Tool names whose `input.file_path` is a real edit (verified live: Write
@@ -118,9 +120,24 @@ def classify_stream(
     :class:`~cuttlefish.agents.outcome.DelegationOutcome` genuinely
     backend-agnostic (ADR-0005) rather than leaking one backend's own path
     convention into a shape every caller reads the same way.
+
+    Every ``tool_use`` block is also recorded as a :class:`ToolCallRecord`
+    (KAN-1714/ADR-0019), paired with its own later ``tool_result`` block by
+    ``tool_use_id`` — verified live as the real join key both blocks actually
+    carry, used here rather than assuming kopicode's own strict FIFO
+    single-call-at-a-time ordering also holds for Claude Code (unverified
+    either way; the id makes that assumption unnecessary). A call's own
+    ``status`` starts as ``"ok"``/``"error"`` from its ``tool_result``'s own
+    ``is_error``, then any call named in the *final* result event's own
+    ``permission_denials`` is upgraded to ``"denied"`` in a second pass, once
+    that event is known — the per-call ``is_error`` flag alone can't tell a
+    permission denial apart from a genuine execution failure.
     """
     edited_paths: list[str] = []
     result_event: Mapping[str, Any] | None = None
+    pending_tool_calls: dict[str, tuple[str, str]] = {}
+    tool_call_ids: list[str] = []
+    tool_calls: list[ToolCallRecord] = []
 
     for event in events:
         kind = event.get("type")
@@ -135,6 +152,25 @@ def classify_stream(
                             path = _relativize(path, root)
                         if path not in edited_paths:
                             edited_paths.append(path)
+                    call_id, name, detail = _tool_use_from_block(block)
+                    if call_id is not None and name is not None:
+                        pending_tool_calls[call_id] = (name, detail or "")
+        elif kind == _TYPE_USER:
+            message = event.get("message")
+            content = message.get("content") if isinstance(message, Mapping) else None
+            if isinstance(content, list):
+                for block in content:
+                    if not isinstance(block, Mapping) or block.get("type") != "tool_result":
+                        continue
+                    call_id = block.get("tool_use_id")
+                    if not isinstance(call_id, str) or call_id not in pending_tool_calls:
+                        continue
+                    name, detail = pending_tool_calls.pop(call_id)
+                    status: Literal["ok", "denied", "error"] = (
+                        "error" if block.get("is_error") else "ok"
+                    )
+                    tool_call_ids.append(call_id)
+                    tool_calls.append(ToolCallRecord(tool=name, detail=detail, status=status))
         elif kind == _TYPE_RESULT:
             result_event = event
 
@@ -148,6 +184,20 @@ def classify_stream(
     tokens, cost_usd = _usage_from_result(result_event)
 
     denials = result_event.get("permission_denials")
+    denied_ids = (
+        {
+            denial.get("tool_use_id")
+            for denial in denials
+            if isinstance(denial, Mapping) and isinstance(denial.get("tool_use_id"), str)
+        }
+        if isinstance(denials, list)
+        else set()
+    )
+    tool_calls = [
+        dataclasses.replace(record, status="denied") if call_id in denied_ids else record
+        for call_id, record in zip(tool_call_ids, tool_calls, strict=True)
+    ]
+
     if isinstance(denials, list) and denials:
         reasons = [
             f"{denial.get('tool_name', 'unknown tool')} denied"
@@ -160,6 +210,7 @@ def classify_stream(
             reason="; ".join(reasons) if reasons else "denied",
             tokens=tokens,
             cost_usd=cost_usd,
+            tool_calls=tool_calls,
         )
 
     subtype = result_event.get("subtype", "unknown")
@@ -170,6 +221,7 @@ def classify_stream(
             reason=str(result_event.get("result") or subtype),
             tokens=tokens,
             cost_usd=cost_usd,
+            tool_calls=tool_calls,
         )
 
     result_text = result_event.get("result")
@@ -185,8 +237,11 @@ def classify_stream(
             edited_paths=edited_paths,
             tokens=tokens,
             cost_usd=cost_usd,
+            tool_calls=tool_calls,
         )
-    return DelegationOutcome(kind="completed", summary=summary, tokens=tokens, cost_usd=cost_usd)
+    return DelegationOutcome(
+        kind="completed", summary=summary, tokens=tokens, cost_usd=cost_usd, tool_calls=tool_calls
+    )
 
 
 #: `result`'s own `usage` fields this module sums into one total token count
@@ -226,6 +281,26 @@ def _edited_path_from_block(block: object) -> str | None:
     tool_input = block.get("input")
     path = tool_input.get("file_path") if isinstance(tool_input, Mapping) else None
     return path if isinstance(path, str) and path else None
+
+
+#: How much of a tool call's own args to keep as its `ToolCallRecord.detail`
+#: (KAN-1714/ADR-0019) -- `Write`'s own `content` field can be an entire file,
+#: and this is a trace log entry, not a second copy of the edit itself (that's
+#: `edited_paths`' own job).
+_TOOL_CALL_DETAIL_CHARS = 500
+
+
+def _tool_use_from_block(block: object) -> tuple[str | None, str | None, str | None]:
+    """`(tool_use_id, name, detail)` off one `tool_use` content block, or all
+    `None` if `block` isn't one."""
+    if not isinstance(block, Mapping) or block.get("type") != "tool_use":
+        return None, None, None
+    call_id = block.get("id")
+    name = block.get("name")
+    if not isinstance(call_id, str) or not isinstance(name, str):
+        return None, None, None
+    detail = json.dumps(block.get("input"), sort_keys=True)[:_TOOL_CALL_DETAIL_CHARS]
+    return call_id, name, detail
 
 
 def _relativize(path: str, root: str) -> str:

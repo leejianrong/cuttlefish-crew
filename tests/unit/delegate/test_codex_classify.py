@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from cuttlefish.agents.outcome import DelegationError
+from cuttlefish.agents.outcome import DelegationError, ToolCallRecord
 from cuttlefish.delegate.codex import classify_stream
 
 
@@ -31,6 +31,20 @@ def _file_change(path: str, kind: str = "add") -> dict[str, object]:
     return {
         "type": "item.completed",
         "item": {"id": "item_1", "type": "file_change", "changes": [{"path": path, "kind": kind}]},
+    }
+
+
+def _command_execution(command: str, *, exit_code: int = 0) -> dict[str, object]:
+    return {
+        "type": "item.completed",
+        "item": {
+            "id": "item_2",
+            "type": "command_execution",
+            "command": command,
+            "aggregated_output": "",
+            "exit_code": exit_code,
+            "status": "completed",
+        },
     }
 
 
@@ -134,3 +148,46 @@ def test_cost_usd_is_always_none() -> None:
     # Code, this is never populated for this backend.
     outcome = classify_stream([_file_change("/scratch/hello.txt"), _turn_completed()])
     assert outcome.cost_usd is None
+
+
+def test_a_file_change_item_is_recorded_as_an_ok_tool_call() -> None:
+    # KAN-1714/ADR-0019: verified live that a rejected patch never produces a
+    # file_change item at all, so every one observed is a landed edit.
+    outcome = classify_stream([_file_change("/scratch/hello.txt"), _turn_completed()])
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="file_change", detail="add /scratch/hello.txt", status="ok")
+    ]
+
+
+def test_a_successful_command_execution_is_recorded_as_ok() -> None:
+    outcome = classify_stream([_command_execution("ls -la"), _turn_completed()])
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="command_execution", detail="ls -la", status="ok")
+    ]
+
+
+def test_a_failed_command_execution_is_recorded_as_error() -> None:
+    outcome = classify_stream([_command_execution("false", exit_code=1), _turn_completed()])
+    assert outcome.tool_calls == [
+        ToolCallRecord(tool="command_execution", detail="false", status="error")
+    ]
+
+
+def test_multiple_tool_calls_are_recorded_in_order() -> None:
+    outcome = classify_stream(
+        [_file_change("/scratch/a.txt"), _command_execution("ls"), _turn_completed()]
+    )
+    assert [tc.tool for tc in outcome.tool_calls] == ["file_change", "command_execution"]
+
+
+def test_an_agent_message_item_is_not_recorded_as_a_tool_call() -> None:
+    outcome = classify_stream(
+        [
+            {
+                "type": "item.completed",
+                "item": {"id": "item_0", "type": "agent_message", "text": "hi"},
+            },
+            _turn_completed(),
+        ]
+    )
+    assert outcome.tool_calls == []

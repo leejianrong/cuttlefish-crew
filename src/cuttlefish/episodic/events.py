@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Mapping
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -239,6 +239,28 @@ class ApprovalDecision:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ToolCallRecorded:
+    """One individual tool invocation inside a single delegation round
+    (KAN-1714, ADR-0019) — copied verbatim off the
+    :class:`~cuttlefish.agents.outcome.ToolCallRecord` list every
+    ``DelegationOutcome`` now carries, journaled once per entry, in order,
+    right after that round's own ``DelegationCompleted``/``DelegationRefused``/
+    ``DelegationFailed``. Never a replacement for those three -- this is the
+    per-call detail underneath one round's own single verdict, not a second
+    account of the round itself (ADR-0004's "no parallel transcript" applies
+    within one round too, not only across whole stores).
+    """
+
+    EVENT_TYPE: ClassVar[str] = "ToolCallRecorded"
+
+    tool: str
+    detail: str
+    status: Literal["ok", "denied", "error"]
+    # Which team role this call belongs to (ADR-0007) -- None outside a team.
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamResumed:
     """A daemon restart found this run still non-terminal and re-drove it via
     satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
@@ -291,6 +313,7 @@ EventPayload = (
     | TaskFailed
     | SteeringMessage
     | ApprovalDecision
+    | ToolCallRecorded
     | TeamResumed
     | UnknownPayload
 )
@@ -311,6 +334,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         TaskFailed,
         SteeringMessage,
         ApprovalDecision,
+        ToolCallRecorded,
         TeamResumed,
     )
 }

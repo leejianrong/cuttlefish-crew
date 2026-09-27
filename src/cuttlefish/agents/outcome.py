@@ -25,6 +25,28 @@ class DelegationError(Exception):
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ToolCallRecord:
+    """One individual tool invocation inside a single delegation round
+    (KAN-1714, ADR-0019) — the per-call detail every backend's own
+    ``classify_stream`` already reduces away when it boils a whole session
+    down to one :class:`DelegationOutcome`. Recorded here, alongside that
+    reduction, not instead of it.
+
+    ``status`` is exactly one of:
+
+    - ``"ok"`` — the call ran and its own tool reported success.
+    - ``"denied"`` — the backend's own permission gate declined this specific
+      call.
+    - ``"error"`` — the call ran but its own tool reported a failure, for a
+      reason other than a permission denial.
+    """
+
+    tool: str
+    detail: str
+    status: Literal["ok", "denied", "error"]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class DelegationOutcome:
     """What one delegation call produced, boiled down to one verdict.
 
@@ -54,3 +76,7 @@ class DelegationOutcome:
     # live against its own `stream-json` `result` event).
     tokens: int | None = None
     cost_usd: float | None = None
+    # Every individual tool call this delegation made, in order (KAN-1714,
+    # ADR-0019) -- empty when the backend made none (a plain informational
+    # reply) or a refusal/failure happened before any call was even attempted.
+    tool_calls: list[ToolCallRecord] = dataclasses.field(default_factory=list)

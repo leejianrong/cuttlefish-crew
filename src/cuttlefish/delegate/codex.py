@@ -79,9 +79,9 @@ import asyncio
 import json
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCallRecord
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
 
@@ -138,18 +138,23 @@ def classify_stream(
     (this module's own doc comment).
     """
     edited_paths: list[str] = []
+    tool_calls: list[ToolCallRecord] = []
     turn_completed: Mapping[str, Any] | None = None
     turn_failed: Mapping[str, Any] | None = None
 
     for event in events:
         kind = event.get("type")
         if kind == _TYPE_ITEM_COMPLETED:
-            path = _edited_path_from_item(event.get("item"))
+            item = event.get("item")
+            path = _edited_path_from_item(item)
             if path is not None:
                 if root is not None:
                     path = _relativize(path, root)
                 if path not in edited_paths:
                     edited_paths.append(path)
+            record = _tool_call_from_item(item)
+            if record is not None:
+                tool_calls.append(record)
         elif kind == _TYPE_TURN_FAILED:
             turn_failed = event.get("error")
         elif kind == _TYPE_TURN_COMPLETED:
@@ -163,6 +168,7 @@ def classify_stream(
             kind="failed",
             summary="Codex did not finish cleanly",
             reason=str(reason),
+            tool_calls=tool_calls,
         )
 
     if turn_completed is None:
@@ -176,6 +182,7 @@ def classify_stream(
             summary=f"Codex edited {len(edited_paths)} file(s)",
             edited_paths=edited_paths,
             tokens=tokens,
+            tool_calls=tool_calls,
         )
     if _REJECTION_MARKER in stderr_tail.lower():
         return DelegationOutcome(
@@ -183,10 +190,50 @@ def classify_stream(
             summary="Codex's sandbox policy declined every action it needed",
             reason=stderr_tail,
             tokens=tokens,
+            tool_calls=tool_calls,
         )
     return DelegationOutcome(
-        kind="completed", summary="Codex finished with no edit needed", tokens=tokens
+        kind="completed",
+        summary="Codex finished with no edit needed",
+        tokens=tokens,
+        tool_calls=tool_calls,
     )
+
+
+#: `item.completed`'s own `item.type` values this module records as a tool call
+#: (KAN-1714/ADR-0019) -- `agent_message`/`error` items are the model's own
+#: text or a mid-stream anomaly notice, neither a tool invocation, so neither
+#: is recorded here.
+_ITEM_TYPE_COMMAND_EXECUTION = "command_execution"
+
+
+def _tool_call_from_item(item: object) -> ToolCallRecord | None:
+    if not isinstance(item, Mapping):
+        return None
+    item_type = item.get("type")
+    if item_type == _ITEM_TYPE_FILE_CHANGE:
+        changes = item.get("changes")
+        detail = (
+            "; ".join(
+                f"{change.get('kind')} {change.get('path')}"
+                for change in changes
+                if isinstance(change, Mapping)
+            )
+            if isinstance(changes, list)
+            else ""
+        )
+        # Verified live: a rejected patch never produces a `file_change` item at
+        # all (this module's own doc comment) -- every one actually observed is
+        # a landed edit.
+        return ToolCallRecord(tool=item_type, detail=detail, status="ok")
+    if item_type == _ITEM_TYPE_COMMAND_EXECUTION:
+        command = item.get("command")
+        exit_code = item.get("exit_code")
+        status: Literal["ok", "denied", "error"] = "ok" if exit_code == 0 else "error"
+        return ToolCallRecord(
+            tool=item_type, detail=command if isinstance(command, str) else "", status=status
+        )
+    return None
 
 
 def _tokens_from_usage(usage: object) -> int | None:
