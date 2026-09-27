@@ -1,9 +1,9 @@
 [project]
-site_url = "https://leejianrong.github.io/cuttlefish-crew/"
+site_url = "https://leejianrong.github.io/cuttlefish-crew/docs/"
 site_name = "cuttlefish-crew"
 site_description = "A fleet manager for teams of coding sub-agents, across many software projects at once."
 docs_dir = "docs-site"
-site_dir = "site"
+site_dir = "site/docs"
 
 repo_url = "https://github.com/leejianrong/cuttlefish-crew"
 repo_name = "leejianrong/cuttlefish-crew"
