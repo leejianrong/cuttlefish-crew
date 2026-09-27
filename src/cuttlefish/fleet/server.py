@@ -13,6 +13,14 @@ task's own control API: it can steer *every* registered project at once.
 A non-loopback bind (ADR-0011, KAN-1706) switches onto a completely separate guard,
 `cuttlefish.fleet.auth.SessionAuth` -- `create_app` treats either through the
 `SecurityCheck` protocol and never needs to know which one is active.
+
+`dashboard_dir` (ADR-0012, KAN-1707) optionally mounts the dashboard's own
+production build (`frontend/dist`, `npm run build`) as static files alongside the
+JSON API, so `cuttlefish serve` alone is a complete, one-process way to see the
+dashboard -- registered *after* every `/api/...` route so it only ever catches
+what those don't, and deliberately outside `_check_security`: the static shell
+carries no secret of its own, same-origin API calls it makes are gated exactly
+as before.
 """
 
 from __future__ import annotations
@@ -20,6 +28,7 @@ from __future__ import annotations
 import dataclasses
 import socket
 from collections.abc import Awaitable, Callable, Collection
+from pathlib import Path
 from typing import Any
 
 import satay.control
@@ -27,6 +36,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
@@ -104,12 +114,15 @@ def create_app(
     security: SecurityCheck,
     login: SessionAuth | None = None,
     cors_origins: Collection[str] = (),
+    dashboard_dir: Path | None = None,
 ) -> FastAPI:
     """`login` is only non-`None` in non-loopback/password mode (ADR-0011) -- it
     both backs `POST /api/login` and doubles as `security` in that mode, since
     `SessionAuth` implements `SecurityCheck` itself. `cors_origins` is the
     operator's own `--allow-origin` list, added to the loopback-only regex below
-    rather than replacing it.
+    rather than replacing it. `dashboard_dir` (ADR-0012), if given, must already
+    exist -- an explicit request for a build that isn't there is a startup error,
+    not a silent skip (`run_daemon`'s own job to tell the two cases apart).
     """
     app = FastAPI(title="cuttlefish-crew fleet daemon")
 
@@ -117,7 +130,12 @@ def create_app(
     async def _check_security(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        if request.url.path not in _PUBLIC_PATHS:
+        # Only `/api/...` ever needs a credential (ADR-0012) -- the dashboard's own
+        # static build, mounted below at "/" when `dashboard_dir` is given, carries
+        # no secret of its own; gating page-load itself would just be friction with
+        # no security benefit, since every API call it then makes is still checked.
+        path = request.url.path
+        if path.startswith("/api/") and path not in _PUBLIC_PATHS:
             try:
                 security.check(
                     token=request.headers.get(TOKEN_HEADER),
@@ -262,6 +280,17 @@ def create_app(
             raise HTTPException(409, str(exc)) from exc
         return {"status": "sent"}
 
+    if dashboard_dir is not None:
+        # Registered last (ADR-0012): Starlette matches routes in registration
+        # order, so every `/api/...` route above still wins over this catch-all
+        # mount at "/" -- only a request none of them matched (the dashboard's
+        # own `index.html`, its `assets/*.js`/`*.css`) ever reaches it.
+        # `html=True` serves `index.html` for `/`; the dashboard has no
+        # client-side router of its own yet (plain `$state`-driven view
+        # switching in `App.svelte`), so no further SPA-fallback route is
+        # needed -- there is no second URL a browser refresh could land on.
+        app.mount("/", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
+
     return app
 
 
@@ -296,6 +325,7 @@ async def run_daemon(
     port: int = DEFAULT_FLEET_PORT,
     password: str | None = None,
     cors_origins: Collection[str] = (),
+    dashboard_dir: Path | None = None,
 ) -> None:
     """Serve `daemon`'s HTTP surface until cancelled (`cuttlefish serve`).
 
@@ -310,10 +340,21 @@ async def run_daemon(
     non-loopback and `password` is missing, or if `password` is too weak
     (`SessionAuth`'s own `WeakPasswordError`) -- refusing to start rather than
     silently falling back to the loopback guard for a bind that isn't loopback.
+
+    `dashboard_dir` (ADR-0012, KAN-1707): the CLI's own job to resolve (an
+    explicit `--dashboard-dir` or a silent, best-effort default) -- by the time
+    it reaches here, non-`None` always means "serve this," so a directory with
+    no `index.html` is a startup error, not a silent no-dashboard fallback.
     """
+    if dashboard_dir is not None and not (dashboard_dir / "index.html").exists():
+        raise ValueError(
+            f"--dashboard-dir {dashboard_dir} has no index.html -- "
+            "build it first (`make frontend-build` / `npm run build` in frontend/)"
+        )
     resolved_port = find_free_port(host, port)
     login: SessionAuth | None = None
     security: SecurityCheck
+    dashboard_note = "  (serving the dashboard build too)" if dashboard_dir is not None else ""
     if satay.control.is_loopback_host(host):
         satay.control.ensure_loopback_bind(host)
         token = satay.control.generate_token()
@@ -323,7 +364,9 @@ async def run_daemon(
         # operator piping this to a file must still be able to read the token
         # immediately, not only once enough further output accumulates to flush.
         print(
-            f"cuttlefish serve: http://{host}:{resolved_port}  {TOKEN_HEADER}: {token}", flush=True
+            f"cuttlefish serve: http://{host}:{resolved_port}  {TOKEN_HEADER}: {token}"
+            f"{dashboard_note}",
+            flush=True,
         )
     else:
         if not password:
@@ -335,10 +378,17 @@ async def run_daemon(
         security = login
         print(
             f"cuttlefish serve: http://{host}:{resolved_port}  "
-            "(non-loopback -- POST /api/login with CUTTLEFISH_SERVE_PASSWORD, ADR-0011)",
+            f"(non-loopback -- POST /api/login with CUTTLEFISH_SERVE_PASSWORD, ADR-0011)"
+            f"{dashboard_note}",
             flush=True,
         )
-    app = create_app(daemon, security=security, login=login, cors_origins=cors_origins)
+    app = create_app(
+        daemon,
+        security=security,
+        login=login,
+        cors_origins=cors_origins,
+        dashboard_dir=dashboard_dir,
+    )
     config = uvicorn.Config(app, host=host, port=resolved_port, log_level="warning")
     server = uvicorn.Server(config)
     await server.serve()

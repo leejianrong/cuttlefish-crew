@@ -10,12 +10,14 @@ dev: ## Sync the dev environment (uv sync)
 	uv sync
 
 # The one-command way to actually see the dashboard running (slice D2,
-# dev-playbook's own "runnable in one command" guidance) -- starts a fleet
-# daemon and the dashboard's dev server together, prints the URL/token to paste
-# in, and stops both on Ctrl-C. Installs frontend/node_modules itself if it's
-# missing, so this is genuinely the first command a newcomer needs, not a second
-# step after remembering to `cd frontend && npm install` first.
-demo: ## Run a fleet daemon + dashboard together, print the URL/token to open
+# dev-playbook's own "runnable in one command" guidance) -- one process now,
+# not two (ADR-0012, KAN-1707): builds the dashboard once, then `cuttlefish
+# serve` alone serves both the JSON API and that build, same origin. Installs
+# frontend/node_modules itself if it's missing, so this is genuinely the first
+# command a newcomer needs, not a second step after `cd frontend && npm
+# install` first. Developing the frontend itself (hot reload) still means
+# running `cd frontend && npm run dev` and `cuttlefish serve` separately.
+demo: ## Build the dashboard + run cuttlefish serve, print the URL to open
 	./scripts/demo.sh
 
 lint: ## Ruff lint + format check

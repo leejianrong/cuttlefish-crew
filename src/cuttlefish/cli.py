@@ -61,6 +61,18 @@ EXIT_TASK_FAILED = 1
 EXIT_CONFIG_ERROR = 2
 EXIT_WORKFLOW_ERROR = 3
 
+#: `cuttlefish serve`'s own best-effort default (ADR-0012, KAN-1707) -- relative
+#: to CWD, matching how `scripts/demo.sh`/`make demo` already invoke it from the
+#: repo root. Missing is not an error here (no `--dashboard-dir` was ever asked
+#: for); missing for an *explicit* `--dashboard-dir` is (`run_daemon`'s job).
+DEFAULT_DASHBOARD_DIR = Path("frontend/dist")
+
+
+def _resolve_dashboard_dir(explicit: str | None) -> Path | None:
+    if explicit is not None:
+        return Path(explicit)
+    return DEFAULT_DASHBOARD_DIR if (DEFAULT_DASHBOARD_DIR / "index.html").exists() else None
+
 
 def _parse_allow(values: list[str] | None) -> list[list[str]]:
     """Each ``--allow`` value is one allowed command, shell-quoted (e.g. ``"go
@@ -403,6 +415,7 @@ async def _serve(args: argparse.Namespace) -> int:
                 port=args.port,
                 password=os.environ.get("CUTTLEFISH_SERVE_PASSWORD"),
                 cors_origins=args.allow_origin or (),
+                dashboard_dir=_resolve_dashboard_dir(args.dashboard_dir),
             )
         except (ValueError, WeakPasswordError) as exc:
             print(f"cuttlefish serve: {exc}", file=sys.stderr)
@@ -622,6 +635,19 @@ def build_parser() -> argparse.ArgumentParser:
             "served from when --host is non-loopback (ADR-0011). Repeatable. Ignored "
             "in loopback mode, which already allows same-machine origins. Default: "
             "none -- only same-machine browser access works until this is set."
+        ),
+    )
+    serve_parser.add_argument(
+        "--dashboard-dir",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Serve the dashboard's own production build (`npm run build` in "
+            "frontend/) from this directory, same-origin with the JSON API "
+            "(ADR-0012). Default: auto-detect ./frontend/dist relative to the "
+            "current directory, silently API-only if it isn't there. An "
+            "explicit path with no index.html in it is a startup error, not a "
+            "silent fallback."
         ),
     )
 

@@ -1,64 +1,40 @@
 #!/usr/bin/env bash
-# Bring up a fleet daemon + the dashboard together, one command:  make demo
-# (or directly: ./scripts/demo.sh). Ctrl-C stops both.
-#
-# dev-playbook's own "runnable in one command" guidance: this is meant to be the
-# first thing a newcomer (or an agent) runs to actually see the dashboard, not a
-# recipe for assembling two separate commands by hand. `cuttlefish serve` itself
-# already auto-picks a free port if its default is taken (find_free_port,
-# cuttlefish.fleet.server) -- this script doesn't need its own port-juggling logic
-# for that half; it only has to read back whichever port/token the daemon printed.
+# The one-command way to see the dashboard: make demo (or ./scripts/demo.sh).
+# Builds the dashboard once (if missing or stale), then runs `cuttlefish serve`
+# alone -- ADR-0012 (KAN-1707): the daemon serves that build itself, same
+# origin as the JSON API, so this is one process now, not two babysat ones.
+# Ctrl-C stops it. `cuttlefish serve` itself already auto-picks a free port if
+# its default is taken (find_free_port, cuttlefish.fleet.server).
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-daemon_log="$(mktemp)"
-daemon_pid=""
+frontend_dir="$repo_root/frontend"
+dist_dir="$frontend_dir/dist"
 
-cleanup() {
-	if [ -n "$daemon_pid" ] && kill -0 "$daemon_pid" 2>/dev/null; then
-		kill "$daemon_pid" 2>/dev/null || true
-		wait "$daemon_pid" 2>/dev/null || true
-	fi
-	rm -f "$daemon_log"
-}
-trap cleanup EXIT INT TERM
-
-if [ ! -d "$repo_root/frontend/node_modules" ]; then
+if [ ! -d "$frontend_dir/node_modules" ]; then
 	echo "Installing dashboard dependencies (frontend/node_modules missing)…"
-	( cd "$repo_root/frontend" && npm install )
+	( cd "$frontend_dir" && npm install )
 fi
 
-echo "Starting the fleet daemon…"
-( cd "$repo_root" && exec uv run cuttlefish serve ) >"$daemon_log" 2>&1 &
-daemon_pid=$!
+# A plain mtime check, not a content hash -- cheap and correct enough for a
+# local dev script (ADR-0012): rebuild if there's no build yet, or any
+# frontend source file is newer than the build's own index.html.
+needs_build=0
+if [ ! -f "$dist_dir/index.html" ]; then
+	needs_build=1
+elif [ -n "$(find "$frontend_dir/src" -newer "$dist_dir/index.html" -print -quit 2>/dev/null)" ]; then
+	needs_build=1
+fi
 
-# Bounded wait for the daemon's own startup line -- never an indefinite hang.
-daemon_line=""
-for _ in $(seq 1 50); do
-	if ! kill -0 "$daemon_pid" 2>/dev/null; then
-		echo "cuttlefish serve exited before starting -- see output below:" >&2
-		cat "$daemon_log" >&2
-		exit 1
-	fi
-	daemon_line="$(grep '^cuttlefish serve:' "$daemon_log" 2>/dev/null || true)"
-	[ -n "$daemon_line" ] && break
-	sleep 0.2
-done
-
-if [ -z "$daemon_line" ]; then
-	echo "cuttlefish serve didn't print its startup line in time -- see output below:" >&2
-	cat "$daemon_log" >&2
-	exit 1
+if [ "$needs_build" -eq 1 ]; then
+	echo "Building the dashboard (frontend/dist missing or stale)…"
+	( cd "$frontend_dir" && npm run build )
 fi
 
 echo
-echo "  $daemon_line"
-echo
-echo "Starting the dashboard (npm run dev)…"
-echo "Open the URL it prints, then paste the base URL and token above into the"
-echo "connect screen -- or click \"See the sprites first\" to preview the pixel-art"
-echo "sprites with no daemon connection at all."
+echo "Starting cuttlefish serve -- open the URL it prints below, paste the"
+echo "token into the connect screen, and you're in."
 echo
 
-cd "$repo_root/frontend"
-npm run dev
+cd "$repo_root"
+exec uv run cuttlefish serve

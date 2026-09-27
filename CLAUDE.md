@@ -20,7 +20,7 @@ doc comment all beat a paragraph here.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the current problem, scope, and shape
   (the cuttlefish-crew pivot direction, built on top of V1/V2's original MVP)
-- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0011
+- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made, 0001–0012
 - [`docs/SLICES.md`](docs/SLICES.md) — the build order this was built against
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed, including gaps a live run surfaced after the fact
@@ -100,10 +100,23 @@ of the loopback default's shared, printed-once static token
 explicit non-loopback browser origins to the dashboard's existing loopback-only
 CORS allow-list. The dashboard's `ConnectScreen` calls the new, credential-less
 `GET /api/auth-mode` once a base URL is entered, then renders a password field
-(`POST /api/login`) or the classic token field accordingly. The remaining
-CUT-E9 cards (KAN-1707 serve-the-dashboard-from-the-daemon, KAN-1708 Tailscale/
-tunnel mode, KAN-1709 daemon process supervision, KAN-1710 a Fly.io feasibility
-spike) are not yet started.
+(`POST /api/login`) or the classic token field accordingly.
+
+KAN-1707 (ADR-0012) is also complete and merged: `cuttlefish serve` optionally
+mounts the dashboard's own production build (`frontend/dist`, `npm run build`)
+as static files at `/`, same origin as the JSON API, registered last so every
+`/api/...` route still wins; `_check_security` now only ever checks `/api/...`
+paths, so the static shell itself needs no credential (every API call it makes
+is still gated exactly as before). `--dashboard-dir PATH` is explicit and
+strict (a startup error if it has no `index.html`); with no flag,
+`cuttlefish._resolve_dashboard_dir` silently probes `./frontend/dist` and
+falls back to API-only if it isn't there. `make demo`/`scripts/demo.sh` is one
+process now, not two — it builds the dashboard once, then `cuttlefish serve`
+alone serves both; developing the frontend itself (hot reload) still means
+running `frontend`'s own `npm run dev` and `cuttlefish serve` separately.
+
+The remaining CUT-E9 cards (KAN-1708 Tailscale/tunnel mode, KAN-1709 daemon
+process supervision, KAN-1710 a Fly.io feasibility spike) are not yet started.
 
 ## Known, accepted gaps — don't re-litigate
 
@@ -172,6 +185,12 @@ spike) are not yet started.
   real guard there instead. Reaching it beyond a LAN still needs the
   operator's own tunnel/VPN (KAN-1708) or a real deployment (KAN-1710); this
   card only adds the auth a non-loopback bind needs once one exists.
+- `cuttlefish serve --dashboard-dir` (ADR-0012) only ever resolves to a plain
+  directory path, checked out from this repo (`frontend/dist`) — the daemon
+  does not (yet) carry its own static assets as an installable artifact
+  (`package_data`, a wheel or container image). That packaging story is real
+  future work, tied to whatever KAN-1710's Fly.io feasibility spike decides,
+  not solved here.
 
 ## Workflow conventions
 
