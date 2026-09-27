@@ -10,7 +10,10 @@ delivers to it — redirecting a still-running task at the boundary between
 delegation rounds, not mid-flight (ADR-0008). ``run --require-approval``/``run-team
 --require-approval`` (KAN-1711) additionally block a round from finalizing at all
 until ``cuttlefish approve <task-id>`` (or ``--reject "<comment>"``) decides it —
-a formal review gate, not just an optional redirect.
+a formal review gate, not just an optional redirect. ``run --max-tokens``/
+``--max-cost-usd`` (and their ``run-team`` equivalents, KAN-1712) force that
+identical decision the moment a run's own cumulative usage crosses either
+ceiling, an automatic trigger for the same gate rather than a separate one.
 """
 
 from __future__ import annotations
@@ -146,14 +149,23 @@ async def _run(args: argparse.Namespace) -> int:
         "secret_names": secret_names,
         "steerable": args.steerable,
         "require_approval": args.require_approval,
+        "max_tokens": args.max_tokens,
+        "max_cost_usd": args.max_cost_usd,
     }
 
-    # A control API + pointer file is needed for either external channel this
-    # task might be reachable over -- `--steerable`'s own optional redirect, or
-    # `--require-approval`'s mandatory review gate (KAN-1711) -- not only the
-    # first of the two, or a require_approval-only run would have no way for
-    # `cuttlefish approve` to ever reach it.
-    needs_control_api = args.steerable or args.require_approval
+    # A control API + pointer file is needed for every external channel this
+    # task might be reachable over -- `--steerable`'s own optional redirect,
+    # `--require-approval`'s mandatory review gate (KAN-1711), or a configured
+    # `--max-tokens`/`--max-cost-usd` ceiling (KAN-1712), which forces the
+    # identical approval wait the moment it's crossed -- a budget-only run with
+    # no control API open would have no way for `cuttlefish approve` to ever
+    # reach it once that happened.
+    needs_control_api = (
+        args.steerable
+        or args.require_approval
+        or args.max_tokens is not None
+        or args.max_cost_usd is not None
+    )
 
     try:
         if needs_control_api:
@@ -233,11 +245,19 @@ async def _run_team(args: argparse.Namespace) -> int:
         "token_budget": args.token_budget,
         "steerable": args.steerable,
         "require_approval": args.require_approval,
+        "max_tokens": args.max_tokens,
+        "max_cost_usd": args.max_cost_usd,
     }
 
-    # See _run's identical comment -- a require_approval-only team still needs
-    # the control API/pointer file `cuttlefish approve` reaches it through.
-    needs_control_api = args.steerable or args.require_approval
+    # See _run's identical comment -- a budget-only or require_approval-only
+    # team still needs the control API/pointer file `cuttlefish approve`
+    # reaches it through.
+    needs_control_api = (
+        args.steerable
+        or args.require_approval
+        or args.max_tokens is not None
+        or args.max_cost_usd is not None
+    )
 
     try:
         if needs_control_api:
@@ -446,6 +466,8 @@ def _project_dict(project: Project) -> dict[str, Any]:
         "roles": [{"name": r.name, "persona": r.persona} for r in project.roles],
         "last_team_id": project.last_team_id,
         "allow": [list(command) for command in project.allow],
+        "max_tokens": project.max_tokens,
+        "max_cost_usd": project.max_cost_usd,
     }
 
 
@@ -465,6 +487,8 @@ def _projects(args: argparse.Namespace) -> int:
                 secrets_scope=args.secrets_scope,
                 roles=tuple(roles),
                 allow=allow,
+                max_tokens=args.max_tokens,
+                max_cost_usd=args.max_cost_usd,
             )
             print(json.dumps(_project_dict(project)))
             return EXIT_OK
@@ -589,6 +613,28 @@ def build_parser() -> argparse.ArgumentParser:
             "Off by default."
         ),
     )
+    run_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Stop and require a decision (KAN-1712) once this run's own cumulative "
+            "token usage reaches N -- the same review gate --require-approval uses. "
+            "Also opens the control API if not already open. Unset by default (no ceiling)."
+        ),
+    )
+    run_parser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=None,
+        metavar="USD",
+        help=(
+            "Stop and require a decision (KAN-1712) once this run's own cumulative "
+            "cost reaches USD -- only ever populated by backends that report a real "
+            "dollar figure (Claude Code; kopicode reports none). Unset by default."
+        ),
+    )
 
     run_team_parser = subparsers.add_parser(
         "run-team", help="Run several named roles concurrently against one project (ADR-0007)"
@@ -648,6 +694,28 @@ def build_parser() -> argparse.ArgumentParser:
             "A role's round never finalizes on its own (KAN-1711), applying to "
             "every role -- blocks until `cuttlefish approve TEAM_ID --role NAME`/"
             '`--reject "<comment>"` decides it. Off by default.'
+        ),
+    )
+    run_team_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Stop and require a decision (KAN-1712) once a role's own cumulative "
+            "token usage reaches N, applying to every role independently. Also "
+            "opens the control API if not already open. Unset by default (no ceiling)."
+        ),
+    )
+    run_team_parser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=None,
+        metavar="USD",
+        help=(
+            "Stop and require a decision (KAN-1712) once a role's own cumulative "
+            "cost reaches USD, applying to every role independently. Only ever "
+            "populated by backends that report a real dollar figure. Unset by default."
         ),
     )
 
@@ -743,6 +811,24 @@ def build_parser() -> argparse.ArgumentParser:
             "Applies to every daemon-started team (`cuttlefish serve`), which has "
             "no CLI --allow flag of its own (Q53). Default: no shell command allowed."
         ),
+    )
+    add_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "This project's own run-scoped token ceiling (KAN-1712), applied to "
+            "every daemon-started team, which has no CLI flag of its own to carry "
+            "it (same reasoning as --allow). Unset by default (no ceiling)."
+        ),
+    )
+    add_parser.add_argument(
+        "--max-cost-usd",
+        type=float,
+        default=None,
+        metavar="USD",
+        help="This project's own run-scoped cost ceiling (KAN-1712). Unset by default.",
     )
 
     projects_sub.add_parser("list", help="List every registered project")

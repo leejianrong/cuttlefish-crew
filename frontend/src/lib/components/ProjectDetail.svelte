@@ -100,6 +100,8 @@
             {role}
             {status}
             handovers={handoversByRole[role] ?? []}
+            usage={project.usage[role]}
+            budget={project.budget}
           />
         {/each}
       </section>

@@ -42,3 +42,15 @@ class DelegationOutcome:
     summary: str
     edited_paths: list[str] = dataclasses.field(default_factory=list)
     reason: str | None = None
+    # Usage this one delegation call burned (KAN-1712/ADR-0017), when its own
+    # backend reports it -- `None` when the backend gave no such figure at all,
+    # never a fabricated zero. `tokens` is a plain total (kopicode's own headless
+    # surface reports only that, no prompt/completion split -- see
+    # `cuttlefish.delegate.kopicode`'s own doc comment); `cost_usd` is `None` for
+    # every kopicode call (it reports no dollar figure at all, and inventing a
+    # per-model pricing table to estimate one is a maintenance burden and a
+    # silent-drift risk this project isn't taking on, an honest gap not a fixable
+    # oversight) and a real figure for Claude Code (`total_cost_usd`, verified
+    # live against its own `stream-json` `result` event).
+    tokens: int | None = None
+    cost_usd: float | None = None

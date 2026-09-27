@@ -9,6 +9,21 @@ export interface RoleDefinition {
   persona: string;
 }
 
+/** One role's cumulative usage so far (KAN-1712/ADR-0017), derived from the
+ * episodic journal -- `cost_usd` is `0` for a backend that reports no dollar
+ * figure at all (kopicode), not a claim that nothing was spent. */
+export interface RoleUsage {
+  tokens: number;
+  cost_usd: number;
+}
+
+/** A project's own run-scoped usage ceiling (KAN-1712/ADR-0017) -- `null` on
+ * either field means "no ceiling," never zero. */
+export interface ProjectBudget {
+  max_tokens: number | null;
+  max_cost_usd: number | null;
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -19,6 +34,8 @@ export interface ProjectSummary {
   allow: string[][];
   running: boolean;
   status: Record<string, RoleStatus>;
+  budget: ProjectBudget;
+  usage: Record<string, RoleUsage>;
 }
 
 export interface RoleStart {
@@ -144,6 +161,8 @@ export class FleetClient {
     secrets_scope?: string;
     roles: RoleDefinition[];
     allow?: string[][];
+    max_tokens?: number | null;
+    max_cost_usd?: number | null;
   }): Promise<ProjectSummary> {
     return this.request("/api/projects", { method: "POST", body: JSON.stringify(input) });
   }
@@ -159,6 +178,20 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/allow`, {
       method: "PATCH",
       body: JSON.stringify({ allow }),
+    });
+  }
+
+  /** KAN-1712/ADR-0017: `null` on either field clears that ceiling back to
+   * "unset" -- the daemon's own `/budget` route reads a missing key the same
+   * way, so this always sends both explicitly. */
+  updateBudget(
+    id: string,
+    maxTokens: number | null,
+    maxCostUsd: number | null,
+  ): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/budget`, {
+      method: "PATCH",
+      body: JSON.stringify({ max_tokens: maxTokens, max_cost_usd: maxCostUsd }),
     });
   }
 

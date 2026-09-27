@@ -30,6 +30,7 @@ from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
 from cuttlefish import runtime
+from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.episodic.events import TeamResumed
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
@@ -224,6 +225,10 @@ class FleetDaemon:
                     "steerable": True,
                     "require_approval": require_approval,
                 }
+                if project.max_tokens is not None:
+                    workflow_input["max_tokens"] = project.max_tokens
+                if project.max_cost_usd is not None:
+                    workflow_input["max_cost_usd"] = project.max_cost_usd
                 async with satay.control.run_app(data_dir=Path(project.root) / ".satay") as app:
                     if not ready.done():
                         ready.set_result((app.base_url, app.token))
@@ -413,6 +418,17 @@ class FleetDaemon:
             return dict.fromkeys(role_names, "queued")
         names = role_names or sorted(roles_in(events))
         return role_statuses(events, names)
+
+    def usage(self, project_id: str) -> dict[str, UsageTotals]:
+        """`role name -> its cumulative usage so far` (KAN-1712/ADR-0017), for
+        `project_id`'s last team -- derived from the identical journal `status`
+        already reads, never a second store."""
+        project = self._projects.get(project_id)
+        role_names = [r.name for r in project.roles]
+        events = self._last_team_events(project)
+        names = role_names or sorted(roles_in(events))
+        payloads = [event.payload for event in events]
+        return {name: cumulative_usage(payloads, role=name) for name in names}
 
     def events(self, project_id: str) -> list[EpisodicEvent]:
         """`project_id`'s last team's full episodic record, in order -- the same

@@ -31,6 +31,13 @@ _KIND_EDIT_APPLIED = "edit_applied"
 _KIND_TOOL_CALL_PARSED = "tool_call_parsed"
 _KIND_TOOL_RESULT = "tool_result"
 _KIND_SESSION_ENDED = "session_ended"
+#: kopicode's own `internal/engine/event.go` copies `journal.ProviderResponse.Tokens
+#: .Total` alone into this kind's `size` field (KAN-1712/ADR-0017, verified directly
+#: against kopicode's source) -- the prompt/completion split its own journal holds
+#: internally never reaches this headless stream, so a summed total is the most this
+#: module can ever report for kopicode, and no dollar figure at all (kopicode reports
+#: no cost anywhere on this stream, for any kind).
+_KIND_PROVIDER_RESPONSE = "provider_response"
 
 #: permission_decided's `decision` field (kopicode internal/permission.Verdict).
 _DECISION_DENY = "deny"
@@ -70,6 +77,7 @@ def classify_stream(
     edited_paths: list[str] = []
     deny_reasons: list[str] = []
     session_ended: Mapping[str, Any] | None = None
+    total_tokens = 0
     # A write_file/delete_file tool_call_parsed's path, held until its matching
     # tool_result confirms it actually ran. FIFO is safe: kopicode dispatches one
     # call at a time and journals its result before starting the next
@@ -99,6 +107,10 @@ def classify_stream(
                 deny_reasons.append(reason if isinstance(reason, str) else "denied")
         elif kind == _KIND_SESSION_ENDED:
             session_ended = event
+        elif kind == _KIND_PROVIDER_RESPONSE:
+            size = event.get("size")
+            if isinstance(size, int):
+                total_tokens += size
 
     if session_ended is None:
         raise DelegationError("kopicode's stream ended with no session_ended event")
@@ -111,17 +123,20 @@ def classify_stream(
             kind="completed",
             summary=f"kopicode edited {len(edited_paths)} file(s) ({stop_reason})",
             edited_paths=edited_paths,
+            tokens=total_tokens,
         )
     if deny_reasons:
         return DelegationOutcome(
             kind="refused",
             summary="kopicode's permission gate declined every action it needed",
             reason="; ".join(deny_reasons),
+            tokens=total_tokens,
         )
     if exit_code == _EXIT_CODE_SUCCESS:
         return DelegationOutcome(
             kind="completed",
             summary=f"kopicode finished with no edit needed ({stop_reason})",
+            tokens=total_tokens,
         )
     reason = f"exit_code={exit_code} reason={stop_reason}"
     if stderr_tail:
@@ -130,6 +145,7 @@ def classify_stream(
         kind="failed",
         summary=f"kopicode did not finish cleanly ({stop_reason})",
         reason=reason,
+        tokens=total_tokens,
     )
 
 

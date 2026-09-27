@@ -106,6 +106,13 @@ class DelegationCompleted:
     # there).
     edited_paths: list[str] = dataclasses.field(default_factory=list)
     role: str | None = None
+    # This delegation's own usage (KAN-1712/ADR-0017), copied verbatim off the
+    # `DelegationOutcome` that produced this event -- `None` for every event this
+    # build wrote before that slice shipped, decoding to "no usage data", never a
+    # fabricated zero. See `cuttlefish.agents.outcome.DelegationOutcome`'s own
+    # doc comment for what each backend actually reports.
+    tokens: int | None = None
+    cost_usd: float | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -121,6 +128,10 @@ class DelegationRefused:
 
     reason: str
     role: str | None = None
+    # See `DelegationCompleted`'s identical fields (KAN-1712/ADR-0017) -- a
+    # refused round still burned real usage getting there.
+    tokens: int | None = None
+    cost_usd: float | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -133,6 +144,10 @@ class DelegationFailed:
 
     reason: str
     role: str | None = None
+    # See `DelegationCompleted`'s identical fields (KAN-1712/ADR-0017) -- a
+    # failed round still burned real usage getting there.
+    tokens: int | None = None
+    cost_usd: float | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
