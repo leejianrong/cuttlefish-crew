@@ -31,6 +31,7 @@ from satay.journal.store import SQLiteStore
 
 from cuttlefish import runtime
 from cuttlefish.config import PreparedRun, prepare_run
+from cuttlefish.episodic.events import TeamResumed
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
@@ -246,6 +247,25 @@ class FleetDaemon:
             store.close()
         return record is not None and record.status not in TERMINAL_STATUSES
 
+    def _mark_resumed(self, project: Project, team_id: str) -> None:
+        """Journal a `TeamResumed` marker directly to `project`'s own episodic
+        store, not through the durable `journal` task -- there is no workflow
+        context at this call site, the same "write straight to the store"
+        posture `_last_team_events` already holds to for reads. `resumed_from_seq`
+        is the highest seq the journal already held, so this renders as exactly
+        "resumed after crash at seq N" (ADR-0010/KAN-1705) -- distinct from
+        ordinary progress, so an operator can see continuity actually working
+        instead of just trusting it."""
+        episodic_path = Path(project.root) / ".cuttlefish" / "episodic.db"
+        store = EpisodicStore.open(episodic_path)
+        try:
+            last_seq = 0
+            for event in store.read(team_id):
+                last_seq = event.seq
+            store.append(team_id, TeamResumed(resumed_from_seq=last_seq))
+        finally:
+            store.close()
+
     async def resume_pending(self) -> list[ResumeAttempt]:
         """Resume every registered project's last team that was still running when
         the daemon (or its host process) died -- ADR-0009's own named daemon-restart
@@ -273,6 +293,7 @@ class FleetDaemon:
             if not await self._is_resumable(project, team_id):
                 continue
             role_inputs = _persisted_roles_to_inputs(project.last_team_roles)
+            self._mark_resumed(project, team_id)
             try:
                 await self._launch_team(project, team_id, role_inputs)
             except FleetError as exc:

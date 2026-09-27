@@ -16,6 +16,7 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    TeamResumed,
     UnknownPayload,
     decode_payload,
     encode_payload,
@@ -48,6 +49,7 @@ KNOWN_PAYLOADS: list[EventPayload] = [
     HandoverWritten(summary="working on the gitignore task", covers_seq_from=1, covers_seq_to=8),
     TaskCompleted(result="done"),
     TaskFailed(error="delegation refused"),
+    TeamResumed(resumed_from_seq=3),
 ]
 
 
