@@ -45,7 +45,10 @@ classifiers = [
 # own and has no reason to pin as tightly as satay. cryptography backs
 # SecretsStore's Fernet encryption (ADR-0006) — floated for the same reason,
 # a well-audited, actively maintained SDK this project has no standing to pin
-# tightly, since it owns no cryptographic primitives of its own.
+# tightly, since it owns no cryptographic primitives of its own. mcp backs
+# `cuttlefish mcp` (KAN-1764, ADR-0020) — the official Model Context Protocol
+# SDK, floated for the identical "well-behaved, actively maintained, not
+# cuttlefish's own to pin tightly" reason as anthropic/openai/e2b.
 dependencies = [
     "satay[studio]==0.2.0",
     "anthropic>=0.40",
@@ -53,6 +56,7 @@ dependencies = [
     "python-dotenv>=1.2.3",
     "e2b>=2.0",
     "cryptography>=42",
+    "mcp>=2.2.0",
 ]
 
 [project.scripts]

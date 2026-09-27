@@ -14,6 +14,9 @@ a formal review gate, not just an optional redirect. ``run --max-tokens``/
 ``--max-cost-usd`` (and their ``run-team`` equivalents, KAN-1712) force that
 identical decision the moment a run's own cumulative usage crosses either
 ceiling, an automatic trigger for the same gate rather than a separate one.
+``cuttlefish mcp`` (KAN-1764) runs an MCP server (stdio transport) wrapping
+an already-running ``cuttlefish serve``'s own HTTP API, for MCP-native hosts
+that prefer typed tool calls over shelling out to this CLI directly.
 """
 
 from __future__ import annotations
@@ -550,6 +553,31 @@ async def _serve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+#: Read as a fallback default so an MCP host's own launch config (typically
+#: env vars, not CLI args -- Claude Desktop/Claude Code's own MCP config
+#: shape) can configure this without a wrapper script (KAN-1764).
+MCP_BASE_URL_ENV = "CUTTLEFISH_MCP_BASE_URL"
+MCP_TOKEN_ENV = "CUTTLEFISH_MCP_TOKEN"
+
+
+def _mcp(args: argparse.Namespace) -> int:
+    """Run an MCP server (stdio transport) wrapping an already-running
+    `cuttlefish serve`'s own HTTP API (KAN-1764/ADR-0020) -- this process is a
+    client of that daemon, not the daemon itself; it never starts one."""
+    if not args.base_url or not args.token:
+        print(
+            f"cuttlefish: mcp needs --base-url and --token (or {MCP_BASE_URL_ENV}/{MCP_TOKEN_ENV})",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+
+    from cuttlefish.mcp import build_mcp_server
+
+    server = build_mcp_server(base_url=args.base_url, token=args.token)
+    server.run("stdio")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cuttlefish")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -891,6 +919,33 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    mcp_parser = subparsers.add_parser(
+        "mcp",
+        help=(
+            "Run an MCP server (stdio transport) wrapping an already-running "
+            "cuttlefish serve's own HTTP API (KAN-1764)"
+        ),
+    )
+    mcp_parser.add_argument(
+        "--base-url",
+        default=os.environ.get(MCP_BASE_URL_ENV),
+        metavar="URL",
+        help=(
+            f"The running cuttlefish serve's own base URL, e.g. "
+            f"http://127.0.0.1:8420. Default: ${MCP_BASE_URL_ENV}."
+        ),
+    )
+    mcp_parser.add_argument(
+        "--token",
+        default=os.environ.get(MCP_TOKEN_ENV),
+        metavar="TOKEN",
+        help=(
+            "That daemon's own x-cuttlefish-token -- its printed-once static "
+            f"token (loopback default), or a POST /api/login session token "
+            f"(non-loopback/password mode, ADR-0011). Default: ${MCP_TOKEN_ENV}."
+        ),
+    )
+
     return parser
 
 
@@ -912,6 +967,8 @@ def main(argv: list[str] | None = None) -> int:
         return _projects(args)
     if args.command == "serve":
         return asyncio.run(_serve(args))
+    if args.command == "mcp":
+        return _mcp(args)
     return _show(args)
 
 
