@@ -14,10 +14,12 @@ import shutil
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
 from cuttlefish.delegate.kopicode import run_kopicode, run_kopicode_in_sandbox
+from cuttlefish.delegate.kopicode_serve import run_kopicode_serve
 from cuttlefish.delegate.policy import write_policy_file
 from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
 
@@ -53,13 +55,25 @@ def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
 
 
 class KopicodeBackend:
-    """Wraps ``kopicode run --print`` behind the pluggable backend seam."""
+    """Wraps kopicode behind the pluggable backend seam.
+
+    ``transport="serve"`` (the default) drives ``kopicode serve`` and answers its live
+    ``consent.request`` from the role's ``allow`` list (``cuttlefish.delegate.consent``),
+    for a delegation with no sandbox provider. A sandboxed delegation always uses
+    ``run --print`` inside the sandbox, with the declared-allowlist policy file: a
+    resident stdio child is not something ``SandboxProvider.exec`` can host (it returns
+    only after the process exits), and inside a sandbox the sandbox is the containment.
+    ``transport="print"`` forces ``run --print`` everywhere.
+    """
 
     NAME: ClassVar[str] = "kopicode"
     CREDENTIAL_ENV_VARS: ClassVar[tuple[str, ...]] = _CREDENTIAL_ENV_VARS
 
-    def __init__(self, binary: str = "kopicode") -> None:
+    def __init__(
+        self, binary: str = "kopicode", *, transport: Literal["serve", "print"] = "serve"
+    ) -> None:
         self._binary = binary
+        self._transport = transport
 
     async def delegate(
         self,
@@ -70,6 +84,18 @@ class KopicodeBackend:
         secrets: Mapping[str, str],
         sandbox_provider: SandboxProvider | None,
     ) -> DelegationOutcome:
+        if self._transport == "serve" and sandbox_provider is None:
+            try:
+                policy = ConsentPolicy(allow)
+            except ConsentPolicyError as exc:
+                raise DelegationError(f"unusable shell allowlist: {exc}") from exc
+            return await run_kopicode_serve(
+                binary=self._binary,
+                task_text=task_text,
+                root=root,
+                policy=policy,
+                env=_credential_envs(secrets),
+            )
         fd, policy_path_str = tempfile.mkstemp(prefix="cuttlefish-policy-", suffix=".toml")
         os.close(fd)
         policy_path = Path(policy_path_str)
