@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 
 import pytest
 from dotenv import load_dotenv
@@ -61,6 +61,16 @@ from dotenv import load_dotenv
 pytest_plugins = ["satay.testing.fixtures"]
 
 load_dotenv()
+
+
+@pytest.fixture(autouse=True)
+async def _end_resident_kopicode_children() -> AsyncIterator[None]:
+    """A test that drives `cli._run` directly bypasses `cli.main`'s cleanup of the shared
+    `kopicode serve` pool; end whatever it left so no child outlives its event loop."""
+    yield
+    from cuttlefish.agents.kopicode import close_shared_pool
+
+    await close_shared_pool()
 
 
 def pytest_collection_modifyitems(items: Sequence[pytest.Item]) -> None:

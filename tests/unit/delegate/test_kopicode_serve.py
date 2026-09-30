@@ -18,9 +18,11 @@ from typing import Any
 import pytest
 
 from cuttlefish.agents.outcome import DelegationError
+from cuttlefish.delegate import kopicode_serve
 from cuttlefish.delegate.consent import ConsentDecision, ConsentPolicy
 from cuttlefish.delegate.kopicode_serve import (
     ConsentRecord,
+    ServePool,
     failure_kind_for,
     run_kopicode_serve,
 )
@@ -100,7 +102,8 @@ async def test_events_and_consent_before_the_start_response_are_demultiplexed(
             {"emit": event({"kind": "edit_applied", "path": "a.py"})},
             {"emit": event({"kind": "provider_response", "size": 2})},
             {"emit": respond()},
-            {"eof": [ended()]},
+            {"close": [ended()]},
+            {"eof": []},
         ]
     )
     outcome = await run(binary, tmp_path)
@@ -110,8 +113,9 @@ async def test_events_and_consent_before_the_start_response_are_demultiplexed(
     assert outcome.tokens == 42
     assert outcome.failure_kind is None
     messages = sent(tmp_path)
-    assert messages[0]["params"]["consent_mode"] == "remote_interactive"
-    assert set(messages[0]["params"]) == {"session", "dir", "prompt", "consent_mode"}
+    start = next(m for m in messages if m.get("method") == "session.start")
+    assert start["params"]["consent_mode"] == "remote_interactive"
+    assert set(start["params"]) == {"session", "dir", "prompt", "consent_mode"}
     reply = next(m for m in messages if m.get("id") == "c-1")
     assert reply == {"jsonrpc": "2.0", "id": "c-1", "result": {"answer": "allow"}}
 
@@ -125,7 +129,8 @@ async def test_a_denied_command_is_answered_deny_and_the_outcome_is_refused(
             {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest && rm -rf /"}},
             {"emit": event({"kind": "permission_decided", "decision": "deny", "reason": "remote"})},
             {"emit": respond()},
-            {"eof": [ended()]},
+            {"close": [ended()]},
+            {"eof": []},
         ]
     )
     records: list[ConsentRecord] = []
@@ -154,7 +159,8 @@ async def test_a_malformed_consent_request_is_denied_and_the_turn_continues(
             {"start": True},
             {"consent": {"id": "c-9", **params}},
             {"emit": respond()},
-            {"eof": [ended()]},
+            {"close": [ended()]},
+            {"eof": []},
         ]
     )
     records: list[ConsentRecord] = []
@@ -174,7 +180,8 @@ async def test_a_consent_request_with_no_params_at_all_is_denied(
             {"start": True},
             {"emit": {"jsonrpc": "2.0", "id": "c-2", "method": "consent.request"}},
             {"emit": respond()},
-            {"eof": [ended()]},
+            {"close": [ended()]},
+            {"eof": []},
         ]
     )
     await run(binary, tmp_path)
@@ -194,7 +201,8 @@ async def test_a_decider_slower_than_the_deadline_is_denied_by_the_client(
             {"start": True},
             {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest"}},
             {"emit": respond()},
-            {"eof": [ended()]},
+            {"close": [ended()]},
+            {"eof": []},
         ]
     )
     records: list[ConsentRecord] = []
@@ -216,7 +224,8 @@ async def test_a_decider_that_raises_is_denied(
             {"start": True},
             {"consent": {"id": "c-1", "kind": "run_shell", "detail": "x"}},
             {"emit": respond()},
-            {"eof": [ended()]},
+            {"close": [ended()]},
+            {"eof": []},
         ]
     )
     await run(binary, tmp_path, policy=boom)
@@ -244,7 +253,8 @@ async def test_a_reply_that_loses_to_kopicodes_own_timeout_is_harmless(
                 )
             },
             {"emit": respond()},
-            {"eof": [ended()]},
+            {"close": [ended()]},
+            {"eof": []},
         ]
     )
     outcome = await run(binary, tmp_path, policy=slow)
@@ -270,7 +280,8 @@ async def test_cancelling_while_a_consent_request_is_outstanding_denies_it_then_
             {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest"}, "wait": 10},
             {"wait_for": "session.cancel"},
             {"emit": respond("cancelled", 1)},
-            {"eof": [ended("cancelled", 1, "context canceled")]},
+            {"close": [ended("cancelled", 1, "context canceled")]},
+            {"eof": []},
         ]
     )
     task = asyncio.create_task(run(binary, tmp_path, policy=never_answers))
@@ -280,12 +291,17 @@ async def test_cancelling_while_a_consent_request_is_outstanding_denies_it_then_
         await task
 
     messages = sent(tmp_path)
-    methods = [m.get("method") or ("reply:" + m["id"] if "id" in m else "eof") for m in messages]
+    methods = [
+        m.get("method") or ("reply:" + str(m["id"]) if "id" in m else "eof" if m.get("eof") else "")
+        for m in messages
+    ]
     deny = next(m for m in messages if m.get("id") == "c-1")
     assert deny["result"] == {"answer": "deny"}
     assert methods.index("reply:c-1") < methods.index("session.cancel")
     cancel = next(m for m in messages if m.get("method") == "session.cancel")
-    assert cancel["params"]["session"] == messages[0]["params"]["session"]
+    start = next(m for m in messages if m.get("method") == "session.start")
+    assert cancel["params"]["session"] == start["params"]["session"]
+    assert methods.index("session.cancel") < methods.index("session.close")
     assert "eof" in methods  # stdin was closed and the child reaped
 
 
@@ -316,7 +332,12 @@ async def test_each_failure_is_a_distinct_kind_carrying_the_real_text(
 ) -> None:
     assert failure_kind_for(stop, code, text) == kind
     binary = fake(
-        [{"start": True}, {"emit": respond(stop, code)}, {"eof": [ended(stop, code, text)]}]
+        [
+            {"start": True},
+            {"emit": respond(stop, code)},
+            {"close": [ended(stop, code, text)]},
+            {"eof": []},
+        ]
     )
     outcome = await run(binary, tmp_path)
 
@@ -333,7 +354,8 @@ async def test_an_edit_that_landed_does_not_hide_a_failed_stop(
             {"start": True},
             {"emit": event({"kind": "edit_applied", "path": "a.py"})},
             {"emit": respond("verification_failed", 1)},
-            {"eof": [ended("verification_failed", 1, "`pytest` exited 1")]},
+            {"close": [ended("verification_failed", 1, "`pytest` exited 1")]},
+            {"eof": []},
         ]
     )
     outcome = await run(binary, tmp_path)
@@ -346,7 +368,12 @@ async def test_the_failure_text_is_redacted_of_the_credential_the_child_carried(
 ) -> None:
     text = f"provider: http 401: bad key {KEY}"
     binary = fake(
-        [{"start": True}, {"emit": respond("error", 3)}, {"eof": [ended("error", 3, text)]}]
+        [
+            {"start": True},
+            {"emit": respond("error", 3)},
+            {"close": [ended("error", 3, text)]},
+            {"eof": []},
+        ]
     )
     outcome = await run(binary, tmp_path, env={"OPENROUTER_API_KEY": KEY})
     assert outcome.reason is not None
@@ -418,7 +445,8 @@ async def test_a_timeout_cancels_the_session_and_raises(
             {"start": True},
             {"wait_for": "session.cancel"},
             {"emit": respond("cancelled", 1)},
-            {"eof": [ended("cancelled", 1)]},
+            {"close": [ended("cancelled", 1)]},
+            {"eof": []},
         ]
     )
     with pytest.raises(DelegationError, match="timed out"):
@@ -426,3 +454,130 @@ async def test_a_timeout_cancels_the_session_and_raises(
             binary=binary, task_text="x", root=str(tmp_path), policy=POLICY, timeout=0.3
         )
     assert any(m.get("method") == "session.cancel" for m in sent(tmp_path))
+
+
+# -- the resident pool ------------------------------------------------------------------
+
+
+def pids(tmp_path: Path) -> list[int]:
+    return [m["pid"] for m in sent(tmp_path) if "pid" in m]
+
+
+def one_delegation(*extra: Any) -> list[Any]:
+    return [
+        {"start": True},
+        {"emit": respond()},
+        {"close": [ended()]},
+        *extra,
+    ]
+
+
+async def test_delegations_on_one_pool_share_a_child_and_each_session_is_closed(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(one_delegation() + one_delegation() + [{"eof": []}])
+    pool = ServePool()
+    try:
+        first = await run(binary, tmp_path, pool=pool)
+        second = await run(binary, tmp_path, pool=pool)
+    finally:
+        await pool.aclose()
+
+    assert (first.kind, second.kind) == ("completed", "completed")
+    assert len(pids(tmp_path)) == 1  # one process served both
+    messages = sent(tmp_path)
+    starts = [m for m in messages if m.get("method") == "session.start"]
+    closes = [m for m in messages if m.get("method") == "session.close"]
+    assert len(starts) == len(closes) == 2
+    assert starts[0]["params"]["session"] != starts[1]["params"]["session"]
+    assert [c["params"]["session"] for c in closes] == [s["params"]["session"] for s in starts]
+
+
+async def test_different_credentials_get_different_children(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake([*one_delegation(), {"eof": []}])
+    pool = ServePool()
+    try:
+        await run(binary, tmp_path, pool=pool, env={"OPENROUTER_API_KEY": KEY})
+        await run(binary, tmp_path, pool=pool, env={"OPENROUTER_API_KEY": KEY + "x"})
+    finally:
+        await pool.aclose()
+    assert len(set(pids(tmp_path))) == 2
+
+
+async def test_a_child_that_died_between_delegations_is_replaced(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(one_delegation({"exit": True}))
+    pool = ServePool()
+    try:
+        await run(binary, tmp_path, pool=pool)
+        await asyncio.sleep(0.3)  # let the reader notice the exit
+        outcome = await run(binary, tmp_path, pool=pool)
+    finally:
+        await pool.aclose()
+    assert outcome.kind == "completed"
+    assert len(set(pids(tmp_path))) == 2
+
+
+async def test_an_unconfirmed_close_kills_the_child_so_no_lock_is_left_held(
+    fake: Callable[[list[Any]], str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kopicode_serve, "_CLOSE_GRACE", 0.3)
+    # After the turn's response this fake reads until stdin closes and never acks the close.
+    binary = fake([{"start": True}, {"emit": respond()}, {"wait_for": "never"}])
+    pool = ServePool()
+    try:
+        outcome = await run(binary, tmp_path, pool=pool)  # the outcome is already known
+        assert outcome.kind == "completed"
+        await run(binary, tmp_path, pool=pool)
+    finally:
+        await pool.aclose()
+    assert len(set(pids(tmp_path))) == 2  # the first child was not reused
+
+
+async def test_a_consent_request_for_a_session_nobody_registered_is_denied(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        [
+            {"start": True},
+            {
+                "consent": {
+                    "id": "c-1",
+                    "session": "someone-else",
+                    "kind": "run_shell",
+                    "detail": "uv run pytest",
+                }
+            },
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    records: list[ConsentRecord] = []
+    await run(binary, tmp_path, on_consent=records.append)
+    reply = next(m for m in sent(tmp_path) if m.get("id") == "c-1")
+    assert reply["result"] == {"answer": "deny"}
+    assert records[0].rule == "unknown_session"
+
+
+async def test_the_failure_text_arrives_with_the_close_not_at_shutdown(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    text = "provider: http 401: expired"
+    binary = fake(
+        [
+            {"start": True},
+            {"emit": respond("error", 3)},
+            {"close": [ended("error", 3, text)]},
+            {"eof": []},
+        ]
+    )
+    pool = ServePool()
+    try:
+        outcome = await run(binary, tmp_path, pool=pool)
+    finally:
+        await pool.aclose()
+    assert outcome.failure_kind == "provider_auth"

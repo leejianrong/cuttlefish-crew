@@ -19,7 +19,7 @@ from typing import ClassVar, Literal
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
 from cuttlefish.delegate.kopicode import run_kopicode, run_kopicode_in_sandbox
-from cuttlefish.delegate.kopicode_serve import run_kopicode_serve
+from cuttlefish.delegate.kopicode_serve import ServePool, run_kopicode_serve
 from cuttlefish.delegate.policy import write_policy_file
 from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
 
@@ -31,6 +31,17 @@ _SANDBOX_POLICY_FILE = "/tmp/cuttlefish-policy.toml"  # inside the sandbox, not 
 
 #: kopicode's own model-provider credential (docs/QUESTIONS.md Q11).
 _CREDENTIAL_ENV_VARS = ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY")
+
+
+#: Shared by every :class:`KopicodeBackend` in the process: ``delegate_to_agent_backend``
+#: resolves a fresh backend per delegation, so a per-instance pool would never be reused.
+#: Safe to share -- a child is keyed by binary and credential set.
+_SHARED_POOL = ServePool()
+
+
+async def close_shared_pool() -> None:
+    """End every resident ``kopicode serve`` child. Call when the event loop is finishing."""
+    await _SHARED_POOL.aclose()
 
 
 def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
@@ -70,10 +81,15 @@ class KopicodeBackend:
     CREDENTIAL_ENV_VARS: ClassVar[tuple[str, ...]] = _CREDENTIAL_ENV_VARS
 
     def __init__(
-        self, binary: str = "kopicode", *, transport: Literal["serve", "print"] = "serve"
+        self,
+        binary: str = "kopicode",
+        *,
+        transport: Literal["serve", "print"] = "serve",
+        pool: ServePool | None = None,
     ) -> None:
         self._binary = binary
         self._transport = transport
+        self._pool = pool if pool is not None else _SHARED_POOL
 
     async def delegate(
         self,
@@ -95,6 +111,7 @@ class KopicodeBackend:
                 root=root,
                 policy=policy,
                 env=_credential_envs(secrets),
+                pool=self._pool,
             )
         fd, policy_path_str = tempfile.mkstemp(prefix="cuttlefish-policy-", suffix=".toml")
         os.close(fd)
