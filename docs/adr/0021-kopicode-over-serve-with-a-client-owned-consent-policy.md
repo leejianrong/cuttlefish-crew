@@ -1,0 +1,92 @@
+# ADR-0021: kopicode is driven over `kopicode serve`, and cuttlefish is its live consent client — one child per delegation, deny by default, no containment claim
+
+- Status: Proposed
+- Date: 2026-09-29
+- Deciders: Jian
+
+## Context
+
+Two problems surfaced integration-testing the `run --print` seam.
+
+**A declared shell allowlist can't express what a model actually types.** kopicode's
+shell tool always runs `/bin/sh -c "<line>"`, and its `--policy-file` allowlist
+exact-matches that whole argv. A model that phrases `uv run pytest` three ways is refused
+three times (kopicode issue #157). kopicode has rejected loosening the match three times —
+a prefix match that allows `uv run pytest` also allows `uv run pytest && rm -rf /` — and
+won't be patched. Its answer is a live consent mode on `kopicode serve` (kopicode ADR-0016,
+PR #159): every shell command or out-of-root write is asked of the client, per action.
+
+**Failures looked identical.** A failed round read `exit_code=3 reason=error`. The real
+diagnostic — provider HTTP status and body, the harness error — is `session_ended.text`.
+
+## Decision
+
+**1. `KopicodeBackend` uses `kopicode serve` for an unsandboxed delegation**
+(`cuttlefish.delegate.kopicode_serve`), `session.start` with `consent_mode:
+"remote_interactive"`. A sandboxed delegation keeps `run --print` inside the sandbox with
+the declared-allowlist policy file: `SandboxProvider.exec` returns only after the process
+exits, so it cannot host a stdio child, and inside a sandbox the sandbox is the
+containment. `transport="print"` forces the old path everywhere. Making the sandboxed path
+live too means a streaming `spawn` on `ContainerSandboxProvider` (`docker exec -i`) — not
+built.
+
+**2. One `serve` child per delegation, not one resident child.** kopicode writes a
+session's `session_ended` — the only event whose `text` carries the failure — when the
+session *closes*, and there is no `session.close`: closing means stdin EOF and process
+exit. A live session also holds its working tree's lock (`-32005` for a second session on
+the same root), and reusing the session would carry one role's conversation into the next.
+Process start-up is negligible next to a model round. `ServeChild` drives any number of
+sessions, so going resident later is a change to its caller, once kopicode has a
+`session.close`.
+
+**3. The consent policy** (`cuttlefish.delegate.consent`) is built from a role's declared
+`allow` — a role with none (the default, and every read-only role) gets no shell at all.
+`detail` is untrusted model output; every rule fails closed:
+
+- `write_outside_root`: always denied, for every role. Writes inside `dir` never reach consent.
+- `run_shell`: the line must be at most 1 KiB and consist only of words of `[A-Za-z0-9_.,:=@%+/-]`
+  joined by single spaces — no quote, `; & | < > $ ` ( ) { } \ * ? ~ #`, newline or tab. Only
+  then is it matched by argv **prefix** against the role's entries; with no shell syntax
+  left in the line, `/bin/sh -c` runs exactly the words matched, so prefix matching is
+  sound. (An allowlist of characters, not a denylist of metacharacters.) Arguments after
+  the matched prefix may not be absolute or contain a `..` segment, including in a
+  `--flag=value` value.
+- `allow` entries are argv (`--allow 'uv run pytest'`) or kopicode's `["/bin/sh","-c",line]`
+  shape; an entry with a metacharacter in it is refused at config time, since it could
+  never match.
+- Never `allow_session`: each decision is made and logged individually.
+- The answer is deadline-bounded (30s) by the client, well inside kopicode's fixed 60s; a
+  timeout or exception in the decider is a `deny`, a malformed request is a `deny`, and
+  cancelling a delegation denies every outstanding request before `session.cancel`.
+
+A prefix entry is a trust grant for that program's whole flag surface: `["python"]` would
+allow `python -m anything`. Entries should name a full subcommand (`uv run pytest`).
+
+**4. Failure kinds.** `DelegationOutcome.failure_kind` (new, optional) is one of
+`provider_auth` (exit 3, HTTP 401/403), `provider_credits` (402), `provider_rate_limit`
+(429), `provider_outage` (5xx), `provider_other`, `harness_error` (exit 4), `max_turns`,
+`verification_failed`, `budget_exhausted`, `cancelled`, `open_failed` (`-32002`),
+`protocol_error`. The `text` goes into `reason` after the same credential redaction as a
+stderr tail. An edit that landed no longer hides a failed stop on this transport.
+
+## Containment
+
+**kopicode does not sandbox what the model's shell can do** (kopicode ADR-0008/0011), and
+neither does this policy. Approving `uv run pytest` is a decision about which commands to
+run, not a boundary around them: it still executes arbitrary repository code as this user,
+with this process's environment, network and filesystem. Denying `..` and absolute
+arguments narrows accidents; it is not a jail. Real containment of an unsandboxed
+delegation is this project's responsibility, and today it is absent by design (ADR-0002's
+one-operator, own-repo trust model). Where the boundary is needed, run the delegation with
+a sandbox provider — which uses the `run --print` path above.
+
+## Consequences
+
+- Needs a kopicode with serve's consent mode (`400091d`, kopicode PR #159, or later). An
+  older binary has no `serve` at all; the client reports kopicode's stderr in the
+  `DelegationError`.
+- Consent decisions are logged (`cuttlefish.delegate.consent`, INFO) with role-agnostic
+  session id, kind, capped `detail`, answer and rule; they are **not yet** in the
+  episodic journal. kopicode's own `permission_decided` events (`source: "remote"`) still
+  feed the per-call `ToolCallRecord` status.
+- The two-tier split leaves sandboxed delegations exposed to #157's exact-match problem.

@@ -21,7 +21,7 @@ from cuttlefish.agents.outcome import DelegationError
 
 
 async def test_the_temporary_policy_file_is_cleaned_up_after_the_call(tmp_path: Path) -> None:
-    backend = KopicodeBackend("kopicode-binary-that-does-not-exist")
+    backend = KopicodeBackend("kopicode-binary-that-does-not-exist", transport="print")
     tmp_dir = Path(tempfile.gettempdir())
     files_before = set(tmp_dir.glob("cuttlefish-policy-*"))
 
@@ -42,7 +42,7 @@ async def test_a_declared_allowlist_reaches_the_written_policy_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """KAN-1011: `allow` is forwarded to `write_policy_file`, not silently dropped."""
-    backend = KopicodeBackend("kopicode-binary-that-does-not-exist")
+    backend = KopicodeBackend("kopicode-binary-that-does-not-exist", transport="print")
     captured: dict[str, object] = {}
     original_write_policy_file = cuttlefish.agents.kopicode.write_policy_file
 

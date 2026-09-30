@@ -80,3 +80,8 @@ class DelegationOutcome:
     # ADR-0019) -- empty when the backend made none (a plain informational
     # reply) or a refusal/failure happened before any call was even attempted.
     tool_calls: list[ToolCallRecord] = dataclasses.field(default_factory=list)
+    # Why a ``"failed"`` outcome failed, when its backend can tell (only kopicode's
+    # serve transport can today) -- one of ``cuttlefish.delegate.kopicode_serve
+    # .FAILURE_KINDS``. ``None`` for every non-failure, and for a failure whose
+    # backend gave nothing finer than ``reason``.
+    failure_kind: str | None = None
