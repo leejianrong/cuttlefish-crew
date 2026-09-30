@@ -53,8 +53,9 @@ uv run cuttlefish run-team \
   --role reviewer:"review the last commit for style issues"
 ```
 
-Both roles run concurrently (`satay.gather`) against the project's shared
-checkout. Watch progress live in the dashboard — each role renders as a
+Both roles start together (`satay.gather`) against the project's shared
+checkout; two kopicode-backed roles are dispatched one at a time instead,
+because kopicode locks a working tree per session. Watch progress live in the dashboard — each role renders as a
 small animated sprite whose pose reflects its status.
 
 ## 4. Steer it, or require your sign-off before it finalizes
