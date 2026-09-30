@@ -81,11 +81,11 @@ kopicode-backed (every role in a team already shares one `root`), avoiding
 kopicode's own per-working-tree lock collision (Q44) rather than failing
 closed on it.
 
-Context/session continuity (CUT-E8, ADR-0010) is complete and merged: `cuttlefish
-run`/`run-team` and `FleetDaemon.resume_pending()` resume a non-terminal run by
-calling `satay.start` with its original `run_id` instead of always minting a
-fresh one, closing both the CLI-crash and daemon-restart resume gaps with the
-one primitive satay's own replay engine already provides; `compose_steered_text`
+Context/session continuity (CUT-E8, ADR-0010) is merged for the daemon only:
+`FleetDaemon.resume_pending()` resumes a non-terminal team on `cuttlefish serve`
+startup by calling `satay.start` with its original `run_id`, the one primitive
+satay's own replay engine already provides (the one-shot CLI does not, see
+Known gaps); `compose_steered_text`
 now folds in the latest `HandoverWritten` summary instead of an unbounded raw
 `round_summaries` list; the dashboard surfaces a `TeamResumed` marker and a
 per-role checkpoint timeline.
@@ -281,6 +281,13 @@ real kopicode team, and reading its real episodic journal back through
 
 ## Known, accepted gaps — don't re-litigate
 
+- **The one-shot CLI never resumes.** `cuttlefish run`/`run-team` always mint
+  a fresh `uuid4` (`cli.py`), and ADR-0010's planned `--resume <id>` flag was
+  never built. Verified live 2026-09-29: `kill -9` mid-delegation, rerun the
+  identical command, get a new task; the crashed run's row stays non-terminal
+  in `.satay/`. Only the daemon resumes (a mid-flight delegation round
+  restarts, finished rounds are not re-run). Don't write "a killed process
+  resumes" without saying which one. ADR-0010.
 - satay-runtime's own `durable_wait_for_event` identity (`event#{ordinal}`,
   `satay/replay/engine.py`) discards the event type before building the final
   identity string, only keeping it in the *counter* that produces the
