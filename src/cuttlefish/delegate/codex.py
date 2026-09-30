@@ -146,8 +146,7 @@ def classify_stream(
         kind = event.get("type")
         if kind == _TYPE_ITEM_COMPLETED:
             item = event.get("item")
-            path = _edited_path_from_item(item)
-            if path is not None:
+            for path in _edited_paths_from_item(item):
                 if root is not None:
                     path = _relativize(path, root)
                 if path not in edited_paths:
@@ -256,18 +255,19 @@ def _tokens_from_usage(usage: object) -> int | None:
     return int(input_tokens or 0) + int(output_tokens or 0)
 
 
-def _edited_path_from_item(item: object) -> str | None:
+def _edited_paths_from_item(item: object) -> list[str]:
     if not isinstance(item, Mapping) or item.get("type") != _ITEM_TYPE_FILE_CHANGE:
-        return None
+        return []
     changes = item.get("changes")
     if not isinstance(changes, list):
-        return None
+        return []
+    paths: list[str] = []
     for change in changes:
         if isinstance(change, Mapping):
             path = change.get("path")
             if isinstance(path, str) and path:
-                return path
-    return None
+                paths.append(path)
+    return paths
 
 
 def _relativize(path: str, root: str) -> str:

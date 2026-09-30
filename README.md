@@ -7,8 +7,8 @@ window and its own demos by hand.
 Give a project's team a task in plain language. Each agent hands its coding
 work to a pluggable backend — [kopicode](https://github.com/leejianrong/kopicode)
 or headless Claude Code — rather than attempting the edit itself, and if the
-process dies partway through, restarting it resumes from where it left off
-instead of starting over: the core loop is a durable
+fleet daemon (`cuttlefish serve`) dies partway through, restarting it resumes
+every in-flight team instead of starting over: the core loop is a durable
 [satay](https://github.com/leejianrong/satay-runtime) workflow, not an
 ordinary function wrapped in durability later. Everything that happens is
 written to one readable record, not scattered across logs that disagree
@@ -36,8 +36,11 @@ flowchart LR
     Operator -->|cuttlefish show| Journal
 ```
 
-A killed process resumes exactly where it left off — nothing above the
-journal is re-run, nothing below it is lost.
+A killed `cuttlefish serve` resumes each project's in-flight team when it
+restarts: the same team id, a `TeamResumed` marker in the journal, and no
+round that already finished is re-run. The delegation round that was
+mid-flight starts over. A killed one-shot `cuttlefish run`/`run-team` does
+**not** resume -- rerunning it starts a new task.
 
 ## Quick start
 
