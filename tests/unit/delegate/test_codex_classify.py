@@ -66,6 +66,26 @@ def test_multiple_file_changes_are_all_recorded_without_duplicates() -> None:
     assert outcome.edited_paths == ["/scratch/a.py", "/scratch/b.py"]
 
 
+def test_one_file_change_item_touching_several_files_records_every_path() -> None:
+    # Verified live (2026-09-29): a single `file_change` item can carry several
+    # `changes` -- one patch editing a module and its test -- and every one of
+    # them is an edit, not just the first.
+    multi_file_item: dict[str, object] = {
+        "type": "item.completed",
+        "item": {
+            "id": "item_3",
+            "type": "file_change",
+            "changes": [
+                {"path": "/scratch/test_a.py", "kind": "update"},
+                {"path": "/scratch/a.py", "kind": "update"},
+            ],
+        },
+    }
+    outcome = classify_stream([multi_file_item, _turn_completed()], root="/scratch")
+    assert outcome.edited_paths == ["test_a.py", "a.py"]
+    assert outcome.summary == "Codex edited 2 file(s)"
+
+
 def test_an_absolute_edited_path_is_relativized_against_root() -> None:
     outcome = classify_stream(
         [_file_change("/scratch/project/hello.txt"), _turn_completed()],
