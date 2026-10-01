@@ -47,6 +47,21 @@ class ToolCallRecord:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ConsentDecisionRecord:
+    """One live consent decision cuttlefish made for a delegation (KAN-1792, ADR-0021).
+
+    ``detail`` is untrusted model output, already capped by the transport; the episodic
+    store redacts it at write time like every other event text. ``answer`` is what was
+    sent back to the backend, ``rule`` which policy rule (or failure mode) produced it.
+    """
+
+    kind: str
+    detail: str
+    answer: Literal["allow", "deny"]
+    rule: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class DelegationOutcome:
     """What one delegation call produced, boiled down to one verdict.
 
@@ -85,3 +100,7 @@ class DelegationOutcome:
     # .FAILURE_KINDS``. ``None`` for every non-failure, and for a failure whose
     # backend gave nothing finer than ``reason``.
     failure_kind: str | None = None
+    # Every live consent decision this delegation's session triggered, in order
+    # (KAN-1792, ADR-0021) -- empty for every transport with no live consent
+    # (`run --print`, the other backends).
+    consent_decisions: list[ConsentDecisionRecord] = dataclasses.field(default_factory=list)

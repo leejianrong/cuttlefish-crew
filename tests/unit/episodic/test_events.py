@@ -5,6 +5,7 @@ import dataclasses
 import pytest
 
 from cuttlefish.episodic.events import (
+    ConsentDecided,
     DelegationCompleted,
     DelegationFailed,
     DelegationRefused,
@@ -53,6 +54,8 @@ KNOWN_PAYLOADS: list[EventPayload] = [
     TeamResumed(resumed_from_seq=3),
     ToolCallRecorded(tool="write_file", detail='{"path":"a.txt"}', status="ok"),
     ToolCallRecorded(tool="run_shell", detail='{"command":"ls"}', status="denied", role="builder"),
+    ConsentDecided(kind="shell", detail="ls -la", answer="allow", rule="allow[0]"),
+    ConsentDecided(kind="shell", detail="rm -rf /", answer="deny", rule="no_match", role="builder"),
 ]
 
 
