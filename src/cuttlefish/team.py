@@ -64,6 +64,7 @@ class RoleInput(TypedDict):
     text: str
     allow: NotRequired[list[list[str]]]
     secret_names: NotRequired[list[str]]
+    backend: NotRequired[str]
 
 
 class TeamInput(TypedDict):
@@ -105,16 +106,24 @@ class TeamInput(TypedDict):
     max_cost_usd: NotRequired[float]
 
 
-def _needs_sequential_dispatch(active_names: list[str], agent_backend: str) -> bool:
+def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[str, str]) -> bool:
     """Whether this round's delegations must run one-at-a-time instead of via
     ``satay.gather`` (docs/QUESTIONS.md Q44).
 
     Every role in a team already shares one ``root`` (``TeamInput.root`` is
     singular, not per-role) -- so two or more active kopicode-backed roles in one
     round always collide on kopicode's own per-working-tree session lock, not just
-    in some edge case. Any other backend, or a single active role, is unaffected.
+    in some edge case. Any other backend, or fewer than two kopicode-backed active
+    roles (roles may name different backends, KAN-1809), is unaffected.
     """
-    return agent_backend == "kopicode" and len(active_names) > 1
+    return sum(backend_by_name[name] == "kopicode" for name in active_names) > 1
+
+
+def _backend_kwargs(role: RoleInput) -> dict[str, str]:
+    """A role's backend override as call kwargs -- empty when it names none, so an
+    unchanged role's task arguments stay byte-identical (replay-safe)."""
+    backend = role.get("backend")
+    return {"agent_backend": backend} if backend else {}
 
 
 async def _dispatch_round(
@@ -124,7 +133,7 @@ async def _dispatch_round(
     role_by_name: dict[str, RoleInput],
     root: str,
     project: str,
-    agent_backend: str,
+    backend_by_name: dict[str, str],
 ) -> list[DelegationOutcome | BaseException]:
     """Run one round's delegations, choosing concurrent (``satay.gather``) or
     sequential dispatch per :func:`_needs_sequential_dispatch` (Q44) -- the
@@ -132,7 +141,7 @@ async def _dispatch_round(
     collect-mode contract by hand, catching each role's failure rather than
     letting one role's exception stop the rest of the round.
     """
-    if _needs_sequential_dispatch(active_names, agent_backend):
+    if _needs_sequential_dispatch(active_names, backend_by_name):
         outcomes: list[DelegationOutcome | BaseException] = []
         for name in active_names:
             try:
@@ -143,6 +152,7 @@ async def _dispatch_round(
                         allow=role_by_name[name].get("allow", DEFAULT_SHELL_ALLOWLIST),
                         project=project,
                         secret_names=role_by_name[name].get("secret_names"),
+                        **_backend_kwargs(role_by_name[name]),
                     )
                 )
             except Exception as exc:
@@ -159,6 +169,7 @@ async def _dispatch_round(
                 allow=role_by_name[name].get("allow", DEFAULT_SHELL_ALLOWLIST),
                 project=project,
                 secret_names=role_by_name[name].get("secret_names"),
+                **_backend_kwargs(role_by_name[name]),
             )
             for name in active_names
         ],
@@ -202,6 +213,9 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     sandbox_name = sandbox_provider.BACKEND_NAME if sandbox_provider is not None else None
 
     role_by_name = {role["name"]: role for role in roles}
+    backend_by_name = {
+        role["name"]: role.get("backend") or runtime_.agent_backend for role in roles
+    }
     current_text: dict[str, str] = {role["name"]: role["text"] for role in roles}
     round_summaries: dict[str, list[str]] = {role["name"]: [] for role in roles}
     final_outcome: dict[str, DelegationOutcome | BaseException] = {}
@@ -225,7 +239,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                     root=root,
                     policy_allow=role.get("allow", DEFAULT_SHELL_ALLOWLIST),
                     sandbox=sandbox_name,
-                    backend=runtime_.agent_backend,
+                    backend=backend_by_name[name],
                     project=project,
                     secret_names=role.get("secret_names", []),
                     role=name,
@@ -238,7 +252,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             role_by_name=role_by_name,
             root=root,
             project=project,
-            agent_backend=runtime_.agent_backend,
+            backend_by_name=backend_by_name,
         )
 
         next_active: list[str] = []

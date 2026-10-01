@@ -58,8 +58,11 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **Only the fleet daemon resumes after a crash.** `cuttlefish run`/`run-team`
   mint a fresh id (`cli.py`) and ADR-0010's `--resume` flag was never built.
   Never write "a killed process resumes" without saying which one.
-- **One backend per process.** `CUTTLEFISH_AGENT_BACKEND` applies to every
-  project and role a given `cuttlefish serve` runs.
+- **Backend resolution order (KAN-1809):** a role's own backend, else its
+  project's, else `CUTTLEFISH_AGENT_BACKEND`. Every named backend's CLI is
+  `PATH`-checked at team start, not mid-task. Two kopicode-backed roles still
+  dispatch one-at-a-time (shared `--root` lock); roles on different backends
+  run concurrently.
 - **`OPENROUTER_API_KEY` is only needed once a handover summary is due**
   (the provider is built lazily, KAN-1807); without it that call fails, unless
   `CUTTLEFISH_LLM_PROVIDER=replay` (placeholder summaries). It is cuttlefish's

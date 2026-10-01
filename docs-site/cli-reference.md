@@ -37,6 +37,11 @@ uv run cuttlefish run-team \
   --role reviewer:"review the last commit for style issues"
 ```
 
+`--role-backend NAME=BACKEND` (repeatable) runs that role through
+`kopicode`, `claude-code` or `codex` instead of `CUTTLEFISH_AGENT_BACKEND`, so
+one team can mix agents. Every named backend's CLI must be on `PATH` before
+the team starts.
+
 `--role NAME:TASK_TEXT` is repeatable and required at least once. Every
 other flag from `run` applies team-wide (one `--root`, one `--allow` list
 shared by every role, one steerable/approval/budget setting applying to
@@ -86,7 +91,10 @@ already-registered root reuses it. Exits 2 if a check fails.
 ## `cuttlefish projects`
 
 Manage the `Project` registry the fleet daemon reads from
-(`~/.cuttlefish/projects.db`).
+(`~/.cuttlefish/projects.db`). `projects add --backend B` sets a project's
+default agent backend and `--role-backend NAME=B` a single role's; resolution is
+role, then project, then `CUTTLEFISH_AGENT_BACKEND`. The dashboard's register
+form takes the same (`name@backend: persona` per role).
 
 ```bash
 uv run cuttlefish projects add \
