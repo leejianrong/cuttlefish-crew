@@ -85,16 +85,16 @@ def resolve_llm_provider() -> LlmProvider:
     smoke-tested with no live credential. A real run defaults to "openrouter" — one
     key over an OpenAI-compatible endpoint reaches many upstream models, rather than
     locking cuttlefish to a single vendor SDK. "claude" remains available for a
-    direct Anthropic credential.
+    direct Anthropic credential. The openrouter provider is built lazily, so a
+    missing key surfaces (with an actionable message) only if a handover needs it.
     """
     choice = os.environ.get(LLM_PROVIDER_ENV, DEFAULT_LLM_PROVIDER)
     if choice == "openrouter":
-        from cuttlefish.llm.openrouter import MissingApiKeyError, OpenRouterLlmProvider
+        from cuttlefish.llm.lazy import LazyLlmProvider
+        from cuttlefish.llm.openrouter import OpenRouterLlmProvider
 
-        try:
-            return OpenRouterLlmProvider()
-        except MissingApiKeyError as exc:
-            raise ConfigError(str(exc)) from exc
+        # Lazy (KAN-1807): the key is only needed once a handover summary is due.
+        return LazyLlmProvider(OpenRouterLlmProvider)
     if choice == "claude":
         from cuttlefish.llm.claude import ClaudeLlmProvider
 
