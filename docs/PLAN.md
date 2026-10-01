@@ -6,7 +6,7 @@ slice C in full - both the team-concurrency half (`cuttlefish run-team`,
 ADR-0007) and the steering half (`cuttlefish run --steerable`/`run-team
 --steerable`/`cuttlefish steer`, ADR-0008) - are all complete and merged.
 Supersedes the single-task-MVP framing this document held through V1/V2
-(both complete, both merged to `main` - see `CLAUDE.md`'s "What's built" for
+(both complete, both merged to `main` - see `agent_docs/what-is-built.md` for
 that history, which stays true and is not being redone, only built on).
 Slice C's steering half redirects at a delegation round's boundary, not
 mid-flight (ADR-0008's own honestly-named limit). Slice D (the

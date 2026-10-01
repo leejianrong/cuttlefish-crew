@@ -131,5 +131,7 @@ Eight tools: `list_projects`, `get_project`, `register_project`,
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |
 
 A real run also needs a model credential for whichever LLM provider and
-agent backend are selected (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, or
-`OPENAI_API_KEY`, depending on your choices).
+agent backend are selected: `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY` for
+kopicode and the reasoning provider, Claude Code's own login or
+`ANTHROPIC_API_KEY`, and `codex login` for Codex (`codex exec` ignores an
+ambient `OPENAI_API_KEY`, ADR-0018).

@@ -66,10 +66,12 @@ backend.
 
 ## Continuity, steering, and approval
 
-A crashed CLI or a restarted daemon resumes a non-terminal run by calling
-`satay.start` with its original `run_id`
+A restarted daemon (`cuttlefish serve`) resumes each project's non-terminal
+team by calling `satay.start` with its original `run_id`
 ([ADR-0010](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0010-continuity-is-a-cuttlefish-owned-resume-layer-satay-stays.md)),
-rather than losing it or starting fresh. Steering
+rather than losing it or starting fresh; the round that was mid-flight
+starts over. The one-shot CLI (`run`/`run-team`) does not resume: rerunning
+it starts a new task. Steering
 ([ADR-0008](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0008-steering-is-a-round-boundary-redirect-not-a-mid-flight-interrupt.md))
 and the round-boundary approval gate
 ([ADR-0016](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0016-round-boundary-approval-gate-replaces-steering-when-both-are-set.md))
