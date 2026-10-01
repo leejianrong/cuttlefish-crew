@@ -60,9 +60,10 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   Never write "a killed process resumes" without saying which one.
 - **One backend per process.** `CUTTLEFISH_AGENT_BACKEND` applies to every
   project and role a given `cuttlefish serve` runs.
-- **`OPENROUTER_API_KEY` is required at startup for every backend** unless
-  `CUTTLEFISH_LLM_PROVIDER=replay` (placeholder handover summaries). It is
-  cuttlefish's own summarising provider, not the coding agent's credential.
+- **`OPENROUTER_API_KEY` is only needed once a handover summary is due**
+  (the provider is built lazily, KAN-1807); without it that call fails, unless
+  `CUTTLEFISH_LLM_PROVIDER=replay` (placeholder summaries). It is cuttlefish's
+  own summarising provider, not the coding agent's credential.
 - **`cuttlefish run` writes `.cuttlefish/` and `.satay/` into the current
   directory**, and the daemon writes them into each project's `--root`.
 - **The code beats prose.** Check a claim against the code before repeating

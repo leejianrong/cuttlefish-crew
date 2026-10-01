@@ -41,16 +41,18 @@ was mid-flight starts over). A killed one-shot `cuttlefish run`/`run-team` does
 |---|---|
 | Python 3.12+ and [uv](https://docs.astral.sh/uv/) | everything |
 | One coding-agent CLI on `PATH`, logged in or keyed: [`kopicode`](https://github.com/leejianrong/kopicode#readme) (the default; needs `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY`), `claude`, or `codex` (after `codex login`) | delegating work |
-| `OPENROUTER_API_KEY`, **or** `CUTTLEFISH_LLM_PROVIDER=replay` | cuttlefish's own summarising calls; see below |
+| `OPENROUTER_API_KEY` (optional) | cuttlefish's own summarising calls; see below |
 | Node.js and npm | only for the dashboard (`make demo`) |
 | Docker | only for `CUTTLEFISH_SANDBOX=container` |
 
 cuttlefish's own model calls are used for one thing, summarising a role's
 working memory when it crosses its token budget. By default they go through
-OpenRouter, so `OPENROUTER_API_KEY` must be set **even if your coding agent is
-Claude Code or Codex**. `CUTTLEFISH_LLM_PROVIDER=replay` skips the key, and
-those summaries become a placeholder: fine for trying it out, not for long
-runs. The chosen agent CLI is checked before any task is accepted.
+OpenRouter, but only when a summary is actually due: a run that never reaches
+its budget needs no key, so a Claude Code or Codex user can start without one.
+If a summary is due and `OPENROUTER_API_KEY` is unset, the run fails with a
+message saying so; `CUTTLEFISH_LLM_PROVIDER=replay` instead makes those
+summaries a placeholder. The chosen agent CLI is checked before any task is
+accepted.
 
 ## Quick start
 
@@ -64,7 +66,6 @@ Run one task against the repo you are standing in (`--root` picks another):
 
 ```bash
 export CUTTLEFISH_AGENT_BACKEND=codex     # or kopicode (default), claude-code
-export CUTTLEFISH_LLM_PROVIDER=replay     # or set OPENROUTER_API_KEY instead
 uv run cuttlefish run "add a .gitignore entry for build artifacts"
 uv run cuttlefish show <task-id>          # the id `run` prints
 ```
