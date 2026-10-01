@@ -29,6 +29,7 @@ import shlex
 import subprocess
 import sys
 import uuid
+from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
@@ -949,14 +950,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+async def _closing_serve_children(coro: Coroutine[Any, Any, int]) -> int:
+    """Run `coro`, then end any resident ``kopicode serve`` children it left behind."""
+    try:
+        return await coro
+    finally:
+        from cuttlefish.agents.kopicode import close_shared_pool
+
+        await close_shared_pool()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.command == "run":
-        return asyncio.run(_run(args))
+        return asyncio.run(_closing_serve_children(_run(args)))
     if args.command == "run-team":
-        return asyncio.run(_run_team(args))
+        return asyncio.run(_closing_serve_children(_run_team(args)))
     if args.command == "secrets":
         return _secrets(args)
     if args.command == "steer":
@@ -966,7 +977,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "projects":
         return _projects(args)
     if args.command == "serve":
-        return asyncio.run(_serve(args))
+        return asyncio.run(_closing_serve_children(_serve(args)))
     if args.command == "mcp":
         return _mcp(args)
     return _show(args)

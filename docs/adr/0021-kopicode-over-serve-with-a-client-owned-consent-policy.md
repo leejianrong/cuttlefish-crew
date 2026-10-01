@@ -1,4 +1,4 @@
-# ADR-0021: kopicode is driven over `kopicode serve`, and cuttlefish is its live consent client — one child per delegation, deny by default, no containment claim
+# ADR-0021: kopicode is driven over `kopicode serve`, and cuttlefish is its live consent client — a resident child, a session per delegation, deny by default, no containment claim
 
 - Status: Proposed
 - Date: 2026-09-29
@@ -30,14 +30,21 @@ containment. `transport="print"` forces the old path everywhere. Making the sand
 live too means a streaming `spawn` on `ContainerSandboxProvider` (`docker exec -i`) — not
 built.
 
-**2. One `serve` child per delegation, not one resident child.** kopicode writes a
-session's `session_ended` — the only event whose `text` carries the failure — when the
-session *closes*, and there is no `session.close`: closing means stdin EOF and process
-exit. A live session also holds its working tree's lock (`-32005` for a second session on
-the same root), and reusing the session would carry one role's conversation into the next.
-Process start-up is negligible next to a model round. `ServeChild` drives any number of
-sessions, so going resident later is a change to its caller, once kopicode has a
-`session.close`.
+**2. A resident `serve` child, one session per delegation, closed with `session.close`.**
+A child is kept per (binary, credential set) — it reads its environment once, so different
+projects' secrets cannot share one (`ServePool`). Each delegation is its own session, so one
+role's conversation never reaches the next, and it ends with kopicode's `session.close`
+(v0.2.0, kopicode PR #161): that writes the session's `session_ended` — the only event whose
+`text` carries the failure — releases the working-tree lock (a second session on the same
+root is refused with `-32005` until then) and frees the id, without ending the process. A
+close that cannot be confirmed kills the child rather than leaving a lock held; the next
+delegation respawns one. A child bound to a finished event loop, or one that has died, is
+replaced.
+
+*History:* the first version of this ADR spawned one child per delegation because kopicode
+had no `session.close` — `session_ended` and the lock were only released by ending the
+process. That constraint is gone; the per-delegation spawn is now only the path taken when
+no pool is given.
 
 **3. The consent policy** (`cuttlefish.delegate.consent`) is built from a role's declared
 `allow` — a role with none (the default, and every read-only role) gets no shell at all.
@@ -82,8 +89,8 @@ a sandbox provider — which uses the `run --print` path above.
 
 ## Consequences
 
-- Needs a kopicode with serve's consent mode (`400091d`, kopicode PR #159, or later). An
-  older binary has no `serve` at all; the client reports kopicode's stderr in the
+- Needs kopicode **v0.2.0 or later** (serve's consent mode, PR #159, and `session.close`,
+  PR #161). v0.1.0 has no `serve` at all; the client reports kopicode's stderr in the
   `DelegationError`.
 - Consent decisions are logged (`cuttlefish.delegate.consent`, INFO) with role-agnostic
   session id, kind, capped `detail`, answer and rule; they are **not yet** in the

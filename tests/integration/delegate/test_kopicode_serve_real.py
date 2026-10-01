@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from cuttlefish.delegate.consent import ConsentPolicy
-from cuttlefish.delegate.kopicode_serve import run_kopicode_serve
+from cuttlefish.delegate.kopicode_serve import ServePool, run_kopicode_serve
 
 _INVALID_OPENROUTER_KEY = "sk-or-v1-" + "0" * 64
 
@@ -41,3 +41,35 @@ async def test_an_invalid_key_is_a_distinct_provider_auth_failure(tmp_path: Path
     assert outcome.failure_kind == "provider_auth"
     assert outcome.reason is not None and "401" in outcome.reason
     assert _INVALID_OPENROUTER_KEY not in outcome.reason
+
+
+@pytest.mark.requires_kopicode
+async def test_back_to_back_delegations_on_one_tree_share_a_child_via_session_close(
+    tmp_path: Path,
+) -> None:
+    """The second delegation on the same directory only starts if the first session's
+    `session.close` really released the working-tree lock (-32005 otherwise)."""
+    subprocess.run(
+        ["git", "init", "-q", str(tmp_path)],
+        check=True,
+        env={"PATH": "/usr/bin:/bin"},
+    )
+    pool = ServePool()
+    try:
+        outcomes = [
+            await run_kopicode_serve(
+                binary="kopicode",
+                task_text="add a .gitignore entry",
+                root=str(tmp_path),
+                policy=ConsentPolicy(),
+                env={"OPENROUTER_API_KEY": _INVALID_OPENROUTER_KEY},
+                timeout=120,
+                pool=pool,
+            )
+            for _ in range(2)
+        ]
+    finally:
+        await pool.aclose()
+
+    assert [o.failure_kind for o in outcomes] == ["provider_auth", "provider_auth"]
+    assert all(o.reason is not None and "401" in o.reason for o in outcomes)

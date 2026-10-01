@@ -7,8 +7,10 @@ file named by ``FAKE_KOPICODE_LOG`` (one JSON object per line, or ``{"eof": true
 Steps: ``{"start": true}`` reads the client's session.start; ``{"emit": <msg>}`` writes a
 line (``"$session"``/``"$start_id"`` are substituted); ``{"consent": {...}, "wait": secs}``
 sends a consent.request and records the reply (or ``"timeout"`` after ``wait`` seconds);
-``{"wait_for": "session.cancel"}`` blocks until that method arrives; ``{"eof": [<msg>...]}``
-blocks until stdin closes, then writes the messages (shutdown's ``session_ended``).
+``{"wait_for": "session.cancel"}`` blocks until that method arrives; ``{"close": [<msg>...]}``
+waits for session.close, writes the messages (``session_ended``), then acknowledges it;
+``{"eof": [<msg>...]}`` blocks until stdin closes, then writes the messages (shutdown's
+``session_ended``).
 """
 
 import json
@@ -33,6 +35,7 @@ def _pump() -> None:
     lines.put(None)
 
 
+log.write(json.dumps({"pid": os.getpid()}) + "\n")
 threading.Thread(target=_pump, daemon=True).start()
 ctx: dict[str, Any] = {}
 
@@ -75,6 +78,21 @@ for step in scenario:
     elif "wait_for" in step:
         while (msg := lines.get()) is not None and msg.get("method") != step["wait_for"]:
             pass
+    elif "close" in step:
+        while (msg := lines.get()) is not None and msg.get("method") != "session.close":
+            pass
+        assert msg is not None, "stdin closed before session.close"
+        for emitted in step["close"]:
+            out(emitted)
+        out(
+            {
+                "jsonrpc": "2.0",
+                "id": msg["id"],
+                "result": {"session": ctx["session"], "closed": True},
+            }
+        )
+    elif "exit" in step:
+        os._exit(0)
     elif "eof" in step:
         while lines.get() is not None:
             pass
