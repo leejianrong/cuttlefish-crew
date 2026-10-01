@@ -62,6 +62,10 @@ cd cuttlefish-crew
 uv sync
 ```
 
+Not sure your setup is right? `uv run cuttlefish init` checks the agent CLI
+and its login, registers the repo as a project with a `builder` and a
+`reviewer` role (re-running is safe), and prints the exact next command.
+
 Run one task against the repo you are standing in (`--root` picks another):
 
 ```bash
