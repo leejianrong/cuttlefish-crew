@@ -180,3 +180,29 @@ def test_parse_roles_rejects_an_empty_name_or_text() -> None:
 def test_parse_roles_rejects_a_duplicate_name() -> None:
     with pytest.raises(ConfigError, match="declared more than once"):
         _parse_roles(["builder:implement it", "builder:implement it again"])
+
+
+def test_role_backend_parsing() -> None:
+    from cuttlefish.cli import _parse_role_backends, _parse_role_definitions
+
+    assert _parse_role_backends(["a=codex"], {"a", "b"}) == {"a": "codex"}
+    for bad in (["a"], ["z=codex"], ["a=nope"]):
+        with pytest.raises(ConfigError):
+            _parse_role_backends(bad, {"a"})
+    roles = _parse_role_definitions(["a:voice", "b"], ["b=claude-code"])
+    assert [(r.name, r.persona, r.backend) for r in roles] == [
+        ("a", "voice", None),
+        ("b", "", "claude-code"),
+    ]
+
+
+def test_resolve_agent_backend_override_beats_the_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from cuttlefish.config import resolve_agent_backend
+
+    monkeypatch.setenv("CUTTLEFISH_AGENT_BACKEND", "codex")
+    assert resolve_agent_backend() == "codex"
+    assert resolve_agent_backend("claude-code") == "claude-code"
+    with pytest.raises(ConfigError):
+        resolve_agent_backend("nope")

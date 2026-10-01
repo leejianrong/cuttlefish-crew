@@ -10,6 +10,7 @@
   let allowText = $state("");
   let maxTokensText = $state("");
   let maxCostUsdText = $state("");
+  let backend = $state("");
   let submitting = $state(false);
   let error = $state<string | null>(null);
 
@@ -19,8 +20,14 @@
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [roleName, ...rest] = line.split(":");
-        return { name: roleName.trim(), persona: rest.join(":").trim() };
+        // `name@backend: persona` -- `@backend` optional (KAN-1809).
+        const [head, ...rest] = line.split(":");
+        const [roleName, roleBackend] = head.split("@");
+        return {
+          name: roleName.trim(),
+          persona: rest.join(":").trim(),
+          backend: roleBackend?.trim() || null,
+        };
       })
       .filter((role) => role.name.length > 0);
   }
@@ -44,6 +51,7 @@
       await client.registerProject({
         name,
         root,
+        backend: backend || null,
         roles: parseRoles(rolesText),
         allow: parseAllow(allowText),
         max_tokens: maxTokensText.trim() ? Number(maxTokensText) : null,
@@ -79,7 +87,17 @@
       </label>
     </div>
     <label>
-      Roles (one per line, <code>name: persona</code>, persona optional)
+      Default agent backend (optional)
+      <select bind:value={backend}>
+        <option value="">daemon default</option>
+        <option value="kopicode">kopicode</option>
+        <option value="claude-code">claude-code</option>
+        <option value="codex">codex</option>
+      </select>
+    </label>
+    <label>
+      Roles (one per line, <code>name: persona</code> or <code>name@backend: persona</code>;
+      persona and backend optional)
       <textarea bind:value={rolesText} rows="3"></textarea>
     </label>
     <label>

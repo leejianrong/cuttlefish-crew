@@ -40,9 +40,14 @@ def test_needs_sequential_dispatch_only_for_two_or_more_kopicode_backed_roles() 
     shares one root (`TeamInput.root` is singular), so this reduces to "kopicode,
     and more than one role active this round." Any other backend, or a lone
     active role, dispatches concurrently exactly as before."""
-    assert _needs_sequential_dispatch(["builder", "reviewer"], "kopicode") is True
-    assert _needs_sequential_dispatch(["builder"], "kopicode") is False
-    assert _needs_sequential_dispatch(["builder", "reviewer"], "claude-code") is False
+    both_kopicode = {"builder": "kopicode", "reviewer": "kopicode"}
+    assert _needs_sequential_dispatch(["builder", "reviewer"], both_kopicode) is True
+    assert _needs_sequential_dispatch(["builder"], both_kopicode) is False
+    both_claude = {"builder": "claude-code", "reviewer": "claude-code"}
+    assert _needs_sequential_dispatch(["builder", "reviewer"], both_claude) is False
+    # KAN-1809: only roles actually on kopicode collide with each other.
+    mixed = {"builder": "kopicode", "reviewer": "codex"}
+    assert _needs_sequential_dispatch(["builder", "reviewer"], mixed) is False
 
 
 async def test_every_roles_own_delegation_failure_is_journaled_under_its_own_role(
@@ -160,4 +165,41 @@ async def test_each_role_gets_its_own_handover_once_over_budget(tmp_path: Path) 
     assert "builder" in roles_handed_over
     assert "reviewer" in roles_handed_over
 
+    episodic_store.close()
+
+
+async def test_a_role_can_name_its_own_backend_and_the_journal_records_it(
+    tmp_path: Path,
+) -> None:
+    """KAN-1809: the default runtime backend is kopicode, but the `reviewer` role
+    names codex -- each role's `DelegationStarted` records the backend it ran
+    through (both fail fast here: the binaries deliberately don't exist)."""
+    episodic_store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=episodic_store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary="kopicode-binary-that-does-not-exist",
+            codex_binary="codex-binary-that-does-not-exist",
+        )
+    )
+    satay_store = SQLiteStore.open(":memory:")
+    root = tmp_path / "scratch"
+    root.mkdir()
+    roles = _roles("builder", "reviewer")
+    roles[1]["backend"] = "codex"
+
+    await start(
+        run_team,
+        {"team_id": "team-b", "root": str(root), "roles": roles},
+        run_id="team-b",
+        store=satay_store,
+    ).result()
+
+    started = {
+        e.payload.role: e.payload.backend
+        for e in episodic_store.read("team-b")
+        if isinstance(e.payload, DelegationStarted)
+    }
+    assert started == {"builder": "kopicode", "reviewer": "codex"}
     episodic_store.close()

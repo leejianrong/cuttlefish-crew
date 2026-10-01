@@ -188,3 +188,25 @@ def test_mark_resumed_on_an_empty_journal_resumes_from_seq_zero(tmp_path: Path) 
     assert len(events) == 1
     assert isinstance(events[0].payload, TeamResumed)
     assert events[0].payload.resumed_from_seq == 0
+
+
+def test_role_backend_is_threaded_into_inputs_and_survives_the_persisted_checkpoint(
+    tmp_path: Path,
+) -> None:
+    """KAN-1809: a role's registered backend reaches its `RoleInput`, and a resume
+    (`_persisted_roles_to_inputs`) rebuilds the identical input, backend included."""
+    from cuttlefish.fleet.daemon import _persisted_roles_to_inputs, _to_persisted_roles
+
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
+    project = daemon.projects.register(
+        name="alpha",
+        root=str(tmp_path / "alpha"),
+        roles=(RoleDefinition(name="reviewer", backend="claude-code"),),
+        backend="codex",
+    )
+    role_inputs = _build_role_inputs(
+        project, [{"name": "builder", "text": "a"}, {"name": "reviewer", "text": "b"}]
+    )
+    assert "backend" not in role_inputs[0]  # falls through to the project's default
+    assert role_inputs[1]["backend"] == "claude-code"
+    assert _persisted_roles_to_inputs(_to_persisted_roles(role_inputs)) == role_inputs

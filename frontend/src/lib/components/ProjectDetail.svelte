@@ -120,6 +120,9 @@
           {#each project.roles as role (role.name)}
             <label>
               <span class="role-label">{role.name}</span>
+              {#if role.backend ?? project.backend}
+                <span class="persona">[{role.backend ?? project.backend}]</span>
+              {/if}
               {#if role.persona}
                 <span class="persona">{role.persona}</span>
               {/if}

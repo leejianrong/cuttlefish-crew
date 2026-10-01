@@ -53,6 +53,9 @@ lifecycle managed for me and remote access from anywhere.
   copy should say the former until a hosted MVP actually ships.
 - **"A small crew of coding agents (Claude Code, Codex, kopicode) per
   project" — the *team* half is real, the *mixed-backend* half is not.**
+  *(Update, KAN-1809: this gap is closed. `Project.backend` and a per-role
+  backend now exist, so the paragraph below describes the state before
+  that card. Mixed-backend crews are real.)*
   N named roles do run concurrently via `satay.gather` (ADR-0007). But
   `CUTTLEFISH_AGENT_BACKEND` is resolved once per process
   (`cuttlefish.config.resolve_agent_backend`), and neither `Project` nor

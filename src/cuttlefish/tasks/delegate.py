@@ -43,10 +43,14 @@ async def delegate_to_agent_backend(
     allow: list[list[str]] | None = None,
     project: str = DEFAULT_PROJECT,
     secret_names: list[str] | None = None,
+    agent_backend: str | None = None,
 ) -> DelegationOutcome:
+    """``agent_backend`` (KAN-1809) is a per-call override of the runtime's default;
+    callers pass it only when set, so a call that names none has the identical
+    recorded arguments it always had (replay-safe for an in-flight run)."""
     runtime_ = runtime.current()
     backend = resolve_backend(
-        runtime_.agent_backend,
+        agent_backend or runtime_.agent_backend,
         kopicode_binary=runtime_.kopicode_binary,
         claude_code_binary=runtime_.claude_code_binary,
         codex_binary=runtime_.codex_binary,

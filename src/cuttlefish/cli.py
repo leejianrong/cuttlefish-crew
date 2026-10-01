@@ -39,7 +39,13 @@ import satay.control
 from dotenv import load_dotenv
 
 from cuttlefish import onboarding, runtime
-from cuttlefish.config import AGENT_BACKEND_ENV, ConfigError, prepare_run, secrets_db_path
+from cuttlefish.config import (
+    AGENT_BACKEND_ENV,
+    ConfigError,
+    prepare_run,
+    secrets_db_path,
+    validate_backend_name,
+)
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
@@ -230,7 +236,12 @@ async def _run_team(args: argparse.Namespace) -> int:
 
     try:
         roles = _parse_roles(args.role)
-        prepared = prepare_run(project=project, secret_names=secret_names)
+        role_backends = _parse_role_backends(args.role_backend, {r["name"] for r in roles})
+        prepared = prepare_run(
+            project=project,
+            secret_names=secret_names,
+            extra_backends=sorted(set(role_backends.values())),
+        )
     except ConfigError as exc:
         print(f"cuttlefish: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
@@ -242,6 +253,9 @@ async def _run_team(args: argparse.Namespace) -> int:
         {"name": role["name"], "text": role["text"], "allow": allow, "secret_names": secret_names}
         for role in roles
     ]
+    for role_input in role_inputs:
+        if role_input["name"] in role_backends:
+            role_input["backend"] = role_backends[role_input["name"]]
     workflow_input = {
         "team_id": team_id,
         "root": root,
@@ -439,7 +453,25 @@ def _secrets(args: argparse.Namespace) -> int:
         store.close()
 
 
-def _parse_role_definitions(values: list[str] | None) -> list[RoleDefinition]:
+def _parse_role_backends(values: list[str] | None, known_roles: set[str]) -> dict[str, str]:
+    """Each ``--role-backend`` value is ``NAME=BACKEND`` (KAN-1809): that role runs
+    through BACKEND instead of the default. Names a role not declared, or an
+    unknown backend, are config errors rather than silently ignored."""
+    result: dict[str, str] = {}
+    for value in values or []:
+        name, sep, backend = value.partition("=")
+        name, backend = name.strip(), backend.strip()
+        if not sep or not name or not backend:
+            raise ConfigError(f"--role-backend {value!r} must be NAME=BACKEND")
+        if name not in known_roles:
+            raise ConfigError(f"--role-backend names {name!r}, which is not a declared role")
+        result[name] = validate_backend_name(backend, source="--role-backend")
+    return result
+
+
+def _parse_role_definitions(
+    values: list[str] | None, role_backends: list[str] | None = None
+) -> list[RoleDefinition]:
     """Each ``--role`` value is ``NAME`` or ``NAME:PERSONA`` (ADR-0009) -- unlike
     ``run-team``'s ``--role`` (`_parse_roles`), a persona is optional: a project
     can register a role's name now and give it a voice later
@@ -459,7 +491,10 @@ def _parse_role_definitions(values: list[str] | None) -> list[RoleDefinition]:
             raise ConfigError(f"--role name {name!r} was declared more than once")
         seen.add(name)
         roles.append(RoleDefinition(name=name, persona=persona))
-    return roles
+    backends = _parse_role_backends(role_backends, seen)
+    return [
+        RoleDefinition(name=r.name, persona=r.persona, backend=backends.get(r.name)) for r in roles
+    ]
 
 
 def _project_dict(project: Project) -> dict[str, Any]:
@@ -468,7 +503,10 @@ def _project_dict(project: Project) -> dict[str, Any]:
         "name": project.name,
         "root": project.root,
         "secrets_scope": project.secrets_scope,
-        "roles": [{"name": r.name, "persona": r.persona} for r in project.roles],
+        "backend": project.backend,
+        "roles": [
+            {"name": r.name, "persona": r.persona, "backend": r.backend} for r in project.roles
+        ],
         "last_team_id": project.last_team_id,
         "allow": [list(command) for command in project.allow],
         "max_tokens": project.max_tokens,
@@ -521,7 +559,12 @@ def _projects(args: argparse.Namespace) -> int:
     try:
         if args.projects_command == "add":
             try:
-                roles = _parse_role_definitions(args.role)
+                roles = _parse_role_definitions(args.role, args.role_backend)
+                backend = (
+                    validate_backend_name(args.backend, source="--backend")
+                    if args.backend
+                    else None
+                )
             except ConfigError as exc:
                 print(f"cuttlefish: {exc}", file=sys.stderr)
                 return EXIT_CONFIG_ERROR
@@ -534,6 +577,7 @@ def _projects(args: argparse.Namespace) -> int:
                 allow=allow,
                 max_tokens=args.max_tokens,
                 max_cost_usd=args.max_cost_usd,
+                backend=backend,
             )
             print(json.dumps(_project_dict(project)))
             return EXIT_OK
@@ -720,6 +764,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_team_parser.add_argument(
+        "--role-backend",
+        dest="role_backend",
+        action="append",
+        metavar="NAME=BACKEND",
+        help=(
+            "Run that --role through BACKEND (kopicode, claude-code, codex) instead "
+            f"of ${AGENT_BACKEND_ENV} (KAN-1809). Repeatable."
+        ),
+    )
+    run_team_parser.add_argument(
         "--root",
         default=None,
         help="The repository or scratch checkout every role delegates against (default: CWD)",
@@ -887,6 +941,25 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "One role: a name, optionally followed by ':' and a persistent "
             "persona/voice (Q31). Repeatable."
+        ),
+    )
+    add_parser.add_argument(
+        "--role-backend",
+        dest="role_backend",
+        action="append",
+        metavar="NAME=BACKEND",
+        help=(
+            "Run this --role through BACKEND (kopicode, claude-code, codex) "
+            "instead of the project's default (KAN-1809). Repeatable."
+        ),
+    )
+    add_parser.add_argument(
+        "--backend",
+        default=None,
+        metavar="BACKEND",
+        help=(
+            "This project's default agent backend (KAN-1809); a role's own "
+            f"--role-backend wins. Default: ${AGENT_BACKEND_ENV}."
         ),
     )
     add_parser.add_argument(

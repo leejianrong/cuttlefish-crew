@@ -55,7 +55,7 @@ def test_register_then_list_round_trips(client: TestClient, tmp_path: Path) -> N
     assert response.status_code == 201
     body = response.json()
     assert body["name"] == "demo"
-    assert body["roles"] == [{"name": "builder", "persona": "ships fast"}]
+    assert body["roles"] == [{"name": "builder", "persona": "ships fast", "backend": None}]
     assert body["running"] is False
 
     listing = client.get("/api/projects").json()

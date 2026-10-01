@@ -46,7 +46,8 @@ CREATE TABLE IF NOT EXISTS projects (
     last_team_roles_json TEXT NOT NULL DEFAULT '[]',
     last_team_require_approval INTEGER NOT NULL DEFAULT 0,
     max_tokens INTEGER,
-    max_cost_usd REAL
+    max_cost_usd REAL,
+    backend TEXT
 )
 """
 
@@ -86,6 +87,12 @@ _ADD_LAST_TEAM_REQUIRE_APPROVAL_COLUMN = (
 _ADD_MAX_TOKENS_COLUMN = "ALTER TABLE projects ADD COLUMN max_tokens INTEGER"
 _ADD_MAX_COST_USD_COLUMN = "ALTER TABLE projects ADD COLUMN max_cost_usd REAL"
 
+#: `backend` was added for KAN-1809 -- a project's own default agent backend,
+#: nullable and defaulting to `NULL` ("use `CUTTLEFISH_AGENT_BACKEND`"), so an
+#: existing row keeps its exact prior behaviour. A role's own backend lives inside
+#: `roles_json`, which needed no migration.
+_ADD_BACKEND_COLUMN = "ALTER TABLE projects ADD COLUMN backend TEXT"
+
 
 @dataclass(frozen=True, slots=True)
 class RoleDefinition:
@@ -96,6 +103,7 @@ class RoleDefinition:
 
     name: str
     persona: str = ""
+    backend: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +120,7 @@ class PersistedRole:
     name: str
     text: str
     allow: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
+    backend: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +150,7 @@ class Project:
     last_team_require_approval: bool = False
     max_tokens: int | None = None
     max_cost_usd: float | None = None
+    backend: str | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -157,12 +167,18 @@ class ProjectNotFoundError(LookupError):
 
 
 def _encode_roles(roles: tuple[RoleDefinition, ...]) -> str:
-    return json.dumps([{"name": r.name, "persona": r.persona} for r in roles])
+    return json.dumps(
+        [
+            {"name": r.name, "persona": r.persona, **({"backend": r.backend} if r.backend else {})}
+            for r in roles
+        ]
+    )
 
 
 def _decode_roles(raw: str) -> tuple[RoleDefinition, ...]:
     return tuple(
-        RoleDefinition(name=r["name"], persona=r.get("persona", "")) for r in json.loads(raw)
+        RoleDefinition(name=r["name"], persona=r.get("persona", ""), backend=r.get("backend"))
+        for r in json.loads(raw)
     )
 
 
@@ -176,7 +192,15 @@ def _decode_allow(raw: str) -> tuple[tuple[str, ...], ...]:
 
 def _encode_persisted_roles(roles: tuple[PersistedRole, ...]) -> str:
     return json.dumps(
-        [{"name": r.name, "text": r.text, "allow": [list(c) for c in r.allow]} for r in roles]
+        [
+            {
+                "name": r.name,
+                "text": r.text,
+                "allow": [list(c) for c in r.allow],
+                **({"backend": r.backend} if r.backend else {}),
+            }
+            for r in roles
+        ]
     )
 
 
@@ -186,6 +210,7 @@ def _decode_persisted_roles(raw: str) -> tuple[PersistedRole, ...]:
             name=r["name"],
             text=r["text"],
             allow=tuple(tuple(c) for c in r.get("allow", [])),
+            backend=r.get("backend"),
         )
         for r in json.loads(raw)
     )
@@ -204,6 +229,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         last_team_require_approval=bool(row["last_team_require_approval"]),
         max_tokens=row["max_tokens"],
         max_cost_usd=row["max_cost_usd"],
+        backend=row["backend"],
     )
 
 
@@ -225,6 +251,8 @@ class ProjectStore:
             self._conn.execute(_ADD_MAX_TOKENS_COLUMN)
         if "max_cost_usd" not in columns:
             self._conn.execute(_ADD_MAX_COST_USD_COLUMN)
+        if "backend" not in columns:
+            self._conn.execute(_ADD_BACKEND_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -259,6 +287,7 @@ class ProjectStore:
         allow: tuple[tuple[str, ...], ...] = (),
         max_tokens: int | None = None,
         max_cost_usd: float | None = None,
+        backend: str | None = None,
     ) -> Project:
         """Register a new project. `secrets_scope` defaults to `name` (Q38)."""
         project = Project(
@@ -270,12 +299,13 @@ class ProjectStore:
             allow=allow,
             max_tokens=max_tokens,
             max_cost_usd=max_cost_usd,
+            backend=backend,
         )
         self._conn.execute(
             "INSERT INTO projects "
             "(id, name, root, secrets_scope, roles_json, last_team_id, allow_json, "
-            "last_team_roles_json, max_tokens, max_cost_usd) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "last_team_roles_json, max_tokens, max_cost_usd, backend) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.id,
                 project.name,
@@ -287,6 +317,7 @@ class ProjectStore:
                 _encode_persisted_roles(project.last_team_roles),
                 project.max_tokens,
                 project.max_cost_usd,
+                project.backend,
             ),
         )
         self._conn.commit()
