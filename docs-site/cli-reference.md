@@ -72,6 +72,17 @@ Manage the project-scoped, encrypted-at-rest secrets store.
 | `delete --project NAME KEY` | Delete a secret. |
 | `list --project NAME` | List a scope's secret names — never values. |
 
+## `cuttlefish init [--root DIR] [--name NAME] [--backend B] [--role NAME[:PERSONA]]...`
+
+Guided first-run setup. Picks the backend (`--backend`, else
+`CUTTLEFISH_AGENT_BACKEND`, else the first of `kopicode`/`claude`/`codex` on
+`PATH`), checks that `uv`, the agent CLI and a plausible login are present
+(best effort: an env credential or the CLI's own login directory, never a
+credential file's contents), registers `--root` (default `.`) as a project
+with `builder` and `reviewer` roles unless `--role` overrides them, and
+prints the exact `cuttlefish run` command to try next. Re-running on an
+already-registered root reuses it. Exits 2 if a check fails.
+
 ## `cuttlefish projects`
 
 Manage the `Project` registry the fleet daemon reads from
