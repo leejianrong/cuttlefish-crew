@@ -40,8 +40,8 @@ def test_add_then_list_round_trips(tmp_path: Path, capsys: pytest.CaptureFixture
     assert added["name"] == "demo"
     assert added["secrets_scope"] == "demo"
     assert added["roles"] == [
-        {"name": "builder", "persona": "ships fast, terse commits"},
-        {"name": "reviewer", "persona": ""},
+        {"name": "builder", "persona": "ships fast, terse commits", "backend": None},
+        {"name": "reviewer", "persona": "", "backend": None},
     ]
 
     exit_code = cli.main(["projects", "list"])
