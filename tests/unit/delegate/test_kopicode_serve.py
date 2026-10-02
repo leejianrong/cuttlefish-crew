@@ -31,6 +31,8 @@ from cuttlefish.sandbox.provider import SandboxError
 FAKE = Path(__file__).with_name("fake_kopicode_serve.py")
 POLICY = ConsentPolicy([["uv", "run", "pytest"]])
 KEY = "sk-or-v1-" + "0" * 40
+#: what kopicode sends as a run_shell consent `detail`: the argv it will run, space-joined.
+SH = "/bin/sh -c "
 
 
 def event(session_event: dict[str, Any]) -> dict[str, Any]:
@@ -99,7 +101,13 @@ async def test_events_and_consent_before_the_start_response_are_demultiplexed(
         [
             {"start": True},
             {"emit": event({"kind": "provider_response", "size": 40})},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest -q"}},
+            {
+                "consent": {
+                    "id": "c-1",
+                    "kind": "run_shell",
+                    "detail": SH + "uv run pytest -q",
+                }
+            },
             {"emit": event({"kind": "edit_applied", "path": "a.py"})},
             {"emit": event({"kind": "provider_response", "size": 2})},
             {"emit": respond()},
@@ -127,7 +135,13 @@ async def test_a_denied_command_is_answered_deny_and_the_outcome_is_refused(
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest && rm -rf /"}},
+            {
+                "consent": {
+                    "id": "c-1",
+                    "kind": "run_shell",
+                    "detail": SH + "uv run pytest && rm -rf /",
+                }
+            },
             {"emit": event({"kind": "permission_decided", "decision": "deny", "reason": "remote"})},
             {"emit": respond()},
             {"close": [ended()]},
@@ -141,7 +155,7 @@ async def test_a_denied_command_is_answered_deny_and_the_outcome_is_refused(
     reply = next(m for m in sent(tmp_path) if m.get("id") == "c-1")
     assert reply["result"] == {"answer": "deny"}
     assert [(r.answer, r.rule) for r in records] == [("deny", "not_a_plain_word_list")]
-    assert records[0].detail == "uv run pytest && rm -rf /"
+    assert records[0].detail == SH + "uv run pytest && rm -rf /"
 
 
 async def test_every_consent_decision_is_carried_on_the_outcome_in_order(
@@ -150,8 +164,20 @@ async def test_every_consent_decision_is_carried_on_the_outcome_in_order(
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest -q"}},
-            {"consent": {"id": "c-2", "kind": "run_shell", "detail": "uv run pytest && rm -rf /"}},
+            {
+                "consent": {
+                    "id": "c-1",
+                    "kind": "run_shell",
+                    "detail": SH + "uv run pytest -q",
+                }
+            },
+            {
+                "consent": {
+                    "id": "c-2",
+                    "kind": "run_shell",
+                    "detail": SH + "uv run pytest && rm -rf /",
+                }
+            },
             {"emit": respond()},
             {"close": [ended()]},
             {"eof": []},
@@ -160,8 +186,8 @@ async def test_every_consent_decision_is_carried_on_the_outcome_in_order(
     outcome = await run(binary, tmp_path)
 
     assert [(d.kind, d.detail, d.answer) for d in outcome.consent_decisions] == [
-        ("run_shell", "uv run pytest -q", "allow"),
-        ("run_shell", "uv run pytest && rm -rf /", "deny"),
+        ("run_shell", SH + "uv run pytest -q", "allow"),
+        ("run_shell", SH + "uv run pytest && rm -rf /", "deny"),
     ]
     assert outcome.consent_decisions[1].rule == "not_a_plain_word_list"
 
@@ -222,7 +248,7 @@ async def test_a_decider_slower_than_the_deadline_is_denied_by_the_client(
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest"}},
+            {"consent": {"id": "c-1", "kind": "run_shell", "detail": SH + "uv run pytest"}},
             {"emit": respond()},
             {"close": [ended()]},
             {"eof": []},
@@ -245,7 +271,7 @@ async def test_a_decider_that_raises_is_denied(
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "x"}},
+            {"consent": {"id": "c-1", "kind": "run_shell", "detail": SH + "x"}},
             {"emit": respond()},
             {"close": [ended()]},
             {"eof": []},
@@ -269,7 +295,10 @@ async def test_a_reply_that_loses_to_kopicodes_own_timeout_is_harmless(
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest"}, "wait": 0.1},
+            {
+                "consent": {"id": "c-1", "kind": "run_shell", "detail": SH + "uv run pytest"},
+                "wait": 0.1,
+            },
             {
                 "emit": event(
                     {"kind": "permission_decided", "decision": "deny", "reason": "timeout"}
@@ -300,7 +329,10 @@ async def test_cancelling_while_a_consent_request_is_outstanding_denies_it_then_
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest"}, "wait": 10},
+            {
+                "consent": {"id": "c-1", "kind": "run_shell", "detail": SH + "uv run pytest"},
+                "wait": 10,
+            },
             {"wait_for": "session.cancel"},
             {"emit": respond("cancelled", 1)},
             {"close": [ended("cancelled", 1, "context canceled")]},
@@ -571,7 +603,7 @@ async def test_a_consent_request_for_a_session_nobody_registered_is_denied(
                     "id": "c-1",
                     "session": "someone-else",
                     "kind": "run_shell",
-                    "detail": "uv run pytest",
+                    "detail": SH + "uv run pytest",
                 }
             },
             {"emit": respond()},
@@ -615,7 +647,13 @@ async def test_a_process_from_a_factory_is_driven_exactly_like_a_host_spawn(
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest -q"}},
+            {
+                "consent": {
+                    "id": "c-1",
+                    "kind": "run_shell",
+                    "detail": SH + "uv run pytest -q",
+                }
+            },
             {"emit": respond()},
             {"close": [ended()]},
             {"eof": []},
@@ -639,7 +677,7 @@ async def test_a_process_from_a_factory_is_driven_exactly_like_a_host_spawn(
     assert len(spawned) == 1
     assert outcome.kind == "completed"
     assert [(d.answer, d.detail) for d in outcome.consent_decisions] == [
-        ("allow", "uv run pytest -q")
+        ("allow", SH + "uv run pytest -q")
     ]
 
 
@@ -703,8 +741,20 @@ async def test_a_streaming_sandbox_runs_serve_inside_it_and_destroys_it_after(
     binary = fake(
         [
             {"start": True},
-            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest -q"}},
-            {"consent": {"id": "c-2", "kind": "run_shell", "detail": "rm -rf x && true"}},
+            {
+                "consent": {
+                    "id": "c-1",
+                    "kind": "run_shell",
+                    "detail": SH + "uv run pytest -q",
+                }
+            },
+            {
+                "consent": {
+                    "id": "c-2",
+                    "kind": "run_shell",
+                    "detail": SH + "rm -rf x && true",
+                }
+            },
             {"emit": respond()},
             {"close": [ended()]},
             {"eof": []},

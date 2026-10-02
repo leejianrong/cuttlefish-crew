@@ -8,9 +8,9 @@ refusing any command line that isn't a plain, space-separated word list. With no
 metacharacter, quoting, or expansion left in the line, ``/bin/sh -c`` runs exactly the
 words that were matched, so a prefix match is sound.
 
-``detail`` is untrusted model output. Every rule here fails closed: anything not positively
-classified is a ``deny``, and the policy never answers ``allow_session`` (every decision is
-made, and logged, individually).
+``detail`` is untrusted model output; for a shell command it is ``/bin/sh -c <line>``. Every
+rule here fails closed: anything not positively classified is a ``deny``, and the policy never
+answers ``allow_session`` (every decision is made, and logged, individually).
 
 This decides which commands cuttlefish *approves*. It is not containment: an approved
 ``uv run pytest`` still executes arbitrary repository code as this user. Real containment is
@@ -36,6 +36,13 @@ MAX_COMMAND_CHARS = 1024
 _WORD = re.compile(r"[A-Za-z0-9_.,:=@%+/-]+")
 
 _SH_C_PREFIX = ("/bin/sh", "-c")
+
+#: What kopicode puts in a ``run_shell`` ``consent.request``'s ``detail``: the argv it will run,
+#: ``["/bin/sh", "-c", <line>]``, joined by spaces (``internal/permission/gate.go``), so the
+#: line follows this prefix. Found live (KAN-1794): kopicode's protocol doc shows the bare line,
+#: and a policy written to that denied every real command. A detail without the prefix is not
+#: what kopicode sends, so it is denied rather than guessed at.
+_DETAIL_PREFIX = " ".join(_SH_C_PREFIX) + " "
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -104,9 +111,12 @@ class ConsentPolicy:
             return _deny("unknown_kind")
         if not self._patterns:
             return _deny("no_shell_allowed")
-        if not detail or len(detail) > MAX_COMMAND_CHARS:
+        if not detail.startswith(_DETAIL_PREFIX):
+            return _deny("not_a_sh_c_command")
+        line = detail[len(_DETAIL_PREFIX) :]
+        if not line or len(line) > MAX_COMMAND_CHARS:
             return _deny("command_length")
-        words = detail.split(" ")
+        words = line.split(" ")
         if not all(_WORD.fullmatch(word) for word in words):
             return _deny("not_a_plain_word_list")
         for pattern in self._patterns:
