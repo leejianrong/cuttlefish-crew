@@ -15,6 +15,7 @@ from cuttlefish.sandbox.provider import (
     SandboxProvider,
     SandboxSpec,
     SnapshotHandle,
+    StreamingSandboxProvider,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "SandboxProvider",
     "SandboxSpec",
     "SnapshotHandle",
+    "StreamingSandboxProvider",
 ]

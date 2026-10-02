@@ -9,6 +9,8 @@ sandbox mounts, same credential forwarding.
 
 from __future__ import annotations
 
+import asyncio
+import functools
 import os
 import shutil
 import tempfile
@@ -21,7 +23,12 @@ from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
 from cuttlefish.delegate.kopicode import run_kopicode, run_kopicode_in_sandbox
 from cuttlefish.delegate.kopicode_serve import ServePool, run_kopicode_serve
 from cuttlefish.delegate.policy import write_policy_file
-from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
+from cuttlefish.sandbox.provider import (
+    SandboxHandle,
+    SandboxProvider,
+    SandboxSpec,
+    StreamingSandboxProvider,
+)
 
 #: Where the kopicode binary and its policy file land inside a sandbox, fixed
 #: rather than mirroring their host paths (cuttlefish.tasks.delegate's
@@ -69,12 +76,14 @@ class KopicodeBackend:
     """Wraps kopicode behind the pluggable backend seam.
 
     ``transport="serve"`` (the default) drives ``kopicode serve`` and answers its live
-    ``consent.request`` from the role's ``allow`` list (``cuttlefish.delegate.consent``),
-    for a delegation with no sandbox provider. A sandboxed delegation always uses
-    ``run --print`` inside the sandbox, with the declared-allowlist policy file: a
-    resident stdio child is not something ``SandboxProvider.exec`` can host (it returns
-    only after the process exits), and inside a sandbox the sandbox is the containment.
-    ``transport="print"`` forces ``run --print`` everywhere.
+    ``consent.request`` from the role's ``allow`` list (``cuttlefish.delegate.consent``).
+    With no sandbox it uses a resident child. In a sandbox whose provider can stream
+    (:class:`~cuttlefish.sandbox.provider.StreamingSandboxProvider`) it starts one ``serve``
+    child inside a fresh sandbox per delegation, under the same policy; destroying the
+    sandbox is the cleanup that does not depend on the process cooperating (KAN-1793,
+    ADR-0021). A sandbox provider that cannot stream falls back to ``run --print`` inside
+    the sandbox with the declared-allowlist policy file, since ``exec`` returns only after
+    the process exits. ``transport="print"`` forces ``run --print`` everywhere.
     """
 
     NAME: ClassVar[str] = "kopicode"
@@ -113,6 +122,18 @@ class KopicodeBackend:
                 env=_credential_envs(secrets),
                 pool=self._pool,
             )
+        if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
+            try:
+                policy = ConsentPolicy(allow)
+            except ConsentPolicyError as exc:
+                raise DelegationError(f"unusable shell allowlist: {exc}") from exc
+            return await self._delegate_serve_inside_sandbox(
+                sandbox_provider,
+                task_text=task_text,
+                root=root,
+                policy=policy,
+                secrets=secrets,
+            )
         fd, policy_path_str = tempfile.mkstemp(prefix="cuttlefish-policy-", suffix=".toml")
         os.close(fd)
         policy_path = Path(policy_path_str)
@@ -135,6 +156,48 @@ class KopicodeBackend:
             )
         finally:
             policy_path.unlink(missing_ok=True)
+
+    async def _delegate_serve_inside_sandbox(
+        self,
+        provider: SandboxProvider,
+        *,
+        task_text: str,
+        root: str,
+        policy: ConsentPolicy,
+        secrets: Mapping[str, str],
+    ) -> DelegationOutcome:
+        """One sandbox, one ``serve`` child, one session; the sandbox is destroyed after.
+
+        ``provider`` is known to be a :class:`StreamingSandboxProvider` (checked by the
+        caller). No policy file is mounted: consent is answered live."""
+        resolved_binary = shutil.which(self._binary)
+        if resolved_binary is None:
+            raise DelegationError(f"kopicode binary {self._binary!r} not found")
+        assert isinstance(provider, StreamingSandboxProvider)
+        env = _credential_envs(secrets)
+        handle = await provider.create(
+            SandboxSpec(
+                envs=env,
+                mounts={resolved_binary: _SANDBOX_KOPICODE_BINARY, root: root},
+            )
+        )
+        try:
+            return await run_kopicode_serve(
+                binary=_SANDBOX_KOPICODE_BINARY,
+                task_text=task_text,
+                root=root,
+                policy=policy,
+                env=env,
+                process_factory=functools.partial(self._spawn_serve, provider, handle, cwd=root),
+            )
+        finally:
+            await asyncio.shield(provider.destroy(handle))
+
+    @staticmethod
+    async def _spawn_serve(
+        provider: StreamingSandboxProvider, handle: SandboxHandle, *, cwd: str
+    ) -> asyncio.subprocess.Process:
+        return await provider.spawn(handle, [_SANDBOX_KOPICODE_BINARY, "serve"], cwd=cwd)
 
     async def _delegate_inside_sandbox(
         self,

@@ -26,6 +26,7 @@ from cuttlefish.delegate.kopicode_serve import (
     failure_kind_for,
     run_kopicode_serve,
 )
+from cuttlefish.sandbox.provider import SandboxError
 
 FAKE = Path(__file__).with_name("fake_kopicode_serve.py")
 POLICY = ConsentPolicy([["uv", "run", "pytest"]])
@@ -603,3 +604,146 @@ async def test_the_failure_text_arrives_with_the_close_not_at_shutdown(
     finally:
         await pool.aclose()
     assert outcome.failure_kind == "provider_auth"
+
+
+# -- a process started elsewhere (a sandbox's streaming spawn, KAN-1793) ------------------
+
+
+async def test_a_process_from_a_factory_is_driven_exactly_like_a_host_spawn(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        [
+            {"start": True},
+            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest -q"}},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    spawned: list[int] = []
+
+    async def factory() -> asyncio.subprocess.Process:
+        process = await asyncio.create_subprocess_exec(
+            binary,
+            "serve",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        spawned.append(process.pid)
+        return process
+
+    outcome = await run(binary, tmp_path, process_factory=factory)
+
+    assert len(spawned) == 1
+    assert outcome.kind == "completed"
+    assert [(d.answer, d.detail) for d in outcome.consent_decisions] == [
+        ("allow", "uv run pytest -q")
+    ]
+
+
+async def test_a_factory_that_fails_to_spawn_is_a_delegation_error(tmp_path: Path) -> None:
+    async def factory() -> asyncio.subprocess.Process:
+        raise SandboxError("container gone")
+
+    with pytest.raises(DelegationError, match="container gone"):
+        await run("unused", tmp_path, process_factory=factory)
+
+
+async def test_a_factory_child_cannot_be_pooled(tmp_path: Path) -> None:
+    async def factory() -> asyncio.subprocess.Process:
+        raise AssertionError("must not be reached")
+
+    with pytest.raises(ValueError, match="pool"):
+        await run("unused", tmp_path, process_factory=factory, pool=ServePool())
+
+
+class _FakeStreamingProvider:
+    """Records what the backend asks of a sandbox; ``spawn`` starts the fake kopicode on the
+    host, standing in for ``docker exec -i``."""
+
+    BACKEND_NAME = "fake"
+
+    def __init__(self, binary: str) -> None:
+        self._binary = binary
+        self.calls: list[str] = []
+        self.spec: Any = None
+        self.spawned: tuple[list[str], str | None] | None = None
+
+    async def create(self, spec: Any = None) -> Any:
+        from cuttlefish.sandbox.provider import SandboxHandle
+
+        self.calls.append("create")
+        self.spec = spec
+        return SandboxHandle("sbx-1")
+
+    async def spawn(
+        self, handle: Any, command: Any, *, cwd: str | None = None
+    ) -> asyncio.subprocess.Process:
+        self.calls.append("spawn")
+        self.spawned = (list(command), cwd)
+        return await asyncio.create_subprocess_exec(
+            self._binary,
+            "serve",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+    async def destroy(self, handle: Any) -> None:
+        self.calls.append("destroy")
+
+
+async def test_a_streaming_sandbox_runs_serve_inside_it_and_destroys_it_after(
+    fake: Callable[[list[Any]], str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cuttlefish.agents.kopicode import KopicodeBackend
+
+    binary = fake(
+        [
+            {"start": True},
+            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest -q"}},
+            {"consent": {"id": "c-2", "kind": "run_shell", "detail": "rm -rf x && true"}},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    provider = _FakeStreamingProvider(binary)
+    outcome = await KopicodeBackend(binary).delegate(
+        task_text="do it",
+        root=str(tmp_path),
+        allow=[["uv", "run", "pytest"]],
+        secrets={},
+        sandbox_provider=provider,  # type: ignore[arg-type]
+    )
+
+    assert provider.calls == ["create", "spawn", "destroy"]  # destroy last: the real cleanup
+    assert provider.spawned == (["/usr/local/bin/kopicode", "serve"], str(tmp_path))
+    mounts = provider.spec.mounts
+    assert mounts[str(tmp_path)] == str(tmp_path)
+    assert "/usr/local/bin/kopicode" in mounts.values()
+    assert not any("policy" in target for target in mounts.values())  # consent is live
+    assert [(d.answer, d.rule) for d in outcome.consent_decisions] == [
+        ("allow", outcome.consent_decisions[0].rule),
+        ("deny", "not_a_plain_word_list"),
+    ]
+
+
+async def test_the_sandbox_is_destroyed_even_when_the_delegation_fails(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    from cuttlefish.agents.kopicode import KopicodeBackend
+
+    binary = fake([{"start": True}, {"exit": True}])
+    provider = _FakeStreamingProvider(binary)
+    with pytest.raises(DelegationError):
+        await KopicodeBackend(binary).delegate(
+            task_text="do it",
+            root=str(tmp_path),
+            allow=None,
+            secrets={},
+            sandbox_provider=provider,  # type: ignore[arg-type]
+        )
+    assert provider.calls[-1] == "destroy"

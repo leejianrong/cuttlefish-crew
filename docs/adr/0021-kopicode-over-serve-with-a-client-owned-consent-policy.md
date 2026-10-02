@@ -21,14 +21,41 @@ diagnostic — provider HTTP status and body, the harness error — is `session_
 
 ## Decision
 
-**1. `KopicodeBackend` uses `kopicode serve` for an unsandboxed delegation**
+**1. `KopicodeBackend` uses `kopicode serve`, in a sandbox as well as out of one**
 (`cuttlefish.delegate.kopicode_serve`), `session.start` with `consent_mode:
-"remote_interactive"`. A sandboxed delegation keeps `run --print` inside the sandbox with
-the declared-allowlist policy file: `SandboxProvider.exec` returns only after the process
-exits, so it cannot host a stdio child, and inside a sandbox the sandbox is the
-containment. `transport="print"` forces the old path everywhere. Making the sandboxed path
-live too means a streaming `spawn` on `ContainerSandboxProvider` (`docker exec -i`) — not
-built.
+"remote_interactive"`.
+
+- *No sandbox:* a resident child, as decision 2 describes.
+- *A sandbox whose provider can stream* (`cuttlefish.sandbox.provider.StreamingSandboxProvider`,
+  currently `ContainerSandboxProvider`, whose `spawn` is `docker exec -i`): one fresh sandbox
+  and one `serve` child **per delegation**, under the same `ConsentPolicy`, torn down by
+  `destroy()` afterwards. No policy file is mounted; consent is live, and each decision is
+  journaled as in the unsandboxed case.
+- *A sandbox whose provider cannot stream* (E2B): `run --print` inside the sandbox with the
+  declared-allowlist policy file, as before. `SandboxProvider.exec` returns only after the
+  process exits, so it cannot host a stdio child.
+- `transport="print"` forces the old path everywhere.
+
+The streaming capability is a **separate, optional interface**, not a method every provider
+must have, so E2B keeps working unchanged and can opt in later. `ServeChild` accepts an
+already-started process (`run_kopicode_serve(process_factory=...)`), so the reader loop,
+consent handling and `session.close` are the same code in both places.
+
+*Why per delegation, not a resident container:* ending the local `docker exec -i` client does
+**not** stop the command inside the container (checked on Docker 29.2.1: a SIGKILLed client
+left its process running). A surviving `kopicode serve` would keep the working-tree lock and
+refuse the next session with `-32005`. `destroy()` is the one cleanup that does not depend on
+the process cooperating, so each delegation gets its own container and always destroys it. A
+pooled container is possible later, but it would need its own answer to that orphan.
+
+*Cost, measured* (`scripts/measure_sandbox_latency.py`, 15 runs, WSL2, an invalid key so no
+model time and one real 401 round trip in every arm): a delegation with nothing to do took a
+median of **131 ms** on the host with a fresh child, **99 ms** with a pooled child, and
+**617 ms** in a container (create 214, session 196, destroy 207). The container adds roughly
+half a second per delegation, small beside a model turn, and accepted for sandboxed runs.
+
+The sandbox does not loosen consent: a sandboxed role gets the same rules as an unsandboxed
+one. A broader sandbox-only policy would be a separate decision with its own ADR.
 
 **2. A resident `serve` child, one session per delegation, closed with `session.close`.**
 A child is kept per (binary, credential set) — it reads its environment once, so different
@@ -85,7 +112,7 @@ with this process's environment, network and filesystem. Denying `..` and absolu
 arguments narrows accidents; it is not a jail. Real containment of an unsandboxed
 delegation is this project's responsibility, and today it is absent by design (ADR-0002's
 one-operator, own-repo trust model). Where the boundary is needed, run the delegation with
-a sandbox provider — which uses the `run --print` path above.
+a sandbox provider; on a streaming provider the same live consent applies inside it.
 
 ## Consequences
 
@@ -97,4 +124,7 @@ a sandbox provider — which uses the `run --print` path above.
   `ConsentDecided` episodic event (KAN-1792) right after the round's `ToolCallRecorded`
   rows, redacted at write time like any episodic text. kopicode's own `permission_decided` events (`source: "remote"`) still
   feed the per-call `ToolCallRecord` status.
-- The two-tier split leaves sandboxed delegations exposed to #157's exact-match problem.
+- A sandboxed delegation on a streaming provider no longer has #157's exact-match problem.
+  One on a provider that cannot stream still does, and E2B additionally cannot run a kopicode
+  delegation at all today: `create` rejects bind mounts, which the delegation needs for the
+  repository and the binary.
