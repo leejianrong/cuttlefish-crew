@@ -77,7 +77,8 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 
 - `main` is PR-only. Branch per slice part: `git switch -c feat/<slice>-<part>`
   off `origin/main`, then open a PR. `make ci` green before merging.
-- Commit trailer: `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+- Never add a `Co-Authored-By` (or any attribution) trailer to commits or PR
+  bodies.
 - `make check` (lint + `mypy --strict`), `make test` (fast, unit-only),
   `make ci` (the full suite `make test-all`, plus `frontend-check`/
   `frontend-test`/`frontend-build`, gates on). CI additionally builds
