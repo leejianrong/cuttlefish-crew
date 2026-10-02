@@ -99,7 +99,7 @@ def test_usage_before_any_start_is_zero_for_every_registered_role(tmp_path: Path
     )
     usage = daemon.usage(project.id)
     assert usage["builder"].tokens == 0
-    assert usage["builder"].cost_usd == 0.0
+    assert usage["builder"].cost_usd is None  # no backend reported a dollar figure
     assert usage["reviewer"].tokens == 0
 
 
