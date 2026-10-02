@@ -26,6 +26,7 @@ uv run cuttlefish run "run the test suite" --allow "go test" --allow "npm test"
 | `--steerable` | Open a local control API so `cuttlefish steer` can redirect this run. |
 | `--require-approval` | A round never finalizes on its own — blocks until `cuttlefish approve` decides it. Implies `--steerable`'s control API. |
 | `--max-tokens N` / `--max-cost-usd USD` | Force a decision once cumulative usage crosses this ceiling — the same review gate `--require-approval` uses. |
+| `--resume ID` | Continue an unfinished run (e.g. after `kill -9`) instead of starting a new one. Repeat the original command's arguments exactly; the round that was in flight starts over, finished rounds are kept. Without it, a rerun warns about unfinished runs in the directory. Also on `run-team`. |
 
 ## `cuttlefish run-team`
 
