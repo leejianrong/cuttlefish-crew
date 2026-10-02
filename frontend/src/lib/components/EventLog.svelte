@@ -31,6 +31,8 @@
         return `a daemon restart found this run still in progress and resumed it -- the journal picks back up from seq ${p.resumed_from_seq}`;
       case "ToolCallRecorded":
         return `${p.tool} (${p.status}): ${p.detail}`;
+      case "ConsentDecided":
+        return `${p.answer} ${p.kind} (${p.rule}): ${p.detail}`;
       default:
         return JSON.stringify(p);
     }
@@ -52,8 +54,9 @@
       <div
         class="row"
         class:handover={event.event_type === "HandoverWritten"}
-        class:tool-denied={event.event_type === "ToolCallRecorded" &&
-          event.payload.status === "denied"}
+        class:tool-denied={(event.event_type === "ToolCallRecorded" &&
+          event.payload.status === "denied") ||
+          (event.event_type === "ConsentDecided" && event.payload.answer === "deny")}
         class:tool-error={event.event_type === "ToolCallRecorded" &&
           event.payload.status === "error"}
       >

@@ -93,7 +93,8 @@ a sandbox provider — which uses the `run --print` path above.
   PR #161). v0.1.0 has no `serve` at all; the client reports kopicode's stderr in the
   `DelegationError`.
 - Consent decisions are logged (`cuttlefish.delegate.consent`, INFO) with role-agnostic
-  session id, kind, capped `detail`, answer and rule; they are **not yet** in the
-  episodic journal. kopicode's own `permission_decided` events (`source: "remote"`) still
+  session id, kind, capped `detail`, answer and rule, and each one is also journaled as a
+  `ConsentDecided` episodic event (KAN-1792) right after the round's `ToolCallRecorded`
+  rows, redacted at write time like any episodic text. kopicode's own `permission_decided` events (`source: "remote"`) still
   feed the per-call `ToolCallRecord` status.
 - The two-tier split leaves sandboxed delegations exposed to #157's exact-match problem.

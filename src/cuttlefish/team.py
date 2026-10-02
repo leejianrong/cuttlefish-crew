@@ -33,6 +33,7 @@ from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
 from cuttlefish.episodic.events import (
     ApprovalDecision,
+    ConsentDecided,
     DelegationCompleted,
     DelegationFailed,
     DelegationRefused,
@@ -308,6 +309,18 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                     team_id,
                     ToolCallRecorded(
                         tool=call.tool, detail=call.detail, status=call.status, role=name
+                    ),
+                )
+            # KAN-1792/ADR-0021: the live consent decisions behind those calls.
+            for decision in outcome.consent_decisions:
+                await journal(
+                    team_id,
+                    ConsentDecided(
+                        kind=decision.kind,
+                        detail=decision.detail,
+                        answer=decision.answer,
+                        rule=decision.rule,
+                        role=name,
                     ),
                 )
 

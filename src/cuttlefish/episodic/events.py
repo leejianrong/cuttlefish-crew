@@ -261,6 +261,24 @@ class ToolCallRecorded:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ConsentDecided:
+    """One live consent decision cuttlefish made for a kopicode ``serve`` session
+    (KAN-1792, ADR-0021) -- journaled beside the round's :class:`ToolCallRecorded` rows,
+    so the dashboard shows what was asked and why it was allowed or denied, not only
+    what ran. ``detail`` is the capped request detail; the store redacts it at write time.
+    """
+
+    EVENT_TYPE: ClassVar[str] = "ConsentDecided"
+
+    kind: str
+    detail: str
+    answer: Literal["allow", "deny"]
+    rule: str
+    # Which team role this decision belongs to (ADR-0007) -- None outside a team.
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamResumed:
     """A daemon restart found this run still non-terminal and re-drove it via
     satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
@@ -314,6 +332,7 @@ EventPayload = (
     | SteeringMessage
     | ApprovalDecision
     | ToolCallRecorded
+    | ConsentDecided
     | TeamResumed
     | UnknownPayload
 )
@@ -335,6 +354,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         SteeringMessage,
         ApprovalDecision,
         ToolCallRecorded,
+        ConsentDecided,
         TeamResumed,
     )
 }

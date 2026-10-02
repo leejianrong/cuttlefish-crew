@@ -143,6 +143,28 @@ async def test_a_denied_command_is_answered_deny_and_the_outcome_is_refused(
     assert records[0].detail == "uv run pytest && rm -rf /"
 
 
+async def test_every_consent_decision_is_carried_on_the_outcome_in_order(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        [
+            {"start": True},
+            {"consent": {"id": "c-1", "kind": "run_shell", "detail": "uv run pytest -q"}},
+            {"consent": {"id": "c-2", "kind": "run_shell", "detail": "uv run pytest && rm -rf /"}},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    outcome = await run(binary, tmp_path)
+
+    assert [(d.kind, d.detail, d.answer) for d in outcome.consent_decisions] == [
+        ("run_shell", "uv run pytest -q", "allow"),
+        ("run_shell", "uv run pytest && rm -rf /", "deny"),
+    ]
+    assert outcome.consent_decisions[1].rule == "not_a_plain_word_list"
+
+
 @pytest.mark.parametrize(
     "params",
     [

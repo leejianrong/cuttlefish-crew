@@ -21,6 +21,7 @@ from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
 from cuttlefish.episodic.events import (
     ApprovalDecision,
+    ConsentDecided,
     DelegationCompleted,
     DelegationFailed,
     DelegationRefused,
@@ -208,6 +209,17 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
         for call in outcome.tool_calls:
             await journal(
                 task_id, ToolCallRecorded(tool=call.tool, detail=call.detail, status=call.status)
+            )
+        # KAN-1792/ADR-0021: the live consent decisions behind those calls.
+        for decision in outcome.consent_decisions:
+            await journal(
+                task_id,
+                ConsentDecided(
+                    kind=decision.kind,
+                    detail=decision.detail,
+                    answer=decision.answer,
+                    rule=decision.rule,
+                ),
             )
 
         # ADR-0010/KAN-1704: checked every round, not only before the loop starts

@@ -45,7 +45,11 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.agents.outcome import (
+    ConsentDecisionRecord,
+    DelegationError,
+    DelegationOutcome,
+)
 from cuttlefish.delegate.consent import ConsentDecision, ConsentPolicy
 from cuttlefish.delegate.kopicode import _redacted_stderr_tail, classify_stream
 from cuttlefish.delegate.subprocess_env import merge_env
@@ -152,6 +156,8 @@ class ServeChild:
         self._background: set[asyncio.Task[None]] = set()
         self._killed = False
         self.events: dict[str, list[Mapping[str, Any]]] = {}
+        #: session id -> the consent decisions made for it so far, in order.
+        self.consents: dict[str, list[ConsentRecord]] = {}
         self.stderr = bytearray()
         self.unparsed_lines = 0
         self._reader = asyncio.create_task(self._read_stdout(process.stdout))
@@ -209,6 +215,10 @@ class ServeChild:
         """Drop a finished session's decider and hand back (and free) its events."""
         self._deciders.pop(session, None)
         return self.events.pop(session, [])
+
+    def take_consents(self, session: str) -> list[ConsentRecord]:
+        """Hand back (and free) the consent decisions made for a finished session."""
+        return self.consents.pop(session, [])
 
     async def stderr_text(self) -> str:
         """What the child wrote to stderr, after giving the reader a moment to reach EOF --
@@ -338,9 +348,10 @@ class ServeChild:
                 _LOG.exception("consent decider raised; denying")
                 decision = ConsentDecision("deny", "decider_error")
         answer = decision.answer if decision.answer in ("allow", "deny") else "deny"
-        self._on_consent(
-            ConsentRecord(session, kind, detail[:_LOG_DETAIL_CHARS], answer, decision.rule)
-        )
+        record = ConsentRecord(session, kind, detail[:_LOG_DETAIL_CHARS], answer, decision.rule)
+        if session in self._deciders:  # an unknown session has no one to collect it
+            self.consents.setdefault(session, []).append(record)
+        self._on_consent(record)
         await self._reply_consent(str(request_id), answer)
 
     # -- lifecycle --------------------------------------------------------------------
@@ -570,6 +581,12 @@ async def run_kopicode_serve(
             await asyncio.shield(child.end_session(session))
     finally:
         events = child.forget(session)
+        consents = [
+            ConsentDecisionRecord(
+                r.kind, r.detail, "allow" if r.answer == "allow" else "deny", r.rule
+            )
+            for r in child.take_consents(session)
+        ]
         if pool is None:
             await asyncio.shield(child.close())
 
@@ -588,8 +605,10 @@ async def run_kopicode_serve(
             summary=f"kopicode serve refused the session ({kind})",
             reason=f"rpc error {code}: {detail}",
             failure_kind=kind,
+            consent_decisions=consents,
         )
     result = response.get("result")
     if not isinstance(result, dict):
         raise DelegationError("kopicode serve replied with neither result nor error")
-    return classify_turn(events, result, env=env)
+    outcome = classify_turn(events, result, env=env)
+    return dataclasses.replace(outcome, consent_decisions=consents)
