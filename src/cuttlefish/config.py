@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -58,17 +59,27 @@ def resolve_codex_binary() -> str:
     return os.environ.get(CODEX_BIN_ENV, DEFAULT_CODEX_BIN)
 
 
-def resolve_agent_backend() -> str:
-    """Which :class:`~cuttlefish.agents.backend.AgentBackend` a delegation runs
-    through (ADR-0005) — "kopicode" by default, matching V1/V2's only backend.
-    """
-    choice = os.environ.get(AGENT_BACKEND_ENV, DEFAULT_AGENT_BACKEND)
+def validate_backend_name(choice: str, *, source: str) -> str:
     if choice not in ("kopicode", "claude-code", "codex"):
         raise ConfigError(
-            f"unknown {AGENT_BACKEND_ENV}={choice!r}; "
-            "expected 'kopicode', 'claude-code', or 'codex'"
+            f"unknown {source}={choice!r}; expected 'kopicode', 'claude-code', or 'codex'"
         )
     return choice
+
+
+def resolve_agent_backend(override: str | None = None) -> str:
+    """Which :class:`~cuttlefish.agents.backend.AgentBackend` a delegation runs
+    through (ADR-0005) — "kopicode" by default, matching V1/V2's only backend.
+
+    ``override`` (KAN-1809) is a project's own backend; it wins over the
+    process-wide ``CUTTLEFISH_AGENT_BACKEND``, which stays the default for anything
+    that names none.
+    """
+    if override is not None:
+        return validate_backend_name(override, source="backend")
+    return validate_backend_name(
+        os.environ.get(AGENT_BACKEND_ENV, DEFAULT_AGENT_BACKEND), source=AGENT_BACKEND_ENV
+    )
 
 
 def check_binary_on_path(binary: str, *, env_hint: str) -> None:
@@ -85,16 +96,16 @@ def resolve_llm_provider() -> LlmProvider:
     smoke-tested with no live credential. A real run defaults to "openrouter" — one
     key over an OpenAI-compatible endpoint reaches many upstream models, rather than
     locking cuttlefish to a single vendor SDK. "claude" remains available for a
-    direct Anthropic credential.
+    direct Anthropic credential. The openrouter provider is built lazily, so a
+    missing key surfaces (with an actionable message) only if a handover needs it.
     """
     choice = os.environ.get(LLM_PROVIDER_ENV, DEFAULT_LLM_PROVIDER)
     if choice == "openrouter":
-        from cuttlefish.llm.openrouter import MissingApiKeyError, OpenRouterLlmProvider
+        from cuttlefish.llm.lazy import LazyLlmProvider
+        from cuttlefish.llm.openrouter import OpenRouterLlmProvider
 
-        try:
-            return OpenRouterLlmProvider()
-        except MissingApiKeyError as exc:
-            raise ConfigError(str(exc)) from exc
+        # Lazy (KAN-1807): the key is only needed once a handover summary is due.
+        return LazyLlmProvider(OpenRouterLlmProvider)
     if choice == "claude":
         from cuttlefish.llm.claude import ClaudeLlmProvider
 
@@ -220,7 +231,12 @@ class PreparedRun:
 
 
 def prepare_run(
-    *, project: str, secret_names: list[str], base_dir: Path | None = None
+    *,
+    project: str,
+    secret_names: list[str],
+    base_dir: Path | None = None,
+    agent_backend: str | None = None,
+    extra_backends: Sequence[str] = (),
 ) -> PreparedRun:
     """Resolve the backend, LLM provider, sandbox, and secrets store for one
     delegation rooted at `base_dir` (default: `Path.cwd()`) -- or raise
@@ -242,13 +258,16 @@ def prepare_run(
 
     secrets_store = None
     try:
-        agent_backend = resolve_agent_backend()
-        if agent_backend == "kopicode":
-            check_binary_on_path(kopicode_binary, env_hint=KOPICODE_BIN_ENV)
-        elif agent_backend == "claude-code":
-            check_binary_on_path(claude_code_binary, env_hint=CLAUDE_CODE_BIN_ENV)
-        else:
-            check_binary_on_path(codex_binary, env_hint=CODEX_BIN_ENV)
+        agent_backend = resolve_agent_backend(agent_backend)
+        # Every backend any role may name is checked now (Q17), not mid-task.
+        for needed in dict.fromkeys([agent_backend, *extra_backends]):
+            validate_backend_name(needed, source="backend")
+            if needed == "kopicode":
+                check_binary_on_path(kopicode_binary, env_hint=KOPICODE_BIN_ENV)
+            elif needed == "claude-code":
+                check_binary_on_path(claude_code_binary, env_hint=CLAUDE_CODE_BIN_ENV)
+            else:
+                check_binary_on_path(codex_binary, env_hint=CODEX_BIN_ENV)
         backend = resolve_backend(
             agent_backend,
             kopicode_binary=kopicode_binary,

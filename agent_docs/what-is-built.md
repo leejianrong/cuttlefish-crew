@@ -62,8 +62,8 @@ closed on it.
 Context/session continuity (CUT-E8, ADR-0010) is merged for the daemon only:
 `FleetDaemon.resume_pending()` resumes a non-terminal team on `cuttlefish serve`
 startup by calling `satay.start` with its original `run_id`, the one primitive
-satay's own replay engine already provides (the one-shot CLI does not, see
-Known gaps); `compose_steered_text`
+satay's own replay engine already provides (the one-shot CLI only on request via
+`--resume <id>`, KAN-1806, see Known gaps); `compose_steered_text`
 now folds in the latest `HandoverWritten` summary instead of an unbounded raw
 `round_summaries` list; the dashboard surfaces a `TeamResumed` marker and a
 per-role checkpoint timeline.

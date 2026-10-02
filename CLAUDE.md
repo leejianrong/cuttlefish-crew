@@ -55,14 +55,20 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 
 ## Gotchas that have already cost a session
 
-- **Only the fleet daemon resumes after a crash.** `cuttlefish run`/`run-team`
-  mint a fresh id (`cli.py`) and ADR-0010's `--resume` flag was never built.
-  Never write "a killed process resumes" without saying which one.
-- **One backend per process.** `CUTTLEFISH_AGENT_BACKEND` applies to every
-  project and role a given `cuttlefish serve` runs.
-- **`OPENROUTER_API_KEY` is required at startup for every backend** unless
-  `CUTTLEFISH_LLM_PROVIDER=replay` (placeholder handover summaries). It is
-  cuttlefish's own summarising provider, not the coding agent's credential.
+- **Only the fleet daemon resumes on its own after a crash.** The one-shot
+  `cuttlefish run`/`run-team` start a new run on a plain rerun (with a warning
+  naming unfinished runs) and resume only via `--resume <id>` plus the original
+  arguments repeated exactly (KAN-1806, `cuttlefish/resume.py`). Never write
+  "a killed process resumes" without saying which one.
+- **Backend resolution order (KAN-1809):** a role's own backend, else its
+  project's, else `CUTTLEFISH_AGENT_BACKEND`. Every named backend's CLI is
+  `PATH`-checked at team start, not mid-task. Two kopicode-backed roles still
+  dispatch one-at-a-time (shared `--root` lock); roles on different backends
+  run concurrently.
+- **`OPENROUTER_API_KEY` is only needed once a handover summary is due**
+  (the provider is built lazily, KAN-1807); without it that call fails, unless
+  `CUTTLEFISH_LLM_PROVIDER=replay` (placeholder summaries). It is cuttlefish's
+  own summarising provider, not the coding agent's credential.
 - **`cuttlefish run` writes `.cuttlefish/` and `.satay/` into the current
   directory**, and the daemon writes them into each project's `--root`.
 - **The code beats prose.** Check a claim against the code before repeating
@@ -73,7 +79,8 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 
 - `main` is PR-only. Branch per slice part: `git switch -c feat/<slice>-<part>`
   off `origin/main`, then open a PR. `make ci` green before merging.
-- Commit trailer: `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
+- Never add a `Co-Authored-By` (or any attribution) trailer to commits or PR
+  bodies.
 - `make check` (lint + `mypy --strict`), `make test` (fast, unit-only),
   `make ci` (the full suite `make test-all`, plus `frontend-check`/
   `frontend-test`/`frontend-build`, gates on). CI additionally builds

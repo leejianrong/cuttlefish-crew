@@ -39,13 +39,17 @@ _USAGE_TYPES = (DelegationCompleted, DelegationRefused, DelegationFailed)
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class UsageTotals:
-    """One role's cumulative usage so far, as journaled -- both fields default
-    to zero for a role with no usage-bearing event yet, not `None`: "nothing
-    spent yet" and "unknown" are different facts, and every caller here wants
-    the former."""
+    """One role's cumulative usage so far, as journaled.
+
+    `tokens` is zero for a role with no usage-bearing event yet. `cost_usd` is
+    `None` unless some event actually reported a dollar figure (KAN-1810):
+    kopicode and Codex report none at all, and summing "nothing reported" to
+    `0.0` read as "this was free" on the dashboard -- "unknown" and "zero" are
+    different facts. A budget ceiling treats `None` as zero spent (`exceeded`),
+    since it can only ever be enforced against a cost that was reported."""
 
     tokens: int = 0
-    cost_usd: float = 0.0
+    cost_usd: float | None = None
 
 
 def cumulative_usage(payloads: Iterable[EventPayload], *, role: str | None) -> UsageTotals:
@@ -58,7 +62,7 @@ def cumulative_usage(payloads: Iterable[EventPayload], *, role: str | None) -> U
     (`cuttlefish.tasks.journal.read_episodic_events`), not two.
     """
     tokens = 0
-    cost_usd = 0.0
+    cost_usd: float | None = None
     for payload in payloads:
         if not isinstance(payload, _USAGE_TYPES):
             continue
@@ -67,7 +71,7 @@ def cumulative_usage(payloads: Iterable[EventPayload], *, role: str | None) -> U
         if payload.tokens is not None:
             tokens += payload.tokens
         if payload.cost_usd is not None:
-            cost_usd += payload.cost_usd
+            cost_usd = (cost_usd or 0.0) + payload.cost_usd
     return UsageTotals(tokens=tokens, cost_usd=cost_usd)
 
 
@@ -81,4 +85,6 @@ def exceeded(totals: UsageTotals, *, max_tokens: int | None, max_cost_usd: float
     """
     if max_tokens is not None and totals.tokens >= max_tokens:
         return True
-    return max_cost_usd is not None and totals.cost_usd >= max_cost_usd
+    return (
+        max_cost_usd is not None and totals.cost_usd is not None and totals.cost_usd >= max_cost_usd
+    )

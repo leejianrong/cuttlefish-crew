@@ -7,14 +7,16 @@ export type RoleStatus = "queued" | "working" | "blocked" | "done" | "failed";
 export interface RoleDefinition {
   name: string;
   persona: string;
+  /** KAN-1809: this role's own agent backend; null/absent uses the project's. */
+  backend?: string | null;
 }
 
 /** One role's cumulative usage so far (KAN-1712/ADR-0017), derived from the
- * episodic journal -- `cost_usd` is `0` for a backend that reports no dollar
- * figure at all (kopicode), not a claim that nothing was spent. */
+ * episodic journal -- `cost_usd` is `null` when no backend reported a dollar
+ * figure (kopicode, Codex), which is "unknown", not "free" (KAN-1810). */
 export interface RoleUsage {
   tokens: number;
-  cost_usd: number;
+  cost_usd: number | null;
 }
 
 /** A project's own run-scoped usage ceiling (KAN-1712/ADR-0017) -- `null` on
@@ -29,6 +31,8 @@ export interface ProjectSummary {
   name: string;
   root: string;
   secrets_scope: string;
+  /** KAN-1809: the project's default backend; null uses the daemon's. */
+  backend?: string | null;
   roles: RoleDefinition[];
   last_team_id: string | null;
   allow: string[][];
@@ -159,6 +163,7 @@ export class FleetClient {
     name: string;
     root: string;
     secrets_scope?: string;
+    backend?: string | null;
     roles: RoleDefinition[];
     allow?: string[][];
     max_tokens?: number | null;

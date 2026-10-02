@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import uuid
@@ -36,9 +37,16 @@ from typing import Any
 import satay
 import satay.control
 from dotenv import load_dotenv
+from satay.journal.events import TERMINAL_STATUSES
 
-from cuttlefish import runtime
-from cuttlefish.config import ConfigError, prepare_run, secrets_db_path
+from cuttlefish import onboarding, resume, runtime
+from cuttlefish.config import (
+    AGENT_BACKEND_ENV,
+    ConfigError,
+    prepare_run,
+    secrets_db_path,
+    validate_backend_name,
+)
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
@@ -131,7 +139,41 @@ def _resolve_root_and_project(args: argparse.Namespace) -> tuple[str, str]:
     return root, project
 
 
+async def _resolve_run_id(args: argparse.Namespace, command: str) -> tuple[str | None, int]:
+    """The id this run uses (KAN-1806): the `--resume` id if it names an unfinished
+    run, else a fresh one -- warning first when unfinished runs already exist, so a
+    plain rerun after a crash is never silently a second, unrelated run.
+    Returns `(None, exit_code)` when `--resume` can't be honoured."""
+    if args.resume:
+        status = await resume.run_status(args.resume)
+        if status is None:
+            print(f"cuttlefish: no run {args.resume!r} in this directory's .satay", file=sys.stderr)
+            return None, EXIT_CONFIG_ERROR
+        if status in TERMINAL_STATUSES:
+            print(f"cuttlefish: run {args.resume!r} already finished ({status})", file=sys.stderr)
+            return None, EXIT_CONFIG_ERROR
+        print(
+            f"cuttlefish: resuming {args.resume} -- repeat the original command's "
+            f"arguments exactly; {resume.RESUME_CAVEAT}",
+            file=sys.stderr,
+        )
+        return args.resume, EXIT_OK
+    unfinished = await resume.unfinished_runs()
+    if unfinished:
+        print(
+            f"cuttlefish: warning: {len(unfinished)} unfinished run(s) in this directory "
+            f"({', '.join(unfinished)}), crashed or still running elsewhere. "
+            f"To continue one, re-run the original command with `--resume ID`; "
+            f"this {command} starts a new run.",
+            file=sys.stderr,
+        )
+    return str(uuid.uuid4()), EXIT_OK
+
+
 async def _run(args: argparse.Namespace) -> int:
+    task_id, early_exit = await _resolve_run_id(args, "run")
+    if task_id is None:
+        return early_exit
     root, project = _resolve_root_and_project(args)
     secret_names = sorted(set(args.secret or []))
 
@@ -142,7 +184,8 @@ async def _run(args: argparse.Namespace) -> int:
         return EXIT_CONFIG_ERROR
 
     runtime.configure(prepared.as_runtime())
-    task_id = str(uuid.uuid4())
+    if args.resume:
+        resume.mark_resumed(prepared.episodic_store, task_id)
     workflow_input = {
         "task_id": task_id,
         "text": args.task,
@@ -224,23 +267,35 @@ def _parse_roles(values: list[str] | None) -> list[RoleInput]:
 
 
 async def _run_team(args: argparse.Namespace) -> int:
+    team_id, early_exit = await _resolve_run_id(args, "run-team")
+    if team_id is None:
+        return early_exit
     root, project = _resolve_root_and_project(args)
     secret_names = sorted(set(args.secret or []))
 
     try:
         roles = _parse_roles(args.role)
-        prepared = prepare_run(project=project, secret_names=secret_names)
+        role_backends = _parse_role_backends(args.role_backend, {r["name"] for r in roles})
+        prepared = prepare_run(
+            project=project,
+            secret_names=secret_names,
+            extra_backends=sorted(set(role_backends.values())),
+        )
     except ConfigError as exc:
         print(f"cuttlefish: {exc}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
 
     runtime.configure(prepared.as_runtime())
-    team_id = str(uuid.uuid4())
+    if args.resume:
+        resume.mark_resumed(prepared.episodic_store, team_id)
     allow = _parse_allow(args.allow)
     role_inputs: list[RoleInput] = [
         {"name": role["name"], "text": role["text"], "allow": allow, "secret_names": secret_names}
         for role in roles
     ]
+    for role_input in role_inputs:
+        if role_input["name"] in role_backends:
+            role_input["backend"] = role_backends[role_input["name"]]
     workflow_input = {
         "team_id": team_id,
         "root": root,
@@ -438,7 +493,25 @@ def _secrets(args: argparse.Namespace) -> int:
         store.close()
 
 
-def _parse_role_definitions(values: list[str] | None) -> list[RoleDefinition]:
+def _parse_role_backends(values: list[str] | None, known_roles: set[str]) -> dict[str, str]:
+    """Each ``--role-backend`` value is ``NAME=BACKEND`` (KAN-1809): that role runs
+    through BACKEND instead of the default. Names a role not declared, or an
+    unknown backend, are config errors rather than silently ignored."""
+    result: dict[str, str] = {}
+    for value in values or []:
+        name, sep, backend = value.partition("=")
+        name, backend = name.strip(), backend.strip()
+        if not sep or not name or not backend:
+            raise ConfigError(f"--role-backend {value!r} must be NAME=BACKEND")
+        if name not in known_roles:
+            raise ConfigError(f"--role-backend names {name!r}, which is not a declared role")
+        result[name] = validate_backend_name(backend, source="--role-backend")
+    return result
+
+
+def _parse_role_definitions(
+    values: list[str] | None, role_backends: list[str] | None = None
+) -> list[RoleDefinition]:
     """Each ``--role`` value is ``NAME`` or ``NAME:PERSONA`` (ADR-0009) -- unlike
     ``run-team``'s ``--role`` (`_parse_roles`), a persona is optional: a project
     can register a role's name now and give it a voice later
@@ -458,7 +531,10 @@ def _parse_role_definitions(values: list[str] | None) -> list[RoleDefinition]:
             raise ConfigError(f"--role name {name!r} was declared more than once")
         seen.add(name)
         roles.append(RoleDefinition(name=name, persona=persona))
-    return roles
+    backends = _parse_role_backends(role_backends, seen)
+    return [
+        RoleDefinition(name=r.name, persona=r.persona, backend=backends.get(r.name)) for r in roles
+    ]
 
 
 def _project_dict(project: Project) -> dict[str, Any]:
@@ -467,7 +543,10 @@ def _project_dict(project: Project) -> dict[str, Any]:
         "name": project.name,
         "root": project.root,
         "secrets_scope": project.secrets_scope,
-        "roles": [{"name": r.name, "persona": r.persona} for r in project.roles],
+        "backend": project.backend,
+        "roles": [
+            {"name": r.name, "persona": r.persona, "backend": r.backend} for r in project.roles
+        ],
         "last_team_id": project.last_team_id,
         "allow": [list(command) for command in project.allow],
         "max_tokens": project.max_tokens,
@@ -475,12 +554,57 @@ def _project_dict(project: Project) -> dict[str, Any]:
     }
 
 
+def _init(args: argparse.Namespace) -> int:
+    """``cuttlefish init`` (KAN-1808): see `cuttlefish.onboarding`."""
+    env = dict(os.environ)
+    backend = args.backend or onboarding.detect_backend(env, shutil.which)
+    if backend is None:
+        print(
+            "cuttlefish: no coding-agent CLI found on PATH. Install one of "
+            "kopicode, claude, or codex, then re-run `cuttlefish init`.",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+    root = Path(args.root)
+    checks = onboarding.check_prerequisites(backend, env=env, which=shutil.which, home=Path.home())
+    print(f"cuttlefish init -- backend: {backend}")
+    for check in checks:
+        print(f"  [{'ok' if check.ok else '!!'}] {check.name}: {check.detail}")
+    if not all(check.ok for check in checks):
+        print("Fix the [!!] items above and re-run `cuttlefish init`.", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    try:
+        roles = tuple(_parse_role_definitions(args.role)) or onboarding.DEFAULT_ROLES
+    except ConfigError as exc:
+        print(f"cuttlefish: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    store = ProjectStore.open()
+    try:
+        project, created = onboarding.register_or_reuse(
+            store, name=args.name or root.resolve().name, root=root, roles=roles
+        )
+    finally:
+        store.close()
+    verb = "registered" if created else "already registered"
+    print(f"  [ok] project {project.name!r} {verb} ({project.root})")
+    print(f"  roles: {', '.join(r.name for r in project.roles) or '(none)'}")
+    print("\nNext, one task against this repo:\n")
+    print("  " + onboarding.next_command(backend, root))
+    print("\nOr the dashboard with every registered project:\n\n  make demo")
+    return EXIT_OK
+
+
 def _projects(args: argparse.Namespace) -> int:
     store = ProjectStore.open()
     try:
         if args.projects_command == "add":
             try:
-                roles = _parse_role_definitions(args.role)
+                roles = _parse_role_definitions(args.role, args.role_backend)
+                backend = (
+                    validate_backend_name(args.backend, source="--backend")
+                    if args.backend
+                    else None
+                )
             except ConfigError as exc:
                 print(f"cuttlefish: {exc}", file=sys.stderr)
                 return EXIT_CONFIG_ERROR
@@ -493,6 +617,7 @@ def _projects(args: argparse.Namespace) -> int:
                 allow=allow,
                 max_tokens=args.max_tokens,
                 max_cost_usd=args.max_cost_usd,
+                backend=backend,
             )
             print(json.dumps(_project_dict(project)))
             return EXIT_OK
@@ -643,6 +768,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_parser.add_argument(
+        "--resume",
+        default=None,
+        metavar="ID",
+        help=(
+            "Resume an unfinished run by its id (KAN-1806, ADR-0010) instead of starting "
+            "a new one. Repeat the original command's arguments exactly. A round that "
+            "was in flight when the run died starts over. Only finished rounds are kept."
+        ),
+    )
+    run_parser.add_argument(
         "--max-tokens",
         type=int,
         default=None,
@@ -676,6 +811,26 @@ def build_parser() -> argparse.ArgumentParser:
             "One role: a name and its own task text, separated by the first ':' "
             "(e.g. --role builder:'implement the login form'). Repeatable; at "
             "least one is required."
+        ),
+    )
+    run_team_parser.add_argument(
+        "--role-backend",
+        dest="role_backend",
+        action="append",
+        metavar="NAME=BACKEND",
+        help=(
+            "Run that --role through BACKEND (kopicode, claude-code, codex) instead "
+            f"of ${AGENT_BACKEND_ENV} (KAN-1809). Repeatable."
+        ),
+    )
+    run_team_parser.add_argument(
+        "--resume",
+        default=None,
+        metavar="ID",
+        help=(
+            "Resume an unfinished run by its id (KAN-1806, ADR-0010) instead of starting "
+            "a new one. Repeat the original command's arguments exactly. A round that "
+            "was in flight when the run died starts over. Only finished rounds are kept."
         ),
     )
     run_team_parser.add_argument(
@@ -805,6 +960,24 @@ def build_parser() -> argparse.ArgumentParser:
     list_scope.add_argument("--project", help="The project scope")
     list_scope.add_argument("--shared", action="store_true", help="The shared scope")
 
+    init_parser = subparsers.add_parser(
+        "init", help="Guided first-run setup: check prerequisites, register this repo"
+    )
+    init_parser.add_argument("--root", default=".", help="The repo to register (default: .)")
+    init_parser.add_argument("--name", default=None, help="Project name (default: the directory's)")
+    init_parser.add_argument(
+        "--backend",
+        choices=("kopicode", "claude-code", "codex"),
+        default=None,
+        help=f"Coding agent backend (default: ${AGENT_BACKEND_ENV}, else the first CLI on PATH)",
+    )
+    init_parser.add_argument(
+        "--role",
+        action="append",
+        metavar="NAME[:PERSONA]",
+        help="A role to register (repeatable). Default: builder and reviewer.",
+    )
+
     projects_parser = subparsers.add_parser(
         "projects", help="Manage the Project registry (ADR-0009)"
     )
@@ -828,6 +1001,25 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "One role: a name, optionally followed by ':' and a persistent "
             "persona/voice (Q31). Repeatable."
+        ),
+    )
+    add_parser.add_argument(
+        "--role-backend",
+        dest="role_backend",
+        action="append",
+        metavar="NAME=BACKEND",
+        help=(
+            "Run this --role through BACKEND (kopicode, claude-code, codex) "
+            "instead of the project's default (KAN-1809). Repeatable."
+        ),
+    )
+    add_parser.add_argument(
+        "--backend",
+        default=None,
+        metavar="BACKEND",
+        help=(
+            "This project's default agent backend (KAN-1809); a role's own "
+            f"--role-backend wins. Default: ${AGENT_BACKEND_ENV}."
         ),
     )
     add_parser.add_argument(
@@ -974,6 +1166,8 @@ def main(argv: list[str] | None = None) -> int:
         return _steer(args)
     if args.command == "approve":
         return _approve(args)
+    if args.command == "init":
+        return _init(args)
     if args.command == "projects":
         return _projects(args)
     if args.command == "serve":

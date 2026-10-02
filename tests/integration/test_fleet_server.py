@@ -55,7 +55,7 @@ def test_register_then_list_round_trips(client: TestClient, tmp_path: Path) -> N
     assert response.status_code == 201
     body = response.json()
     assert body["name"] == "demo"
-    assert body["roles"] == [{"name": "builder", "persona": "ships fast"}]
+    assert body["roles"] == [{"name": "builder", "persona": "ships fast", "backend": None}]
     assert body["running"] is False
 
     listing = client.get("/api/projects").json()
@@ -355,3 +355,14 @@ def test_update_allow_with_no_body_is_400_not_500(client: TestClient, tmp_path: 
 
     response = client.patch(f"/api/projects/{project_id}/allow", content=b"")
     assert response.status_code == 400
+
+
+def test_usage_cost_is_null_not_zero_when_no_backend_reported_one(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """KAN-1810: a role with no reported dollar figure is "unknown", not "free"."""
+    response = client.post(
+        "/api/projects",
+        json={"name": "demo", "root": str(tmp_path / "demo"), "roles": [{"name": "builder"}]},
+    )
+    assert response.json()["usage"]["builder"] == {"tokens": 0, "cost_usd": None}
