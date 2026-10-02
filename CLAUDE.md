@@ -55,9 +55,11 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 
 ## Gotchas that have already cost a session
 
-- **Only the fleet daemon resumes after a crash.** `cuttlefish run`/`run-team`
-  mint a fresh id (`cli.py`) and ADR-0010's `--resume` flag was never built.
-  Never write "a killed process resumes" without saying which one.
+- **Only the fleet daemon resumes on its own after a crash.** The one-shot
+  `cuttlefish run`/`run-team` start a new run on a plain rerun (with a warning
+  naming unfinished runs) and resume only via `--resume <id>` plus the original
+  arguments repeated exactly (KAN-1806, `cuttlefish/resume.py`). Never write
+  "a killed process resumes" without saying which one.
 - **Backend resolution order (KAN-1809):** a role's own backend, else its
   project's, else `CUTTLEFISH_AGENT_BACKEND`. Every named backend's CLI is
   `PATH`-checked at team start, not mid-task. Two kopicode-backed roles still

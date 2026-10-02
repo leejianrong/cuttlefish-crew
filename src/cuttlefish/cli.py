@@ -37,8 +37,9 @@ from typing import Any
 import satay
 import satay.control
 from dotenv import load_dotenv
+from satay.journal.events import TERMINAL_STATUSES
 
-from cuttlefish import onboarding, runtime
+from cuttlefish import onboarding, resume, runtime
 from cuttlefish.config import (
     AGENT_BACKEND_ENV,
     ConfigError,
@@ -138,7 +139,41 @@ def _resolve_root_and_project(args: argparse.Namespace) -> tuple[str, str]:
     return root, project
 
 
+async def _resolve_run_id(args: argparse.Namespace, command: str) -> tuple[str | None, int]:
+    """The id this run uses (KAN-1806): the `--resume` id if it names an unfinished
+    run, else a fresh one -- warning first when unfinished runs already exist, so a
+    plain rerun after a crash is never silently a second, unrelated run.
+    Returns `(None, exit_code)` when `--resume` can't be honoured."""
+    if args.resume:
+        status = await resume.run_status(args.resume)
+        if status is None:
+            print(f"cuttlefish: no run {args.resume!r} in this directory's .satay", file=sys.stderr)
+            return None, EXIT_CONFIG_ERROR
+        if status in TERMINAL_STATUSES:
+            print(f"cuttlefish: run {args.resume!r} already finished ({status})", file=sys.stderr)
+            return None, EXIT_CONFIG_ERROR
+        print(
+            f"cuttlefish: resuming {args.resume} -- repeat the original command's "
+            f"arguments exactly; {resume.RESUME_CAVEAT}",
+            file=sys.stderr,
+        )
+        return args.resume, EXIT_OK
+    unfinished = await resume.unfinished_runs()
+    if unfinished:
+        print(
+            f"cuttlefish: warning: {len(unfinished)} unfinished run(s) in this directory "
+            f"({', '.join(unfinished)}), crashed or still running elsewhere. "
+            f"To continue one, re-run the original command with `--resume ID`; "
+            f"this {command} starts a new run.",
+            file=sys.stderr,
+        )
+    return str(uuid.uuid4()), EXIT_OK
+
+
 async def _run(args: argparse.Namespace) -> int:
+    task_id, early_exit = await _resolve_run_id(args, "run")
+    if task_id is None:
+        return early_exit
     root, project = _resolve_root_and_project(args)
     secret_names = sorted(set(args.secret or []))
 
@@ -149,7 +184,8 @@ async def _run(args: argparse.Namespace) -> int:
         return EXIT_CONFIG_ERROR
 
     runtime.configure(prepared.as_runtime())
-    task_id = str(uuid.uuid4())
+    if args.resume:
+        resume.mark_resumed(prepared.episodic_store, task_id)
     workflow_input = {
         "task_id": task_id,
         "text": args.task,
@@ -231,6 +267,9 @@ def _parse_roles(values: list[str] | None) -> list[RoleInput]:
 
 
 async def _run_team(args: argparse.Namespace) -> int:
+    team_id, early_exit = await _resolve_run_id(args, "run-team")
+    if team_id is None:
+        return early_exit
     root, project = _resolve_root_and_project(args)
     secret_names = sorted(set(args.secret or []))
 
@@ -247,7 +286,8 @@ async def _run_team(args: argparse.Namespace) -> int:
         return EXIT_CONFIG_ERROR
 
     runtime.configure(prepared.as_runtime())
-    team_id = str(uuid.uuid4())
+    if args.resume:
+        resume.mark_resumed(prepared.episodic_store, team_id)
     allow = _parse_allow(args.allow)
     role_inputs: list[RoleInput] = [
         {"name": role["name"], "text": role["text"], "allow": allow, "secret_names": secret_names}
@@ -728,6 +768,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     run_parser.add_argument(
+        "--resume",
+        default=None,
+        metavar="ID",
+        help=(
+            "Resume an unfinished run by its id (KAN-1806, ADR-0010) instead of starting "
+            "a new one. Repeat the original command's arguments exactly. A round that "
+            "was in flight when the run died starts over. Only finished rounds are kept."
+        ),
+    )
+    run_parser.add_argument(
         "--max-tokens",
         type=int,
         default=None,
@@ -771,6 +821,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Run that --role through BACKEND (kopicode, claude-code, codex) instead "
             f"of ${AGENT_BACKEND_ENV} (KAN-1809). Repeatable."
+        ),
+    )
+    run_team_parser.add_argument(
+        "--resume",
+        default=None,
+        metavar="ID",
+        help=(
+            "Resume an unfinished run by its id (KAN-1806, ADR-0010) instead of starting "
+            "a new one. Repeat the original command's arguments exactly. A round that "
+            "was in flight when the run died starts over. Only finished rounds are kept."
         ),
     )
     run_team_parser.add_argument(

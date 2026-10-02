@@ -32,8 +32,10 @@ The core loop is a durable [satay](https://github.com/leejianrong/satay-runtime)
 workflow. If the fleet daemon (`cuttlefish serve`) is killed mid-run,
 restarting it resumes each project's in-flight team: same team id, a
 `TeamResumed` marker in the journal, no finished round re-run (the round that
-was mid-flight starts over). A killed one-shot `cuttlefish run`/`run-team` does
-**not** resume; rerunning it starts a new task.
+was mid-flight starts over). A killed one-shot `cuttlefish run`/`run-team` is
+not resumed automatically: rerunning it warns that an unfinished run exists and
+starts a new task, and repeating the original command with `--resume <id>`
+continues the old one instead.
 
 ## Prerequisites
 
