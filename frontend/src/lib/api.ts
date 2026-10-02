@@ -12,11 +12,11 @@ export interface RoleDefinition {
 }
 
 /** One role's cumulative usage so far (KAN-1712/ADR-0017), derived from the
- * episodic journal -- `cost_usd` is `0` for a backend that reports no dollar
- * figure at all (kopicode), not a claim that nothing was spent. */
+ * episodic journal -- `cost_usd` is `null` when no backend reported a dollar
+ * figure (kopicode, Codex), which is "unknown", not "free" (KAN-1810). */
 export interface RoleUsage {
   tokens: number;
-  cost_usd: number;
+  cost_usd: number | null;
 }
 
 /** A project's own run-scoped usage ceiling (KAN-1712/ADR-0017) -- `null` on
