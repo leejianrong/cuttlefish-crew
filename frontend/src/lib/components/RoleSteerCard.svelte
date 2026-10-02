@@ -8,7 +8,7 @@
     role,
     status,
     handovers = [],
-    usage = { tokens: 0, cost_usd: 0 },
+    usage = { tokens: 0, cost_usd: null },
     budget = { max_tokens: null, max_cost_usd: null },
   }: {
     client: FleetClient;
@@ -29,7 +29,9 @@
     budget.max_tokens !== null && usage.tokens >= budget.max_tokens,
   );
   const costOverBudget = $derived(
-    budget.max_cost_usd !== null && usage.cost_usd >= budget.max_cost_usd,
+    budget.max_cost_usd !== null &&
+      usage.cost_usd !== null &&
+      usage.cost_usd >= budget.max_cost_usd,
   );
 
   let message = $state("");
@@ -87,10 +89,12 @@
     {usage.tokens.toLocaleString()} tokens{budget.max_tokens !== null
       ? ` / ${budget.max_tokens.toLocaleString()}`
       : ""}
-    {#if usage.cost_usd > 0 || budget.max_cost_usd !== null}
+    {#if usage.cost_usd !== null}
       &middot; ${usage.cost_usd.toFixed(4)}{budget.max_cost_usd !== null
         ? ` / $${budget.max_cost_usd.toFixed(2)}`
         : ""}
+    {:else}
+      &middot; cost unknown
     {/if}
   </p>
   <div class="steer">

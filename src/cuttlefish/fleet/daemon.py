@@ -91,14 +91,18 @@ def _build_role_inputs(project: Project, roles: list[RoleStart]) -> list[RoleInp
     gets `policy.DEFAULT_SHELL_ALLOWLIST` (no shell command at all) -- see
     `cuttlefish.team.RoleInput`'s own docstring for that default."""
     allow = [list(command) for command in project.allow]
-    return [
-        {
+    inputs: list[RoleInput] = []
+    for role in roles:
+        role_def = project.role(role["name"])
+        role_input: RoleInput = {
             "name": role["name"],
-            "text": _compose_role_text(project.role(role["name"]), role["text"]),
+            "text": _compose_role_text(role_def, role["text"]),
             "allow": allow,
         }
-        for role in roles
-    ]
+        if role_def is not None and role_def.backend:
+            role_input["backend"] = role_def.backend
+        inputs.append(role_input)
+    return inputs
 
 
 def _to_persisted_roles(role_inputs: list[RoleInput]) -> tuple[PersistedRole, ...]:
@@ -112,16 +116,24 @@ def _to_persisted_roles(role_inputs: list[RoleInput]) -> tuple[PersistedRole, ..
             name=role["name"],
             text=role["text"],
             allow=tuple(tuple(command) for command in role.get("allow", [])),
+            backend=role.get("backend"),
         )
         for role in role_inputs
     )
 
 
 def _persisted_roles_to_inputs(roles: tuple[PersistedRole, ...]) -> list[RoleInput]:
-    return [
-        {"name": role.name, "text": role.text, "allow": [list(command) for command in role.allow]}
-        for role in roles
-    ]
+    inputs: list[RoleInput] = []
+    for role in roles:
+        role_input: RoleInput = {
+            "name": role.name,
+            "text": role.text,
+            "allow": [list(command) for command in role.allow],
+        }
+        if role.backend:
+            role_input["backend"] = role.backend
+        inputs.append(role_input)
+    return inputs
 
 
 @dataclass(slots=True, frozen=True)
@@ -214,7 +226,11 @@ class FleetDaemon:
             prepared: PreparedRun | None = None
             try:
                 prepared = prepare_run(
-                    project=project.secrets_scope, secret_names=[], base_dir=Path(project.root)
+                    project=project.secrets_scope,
+                    secret_names=[],
+                    base_dir=Path(project.root),
+                    agent_backend=project.backend,
+                    extra_backends=[r["backend"] for r in role_inputs if r.get("backend")],
                 )
                 runtime.configure(prepared.as_runtime())
                 workflow_input: TeamInput = {

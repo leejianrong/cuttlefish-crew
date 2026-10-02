@@ -38,6 +38,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
@@ -64,7 +65,10 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "name": project.name,
         "root": project.root,
         "secrets_scope": project.secrets_scope,
-        "roles": [{"name": r.name, "persona": r.persona} for r in project.roles],
+        "backend": project.backend,
+        "roles": [
+            {"name": r.name, "persona": r.persona, "backend": r.backend} for r in project.roles
+        ],
         "last_team_id": project.last_team_id,
         "allow": [list(command) for command in project.allow],
         "running": daemon.is_running(project.id),
@@ -88,8 +92,22 @@ def _event_json(event: EpisodicEvent) -> dict[str, Any]:
 
 def _roles_from_body(body: dict[str, Any]) -> tuple[RoleDefinition, ...]:
     return tuple(
-        RoleDefinition(name=r["name"], persona=r.get("persona", "")) for r in body.get("roles", [])
+        RoleDefinition(
+            name=r["name"], persona=r.get("persona", ""), backend=_backend_from(r.get("backend"))
+        )
+        for r in body.get("roles", [])
     )
+
+
+def _backend_from(value: Any) -> str | None:
+    """A request's optional backend name (KAN-1809), validated the same way the
+    environment variable is -- a typo is a 400 now, not a failed start later."""
+    if value in (None, ""):
+        return None
+    try:
+        return validate_backend_name(str(value), source="backend")
+    except ConfigError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def _allow_from_body(body: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
@@ -220,6 +238,7 @@ def create_app(
             allow=_allow_from_body(body),
             max_tokens=max_tokens,
             max_cost_usd=max_cost_usd,
+            backend=_backend_from(body.get("backend")),
         )
         return _project_json(daemon, project.id)
 

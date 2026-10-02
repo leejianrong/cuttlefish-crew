@@ -5,13 +5,17 @@ named on purpose; don't re-litigate one without new evidence. Read this
 before proposing to "fix" a limitation, and add a bullet (with the ADR or
 `docs/QUESTIONS.md` entry that explains it) when a new one is accepted.
 
-- **The one-shot CLI never resumes.** `cuttlefish run`/`run-team` always mint
-  a fresh `uuid4` (`cli.py`), and ADR-0010's planned `--resume <id>` flag was
-  never built. Verified live 2026-09-29: `kill -9` mid-delegation, rerun the
-  identical command, get a new task; the crashed run's row stays non-terminal
-  in `.satay/`. Only the daemon resumes (a mid-flight delegation round
-  restarts, finished rounds are not re-run). Don't write "a killed process
-  resumes" without saying which one. ADR-0010.
+- **The one-shot CLI resumes only on request.** A plain `cuttlefish run`/
+  `run-team` rerun after a crash starts a new run (verified live 2026-09-29:
+  `kill -9` mid-delegation, identical rerun, new task, the crashed row stays
+  non-terminal in `.satay/`); since KAN-1806 it warns on stderr naming every
+  unfinished run in that directory. `--resume <id>` re-drives the old run via
+  `satay.start(run_id=)`, but the operator must repeat the original arguments
+  exactly (satay replays against the input it is given), a round in flight at
+  the crash restarts from its start, and the warning cannot tell a crashed run
+  from one still running in another process. Only the daemon resumes with no
+  operator action. Don't write "a killed process resumes" without saying
+  which one. ADR-0010.
 - satay-runtime's own `durable_wait_for_event` identity (`event#{ordinal}`,
   `satay/replay/engine.py`) discards the event type before building the final
   identity string, only keeping it in the *counter* that produces the

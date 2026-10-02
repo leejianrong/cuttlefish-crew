@@ -304,3 +304,35 @@ def test_deregister_returns_whether_anything_was_removed_and_never_touches_root(
     assert store.deregister(project.id) is False  # already gone -- idempotent, not an error
     assert (root / "marker.txt").exists()
     store.close()
+
+
+def test_backend_round_trips_on_project_role_and_persisted_role(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(
+        name="demo",
+        root=str(tmp_path / "demo"),
+        backend="codex",
+        roles=(RoleDefinition(name="a", backend="claude-code"), RoleDefinition(name="b")),
+    )
+    loaded = store.get(project.id)
+    assert loaded.backend == "codex"
+    assert [r.backend for r in loaded.roles] == ["claude-code", None]
+    store.close()
+    assert PersistedRole(name="x", text="t").backend is None
+
+
+def test_a_projects_db_predating_the_backend_column_is_migrated_in_place(tmp_path: Path) -> None:
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, root TEXT NOT NULL, "
+        "secrets_scope TEXT NOT NULL, roles_json TEXT NOT NULL, last_team_id TEXT)"
+    )
+    conn.execute("INSERT INTO projects VALUES ('p', 'n', '/r', 'n', '[]', NULL)")
+    conn.commit()
+    conn.close()
+    store = ProjectStore.open(path)
+    assert store.get("p").backend is None
+    store.close()

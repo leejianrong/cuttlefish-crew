@@ -36,7 +36,11 @@ class OpenRouterLlmProvider:
     def __init__(self, *, model: str = DEFAULT_MODEL, max_tokens: int = DEFAULT_MAX_TOKENS) -> None:
         api_key = os.environ.get(OPENROUTER_API_KEY_ENV)
         if not api_key:
-            raise MissingApiKeyError(f"{OPENROUTER_API_KEY_ENV} is not set")
+            raise MissingApiKeyError(
+                f"{OPENROUTER_API_KEY_ENV} is not set. cuttlefish needs it only for its own "
+                "handover summaries (the coding agent has its own credential): set it, or set "
+                "CUTTLEFISH_LLM_PROVIDER=replay for placeholder summaries."
+            )
         self._client = openai.AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
         self._model = model
         self._max_tokens = max_tokens

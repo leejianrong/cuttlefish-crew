@@ -24,7 +24,7 @@ def test_cumulative_usage_sums_across_completed_refused_and_failed() -> None:
 
 def test_cumulative_usage_ignores_events_with_no_usage_data() -> None:
     payloads = [DelegationCompleted(summary="ok")]  # tokens/cost_usd both None
-    assert cumulative_usage(payloads, role=None) == UsageTotals(tokens=0, cost_usd=0.0)
+    assert cumulative_usage(payloads, role=None) == UsageTotals(tokens=0, cost_usd=None)
 
 
 def test_cumulative_usage_ignores_non_usage_event_types() -> None:
@@ -43,6 +43,14 @@ def test_cumulative_usage_filters_by_role() -> None:
     assert cumulative_usage(payloads, role="builder") == UsageTotals(tokens=100)
     assert cumulative_usage(payloads, role="reviewer") == UsageTotals(tokens=999)
     assert cumulative_usage(payloads, role=None) == UsageTotals()
+
+
+def test_unreported_cost_is_unknown_not_zero_and_never_trips_a_cost_ceiling() -> None:
+    """KAN-1810: kopicode/Codex report no dollar figure."""
+    payloads = [DelegationCompleted(summary="ok", tokens=100, cost_usd=None)]
+    totals = cumulative_usage(payloads, role=None)
+    assert totals == UsageTotals(tokens=100, cost_usd=None)
+    assert exceeded(totals, max_tokens=None, max_cost_usd=0.0) is False
 
 
 def test_exceeded_is_false_with_no_ceiling_configured() -> None:

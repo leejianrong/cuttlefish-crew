@@ -26,6 +26,7 @@ uv run cuttlefish run "run the test suite" --allow "go test" --allow "npm test"
 | `--steerable` | Open a local control API so `cuttlefish steer` can redirect this run. |
 | `--require-approval` | A round never finalizes on its own — blocks until `cuttlefish approve` decides it. Implies `--steerable`'s control API. |
 | `--max-tokens N` / `--max-cost-usd USD` | Force a decision once cumulative usage crosses this ceiling — the same review gate `--require-approval` uses. |
+| `--resume ID` | Continue an unfinished run (e.g. after `kill -9`) instead of starting a new one. Repeat the original command's arguments exactly; the round that was in flight starts over, finished rounds are kept. Without it, a rerun warns about unfinished runs in the directory. Also on `run-team`. |
 
 ## `cuttlefish run-team`
 
@@ -36,6 +37,11 @@ uv run cuttlefish run-team \
   --role builder:"implement the login form" \
   --role reviewer:"review the last commit for style issues"
 ```
+
+`--role-backend NAME=BACKEND` (repeatable) runs that role through
+`kopicode`, `claude-code` or `codex` instead of `CUTTLEFISH_AGENT_BACKEND`, so
+one team can mix agents. Every named backend's CLI must be on `PATH` before
+the team starts.
 
 `--role NAME:TASK_TEXT` is repeatable and required at least once. Every
 other flag from `run` applies team-wide (one `--root`, one `--allow` list
@@ -72,10 +78,24 @@ Manage the project-scoped, encrypted-at-rest secrets store.
 | `delete --project NAME KEY` | Delete a secret. |
 | `list --project NAME` | List a scope's secret names — never values. |
 
+## `cuttlefish init [--root DIR] [--name NAME] [--backend B] [--role NAME[:PERSONA]]...`
+
+Guided first-run setup. Picks the backend (`--backend`, else
+`CUTTLEFISH_AGENT_BACKEND`, else the first of `kopicode`/`claude`/`codex` on
+`PATH`), checks that `uv`, the agent CLI and a plausible login are present
+(best effort: an env credential or the CLI's own login directory, never a
+credential file's contents), registers `--root` (default `.`) as a project
+with `builder` and `reviewer` roles unless `--role` overrides them, and
+prints the exact `cuttlefish run` command to try next. Re-running on an
+already-registered root reuses it. Exits 2 if a check fails.
+
 ## `cuttlefish projects`
 
 Manage the `Project` registry the fleet daemon reads from
-(`~/.cuttlefish/projects.db`).
+(`~/.cuttlefish/projects.db`). `projects add --backend B` sets a project's
+default agent backend and `--role-backend NAME=B` a single role's; resolution is
+role, then project, then `CUTTLEFISH_AGENT_BACKEND`. The dashboard's register
+form takes the same (`name@backend: persona` per role).
 
 ```bash
 uv run cuttlefish projects add \
@@ -124,7 +144,7 @@ Eight tools: `list_projects`, `get_project`, `register_project`,
 |---|---|---|
 | `CUTTLEFISH_AGENT_BACKEND` | `kopicode` | Which coding-agent backend a delegation runs through: `kopicode`, `claude-code`, or `codex`. One choice per process — every project and role a given `cuttlefish serve` runs shares it. |
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
-| `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
+| `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` are unavailable. |
 | `CUTTLEFISH_SERVE_PASSWORD` | unset | Required for any non-loopback `cuttlefish serve` bind. |
