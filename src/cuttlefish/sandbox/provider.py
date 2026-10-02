@@ -10,9 +10,10 @@ configured on ``runtime.Runtime.sandbox_provider``.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import ClassVar, Protocol
+from typing import ClassVar, Protocol, runtime_checkable
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,3 +100,29 @@ class SandboxProvider(Protocol):
     async def snapshot(self, handle: SandboxHandle) -> SnapshotHandle: ...
 
     async def destroy(self, handle: SandboxHandle) -> None: ...
+
+
+@runtime_checkable
+class StreamingSandboxProvider(Protocol):
+    """A provider that can also start a process in a sandbox and keep talking to it
+    (KAN-1793, ADR-0021) -- the capability ``exec`` lacks, since ``exec`` returns only after
+    the process exits.
+
+    Separate from :class:`SandboxProvider` on purpose: a backend opts in, and a caller
+    checks once with ``isinstance`` and otherwise falls back to ``exec``. A provider that
+    cannot stream (E2B today) is not forced to implement or half-implement it.
+
+    ``spawn`` returns the started process with stdin, stdout and stderr piped and no
+    terminal -- the caller owns its lifetime and the stream's framing. **Killing the
+    returned process does not promise the command inside the sandbox stops**: for a
+    container it ends only the local client (verified: the in-container process survived
+    a SIGKILL of ``docker exec -i``). The caller's real cleanup is :meth:`destroy`.
+    """
+
+    async def spawn(
+        self,
+        handle: SandboxHandle,
+        command: Sequence[str],
+        *,
+        cwd: str | None = None,
+    ) -> asyncio.subprocess.Process: ...

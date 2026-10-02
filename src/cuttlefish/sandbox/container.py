@@ -125,6 +125,31 @@ class ContainerSandboxProvider:
             raise SandboxError(f"container {handle.id!r} not found: {stderr.strip()}")
         return ExecResult(exit_code=code, stdout=stdout, stderr=stderr)
 
+    async def spawn(
+        self,
+        handle: SandboxHandle,
+        command: Sequence[str],
+        *,
+        cwd: str | None = None,
+    ) -> asyncio.subprocess.Process:
+        """``docker exec -i``: stdin and stdout piped, never ``-t`` (a terminal would mangle
+        a line-framed protocol). The returned process is the local ``docker`` client; ending
+        it does not promise the command in the container ends -- ``destroy`` does."""
+        args = ["exec", "-i"]
+        if cwd is not None:
+            args += ["-w", cwd]
+        args += [handle.id, *command]
+        try:
+            return await asyncio.create_subprocess_exec(
+                self._docker_binary,
+                *args,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+        except OSError as exc:
+            raise SandboxError(f"docker exec -i failed to start: {exc}") from exc
+
     async def snapshot(self, handle: SandboxHandle) -> SnapshotHandle:
         code, stdout, stderr = await self._docker("commit", handle.id)
         if code != 0:

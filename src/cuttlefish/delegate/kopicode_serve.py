@@ -53,6 +53,7 @@ from cuttlefish.agents.outcome import (
 from cuttlefish.delegate.consent import ConsentDecision, ConsentPolicy
 from cuttlefish.delegate.kopicode import _redacted_stderr_tail, classify_stream
 from cuttlefish.delegate.subprocess_env import merge_env
+from cuttlefish.sandbox.provider import SandboxError
 
 _LOG = logging.getLogger("cuttlefish.delegate.consent")
 
@@ -530,6 +531,7 @@ async def run_kopicode_serve(
     on_consent: Callable[[ConsentRecord], None] | None = None,
     session_id: str | None = None,
     pool: ServePool | None = None,
+    process_factory: Callable[[], Awaitable[asyncio.subprocess.Process]] | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
 
@@ -538,13 +540,30 @@ async def run_kopicode_serve(
     ``session.close``, so its ``session_ended`` (and failure ``text``) is in hand before the
     outcome is classified and its working tree is free for the next delegation.
 
+    ``process_factory`` starts the ``serve`` process somewhere other than this host (a
+    sandbox's streaming ``spawn``, KAN-1793); the child it yields is used for this call alone
+    and closed after, so it cannot be combined with a ``pool``. ``binary`` and ``env`` then
+    only name what to redact from failure text -- nothing is spawned from them.
+
     Same contract as :func:`~cuttlefish.delegate.kopicode.run_kopicode`: raises
     :class:`DelegationError` for anything short of a recorded turn (binary missing, the
     child dying mid-turn, a timeout); everything kopicode itself recorded is an outcome.
     """
     session = session_id or f"cuttlefish-{uuid.uuid4().hex[:12]}"
     decide: Decider = policy.decide if isinstance(policy, ConsentPolicy) else policy
-    if pool is not None:
+    if process_factory is not None:
+        if pool is not None:
+            raise ValueError("a process_factory child is per-delegation; it cannot use a pool")
+        try:
+            process = await process_factory()
+        except SandboxError as exc:
+            raise DelegationError(f"kopicode sandbox spawn failed: {exc}") from exc
+        child = ServeChild(
+            process,
+            consent_deadline=consent_deadline,
+            on_consent=on_consent or _log_consent,
+        )
+    elif pool is not None:
         child = await pool.child_for(
             binary=binary, env=env, consent_deadline=consent_deadline, on_consent=on_consent
         )

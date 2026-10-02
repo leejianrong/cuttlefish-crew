@@ -63,3 +63,28 @@ async def test_a_declared_allowlist_reaches_the_written_policy_file(
         )
 
     assert captured["allow"] == declared
+
+
+class _ExecOnlyProvider:
+    """A sandbox provider that cannot stream (like E2B today): no ``spawn``."""
+
+    BACKEND_NAME = "exec-only"
+
+
+async def test_a_sandbox_that_cannot_stream_keeps_the_run_print_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def must_not_serve(**_: object) -> None:
+        raise AssertionError("serve must not be used without a streaming provider")
+
+    monkeypatch.setattr(cuttlefish.agents.kopicode, "run_kopicode_serve", must_not_serve)
+    backend = KopicodeBackend("kopicode-binary-that-does-not-exist")
+
+    with pytest.raises(DelegationError, match="not found"):
+        await backend.delegate(
+            task_text="x",
+            root=str(tmp_path),
+            allow=None,
+            secrets={},
+            sandbox_provider=_ExecOnlyProvider(),  # type: ignore[arg-type]
+        )
