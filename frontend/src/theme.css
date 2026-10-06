@@ -156,6 +156,59 @@ svg.i.sm { width: 18px; height: 18px; }
 .card.filled { background: var(--md-sys-color-surface-container-low); border-color: transparent; }
 .card.elevated { background: var(--md-sys-color-surface-container-low); border-color: transparent; box-shadow: var(--md-sys-elevation-level1); }
 
+/* list row */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  color: var(--md-sys-color-on-surface);
+}
+.item.selected { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.divider { height: 1px; background: var(--md-sys-color-outline-variant); border: 0; margin: 0; }
+
+/* selectable option (radio card) and segmented button */
+.opt {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 16px;
+  border-radius: var(--md-sys-shape-corner-large);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container-lowest);
+  color: var(--md-sys-color-on-surface);
+}
+.opt.selected {
+  border: 2px solid var(--md-sys-color-primary);
+  padding: 15px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.radio {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--md-sys-color-on-surface-variant);
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+.opt.selected .radio { border-color: var(--md-sys-color-primary); }
+.opt.selected .radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--md-sys-color-primary); }
+.seg { display: inline-flex; border: 1px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
+.seg button { position: relative; overflow: hidden; height: 40px; padding: 0 20px; border: 0; background: transparent; display: inline-flex; align-items: center; gap: 8px; font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain); color: var(--md-sys-color-on-surface); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--md-sys-color-outline); }
+.seg button::before { content: ""; position: absolute; inset: 0; background: currentColor; opacity: 0; pointer-events: none; transition: opacity var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard); }
+.seg button:hover::before { opacity: 0.08; }
+.seg button:focus-visible::before { opacity: 0.12; }
+.seg button.selected { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+
 /* outlined text field: wrap a label and an input/textarea/select */
 .field {
   display: block;

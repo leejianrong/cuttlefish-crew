@@ -13,6 +13,7 @@ import satay.control
 from starlette.testclient import TestClient
 
 from cuttlefish.fleet.daemon import FleetDaemon
+from cuttlefish.fleet.fs import FolderBrowser
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.projects.store import ProjectStore
 
@@ -491,3 +492,65 @@ def test_a_role_can_carry_an_explicit_access_override(client: TestClient, tmp_pa
         },
     ).json()
     assert [r["access"] for r in body["roles"]] == ["read-only", "standard", None]
+
+
+@pytest.fixture
+def browsing_client(tmp_path: Path) -> TestClient:
+    home = tmp_path / "home"
+    (home / "proj" / ".git").mkdir(parents=True)
+    (home / "plain").mkdir()
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
+    app = create_app(
+        daemon,
+        security=satay.control.SecurityPolicy(token="test-token"),
+        folders=FolderBrowser([home]),
+    )
+    return TestClient(app, base_url="http://127.0.0.1", headers={TOKEN_HEADER: "test-token"})
+
+
+def test_the_folder_listing_is_served_with_its_roots(
+    browsing_client: TestClient, tmp_path: Path
+) -> None:
+    body = browsing_client.get("/api/fs").json()
+    assert body["root"] == str((tmp_path / "home").resolve())
+    assert body["roots"] == [body["root"]]
+    assert body["parent"] is None
+    assert [(f["name"], f["is_git"]) for f in body["folders"]] == [("plain", False), ("proj", True)]
+
+
+def test_a_subfolder_is_listed_by_path(browsing_client: TestClient, tmp_path: Path) -> None:
+    path = str((tmp_path / "home" / "proj").resolve())
+    body = browsing_client.get("/api/fs", params={"path": path}).json()
+    assert body["path"] == path
+    assert body["parent"] == str((tmp_path / "home").resolve())
+
+
+def test_a_path_outside_the_roots_is_403_and_a_missing_one_404(
+    browsing_client: TestClient, tmp_path: Path
+) -> None:
+    assert browsing_client.get("/api/fs", params={"path": "/etc"}).status_code == 403
+    missing = str(tmp_path / "home" / "nope")
+    assert browsing_client.get("/api/fs", params={"path": missing}).status_code == 404
+
+
+def test_inspect_is_served_and_guarded(browsing_client: TestClient, tmp_path: Path) -> None:
+    path = str((tmp_path / "home" / "plain").resolve())
+    body = browsing_client.get("/api/fs/inspect", params={"path": path}).json()
+    assert body["name"] == "plain" and body["is_git"] is False and body["languages"] == []
+    assert browsing_client.get("/api/fs/inspect", params={"path": "/etc"}).status_code == 403
+    assert browsing_client.get("/api/fs/inspect").status_code == 422
+
+
+def test_the_folder_routes_need_the_token(tmp_path: Path) -> None:
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
+    app = create_app(
+        daemon,
+        security=satay.control.SecurityPolicy(token="real"),
+        folders=FolderBrowser([tmp_path]),
+    )
+    assert TestClient(app, base_url="http://127.0.0.1").get("/api/fs").status_code == 401
+
+
+def test_a_daemon_with_no_folder_browser_answers_404(client: TestClient) -> None:
+    assert client.get("/api/fs").status_code == 404
+    assert client.get("/api/fs/inspect", params={"path": "/"}).status_code == 404

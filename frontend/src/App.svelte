@@ -1,5 +1,6 @@
 <script lang="ts">
   import { FleetClient } from "./lib/api";
+  import AddProject from "./lib/components/AddProject.svelte";
   import ConnectScreen from "./lib/components/ConnectScreen.svelte";
   import Portfolio from "./lib/components/Portfolio.svelte";
   import ProjectDetail from "./lib/components/ProjectDetail.svelte";
@@ -15,6 +16,7 @@
   );
   let openProjectId = $state<string | null>(null);
   let showGallery = $state(false);
+  let adding = $state(false);
   const storedTheme = loadTheme();
   applyTheme(storedTheme);
   let theme = $state<ThemePreference>(storedTheme);
@@ -30,13 +32,17 @@
     client = null;
     openProjectId = null;
     showGallery = false;
+    adding = false;
     clearConnection();
   }
 
   function navigate(id: string) {
     showGallery = id === "sprites";
-    // Choosing Projects from inside a project goes back to the list.
-    if (id === "projects") openProjectId = null;
+    // Choosing Projects from inside a project or the add screen goes back to the list.
+    if (id === "projects") {
+      openProjectId = null;
+      adding = false;
+    }
   }
 </script>
 
@@ -57,10 +63,23 @@
   >
     {#if showGallery}
       <SpriteGallery onBack={() => (showGallery = false)} />
+    {:else if adding}
+      <AddProject
+        {client}
+        onCancel={() => (adding = false)}
+        onRegistered={(project) => {
+          adding = false;
+          openProjectId = project.id;
+        }}
+      />
     {:else if openProjectId}
       <ProjectDetail {client} projectId={openProjectId} onBack={() => (openProjectId = null)} />
     {:else}
-      <Portfolio {client} onOpenProject={(id) => (openProjectId = id)} />
+      <Portfolio
+        {client}
+        onOpenProject={(id) => (openProjectId = id)}
+        onAddProject={() => (adding = true)}
+      />
     {/if}
   </Shell>
 {/if}

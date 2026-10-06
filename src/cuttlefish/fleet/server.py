@@ -25,9 +25,10 @@ as before.
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import socket
-from collections.abc import Awaitable, Callable, Collection
+from collections.abc import Awaitable, Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +43,7 @@ from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
+from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.permissions import ACCESS_LEVELS, DEFAULT_MODE, MODES
 from cuttlefish.projects.store import ProjectNotFoundError, RoleDefinition
 from cuttlefish.roles import (
@@ -195,6 +197,7 @@ def create_app(
     login: SessionAuth | None = None,
     cors_origins: Collection[str] = (),
     dashboard_dir: Path | None = None,
+    folders: FolderBrowser | None = None,
 ) -> FastAPI:
     """`login` is only non-`None` in non-loopback/password mode (ADR-0011) -- it
     both backs `POST /api/login` and doubles as `security` in that mode, since
@@ -203,6 +206,8 @@ def create_app(
     rather than replacing it. `dashboard_dir` (ADR-0012), if given, must already
     exist -- an explicit request for a build that isn't there is a startup error,
     not a silent skip (`run_daemon`'s own job to tell the two cases apart).
+    `folders` (V4-E, ADR-0026) backs the dashboard's folder picker; without one, those two
+    routes answer 404 rather than browsing anything by default.
     """
     app = FastAPI(title="cuttlefish-crew fleet daemon")
 
@@ -262,6 +267,50 @@ def create_app(
         except satay.control.AuthError as exc:
             raise HTTPException(exc.status, exc.detail) from exc
         return {"token": token, "expires_in": login.ttl_seconds}
+
+    def _browser() -> FolderBrowser:
+        if folders is None:
+            raise HTTPException(404, "this daemon was not started with a folder browser")
+        return folders
+
+    @app.get("/api/fs")
+    async def list_folders(path: str | None = None) -> dict[str, Any]:
+        browser = _browser()
+        try:
+            listing = await asyncio.to_thread(browser.list_folders, path)
+        except OutsideBrowseRootsError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except NotAFolderError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {
+            "path": listing.path,
+            "root": listing.root,
+            "roots": [str(root) for root in browser.roots],
+            "parent": listing.parent,
+            "truncated": listing.truncated,
+            "folders": [
+                {"name": f.name, "path": f.path, "is_git": f.is_git} for f in listing.folders
+            ],
+        }
+
+    @app.get("/api/fs/inspect")
+    async def inspect_folder(path: str) -> dict[str, Any]:
+        browser = _browser()
+        try:
+            found = await asyncio.to_thread(browser.inspect, path)
+        except OutsideBrowseRootsError as exc:
+            raise HTTPException(403, str(exc)) from exc
+        except NotAFolderError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {
+            "path": found.path,
+            "name": found.name,
+            "is_git": found.is_git,
+            "branch": found.branch,
+            "dirty": found.dirty,
+            "last_commit": found.last_commit,
+            "languages": list(found.languages),
+        }
 
     @app.get("/api/roles")
     async def list_builtin_roles() -> dict[str, Any]:
@@ -495,6 +544,7 @@ async def run_daemon(
     password: str | None = None,
     cors_origins: Collection[str] = (),
     dashboard_dir: Path | None = None,
+    browse_roots: Sequence[Path] = (),
 ) -> None:
     """Serve `daemon`'s HTTP surface until cancelled (`cuttlefish serve`).
 
@@ -564,6 +614,7 @@ async def run_daemon(
         login=login,
         cors_origins=cors_origins,
         dashboard_dir=dashboard_dir,
+        folders=FolderBrowser(browse_roots or [Path.home()]),
     )
     config = uvicorn.Config(app, host=host, port=resolved_port, log_level="warning")
     server = uvicorn.Server(config)

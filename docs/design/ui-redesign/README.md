@@ -62,6 +62,13 @@ and this folder disagree after a slice lands, update this folder.
   Regenerate both schemes together; never hand-edit a role.
 - Screenshots of what shipped (V4-D, projects screen in light, dark and phone width) are in
   `shipped/`. They are the baseline to compare later slices against.
+- **V4-E (folder picker and the short register flow) shipped.** `AddProject.svelte` follows
+  screen 1: folder browser with breadcrumbs, up button, git tag per folder and a typed-path box;
+  team templates; the three modes; a summary column with git state and detected languages; and
+  collapsed Advanced options. Screenshots in `shipped/v4e-*`. Differences from the mockup:
+  no "New folder" button; "Recent" lists the folders of already-registered projects; the
+  summary column stacks below the form under 900px; Ask first's description says plainly that
+  nothing asks yet (ADR-0025). Registering opens the new project's page.
 - Fonts are self-hosted (`@fontsource-variable/*`), so the dashboard makes no external request.
 - The nav rail lists only screens that exist (`frontend/src/lib/nav.ts`); Fleet and Roles
   join it with V4-H and V4-F. The rail becomes a bottom bar under 640px. A theme button
