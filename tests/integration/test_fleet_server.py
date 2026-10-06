@@ -102,6 +102,29 @@ def test_update_allow_replaces_the_whole_set(client: TestClient, tmp_path: Path)
     assert response.json()["allow"] == [["uv", "run", "pytest"]]
 
 
+@pytest.mark.parametrize(
+    "allow",
+    [[["sudo", "make"]], [["make", "a;b"]], [[]], [["git", "push", "--force"]], ["make"], "make"],
+)
+def test_update_allow_refuses_an_entry_the_consent_policy_would_refuse(
+    client: TestClient, tmp_path: Path, allow: object
+) -> None:
+    created = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")}
+    ).json()
+    response = client.patch(f"/api/projects/{created['id']}/allow", json={"allow": allow})
+    assert response.status_code == 400
+    assert client.get(f"/api/projects/{created['id']}").json()["allow"] == []
+
+
+def test_register_refuses_a_bad_allow_entry(client: TestClient, tmp_path: Path) -> None:
+    response = client.post(
+        "/api/projects",
+        json={"name": "demo", "root": str(tmp_path / "demo"), "allow": [["sudo", "x"]]},
+    )
+    assert response.status_code == 400
+
+
 def test_update_allow_for_an_unknown_project_is_404(client: TestClient) -> None:
     response = client.patch("/api/projects/no-such-id/allow", json={"allow": []})
     assert response.status_code == 404

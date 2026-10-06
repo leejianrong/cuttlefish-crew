@@ -279,6 +279,46 @@ class ConsentDecided:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class RequestRaised:
+    """Something needs a person (ADR-0028): journaled live, when it is raised, not after the
+    round. State is derived by folding this with :class:`RequestResolved`; there is no
+    requests table. ``detail`` is the command line or question text (the store redacts it at
+    write time), ``why`` says in plain words why the agent was stopped, ``answers`` is what a
+    person may reply, and ``lands`` says when an answer takes effect (``now``,
+    ``end_of_turn`` or ``next_round``) so a card never implies a live prompt that is not there.
+    """
+
+    EVENT_TYPE: ClassVar[str] = "RequestRaised"
+
+    request_id: str
+    kind: Literal["permission", "question", "blocked"]
+    title: str
+    detail: str
+    why: str
+    answers: list[str]
+    expires_at: str
+    lands: Literal["now", "end_of_turn", "next_round"] = "now"
+    suggested_rule: list[str] | None = None
+    role: str | None = None
+    backend: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RequestResolved:
+    """How a :class:`RequestRaised` ended -- exactly one per request (ADR-0028). ``rule`` is the
+    command words an Always allow added."""
+
+    EVENT_TYPE: ClassVar[str] = "RequestResolved"
+
+    request_id: str
+    resolution: Literal[
+        "allowed_once", "allowed_always", "denied", "expired", "cancelled", "abandoned"
+    ]
+    by: Literal["person", "timeout", "system"]
+    rule: list[str] | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamResumed:
     """A daemon restart found this run still non-terminal and re-drove it via
     satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
@@ -333,6 +373,8 @@ EventPayload = (
     | ApprovalDecision
     | ToolCallRecorded
     | ConsentDecided
+    | RequestRaised
+    | RequestResolved
     | TeamResumed
     | UnknownPayload
 )
@@ -355,6 +397,8 @@ _REGISTRY: Mapping[str, type[Any]] = {
         ApprovalDecision,
         ToolCallRecorded,
         ConsentDecided,
+        RequestRaised,
+        RequestResolved,
         TeamResumed,
     )
 }
