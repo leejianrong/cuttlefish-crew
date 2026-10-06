@@ -88,15 +88,31 @@ _NEVER_ALLOWED_BASH_PREFIXES = (
     "git push --force-with-lease",
 )
 
+#: Auto mode hands Claude Code every Bash command, and a deny pattern cannot say "a download
+#: piped into a shell", so downloads are denied outright there. Cruder than kopicode's check;
+#: named in known-gaps.md.
+_AUTO_EXTRA_DENIED_BASH_PREFIXES = ("curl", "wget")
+
+#: The tools that change files; denied for a read-only role.
+_EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+
 
 def build_claude_code_argv(
-    binary: str, task_text: str, *, allow: list[list[str]] | None = None
+    binary: str,
+    task_text: str,
+    *,
+    allow: list[list[str]] | None = None,
+    mode: str = "standard",
 ) -> list[str]:
     """The argv for one ``binary -p task_text --output-format stream-json ...`` call.
 
     Shared by :func:`run_claude_code` (a direct host subprocess) and
     :func:`run_claude_code_in_sandbox` (a `SandboxProvider.exec` call), the
     same split kopicode's own ``build_kopicode_argv`` makes.
+
+    ``mode`` (V4-C): ``"auto"`` allows every Bash command and denies the never-allowed
+    prefixes plus downloads; ``"read-only"`` also denies the file-editing tools. Neither
+    deny-beats-allow nor the exact pattern semantics are verified live yet.
     """
     args = [
         binary,
@@ -110,13 +126,24 @@ def build_claude_code_argv(
         "--permission-prompts",
         "none",
     ]
-    if allow:
+    denied: list[str] = []
+    if mode == "auto":
+        args.extend(["--allowedTools", "Bash"])
+        denied.extend(
+            f"Bash({prefix}:*)"
+            for prefix in (*_NEVER_ALLOWED_BASH_PREFIXES, *_AUTO_EXTRA_DENIED_BASH_PREFIXES)
+        )
+    elif allow:
         args.append("--allowedTools")
         args.extend(f"Bash({shlex.join(command)}:*)" for command in allow)
-        args.append("--disallowedTools")
-        args.extend(f"Bash({prefix}:*)" for prefix in _NEVER_ALLOWED_BASH_PREFIXES)
+        denied.extend(f"Bash({prefix}:*)" for prefix in _NEVER_ALLOWED_BASH_PREFIXES)
     else:
-        args.extend(["--disallowedTools", "Bash"])
+        denied.append("Bash")
+    if mode == "read-only":
+        denied.extend(_EDIT_TOOLS)
+    if denied:
+        args.append("--disallowedTools")
+        args.extend(denied)
     return args
 
 
@@ -335,6 +362,7 @@ async def run_claude_code(
     task_text: str,
     root: str,
     allow: list[list[str]] | None = None,
+    mode: str = "standard",
     env: Mapping[str, str] | None = None,
     timeout: float | None = None,
 ) -> DelegationOutcome:
@@ -343,7 +371,7 @@ async def run_claude_code(
     Raises :class:`DelegationError` for anything short of a recorded result:
     the binary missing, a non-JSON line, or a stream with no `result` event.
     """
-    args = build_claude_code_argv(binary, task_text, allow=allow)
+    args = build_claude_code_argv(binary, task_text, allow=allow, mode=mode)
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -384,6 +412,7 @@ async def run_claude_code_in_sandbox(
     task_text: str,
     root: str,
     allow: list[list[str]] | None = None,
+    mode: str = "standard",
     timeout: float | None = None,
 ) -> DelegationOutcome:
     """Run Claude Code inside an already-created sandbox and classify what it did.
@@ -392,7 +421,7 @@ async def run_claude_code_in_sandbox(
     same contract :func:`~cuttlefish.delegate.kopicode.run_kopicode_in_sandbox`
     gives, now for this backend.
     """
-    args = build_claude_code_argv(binary, task_text, allow=allow)
+    args = build_claude_code_argv(binary, task_text, allow=allow, mode=mode)
     try:
         result = await provider.exec(handle, args, cwd=root, timeout=timeout)
     except SandboxError as exc:

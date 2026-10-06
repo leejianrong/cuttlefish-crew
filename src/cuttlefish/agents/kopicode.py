@@ -108,10 +108,11 @@ class KopicodeBackend:
         allow: list[list[str]] | None,
         secrets: Mapping[str, str],
         sandbox_provider: SandboxProvider | None,
+        mode: str = "standard",
     ) -> DelegationOutcome:
         if self._transport == "serve" and sandbox_provider is None:
             try:
-                policy = ConsentPolicy(allow)
+                policy = ConsentPolicy(allow, auto=mode == "auto")
             except ConsentPolicyError as exc:
                 raise DelegationError(f"unusable shell allowlist: {exc}") from exc
             return await run_kopicode_serve(
@@ -124,7 +125,7 @@ class KopicodeBackend:
             )
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
             try:
-                policy = ConsentPolicy(allow)
+                policy = ConsentPolicy(allow, auto=mode == "auto")
             except ConsentPolicyError as exc:
                 raise DelegationError(f"unusable shell allowlist: {exc}") from exc
             return await self._delegate_serve_inside_sandbox(
@@ -133,6 +134,11 @@ class KopicodeBackend:
                 root=root,
                 policy=policy,
                 secrets=secrets,
+            )
+        if mode == "auto":
+            raise DelegationError(
+                "auto mode needs the kopicode serve transport: an exact-match policy file "
+                "cannot express it"
             )
         fd, policy_path_str = tempfile.mkstemp(prefix="cuttlefish-policy-", suffix=".toml")
         os.close(fd)

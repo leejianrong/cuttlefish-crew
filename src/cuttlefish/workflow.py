@@ -98,6 +98,7 @@ class TaskInput(TypedDict):
     root: str
     token_budget: NotRequired[int]
     allow: NotRequired[list[list[str]]]
+    access: NotRequired[str]
     project: NotRequired[str]
     secret_names: NotRequired[list[str]]
     steerable: NotRequired[bool]
@@ -114,6 +115,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
     root = task_input["root"]
     token_budget = task_input.get("token_budget", DEFAULT_TOKEN_BUDGET)
     allow = task_input.get("allow", DEFAULT_SHELL_ALLOWLIST)
+    access = task_input.get("access")
     project = task_input.get("project", DEFAULT_PROJECT)
     secret_names = task_input.get("secret_names", [])
     steerable = task_input.get("steerable", False)
@@ -157,7 +159,12 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
 
         try:
             outcome = await delegate_to_agent_backend(
-                current_text, root, allow=allow, project=project, secret_names=secret_names
+                current_text,
+                root,
+                allow=allow,
+                project=project,
+                secret_names=secret_names,
+                **({"access": access} if access else {}),
             )
         except DelegationError as exc:
             # A plain (non-collected) awaited task's failure re-raises the task body's

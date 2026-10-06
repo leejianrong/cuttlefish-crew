@@ -199,3 +199,28 @@ A role is "default" while its prompt equals the built-in one; edit it and it is 
 ignores any declared `--allow`. It does not yet stop a role editing files, because that
 needs per-backend handling that arrives with the permission modes; until then the
 reviewer's and planner's prompts are what keep them from editing.
+
+## Permission modes
+
+`run`, `run-team` and `projects add` take `--mode ask-first|standard|auto` (default
+`standard`); a project's mode is also set with `PATCH /api/projects/{id}/mode` and applies from
+the next round. A role may override it with its own `access` (`ask-first`, `standard`, `auto`
+or `read-only`), and the role's own setting wins.
+
+| Mode | Shell commands | File edits |
+| --- | --- | --- |
+| `ask-first` | None run on their own. **Nothing asks yet**: a command that would need an answer is refused. | Yes (not on Codex) |
+| `standard` | The built-in presets plus `--allow` | Yes |
+| `auto` | Any command except the never-allowed list | Yes |
+| `read-only` (a role) | Inspection only (`ls`, `grep`, `git diff`, ...) | No on Claude Code and Codex; **yes on kopicode** |
+
+The never-allowed list applies in every mode: `sudo`, a forced `git push`, a download piped into
+a shell, and a write outside `--root` (`rm`, `mv`, `cp`, `tee`, `>` and similar aimed at an
+absolute, `~`, `..` or variable path). It reads the command line as text, so it is a floor,
+not containment.
+
+How each agent receives a mode: kopicode answers every command live, so Auto allows
+everything that is not never-allowed and needs `kopicode serve` (not the `print` transport).
+Claude Code gets tool allow and deny patterns; in Auto it also refuses `curl` and `wget`.
+Codex only has two sandboxes, read-only and workspace-write, so Ask first and read-only both
+mean read-only there and Auto is the same as Standard.

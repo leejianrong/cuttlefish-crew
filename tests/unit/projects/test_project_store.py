@@ -336,3 +336,32 @@ def test_a_projects_db_predating_the_backend_column_is_migrated_in_place(tmp_pat
     store = ProjectStore.open(path)
     assert store.get("p").backend is None
     store.close()
+
+
+def test_a_project_defaults_to_standard_mode_and_round_trips_another(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    plain = store.register(name="a", root=str(tmp_path / "a"))
+    auto = store.register(name="b", root=str(tmp_path / "b"), mode="auto")
+    assert plain.mode == "standard"
+    assert store.get(auto.id).mode == "auto"
+    store.close()
+
+
+def test_update_mode_changes_only_the_mode(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="a", root=str(tmp_path / "a"), allow=(("go", "test"),))
+    updated = store.update_mode(project.id, "ask-first")
+    assert updated.mode == "ask-first"
+    assert updated.allow == (("go", "test"),)
+    store.close()
+
+
+def test_a_role_access_round_trips(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(
+        name="a",
+        root=str(tmp_path / "a"),
+        roles=(RoleDefinition(name="r", access="read-only"), RoleDefinition(name="b")),
+    )
+    assert [r.access for r in store.get(project.id).roles] == ["read-only", None]
+    store.close()

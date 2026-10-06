@@ -88,3 +88,16 @@ async def test_a_sandbox_that_cannot_stream_keeps_the_run_print_path(
             secrets={},
             sandbox_provider=_ExecOnlyProvider(),  # type: ignore[arg-type]
         )
+
+
+async def test_auto_mode_needs_the_serve_transport(tmp_path: Path) -> None:
+    backend = KopicodeBackend("kopicode-binary-that-does-not-exist", transport="print")
+    with pytest.raises(DelegationError, match="serve transport"):
+        await backend.delegate(
+            task_text="t",
+            root=str(tmp_path),
+            allow=[],
+            secrets={},
+            sandbox_provider=None,
+            mode="auto",
+        )

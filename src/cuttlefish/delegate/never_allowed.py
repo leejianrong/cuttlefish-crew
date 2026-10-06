@@ -32,6 +32,32 @@ _PIPE_TO_SHELL = re.compile(
     r"\b(?:curl|wget|fetch)\b[^|;&\n]*\|\s*(?:sudo\s+)?(?:env\s+)?(?:ba|z|da|k)?sh\b"
 )
 
+#: Commands that change or delete the paths they are given. In ``auto`` mode no allow list
+#: stands between the model and these, so a path that leaves the project root is refused
+#: here. Best effort on a command line read as text, not containment: a script, an alias or a
+#: path built at run time can still write elsewhere, and any ``$`` or backtick on the line
+#: makes the target unknowable, so a write command on such a line is refused.
+_WRITES_EVERY_ARG = frozenset(
+    {
+        "rm",
+        "rmdir",
+        "unlink",
+        "shred",
+        "touch",
+        "mkdir",
+        "chmod",
+        "chown",
+        "chgrp",
+        "truncate",
+        "tee",
+    }
+)
+#: Commands whose last argument is the destination; earlier arguments are only read.
+_WRITES_LAST_ARG = frozenset({"cp", "mv", "ln", "install"})
+
+#: ``> target`` and ``>> target`` (``2>&1`` and friends are not file targets).
+_REDIRECT = re.compile(r">>?\s*(\S+)")
+
 #: Flags that turn an otherwise ordinary command into one that writes, deletes or runs
 #: something else. Keyed by the command's own leading words. Applied to every allow rule,
 #: declared or built in, because the preset's ``find`` and ``rg`` are only safe without them.
@@ -44,10 +70,34 @@ UNSAFE_FLAGS: Mapping[tuple[str, ...], frozenset[str]] = {
 }
 
 
+def _leaves_root(argument: str) -> bool:
+    """Whether a path argument reaches outside the working tree: absolute, home-relative,
+    with a ``..`` segment, or built from a variable or substitution."""
+    path = argument.strip("'\"")
+    return path.startswith(("/", "~")) or ".." in path.split("/") or "$" in path or "`" in path
+
+
+def _writes_outside_root(words: list[str], *, dynamic: bool) -> bool:
+    command = words[0]
+    arguments = [word for word in words[1:] if not word.startswith("-")]
+    if command in _WRITES_EVERY_ARG:
+        return dynamic or any(_leaves_root(argument) for argument in arguments)
+    if command in _WRITES_LAST_ARG:
+        return bool(arguments) and (dynamic or _leaves_root(arguments[-1]))
+    if command == "dd":
+        return any(word.startswith("of=") and _leaves_root(word[3:]) for word in words[1:])
+    return False
+
+
 def never_allowed_reason(line: str) -> str | None:
     """Why `line` may never be approved, or ``None`` when no never-allowed rule applies."""
     if _PIPE_TO_SHELL.search(line):
         return "never_allowed:pipe_to_shell"
+    for match in _REDIRECT.finditer(line):
+        target = match.group(1)
+        if not target.startswith("&") and target != "/dev/null" and _leaves_root(target):
+            return "never_allowed:write_outside_root"
+    dynamic = "$" in line or "`" in line
     for segment in _SEGMENT_SPLIT.split(line):
         words = segment.split()
         if not words:
@@ -58,6 +108,8 @@ def never_allowed_reason(line: str) -> str | None:
             args = words[words.index("push", 1) + 1 :]
             if any(arg in _FORCE_PUSH_FLAGS or arg.startswith(("--force", "+")) for arg in args):
                 return "never_allowed:force_push"
+        if _writes_outside_root(words, dynamic=dynamic):
+            return "never_allowed:write_outside_root"
     return None
 
 

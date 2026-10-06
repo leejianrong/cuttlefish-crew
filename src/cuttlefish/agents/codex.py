@@ -61,6 +61,7 @@ class CodexBackend:
         allow: list[list[str]] | None,
         secrets: Mapping[str, str],
         sandbox_provider: SandboxProvider | None,
+        mode: str = "standard",
     ) -> DelegationOutcome:
         if sandbox_provider is None:
             return await run_codex(
@@ -68,10 +69,16 @@ class CodexBackend:
                 task_text=task_text,
                 root=root,
                 allow=allow,
+                mode=mode,
                 env=_credential_envs(secrets),
             )
         return await self._delegate_inside_sandbox(
-            sandbox_provider, task_text=task_text, root=root, allow=allow, secrets=secrets
+            sandbox_provider,
+            task_text=task_text,
+            root=root,
+            allow=allow,
+            mode=mode,
+            secrets=secrets,
         )
 
     async def _delegate_inside_sandbox(
@@ -81,6 +88,7 @@ class CodexBackend:
         task_text: str,
         root: str,
         allow: list[list[str]] | None,
+        mode: str,
         secrets: Mapping[str, str],
     ) -> DelegationOutcome:
         resolved_binary = shutil.which(self._binary)
@@ -101,6 +109,7 @@ class CodexBackend:
                 task_text=task_text,
                 root=root,
                 allow=allow,
+                mode=mode,
             )
         finally:
             await provider.destroy(handle)

@@ -35,6 +35,10 @@ class AgentBackend(Protocol):
     forwarded ambiently. A caller resolves these plus any explicitly declared
     names from :class:`~cuttlefish.secrets.store.SecretsStore` and passes the
     result as ``secrets``.
+
+    ``mode`` (V4-C, ADR-0025) is ``"standard"``, ``"auto"`` or ``"read-only"``; the caller
+    passes it only when it is not ``"standard"``. ``allow`` already carries the rest (an
+    empty list is ask-first). Each backend maps ``mode`` onto its own controls.
     """
 
     NAME: ClassVar[str]
@@ -48,4 +52,5 @@ class AgentBackend(Protocol):
         allow: list[list[str]] | None,
         secrets: Mapping[str, str],
         sandbox_provider: SandboxProvider | None,
+        mode: str = "standard",
     ) -> DelegationOutcome: ...

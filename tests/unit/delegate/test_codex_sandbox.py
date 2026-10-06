@@ -101,3 +101,13 @@ async def test_run_codex_in_sandbox_raises_on_output_with_no_terminal_event() ->
             task_text="add a .gitignore entry",
             root="/scratch",
         )
+
+
+def test_a_read_only_role_gets_the_read_only_sandbox_even_with_commands() -> None:
+    argv = build_codex_argv("codex", "t", allow=[["ls"]], mode="read-only")
+    assert argv[argv.index("--sandbox") + 1] == "read-only"
+
+
+def test_auto_mode_gets_workspace_write() -> None:
+    argv = build_codex_argv("codex", "t", allow=[["ls"]], mode="auto")
+    assert argv[argv.index("--sandbox") + 1] == "workspace-write"
