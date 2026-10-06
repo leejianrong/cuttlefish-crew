@@ -319,7 +319,10 @@ checked against kopicode's source rather than a live run.
   with `…`; then `ask_requested` and `ask_answered` (`source: "policy"`, `reason: "refused"`
   when nobody was present). So the dashboard's JSON parse of `detail` is right for a short
   question and wrong for a long one; the fix (#79) reads the question out of the cut text.
-- **Not checked live** (no model credential was available): that a held request survives past 60
-  seconds under `--consent-timeout`, and the `permission_decided` `source: remote` events for
-  answers given through the broker. Both are covered by `requires_live_credential` tests
-  (`test_kopicode_serve_needs_you_live.py`) that run when a key is present.
+- **Checked live (same day, kopicode v0.3.0, a real model):** a held request survives past
+  kopicode's default 60 seconds under `--consent-timeout`: one answered after 65 seconds was
+  honoured. A real model's off-list `run_shell` was held, one command allowed once and one
+  denied through the broker, and both reached kopicode's own tool-call statuses (`ok` and
+  `denied`); the model carried on to the second command after the first answer
+  (`test_kopicode_serve_needs_you_live.py`, both tests passed). Still not checked: what a model
+  does after an expiry or an Always, and the `ask` event shape, which is read from source only.
