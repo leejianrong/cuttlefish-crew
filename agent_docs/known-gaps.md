@@ -41,6 +41,11 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - `ClaudeCodeBackend`'s sandboxed path only works for an operator
   authenticated via `ANTHROPIC_API_KEY`, not Claude Code's own OAuth login.
   `docs/QUESTIONS.md` Q37.
+- A `read-only` role (reviewer, planner; ADR-0024) gets an inspection-only shell but
+  can still edit files: kopicode's gate treats in-root edits as implicit, Claude Code
+  runs under `acceptEdits`, and Codex's sandbox is chosen from the allow list, not
+  the role. Closing this is the permission-modes slice (V4-C); until then the
+  role's prompt is the only thing stopping an edit.
 - Its declared-allowlist-to-`--allowedTools` mapping is an honest
   approximation (the default presets pass through it too, so `find` and `rg`
   there are not protected from `-delete`/`--pre` the way kopicode's consent

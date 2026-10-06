@@ -98,6 +98,9 @@ PRESETS: Mapping[str, tuple[Command, ...]] = {
     ),
 }
 
+#: What a read-only role may run: look, never change. Declared commands do not widen it.
+READ_ONLY_PRESETS: tuple[str, ...] = ("inspect", "git-read")
+
 #: What a call that declares nothing gets.
 DEFAULT_PRESETS: tuple[str, ...] = (
     "inspect",
@@ -115,6 +118,11 @@ def preset_allow(names: Sequence[str]) -> list[list[str]]:
     for name in names:
         commands.extend(list(command) for command in PRESETS[name])
     return commands
+
+
+def read_only_allow() -> list[list[str]]:
+    """The shell a read-only role gets (``READ_ONLY_PRESETS``), whatever else is declared."""
+    return preset_allow(READ_ONLY_PRESETS)
 
 
 def resolve_allow(declared: Sequence[Sequence[str]] | None = None) -> list[list[str]]:

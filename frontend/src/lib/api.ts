@@ -9,6 +9,10 @@ export interface RoleDefinition {
   persona: string;
   /** KAN-1809: this role's own agent backend; null/absent uses the project's. */
   backend?: string | null;
+  /** V4-B: "read-only" restricts the role's shell to inspection; "standard" is the project's. */
+  access?: "standard" | "read-only";
+  /** V4-B: true while a built-in role still carries its built-in prompt. Read-only. */
+  default_prompt?: boolean;
 }
 
 /** One role's cumulative usage so far (KAN-1712/ADR-0017), derived from the
@@ -164,7 +168,9 @@ export class FleetClient {
     root: string;
     secrets_scope?: string;
     backend?: string | null;
-    roles: RoleDefinition[];
+    /** Omit both `roles` and `template` for the default team (builder + reviewer). */
+    roles?: RoleDefinition[];
+    template?: string;
     allow?: string[][];
     max_tokens?: number | null;
     max_cost_usd?: number | null;

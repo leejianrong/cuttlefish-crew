@@ -136,3 +136,40 @@ async def test_an_unknown_configured_backend_raises_rather_than_silently_falling
         await delegate_to_agent_backend("add a .gitignore entry", str(tmp_path))
 
     store.close()
+
+
+class _RecordingBackend:
+    CREDENTIAL_ENV_VARS: tuple[str, ...] = ()
+
+    def __init__(self) -> None:
+        self.allow: list[list[str]] | None = None
+
+    async def delegate(self, *, allow: list[list[str]] | None, **_: object) -> object:
+        self.allow = allow
+        return object()
+
+
+@pytest.mark.parametrize(
+    ("access", "expect_write"),
+    [(None, True), ("read-only", False)],
+)
+async def test_access_decides_which_shell_the_backend_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, access: str | None, expect_write: bool
+) -> None:
+    backend = _RecordingBackend()
+    monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary="kopicode"
+        )
+    )
+
+    kwargs = {"access": access} if access else {}
+    await delegate_to_agent_backend("t", str(tmp_path), allow=[["go", "test"]], **kwargs)
+
+    assert backend.allow is not None
+    assert (["git", "add"] in backend.allow) is expect_write
+    assert (["go", "test"] in backend.allow) is expect_write  # read-only ignores declarations
+    assert ["git", "status"] in backend.allow  # everyone can look
+    store.close()

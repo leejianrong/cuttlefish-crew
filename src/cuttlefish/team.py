@@ -66,6 +66,7 @@ class RoleInput(TypedDict):
     allow: NotRequired[list[list[str]]]
     secret_names: NotRequired[list[str]]
     backend: NotRequired[str]
+    access: NotRequired[str]
 
 
 class TeamInput(TypedDict):
@@ -121,10 +122,16 @@ def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[st
 
 
 def _backend_kwargs(role: RoleInput) -> dict[str, str]:
-    """A role's backend override as call kwargs -- empty when it names none, so an
-    unchanged role's task arguments stay byte-identical (replay-safe)."""
+    """A role's backend and access overrides as call kwargs -- empty when it sets
+    neither, so an unchanged role's task arguments stay byte-identical (replay-safe)."""
+    kwargs: dict[str, str] = {}
     backend = role.get("backend")
-    return {"agent_backend": backend} if backend else {}
+    if backend:
+        kwargs["agent_backend"] = backend
+    access = role.get("access")
+    if access:
+        kwargs["access"] = access
+    return kwargs
 
 
 async def _dispatch_round(

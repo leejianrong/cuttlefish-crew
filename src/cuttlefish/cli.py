@@ -51,6 +51,7 @@ from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
 from cuttlefish.projects.store import Project, ProjectStore, RoleDefinition
+from cuttlefish.roles import BUILTIN_ROLES, UnknownTemplateError, role_definition, template_roles
 from cuttlefish.secrets.store import (
     SHARED_SCOPE,
     InvalidSecretsKeyError,
@@ -531,10 +532,18 @@ def _parse_role_definitions(
         if name in seen:
             raise ConfigError(f"--role name {name!r} was declared more than once")
         seen.add(name)
-        roles.append(RoleDefinition(name=name, persona=persona))
+        # A built-in name with no persona of its own is that built-in (V4-B).
+        roles.append(
+            role_definition(name)
+            if not persona and name in BUILTIN_ROLES
+            else RoleDefinition(name=name, persona=persona)
+        )
     backends = _parse_role_backends(role_backends, seen)
     return [
-        RoleDefinition(name=r.name, persona=r.persona, backend=backends.get(r.name)) for r in roles
+        RoleDefinition(
+            name=r.name, persona=r.persona, backend=backends.get(r.name), access=r.access
+        )
+        for r in roles
     ]
 
 
@@ -546,7 +555,13 @@ def _project_dict(project: Project) -> dict[str, Any]:
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
         "roles": [
-            {"name": r.name, "persona": r.persona, "backend": r.backend} for r in project.roles
+            {
+                "name": r.name,
+                "persona": r.persona,
+                "backend": r.backend,
+                "access": r.access or "standard",
+            }
+            for r in project.roles
         ],
         "last_team_id": project.last_team_id,
         "allow": [list(command) for command in project.allow],
@@ -600,13 +615,20 @@ def _projects(args: argparse.Namespace) -> int:
     try:
         if args.projects_command == "add":
             try:
-                roles = _parse_role_definitions(args.role, args.role_backend)
+                if args.template and args.role:
+                    raise ConfigError("--template and --role cannot be combined")
+                if args.template:
+                    roles = list(template_roles(args.template))
+                else:
+                    roles = _parse_role_definitions(args.role, args.role_backend) or list(
+                        template_roles()
+                    )
                 backend = (
                     validate_backend_name(args.backend, source="--backend")
                     if args.backend
                     else None
                 )
-            except ConfigError as exc:
+            except (ConfigError, UnknownTemplateError) as exc:
                 print(f"cuttlefish: {exc}", file=sys.stderr)
                 return EXIT_CONFIG_ERROR
             allow = tuple(tuple(command) for command in _parse_allow(args.allow))
@@ -998,12 +1020,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="This project's SecretsStore scope (ADR-0006). Default: --name.",
     )
     add_parser.add_argument(
+        "--template",
+        metavar="NAME",
+        help=(
+            "A built-in team: solo-builder, builder-reviewer or full-crew, each with "
+            "ready-made role prompts. Default when no --role is given: builder-reviewer."
+        ),
+    )
+    add_parser.add_argument(
         "--role",
         action="append",
         metavar="NAME[:PERSONA]",
         help=(
             "One role: a name, optionally followed by ':' and a persistent "
-            "persona/voice (Q31). Repeatable."
+            "persona/voice (Q31). A built-in name (builder, reviewer, tester, planner, "
+            "docs-writer) with no persona gets its built-in prompt. Repeatable."
         ),
     )
     add_parser.add_argument(
