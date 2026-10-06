@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import TaskSubmitted, TeamResumed
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RunningTeam, _build_role_inputs
@@ -253,3 +254,20 @@ def test_an_auto_project_gives_every_role_auto_except_where_it_overrides(tmp_pat
         None,  # an explicit standard override is the default, so nothing is passed
         "auto",
     ]
+
+
+def test_default_presets_pass_nothing_and_a_custom_set_is_passed_to_every_role(
+    tmp_path: Path,
+) -> None:
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
+    plain = daemon.projects.register(name="a", root=str(tmp_path / "a"))
+    same = daemon.projects.register(
+        name="b", root=str(tmp_path / "b"), presets=tuple(DEFAULT_PRESETS)
+    )
+    custom = daemon.projects.register(
+        name="c", root=str(tmp_path / "c"), presets=("inspect", "containers")
+    )
+    roles = [{"name": "builder", "text": "x"}]
+    assert "presets" not in _build_role_inputs(plain, roles)[0]
+    assert "presets" not in _build_role_inputs(same, roles)[0]
+    assert _build_role_inputs(custom, roles)[0]["presets"] == ["inspect", "containers"]

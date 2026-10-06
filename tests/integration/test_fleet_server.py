@@ -554,3 +554,53 @@ def test_the_folder_routes_need_the_token(tmp_path: Path) -> None:
 def test_a_daemon_with_no_folder_browser_answers_404(client: TestClient) -> None:
     assert client.get("/api/fs").status_code == 404
     assert client.get("/api/fs/inspect", params={"path": "/"}).status_code == 404
+
+
+def test_the_permissions_catalogue_lists_modes_presets_blocked_and_backends(
+    client: TestClient,
+) -> None:
+    body = client.get("/api/permissions").json()
+    assert [m["name"] for m in body["modes"]] == ["ask-first", "standard", "auto"]
+    presets = {p["name"]: p for p in body["presets"]}
+    assert presets["python"]["default"] is True and presets["containers"]["default"] is False
+    assert "uv run pytest" in presets["python"]["commands"]
+    assert any("sudo" in item["label"] for item in body["never_allowed"])
+    assert [b["name"] for b in body["backends"]] == ["kopicode", "claude-code", "codex"]
+
+
+def test_a_project_reports_the_default_presets_until_it_chooses_others(
+    client: TestClient, tmp_path: Path
+) -> None:
+    created = client.post("/api/projects", json={"name": "a", "root": str(tmp_path / "a")}).json()
+    assert "python" in created["presets"] and "containers" not in created["presets"]
+    patched = client.patch(
+        f"/api/projects/{created['id']}/presets", json={"presets": ["containers", "inspect"]}
+    ).json()
+    assert patched["presets"] == ["inspect", "containers"]  # catalogue order
+    assert client.get(f"/api/projects/{created['id']}").json()["presets"] == [
+        "inspect",
+        "containers",
+    ]
+
+
+def test_register_can_choose_presets_and_a_bad_name_is_400(
+    client: TestClient, tmp_path: Path
+) -> None:
+    ok = client.post(
+        "/api/projects",
+        json={"name": "a", "root": str(tmp_path / "a"), "presets": ["inspect"]},
+    ).json()
+    assert ok["presets"] == ["inspect"]
+    bad = client.post(
+        "/api/projects", json={"name": "b", "root": str(tmp_path / "b"), "presets": ["nope"]}
+    )
+    assert bad.status_code == 400 and "inspect" in bad.json()["detail"]
+
+
+def test_patching_presets_validates_and_404s(client: TestClient, tmp_path: Path) -> None:
+    created = client.post("/api/projects", json={"name": "a", "root": str(tmp_path / "a")}).json()
+    url = f"/api/projects/{created['id']}/presets"
+    assert client.patch(url, json={"presets": "inspect"}).status_code == 400
+    assert client.patch(url, json={"presets": ["nope"]}).status_code == 400
+    assert client.patch("/api/projects/nope/presets", json={"presets": []}).status_code == 404
+    assert client.patch(url, json={"presets": []}).json()["presets"] == []

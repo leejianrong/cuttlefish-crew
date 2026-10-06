@@ -3,7 +3,10 @@
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
   import OfficeScene from "./OfficeScene.svelte";
+  import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
+  import Tabs from "./Tabs.svelte";
+  import TeamTab from "./TeamTab.svelte";
 
   let {
     client,
@@ -17,6 +20,12 @@
   let startError = $state<string | null>(null);
   let taskTexts = $state<Record<string, string>>({});
   let requireApproval = $state(false);
+  let tab = $state<"overview" | "permissions" | "team">("overview");
+  const TABS = [
+    { id: "overview", label: "Overview" },
+    { id: "permissions", label: "Permissions" },
+    { id: "team", label: "Team" },
+  ];
 
   // ADR-0010/KAN-1705: continuity, made visible rather than just trusted -- a
   // per-role timeline of handover checkpoints (RoleSteerCard renders each
@@ -72,7 +81,7 @@
   }
 </script>
 
-<div class="page">
+<div class="page" class:wide={tab !== "overview"}>
   <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Projects</button>
 
   {#if project}
@@ -80,6 +89,20 @@
       <h1 class="headline-small">{project.name}</h1>
       <p class="root mono">{project.root}</p>
     </header>
+
+    <Tabs
+      tabs={TABS}
+      active={tab}
+      label="Project"
+      onSelect={(id) => (tab = id as typeof tab)}
+    />
+
+    <div id="panel-{tab}" role="tabpanel" aria-labelledby="tab-{tab}">
+    {#if tab === "permissions"}
+      <PermissionsTab {client} {project} onChanged={refresh} />
+    {:else if tab === "team"}
+      <TeamTab {client} {project} onChanged={refresh} />
+    {:else}
 
     {#if resumedEvents.length > 0}
       <p class="resumed-banner">
@@ -152,10 +175,16 @@
       <h2>Recent activity</h2>
       <EventLog {events} />
     </section>
+    {/if}
+    </div>
   {/if}
 </div>
 
 <style>
+  .page.wide {
+    max-width: 72rem;
+  }
+
   .page {
     max-width: 56rem;
     margin: 0 auto;

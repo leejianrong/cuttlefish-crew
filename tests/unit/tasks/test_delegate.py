@@ -205,3 +205,24 @@ async def test_auto_gets_the_presets_so_a_list_driven_backend_still_has_one_and_
     backend = await _delegate_with(tmp_path, monkeypatch, "auto")
     assert backend.allow
     assert backend.mode == "auto"
+
+
+async def test_chosen_presets_reach_the_backend_in_place_of_the_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = _RecordingBackend()
+    monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary="kopicode"
+        )
+    )
+    await delegate_to_agent_backend(
+        "t", str(tmp_path), allow=[["go", "test"]], presets=["inspect", "containers"]
+    )
+    store.close()
+    assert backend.allow is not None
+    assert ["ls"] in backend.allow and ["docker", "compose", "up"] in backend.allow
+    assert ["go", "test"] in backend.allow
+    assert ["uv", "run", "pytest"] not in backend.allow

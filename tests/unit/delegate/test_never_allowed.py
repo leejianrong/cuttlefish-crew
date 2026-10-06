@@ -107,3 +107,11 @@ def test_writes_outside_the_root_are_never_allowed(line: str) -> None:
 )
 def test_writes_inside_the_root_and_reads_anywhere_are_fine(line: str) -> None:
     assert never_allowed_reason(line) is None
+
+
+def test_the_summary_the_dashboard_shows_covers_each_rule_family() -> None:
+    from cuttlefish.delegate.never_allowed import NEVER_ALLOWED_SUMMARY
+
+    labels = " ".join(label for label, _ in NEVER_ALLOWED_SUMMARY)
+    assert all(word in labels for word in ("sudo", "--force", "curl", "rm"))
+    assert all(summary for _, summary in NEVER_ALLOWED_SUMMARY)

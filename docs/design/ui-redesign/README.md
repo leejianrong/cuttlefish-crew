@@ -69,6 +69,15 @@ and this folder disagree after a slice lands, update this folder.
   no "New folder" button; "Recent" lists the folders of already-registered projects; the
   summary column stacks below the form under 900px; Ask first's description says plainly that
   nothing asks yet (ADR-0025). Registering opens the new project's page.
+- **V4-F (Permissions and Team tabs) shipped.** A project page now has Overview, Permissions
+  and Team tabs; the **Roles** rail destination is a read-only library. Screenshots in
+  `shipped/v4f-*`. Differences from the mockups: the roles editor lives on the project (roles
+  belong to a project, so editing a "global" role would be a fiction), and the library only
+  shows the built-ins; the "Always blocked", "How each agent receives this" and "Role overrides"
+  panels are driven by `GET /api/permissions`, and the role overrides panel is read-only (edit
+  on Team); Save and Discard are explicit; a running team shows that changes apply at the next
+  start. "Tester: Standard + containers" per-role command groups are not built: command groups
+  are per project.
 - Fonts are self-hosted (`@fontsource-variable/*`), so the dashboard makes no external request.
 - The nav rail lists only screens that exist (`frontend/src/lib/nav.ts`); Fleet and Roles
   join it with V4-H and V4-F. The rail becomes a bottom bar under 640px. A theme button

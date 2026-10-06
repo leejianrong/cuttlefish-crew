@@ -32,6 +32,7 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import runtime
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
+from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import TeamResumed
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
@@ -105,6 +106,8 @@ def _build_role_inputs(project: Project, roles: list[RoleStart]) -> list[RoleInp
         access = effective_access(project.mode, role_def.access if role_def else None)
         if access != DEFAULT_MODE:
             role_input["access"] = access
+        if project.presets is not None and list(project.presets) != list(DEFAULT_PRESETS):
+            role_input["presets"] = list(project.presets)
         inputs.append(role_input)
     return inputs
 
@@ -122,6 +125,7 @@ def _to_persisted_roles(role_inputs: list[RoleInput]) -> tuple[PersistedRole, ..
             allow=tuple(tuple(command) for command in role.get("allow", [])),
             backend=role.get("backend"),
             access=role.get("access"),
+            presets=tuple(role["presets"]) if "presets" in role else None,
         )
         for role in role_inputs
     )
@@ -139,6 +143,8 @@ def _persisted_roles_to_inputs(roles: tuple[PersistedRole, ...]) -> list[RoleInp
             role_input["backend"] = role.backend
         if role.access:
             role_input["access"] = role.access
+        if role.presets is not None:
+            role_input["presets"] = list(role.presets)
         inputs.append(role_input)
     return inputs
 
