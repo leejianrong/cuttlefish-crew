@@ -137,5 +137,13 @@ describe("Needs-you events", () => {
     );
     const plain = view("ToolCallRecorded", { tool: "ask", status: "ok", detail: "which limit?" });
     expect(summarize(plain)).toBe("Asked a question nobody could answer: which limit?");
+    const cut = view("ToolCallRecorded", {
+      tool: "ask",
+      status: "ok",
+      detail: '{"question":"Which of the two retry settings should win when they disagree, the …',
+    });
+    expect(summarize(cut)).toBe(
+      "Asked a question nobody could answer: Which of the two retry settings should win when they disagree, the …",
+    );
   });
 });

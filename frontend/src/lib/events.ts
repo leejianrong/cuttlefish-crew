@@ -105,16 +105,30 @@ export function summarize(event: EpisodicEventView): string {
 /** kopicode's `ask` tool: the model put a question to a person, but kopicode has no way to hand
  * it to us mid-run (kopicode#173), so it got the fixed "nobody is here" reply. Say that plainly. */
 function askSummary(detail: string): string {
-  let question = detail;
+  return `Asked a question nobody could answer: ${questionOf(detail)}`;
+}
+
+/** kopicode's `detail` is the call's raw arguments, whitespace-collapsed and cut at 120
+ * characters with a trailing "…", so a longer call is no longer valid JSON. Read the question out
+ * of the cut text rather than showing the JSON. */
+function questionOf(detail: string): string {
   try {
     const parsed: unknown = JSON.parse(detail);
     if (parsed && typeof parsed === "object" && "question" in parsed) {
-      question = String((parsed as { question: unknown }).question);
+      return String((parsed as { question: unknown }).question);
     }
   } catch {
-    // not JSON: show the text as it came
+    // not whole JSON: fall through
   }
-  return `Asked a question nobody could answer: ${question}`;
+  const cut = /^\{\s*"question"\s*:\s*"((?:[^"\\]|\\.)*)("?)/.exec(detail);
+  if (!cut) return detail;
+  let text = cut[1];
+  try {
+    text = JSON.parse(`"${text}"`) as string;
+  } catch {
+    // a cut escape sequence: keep the raw text
+  }
+  return cut[2] ? text : text.replace(/…$/, "") + "…";
 }
 
 function capitalise(text: string): string {
