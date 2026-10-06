@@ -1,7 +1,8 @@
 // Plain-language labels for the activity log. The journal's event names and rule ids are the
 // daemon's vocabulary; the person reading the log should not need them.
 
-import type { EpisodicEventView } from "./api";
+import type { EpisodicEventView, RequestResolution } from "./api";
+import { OUTCOMES } from "./requests";
 
 const LABELS: Record<string, string> = {
   TaskSubmitted: "Task",
@@ -16,6 +17,8 @@ const LABELS: Record<string, string> = {
   TeamResumed: "Resumed",
   ToolCallRecorded: "Tool",
   ConsentDecided: "Command",
+  RequestRaised: "Needs you",
+  RequestResolved: "Answered",
 };
 
 export function eventLabel(type: string): string {
@@ -83,7 +86,11 @@ export function summarize(event: EpisodicEventView): string {
     case "TeamResumed":
       return "A daemon restart found this run still in progress, and it picked up where it left off.";
     case "ToolCallRecorded":
-      return `${p.tool} (${p.status}): ${p.detail}`;
+      return p.tool === "ask" ? askSummary(String(p.detail)) : `${p.tool} (${p.status}): ${p.detail}`;
+    case "RequestRaised":
+      return `${p.title}: ${commandText(String(p.detail))}`;
+    case "RequestResolved":
+      return OUTCOMES[p.resolution as RequestResolution] ?? String(p.resolution);
     case "ConsentDecided": {
       const what = p.kind === "run_shell" ? commandText(String(p.detail)) : String(p.detail);
       return p.answer === "deny"
@@ -93,6 +100,21 @@ export function summarize(event: EpisodicEventView): string {
     default:
       return JSON.stringify(p);
   }
+}
+
+/** kopicode's `ask` tool: the model put a question to a person, but kopicode has no way to hand
+ * it to us mid-run (kopicode#173), so it got the fixed "nobody is here" reply. Say that plainly. */
+function askSummary(detail: string): string {
+  let question = detail;
+  try {
+    const parsed: unknown = JSON.parse(detail);
+    if (parsed && typeof parsed === "object" && "question" in parsed) {
+      question = String((parsed as { question: unknown }).question);
+    }
+  } catch {
+    // not JSON: show the text as it came
+  }
+  return `Asked a question nobody could answer: ${question}`;
 }
 
 function capitalise(text: string): string {

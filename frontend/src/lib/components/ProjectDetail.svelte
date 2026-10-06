@@ -1,8 +1,9 @@
 <script lang="ts">
-  import type { EpisodicEventView, FleetClient, ProjectSummary } from "../api";
+  import type { EpisodicEventView, FleetClient, NeedsYouRequest, ProjectSummary } from "../api";
   import { modeLabel } from "../team";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
+  import NeedsYouTab from "./NeedsYouTab.svelte";
   import OfficeScene from "./OfficeScene.svelte";
   import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
@@ -15,10 +16,13 @@
     onBack,
   }: { client: FleetClient; projectId: string; onBack: () => void } = $props();
 
-  type TabId = "overview" | "permissions" | "team";
+  type TabId = "overview" | "needs-you" | "permissions" | "team";
 
   let project = $state<ProjectSummary | null>(null);
   let events = $state<EpisodicEventView[]>([]);
+  let pending = $state<NeedsYouRequest[]>([]);
+  let resolved = $state<NeedsYouRequest[]>([]);
+  let requestsFetchedAt = $state(Date.now());
   let unreachable = $state(false);
   let starting = $state(false);
   let startError = $state<string | null>(null);
@@ -28,11 +32,12 @@
   let stopping = $state(false);
   let permissionsDirty = $state(false);
   let tab = $state<TabId>("overview");
-  const TABS = [
+  const TABS = $derived([
     { id: "overview", label: "Overview" },
+    { id: "needs-you", label: "Needs you", badge: pending.length },
     { id: "permissions", label: "Permissions" },
     { id: "team", label: "Team" },
-  ];
+  ]);
 
   // A starting point for a blank task box; picking one fills the first role's task.
   const EXAMPLES = [
@@ -69,6 +74,10 @@
     try {
       project = await client.getProject(projectId);
       events = (await client.getEvents(projectId)).events;
+      const requests = await client.listProjectRequests(projectId);
+      pending = requests.pending;
+      resolved = requests.resolved;
+      requestsFetchedAt = Date.now();
       unreachable = false;
     } catch {
       unreachable = true;
@@ -258,6 +267,17 @@
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>
         <EventLog {events} onOpenPermissions={() => (tab = "permissions")} />
       </section>
+    </div>
+
+    <div id="panel-needs-you" role="tabpanel" aria-labelledby="tab-needs-you" hidden={tab !== "needs-you"}>
+      <NeedsYouTab
+        {client}
+        {project}
+        {pending}
+        {resolved}
+        fetchedAt={requestsFetchedAt}
+        onAnswered={refresh}
+      />
     </div>
 
     <div id="panel-permissions" role="tabpanel" aria-labelledby="tab-permissions" hidden={tab !== "permissions"}>

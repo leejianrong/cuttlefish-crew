@@ -44,6 +44,8 @@ Codex has one coarse sandbox dial (ADR-0018).
 
 ## Consequences
 
+- *Amended by ADR-0028:* on kopicode, Ask first and Standard now ask (the text below is what
+  was true when this was written). Claude Code and Codex still refuse.
 - Ask first does not ask yet. Until V4-H a command that would need an answer is refused, and
   the dashboard must say so rather than imply a prompt.
 - Auto on Claude Code is crude (no downloads at all) and its deny-beats-allow behaviour is not

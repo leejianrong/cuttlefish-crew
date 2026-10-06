@@ -98,3 +98,44 @@ describe("formatWhen", () => {
     expect(formatWhen("2026-10-04T10:00:00", now)).toMatch(/Oct/);
   });
 });
+
+describe("Needs-you events", () => {
+  const at = "2026-10-06T10:00:00+00:00";
+  const view = (event_type: string, payload: Record<string, unknown>) => ({
+    seq: 1,
+    ts: at,
+    event_type,
+    payload,
+  });
+
+  it("labels and summarises a raised request and how it ended", () => {
+    const raised = view("RequestRaised", {
+      title: "builder wants to run a command that isn't on the list",
+      detail: "docker compose up -d postgres",
+    });
+    expect(eventLabel("RequestRaised")).toBe("Needs you");
+    expect(summarize(raised)).toBe(
+      "builder wants to run a command that isn't on the list: docker compose up -d postgres",
+    );
+    expect(eventLabel("RequestResolved")).toBe("Answered");
+    expect(summarize(view("RequestResolved", { resolution: "expired" }))).toBe(
+      "Denied: no answer in time",
+    );
+    expect(summarize(view("RequestResolved", { resolution: "allowed_once" }))).toBe(
+      "Allowed once",
+    );
+  });
+
+  it("says a kopicode ask call could not be answered", () => {
+    const ask = view("ToolCallRecorded", {
+      tool: "ask",
+      status: "ok",
+      detail: '{"question":"Per request or per session?"}',
+    });
+    expect(summarize(ask)).toBe(
+      "Asked a question nobody could answer: Per request or per session?",
+    );
+    const plain = view("ToolCallRecorded", { tool: "ask", status: "ok", detail: "which limit?" });
+    expect(summarize(plain)).toBe("Asked a question nobody could answer: which limit?");
+  });
+});

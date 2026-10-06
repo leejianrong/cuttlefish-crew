@@ -129,6 +129,53 @@ export interface EpisodicEventView {
   payload: Record<string, unknown>;
 }
 
+/** What a person may answer a request with (ADR-0028). */
+export type RequestAnswer = "allow_once" | "allow_always" | "deny";
+
+export type RequestResolution =
+  | "allowed_once"
+  | "allowed_always"
+  | "denied"
+  | "expired"
+  | "cancelled"
+  | "abandoned";
+
+/** Something that needs a person: today a kopicode agent paused on a command (kind `permission`). */
+export interface NeedsYouRequest {
+  id: string;
+  kind: "permission" | "question" | "blocked";
+  /** `pending`, or how it ended. */
+  state: "pending" | RequestResolution;
+  title: string;
+  /** The command line or the question, already redacted. */
+  detail: string;
+  why: string;
+  answers: string[];
+  suggested_rule: string[] | null;
+  role: string | null;
+  backend: string | null;
+  /** When an answer takes effect: `now` is a live prompt, the others are not. */
+  lands: "now" | "end_of_turn" | "next_round";
+  expires_at: string;
+  project_id: string;
+  project_name: string;
+  /** Pending only: seconds left when the daemon answered. */
+  expires_in_s?: number;
+  /** Resolved only. */
+  by?: "person" | "timeout" | "system";
+  rule?: string[] | null;
+  raised_at?: string;
+  resolved_at?: string | null;
+}
+
+export interface AnswerResult {
+  request_id: string;
+  resolution: RequestResolution;
+  by: "person" | "timeout" | "system";
+  rule: string[] | null;
+  already: boolean;
+}
+
 export class FleetApiError extends Error {
   constructor(
     public status: number,
@@ -353,6 +400,31 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/approve`, {
       method: "POST",
       body: JSON.stringify({ role, approved, comment: comment ?? null }),
+    });
+  }
+
+  /** Every pending request across the fleet (the rail badge and the Needs-you screen). */
+  listRequests(): Promise<{ requests: NeedsYouRequest[] }> {
+    return this.request("/api/requests");
+  }
+
+  listProjectRequests(
+    id: string,
+  ): Promise<{ pending: NeedsYouRequest[]; resolved: NeedsYouRequest[] }> {
+    return this.request(`/api/projects/${id}/requests`);
+  }
+
+  /** `rule` is only for `allow_always`: the start of the command, which the daemon checks. A 409
+   * means the request already ended another way; a 422's message says why a rule was refused. */
+  answerRequest(
+    projectId: string,
+    requestId: string,
+    answer: RequestAnswer,
+    rule?: string[],
+  ): Promise<AnswerResult> {
+    return this.request(`/api/projects/${projectId}/requests/${requestId}/answer`, {
+      method: "POST",
+      body: JSON.stringify(rule ? { answer, rule } : { answer }),
     });
   }
 }

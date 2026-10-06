@@ -147,8 +147,7 @@ Eight tools: `list_projects`, `get_project`, `register_project`,
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
-| `CUTTLEFISH_NEEDS_YOU` | unset | `1` lets a `cuttlefish serve` kopicode team stop and ask a person about a command nothing approves (ADR-0028). Experimental: nothing in the dashboard can answer until a later slice, so leave it unset for now. |
-| `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds a person has to answer such a request before it is denied (10 to 86400). A kopicode older than the `--consent-timeout` flag allows 45. |
+| `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. A kopicode without the `--consent-timeout` flag allows 45. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` are unavailable. |
 | `CUTTLEFISH_SERVE_PASSWORD` | unset | Required for any non-loopback `cuttlefish serve` bind. |
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |
@@ -222,8 +221,7 @@ the team starts**, not to a team already running.
 
 ### Needs-you requests over HTTP
 
-Experimental until the dashboard shows them (`CUTTLEFISH_NEEDS_YOU=1`, see the table above).
-When a kopicode agent asks to run a command nothing approves, the daemon holds it as a request:
+The dashboard shows these under **Needs you**. When a kopicode agent asks to run a command nothing approves, the daemon holds it as a request:
 
 - `GET /api/requests`: every pending request across the fleet, with the project, the role, the
   command, why it stopped, the answers allowed, a suggested "always" rule and `expires_in_s`.
@@ -246,8 +244,8 @@ or `read-only`), and the role's own setting wins.
 
 | Mode | Shell commands | File edits |
 | --- | --- | --- |
-| `ask-first` | None run on their own. **Nothing asks yet**: a command that would need an answer is refused. | Yes (not on Codex) |
-| `standard` | The built-in presets plus `--allow` | Yes |
+| `ask-first` | None run on their own. On kopicode a command stops the agent and appears under **Needs you** for you to allow or deny; Claude Code and Codex cannot pause, so there it is refused. | Yes (not on Codex) |
+| `standard` | The built-in presets plus `--allow`. On kopicode a command off that list appears under **Needs you** instead of being refused; elsewhere it is refused. | Yes |
 | `auto` | Any command except the never-allowed list | Yes |
 | `read-only` (a role) | Inspection only (`ls`, `grep`, `git diff`, ...) | No on Claude Code and Codex; **yes on kopicode** |
 
@@ -255,6 +253,8 @@ The never-allowed list applies in every mode: `sudo`, a forced `git push`, a dow
 a shell, and a write outside `--root` (`rm`, `mv`, `cp`, `tee`, `>` and similar aimed at an
 absolute, `~`, `..` or variable path). It reads the command line as text, so it is a floor,
 not containment.
+
+Only a team started from the dashboard (`cuttlefish serve`) can ask you: `run` and `run-team` have no inbox, so they refuse a command nothing approves.
 
 How each agent receives a mode: kopicode answers every command live, so Auto allows
 everything that is not never-allowed and needs `kopicode serve` (not the `print` transport).

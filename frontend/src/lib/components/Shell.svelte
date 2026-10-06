@@ -2,6 +2,7 @@
   import type { Snippet } from "svelte";
   import { applyTheme, nextTheme, saveTheme, type ThemePreference } from "../theme";
   import type { NavItem } from "../nav";
+  import { badgeText } from "../requests";
   import Icon from "./Icon.svelte";
 
   let {
@@ -51,9 +52,11 @@
           class="destination"
           class:active={item.id === active}
           aria-current={item.id === active ? "page" : undefined}
+          aria-label={item.badge ? `${item.label}, ${item.badge} waiting` : undefined}
           onclick={() => onNavigate(item.id)}
         >
           <span class="pill"><Icon name={item.icon} /></span>
+          {#if item.badge}<span class="badge" aria-hidden="true">{badgeText(item.badge)}</span>{/if}
           <span class="label">{item.label}</span>
         </button>
       {/each}
@@ -120,6 +123,27 @@
     color: var(--md-sys-color-on-surface-variant);
     font: 500 0.75rem/1rem var(--md-ref-typeface-plain);
     letter-spacing: 0.03125rem;
+  }
+
+  .destination {
+    position: relative;
+  }
+
+  /* Coral means "needs you" and only that (design README): the count of waiting requests. */
+  .badge {
+    position: absolute;
+    top: -4px;
+    left: calc(50% + 6px);
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: var(--md-sys-color-attention);
+    color: var(--md-sys-color-on-attention);
+    font: 700 0.6875rem/1 var(--md-ref-typeface-plain);
   }
 
   .pill {

@@ -96,9 +96,7 @@ async def test_a_team_asks_a_person_and_the_answer_reaches_the_agent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fake_kopicode(tmp_path, monkeypatch, _scenario())
-    daemon = FleetDaemon(
-        ProjectStore.open(tmp_path / "projects.db"), request_window_s=60, ask_people=True
-    )
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"), request_window_s=60)
     root = tmp_path / "alpha"
     root.mkdir()
     project = daemon.projects.register(name="alpha", root=str(root))
@@ -132,9 +130,7 @@ async def test_stopping_the_team_while_asked_cancels_the_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _fake_kopicode(tmp_path, monkeypatch, _scenario())
-    daemon = FleetDaemon(
-        ProjectStore.open(tmp_path / "projects.db"), request_window_s=60, ask_people=True
-    )
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"), request_window_s=60)
     root = tmp_path / "alpha"
     root.mkdir()
     project = daemon.projects.register(name="alpha", root=str(root))
@@ -179,23 +175,3 @@ def test_a_restart_abandons_what_a_dead_daemon_left_pending(tmp_path: Path) -> N
     }
     assert resolved == {"r1": "denied", "r2": "abandoned"}
     assert daemon.sweep_abandoned() == 0  # idempotent
-
-
-async def test_without_the_opt_in_nothing_is_asked(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _fake_kopicode(tmp_path, monkeypatch, _scenario())
-    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
-    root = tmp_path / "alpha"
-    root.mkdir()
-    project = daemon.projects.register(name="alpha", root=str(root))
-    team_id = await daemon.start(project.id, [{"name": "builder", "text": "bring the db up"}])
-    try:
-        await _until(
-            lambda: any(isinstance(p, DelegationCompleted) for p in _journal(project.root, team_id))
-        )
-    finally:
-        if daemon.is_running(project.id):
-            await daemon.stop(project.id)
-    assert daemon.requests.pending() == []
-    assert '"result": {"answer": "deny"}' in (tmp_path / "sent.jsonl").read_text()

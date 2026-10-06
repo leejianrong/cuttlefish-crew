@@ -3,9 +3,11 @@
 A project has one **mode**; a role may override it with an **access** level. The effective
 access of a delegation is the role's own, else the project's, else ``standard``.
 
-- ``ask-first``: files can be read and edited; no shell command runs on its own. Until live
-  prompts exist (V4-H) a command that would need an answer is refused.
-- ``standard``: the built-in dev presets plus anything declared (ADR-0023).
+- ``ask-first``: files can be read and edited; no shell command runs on its own. On kopicode
+  inside the fleet daemon a command stops the agent and waits for a person (ADR-0028); on
+  Claude Code and Codex, which cannot pause, it is refused.
+- ``standard``: the built-in dev presets plus anything declared (ADR-0023); on kopicode a
+  command off the list is asked about, as in ask-first.
 - ``auto``: any shell command runs, except the never-allowed list (``never_allowed``).
 - ``read-only`` (a role access, not a project mode): inspection-only shell, and no file
   edits where the backend can stop them.
@@ -33,12 +35,14 @@ def effective_access(project_mode: str | None, role_access: str | None) -> str:
 MODE_INFO: dict[str, tuple[str, str]] = {
     "ask-first": (
         "Ask first",
-        "Agents can read and edit files. No command runs on its own. Nothing asks you yet, "
-        "so a command that would need an answer is refused.",
+        "Agents can read and edit files. No command runs on its own. With kopicode, each "
+        "command stops the agent until you allow or deny it. Claude Code and Codex cannot "
+        "pause, so there a command is refused.",
     ),
     "standard": (
         "Standard",
-        "Everyday dev commands run on their own. Anything off the list is refused.",
+        "Everyday dev commands run on their own. With kopicode, anything off the list stops "
+        "the agent until you allow or deny it. Claude Code and Codex refuse it.",
     ),
     "auto": (
         "Auto",
@@ -51,21 +55,24 @@ MODE_INFO: dict[str, tuple[str, str]] = {
 BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
     (
         "kopicode",
-        "Decided live, no prompt yet",
-        "Exact rules, decided for every command. Auto allows everything that is not blocked. "
-        "A read-only role can still edit files: kopicode has no way to refuse an edit.",
+        "Asks you live",
+        "Every command is decided as it is asked. Ask first and Standard pause the agent on a "
+        "command that is not allowed and show it under Needs you; an unanswered one is denied "
+        "when its time runs out. Auto allows everything that is not blocked. A read-only role "
+        "can still edit files: kopicode has no way to refuse an edit.",
     ),
     (
         "claude-code",
         "Set for each run",
-        "Passed as allow and deny rules for each run. Auto refuses curl and wget outright. "
-        "Read-only roles cannot edit files.",
+        "Passed as allow and deny rules for each run. It cannot pause to ask, so a command "
+        "that needs an answer is refused. Auto refuses curl and wget outright. Read-only roles "
+        "cannot edit files.",
     ),
     (
         "codex",
         "Set for each run, coarse",
-        "Only two sandboxes exist: read-only, or edit the folder. Ask first and read-only roles "
-        "get the read-only one, and Auto is the same as Standard. Single commands cannot be "
-        "filtered.",
+        "Only two sandboxes exist: read-only, or edit the folder. It cannot pause to ask. Ask "
+        "first and read-only roles get the read-only one, and Auto is the same as Standard. "
+        "Single commands cannot be filtered.",
     ),
 )
