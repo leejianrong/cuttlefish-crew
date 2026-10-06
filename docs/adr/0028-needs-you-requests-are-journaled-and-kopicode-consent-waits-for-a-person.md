@@ -1,6 +1,6 @@
 # ADR-0028: "Needs you" requests are journaled records, and kopicode's consent request waits for a person
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-10-06
 - Deciders: Jian (docs/SLICES.md V4-H)
 
@@ -278,11 +278,11 @@ All under the existing token or session; answering grants shell execution, the s
 - A stricter way to bound a long wait (a per-project window setting) is not built; the
   environment variable covers the daemon as a whole.
 
-## Open questions for the maintainer
+## Decided questions
 
-1. **Does Standard ask, or only Ask first?** Recommended: both. Otherwise the demo
-   (a command off the list under Needs you) only works in a mode nobody starts in.
-2. **Default window**: 10 minutes. Shorter stalls less, longer survives a coffee.
-3. **Always allow is project-wide** (one list, visible on Permissions). Per-role would need
-   per-role commands, which ADR-0027 deferred.
-4. **File the `ask.request` issue on kopicode?**
+1. Standard asks as well as Ask first.
+2. The default window is 10 minutes (`CUTTLEFISH_REQUEST_WINDOW`).
+3. Always allow is project-wide.
+4. The upstream asks are filed on kopicode: #173 (`ask.request`), #174 (a release with
+   `--consent-timeout`), #175 (version and capability list), #176 (read-only session option),
+   #177 (structured command field), #178 (per-session consent timeout).
