@@ -104,6 +104,9 @@ class RoleDefinition:
     name: str
     persona: str = ""
     backend: str | None = None
+    #: ``"read-only"`` restricts the role's shell to inspection (roles.py, ADR-0024); ``None``
+    #: is the project's normal access.
+    access: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +124,7 @@ class PersistedRole:
     text: str
     allow: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     backend: str | None = None
+    access: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +172,12 @@ class ProjectNotFoundError(LookupError):
 def _encode_roles(roles: tuple[RoleDefinition, ...]) -> str:
     return json.dumps(
         [
-            {"name": r.name, "persona": r.persona, **({"backend": r.backend} if r.backend else {})}
+            {
+                "name": r.name,
+                "persona": r.persona,
+                **({"backend": r.backend} if r.backend else {}),
+                **({"access": r.access} if r.access else {}),
+            }
             for r in roles
         ]
     )
@@ -176,7 +185,12 @@ def _encode_roles(roles: tuple[RoleDefinition, ...]) -> str:
 
 def _decode_roles(raw: str) -> tuple[RoleDefinition, ...]:
     return tuple(
-        RoleDefinition(name=r["name"], persona=r.get("persona", ""), backend=r.get("backend"))
+        RoleDefinition(
+            name=r["name"],
+            persona=r.get("persona", ""),
+            backend=r.get("backend"),
+            access=r.get("access"),
+        )
         for r in json.loads(raw)
     )
 
@@ -197,6 +211,7 @@ def _encode_persisted_roles(roles: tuple[PersistedRole, ...]) -> str:
                 "text": r.text,
                 "allow": [list(c) for c in r.allow],
                 **({"backend": r.backend} if r.backend else {}),
+                **({"access": r.access} if r.access else {}),
             }
             for r in roles
         ]
@@ -210,6 +225,7 @@ def _decode_persisted_roles(raw: str) -> tuple[PersistedRole, ...]:
             text=r["text"],
             allow=tuple(tuple(c) for c in r.get("allow", [])),
             backend=r.get("backend"),
+            access=r.get("access"),
         )
         for r in json.loads(raw)
     )

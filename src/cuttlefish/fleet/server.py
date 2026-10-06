@@ -43,6 +43,15 @@ from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
 from cuttlefish.projects.store import ProjectNotFoundError, RoleDefinition
+from cuttlefish.roles import (
+    ACCESS_LEVELS,
+    BUILTIN_ROLES,
+    DEFAULT_TEMPLATE,
+    TEMPLATES,
+    UnknownTemplateError,
+    is_default_prompt,
+    template_roles,
+)
 
 #: Distinct from satay's own `x-satay-token` (ADR-0046) -- a fleet-daemon request
 #: and a per-task steering request must never be confused for one another.
@@ -67,7 +76,14 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
         "roles": [
-            {"name": r.name, "persona": r.persona, "backend": r.backend} for r in project.roles
+            {
+                "name": r.name,
+                "persona": r.persona,
+                "backend": r.backend,
+                "access": r.access or "standard",
+                "default_prompt": is_default_prompt(r),
+            }
+            for r in project.roles
         ],
         "last_team_id": project.last_team_id,
         "allow": [list(command) for command in project.allow],
@@ -91,12 +107,30 @@ def _event_json(event: EpisodicEvent) -> dict[str, Any]:
 
 
 def _roles_from_body(body: dict[str, Any]) -> tuple[RoleDefinition, ...]:
+    """The request's roles; with none given, the named ``template`` (V4-B), else none."""
+    if not body.get("roles") and body.get("template"):
+        try:
+            return template_roles(str(body["template"]))
+        except UnknownTemplateError as exc:
+            raise HTTPException(400, str(exc)) from exc
     return tuple(
         RoleDefinition(
-            name=r["name"], persona=r.get("persona", ""), backend=_backend_from(r.get("backend"))
+            name=r["name"],
+            persona=r.get("persona", ""),
+            backend=_backend_from(r.get("backend")),
+            access=_access_from(r.get("access")),
         )
         for r in body.get("roles", [])
     )
+
+
+def _access_from(value: Any) -> str | None:
+    """A role's optional access level: ``"standard"`` and unset are the same (``None``)."""
+    if value in (None, "", "standard"):
+        return None
+    if value not in ACCESS_LEVELS:
+        raise HTTPException(400, f"'access' must be one of {', '.join(ACCESS_LEVELS)}")
+    return str(value)
 
 
 def _backend_from(value: Any) -> str | None:
@@ -219,6 +253,35 @@ def create_app(
             raise HTTPException(exc.status, exc.detail) from exc
         return {"token": token, "expires_in": login.ttl_seconds}
 
+    @app.get("/api/roles")
+    async def list_builtin_roles() -> dict[str, Any]:
+        return {
+            "roles": [
+                {
+                    "name": role.name,
+                    "summary": role.summary,
+                    "prompt": role.prompt,
+                    "access": role.access,
+                }
+                for role in BUILTIN_ROLES.values()
+            ]
+        }
+
+    @app.get("/api/templates")
+    async def list_templates() -> dict[str, Any]:
+        return {
+            "default": DEFAULT_TEMPLATE,
+            "templates": [
+                {
+                    "name": template.name,
+                    "title": template.title,
+                    "summary": template.summary,
+                    "roles": list(template.roles),
+                }
+                for template in TEMPLATES.values()
+            ],
+        }
+
     @app.get("/api/projects")
     async def list_projects() -> dict[str, Any]:
         return {"projects": [_project_json(daemon, p.id) for p in daemon.projects.list()]}
@@ -234,7 +297,8 @@ def create_app(
             name=name,
             root=root,
             secrets_scope=body.get("secrets_scope"),
-            roles=_roles_from_body(body),
+            roles=_roles_from_body(body)
+            or (() if "roles" in body else template_roles(DEFAULT_TEMPLATE)),
             allow=_allow_from_body(body),
             max_tokens=max_tokens,
             max_cost_usd=max_cost_usd,

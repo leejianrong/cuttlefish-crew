@@ -101,6 +101,8 @@ def _build_role_inputs(project: Project, roles: list[RoleStart]) -> list[RoleInp
         }
         if role_def is not None and role_def.backend:
             role_input["backend"] = role_def.backend
+        if role_def is not None and role_def.access:
+            role_input["access"] = role_def.access
         inputs.append(role_input)
     return inputs
 
@@ -117,6 +119,7 @@ def _to_persisted_roles(role_inputs: list[RoleInput]) -> tuple[PersistedRole, ..
             text=role["text"],
             allow=tuple(tuple(command) for command in role.get("allow", [])),
             backend=role.get("backend"),
+            access=role.get("access"),
         )
         for role in role_inputs
     )
@@ -132,6 +135,8 @@ def _persisted_roles_to_inputs(roles: tuple[PersistedRole, ...]) -> list[RoleInp
         }
         if role.backend:
             role_input["backend"] = role.backend
+        if role.access:
+            role_input["access"] = role.access
         inputs.append(role_input)
     return inputs
 

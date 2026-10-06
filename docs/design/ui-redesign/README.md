@@ -51,6 +51,18 @@ and this folder disagree after a slice lands, update this folder.
 - Real `<button>`, `<input>` and `<label>` elements, icon-only buttons have an
   `aria-label`, visible focus ring, reduced motion respected.
 
+## Built since the mockup
+
+- Stored role prompts open with the instruction, not "You are the builder.", because
+  cuttlefish prepends "You are {name}." to every task. The prompt shown in
+  `4-roles-and-teams.dc.html` should drop that opener when the screen is built.
+- The builder prompt's "ask one specific question" line is not in the shipped prompt:
+  only kopicode can ask today (V4-H), so it says to state the assumption and take the
+  most conservative reading. Restore the question once asking works on every backend.
+- Role access is `standard` or `read-only` (`GET /api/roles`); read-only is a shell
+  restriction only until V4-C, so the UI must not call it "can't edit".
+- `make` commands are on by default (not in the Permissions mockup).
+
 ## Known gaps in the mockup
 
 - Static: no working interactions, no empty or error states, no dark theme, no phone

@@ -28,15 +28,13 @@ from cuttlefish.config import (
     LLM_PROVIDER_ENV,
 )
 from cuttlefish.projects.store import Project, ProjectStore, RoleDefinition
+from cuttlefish.roles import template_roles
 
 BACKENDS = ("kopicode", "claude-code", "codex")
 
 #: Proposed when the operator names no role of their own: the smallest team that
 #: shows what cuttlefish is for (one role writes, one checks).
-DEFAULT_ROLES = (
-    RoleDefinition(name="builder", persona="You implement the task with small, focused changes."),
-    RoleDefinition(name="reviewer", persona="You review the repo's recent changes for bugs."),
-)
+DEFAULT_ROLES = template_roles()
 
 _BINARY_ENVS = {
     "kopicode": (KOPICODE_BIN_ENV, DEFAULT_KOPICODE_BIN),

@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from cuttlefish import cli
+from cuttlefish.roles import BUILTIN_ROLES
 
 
 @pytest.fixture(autouse=True)
@@ -39,9 +40,20 @@ def test_add_then_list_round_trips(tmp_path: Path, capsys: pytest.CaptureFixture
     added = json.loads(capsys.readouterr().out)
     assert added["name"] == "demo"
     assert added["secrets_scope"] == "demo"
+    # A persona on the command line wins; a bare built-in name is that built-in (V4-B).
     assert added["roles"] == [
-        {"name": "builder", "persona": "ships fast, terse commits", "backend": None},
-        {"name": "reviewer", "persona": "", "backend": None},
+        {
+            "name": "builder",
+            "persona": "ships fast, terse commits",
+            "backend": None,
+            "access": "standard",
+        },
+        {
+            "name": "reviewer",
+            "persona": BUILTIN_ROLES["reviewer"].prompt,
+            "backend": None,
+            "access": "read-only",
+        },
     ]
 
     exit_code = cli.main(["projects", "list"])
@@ -108,3 +120,37 @@ def test_a_duplicate_role_name_is_a_config_error(capsys: pytest.CaptureFixture[s
     )
     assert exit_code == cli.EXIT_CONFIG_ERROR
     assert "declared more than once" in capsys.readouterr().err
+
+
+def test_add_with_a_template_registers_that_teams_roles(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["projects", "add", "--name", "demo", "--root", str(tmp_path / "demo")]
+    assert cli.main([*args, "--template", "full-crew"]) == cli.EXIT_OK
+    added = json.loads(capsys.readouterr().out)
+    assert [r["name"] for r in added["roles"]] == ["planner", "builder", "tester", "reviewer"]
+
+
+def test_add_with_no_role_or_template_gets_builder_and_reviewer(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["projects", "add", "--name", "demo", "--root", str(tmp_path / "demo")]
+    assert cli.main(args) == cli.EXIT_OK
+    added = json.loads(capsys.readouterr().out)
+    assert [r["name"] for r in added["roles"]] == ["builder", "reviewer"]
+
+
+def test_add_rejects_a_template_together_with_a_role(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["projects", "add", "--name", "demo", "--root", str(tmp_path / "demo")]
+    assert cli.main([*args, "--template", "solo-builder", "--role", "x"]) == cli.EXIT_CONFIG_ERROR
+    assert "cannot be combined" in capsys.readouterr().err
+
+
+def test_add_rejects_an_unknown_template(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = ["projects", "add", "--name", "demo", "--root", str(tmp_path / "demo")]
+    assert cli.main([*args, "--template", "nope"]) == cli.EXIT_CONFIG_ERROR
+    assert "solo-builder" in capsys.readouterr().err

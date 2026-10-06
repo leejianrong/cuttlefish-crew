@@ -106,7 +106,7 @@ uv run cuttlefish projects add \
 
 | Subcommand | What it does |
 |---|---|
-| `add` | Register a project — `--name`/`--root` required; `--secrets-scope`, `--role NAME[:PERSONA]` (repeatable), `--allow CMD` (repeatable), `--max-tokens`/`--max-cost-usd` optional. |
+| `add` | Register a project — `--name`/`--root` required; `--secrets-scope`, `--template NAME` (a built-in team, below) or `--role NAME[:PERSONA]` (repeatable), `--allow CMD` (repeatable), `--max-tokens`/`--max-cost-usd` optional. |
 | `list` | List every registered project. |
 | `remove` | Deregister a project — never touches its files. |
 
@@ -177,3 +177,25 @@ kopicode checks this live; for Claude Code the same list is passed as `--allowed
 (plus deny patterns for the never-allowed prefixes) and for Codex it only switches the
 sandbox to `workspace-write` -- see the known gaps. The `print` transport's exact-match
 policy file cannot express prefixes, so it sees the presets but matches almost nothing.
+
+## Built-in roles and teams
+
+`projects add` with no `--role` registers the **builder-reviewer** team. `--template NAME`
+picks another (`solo-builder`, `builder-reviewer`, `full-crew`); it cannot be combined with
+`--role`. A bare built-in name (`--role reviewer`) is that built-in, and `NAME:PERSONA`
+overrides its prompt. The dashboard's `GET /api/roles` and `GET /api/templates` list them,
+and `POST /api/projects` accepts `template` the same way.
+
+| Role | Does | Access |
+| --- | --- | --- |
+| `builder` | Implements in small steps, runs tests, commits, never pushes | standard |
+| `reviewer` | Reads the diff and reports findings, most serious first | read-only |
+| `tester` | Writes and runs tests, reports bugs rather than patching them | standard |
+| `planner` | Turns a goal into an ordered plan | read-only |
+| `docs-writer` | Keeps docs true to the code | standard |
+
+A role is "default" while its prompt equals the built-in one; edit it and it is just a role.
+**Read-only restricts a role's shell to inspection** (`ls`, `grep`, `git diff`, ...) and
+ignores any declared `--allow`. It does not yet stop a role editing files, because that
+needs per-backend handling that arrives with the permission modes; until then the
+reviewer's and planner's prompts are what keep them from editing.

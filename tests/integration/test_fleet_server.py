@@ -55,7 +55,15 @@ def test_register_then_list_round_trips(client: TestClient, tmp_path: Path) -> N
     assert response.status_code == 201
     body = response.json()
     assert body["name"] == "demo"
-    assert body["roles"] == [{"name": "builder", "persona": "ships fast", "backend": None}]
+    assert body["roles"] == [
+        {
+            "name": "builder",
+            "persona": "ships fast",
+            "backend": None,
+            "access": "standard",
+            "default_prompt": False,
+        }
+    ]
     assert body["running"] is False
 
     listing = client.get("/api/projects").json()
@@ -117,7 +125,9 @@ def test_register_with_budget_round_trips(client: TestClient, tmp_path: Path) ->
 
 
 def test_register_with_no_budget_defaults_to_no_ceiling(client: TestClient, tmp_path: Path) -> None:
-    response = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")})
+    response = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "demo"), "roles": []}
+    )
     body = response.json()
     assert body["budget"] == {"max_tokens": None, "max_cost_usd": None}
     assert body["usage"] == {}
@@ -366,3 +376,69 @@ def test_usage_cost_is_null_not_zero_when_no_backend_reported_one(
         json={"name": "demo", "root": str(tmp_path / "demo"), "roles": [{"name": "builder"}]},
     )
     assert response.json()["usage"]["builder"] == {"tokens": 0, "cost_usd": None}
+
+
+def test_register_with_no_roles_gets_the_default_template(
+    client: TestClient, tmp_path: Path
+) -> None:
+    body = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "d")}).json()
+    assert [r["name"] for r in body["roles"]] == ["builder", "reviewer"]
+    assert [r["access"] for r in body["roles"]] == ["standard", "read-only"]
+    assert all(r["default_prompt"] for r in body["roles"])
+
+
+def test_register_with_a_template_gets_that_teams_roles(client: TestClient, tmp_path: Path) -> None:
+    body = client.post(
+        "/api/projects",
+        json={"name": "demo", "root": str(tmp_path / "d"), "template": "full-crew"},
+    ).json()
+    assert [r["name"] for r in body["roles"]] == ["planner", "builder", "tester", "reviewer"]
+
+
+def test_register_with_an_unknown_template_is_400(client: TestClient, tmp_path: Path) -> None:
+    response = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "d"), "template": "nope"}
+    )
+    assert response.status_code == 400
+    assert "solo-builder" in response.json()["detail"]
+
+
+def test_explicit_empty_roles_stay_empty(client: TestClient, tmp_path: Path) -> None:
+    body = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "d"), "roles": []}
+    ).json()
+    assert body["roles"] == []
+
+
+def test_an_edited_builtin_is_no_longer_the_default_prompt(
+    client: TestClient, tmp_path: Path
+) -> None:
+    created = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "d")}
+    ).json()
+    updated = client.patch(
+        f"/api/projects/{created['id']}/roles",
+        json={"roles": [{"name": "builder", "persona": "ship it"}]},
+    ).json()
+    assert updated["roles"][0]["default_prompt"] is False
+
+
+def test_a_role_with_an_unknown_access_level_is_400(client: TestClient, tmp_path: Path) -> None:
+    response = client.post(
+        "/api/projects",
+        json={"name": "d", "root": str(tmp_path / "d"), "roles": [{"name": "x", "access": "root"}]},
+    )
+    assert response.status_code == 400
+
+
+def test_the_role_library_and_templates_are_served(client: TestClient) -> None:
+    roles = client.get("/api/roles").json()["roles"]
+    assert {r["name"] for r in roles} == {"builder", "reviewer", "tester", "planner", "docs-writer"}
+    assert all(r["prompt"] for r in roles)
+    templates = client.get("/api/templates").json()
+    assert templates["default"] == "builder-reviewer"
+    assert [t["name"] for t in templates["templates"]] == [
+        "solo-builder",
+        "builder-reviewer",
+        "full-crew",
+    ]
