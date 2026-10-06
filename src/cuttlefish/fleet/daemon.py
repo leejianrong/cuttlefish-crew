@@ -41,10 +41,15 @@ from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
 from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
 from cuttlefish.requests import (
+    AlreadyResolvedError,
+    HistoryEntry,
     Outcome,
     RequestBroker,
     RequestContext,
+    RequestError,
+    UnknownRequestError,
     granted_rules,
+    history,
     unresolved,
 )
 from cuttlefish.steering import (
@@ -196,10 +201,47 @@ class FleetDaemon:
         return self._team_stores[team_id].append(team_id, payload)
 
     def answer_request(
-        self, request_id: str, answer: str, *, rule: Sequence[str] | None = None
+        self,
+        project_id: str,
+        request_id: str,
+        answer: str,
+        *,
+        rule: Sequence[str] | None = None,
     ) -> Outcome:
-        """Answer a pending request (ADR-0028). Raises the broker's `RequestError`s."""
-        return self.requests.answer(request_id, answer, rule=rule)
+        """Answer a pending request of `project_id` (ADR-0028). Raises the broker's
+        `RequestError`s. An "Always allow" is applied to the running team by the broker and
+        saved to the project's own commands here, for the starts after this one."""
+        project = self._projects.get(project_id)
+        try:
+            outcome = self.requests.answer(request_id, answer, rule=rule, project_id=project_id)
+        except UnknownRequestError:
+            # Not in memory: a request from before a restart, or from a finished team. The
+            # journal still says how it ended.
+            raise self._from_journal(project, request_id) from None
+        if outcome.rule is not None:
+            self._projects.add_allow(project_id, outcome.rule)
+        return outcome
+
+    def _from_journal(self, project: Project, request_id: str) -> RequestError:
+        for entry in history(self._last_team_events(project)):
+            if entry.raised.request_id == request_id:
+                if entry.resolved is None:  # raised, never resolved, and not live: abandoned
+                    return AlreadyResolvedError(Outcome(request_id, "abandoned", "system"))
+                return AlreadyResolvedError(
+                    Outcome(
+                        request_id,
+                        entry.resolved.resolution,
+                        entry.resolved.by,
+                        tuple(entry.resolved.rule) if entry.resolved.rule else None,
+                    )
+                )
+        return UnknownRequestError(f"no request {request_id!r}")
+
+    def request_history(self, project_id: str, *, limit: int = 50) -> list[HistoryEntry]:
+        """The project's last team's requests that have ended, newest first."""
+        project = self._projects.get(project_id)
+        ended = [e for e in history(self._last_team_events(project)) if e.resolved is not None]
+        return ended[::-1][:limit]
 
     def sweep_abandoned(self) -> int:
         """Resolve as `abandoned` every request a project's last team raised and never resolved.

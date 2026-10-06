@@ -401,6 +401,14 @@ class ProjectStore:
         self._conn.commit()
         return self.get(project_id)
 
+    def add_allow(self, project_id: str, entry: tuple[str, ...]) -> Project:
+        """Append one command to the project's own, unless it is already there (an "Always
+        allow" answered in Needs you, ADR-0028)."""
+        project = self.get(project_id)
+        if entry in project.allow:
+            return project
+        return self.update_allow(project_id, (*project.allow, entry))
+
     def update_mode(self, project_id: str, mode: str) -> Project:
         """Set this project's permission mode (V4-C/ADR-0025), applied the next time the team starts
         (the daemon composes each role's settings once, at start)."""

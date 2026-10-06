@@ -110,7 +110,7 @@ async def test_a_team_asks_a_person_and_the_answer_reaches_the_agent(
         assert request.record.role == "builder"  # attributed through satay.gather
         assert request.record.detail == LINE and request.record.backend == "kopicode"
 
-        outcome = daemon.answer_request(request.id, "allow_once")
+        outcome = daemon.answer_request(project.id, request.id, "allow_once")
         assert outcome.resolution == "allowed_once"
         await _until(
             lambda: any(isinstance(p, DelegationCompleted) for p in _journal(project.root, team_id))
