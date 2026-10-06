@@ -50,6 +50,7 @@ from cuttlefish.config import (
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
+from cuttlefish.permissions import DEFAULT_MODE, MODES
 from cuttlefish.projects.store import Project, ProjectStore, RoleDefinition
 from cuttlefish.roles import BUILTIN_ROLES, UnknownTemplateError, role_definition, template_roles
 from cuttlefish.secrets.store import (
@@ -125,6 +126,12 @@ def _resolve_tailscale_host() -> str:
     return host
 
 
+def _mode_input(mode: str) -> dict[str, str]:
+    """``--mode`` as the task input's ``access`` -- omitted for standard, so a default run's
+    recorded arguments are the ones it always had (replay-safe)."""
+    return {"access": mode} if mode != DEFAULT_MODE else {}
+
+
 def _parse_allow(values: list[str] | None) -> list[list[str]]:
     """Each ``--allow`` value is one allowed command, shell-quoted (e.g. ``"go
     test"``), split into the argv list kopicode's own declared-allowlist grammar
@@ -194,6 +201,7 @@ async def _run(args: argparse.Namespace) -> int:
         "root": root,
         "token_budget": args.token_budget,
         "allow": _parse_allow(args.allow),
+        **_mode_input(args.mode),
         "project": project,
         "secret_names": secret_names,
         "steerable": args.steerable,
@@ -298,6 +306,8 @@ async def _run_team(args: argparse.Namespace) -> int:
     for role_input in role_inputs:
         if role_input["name"] in role_backends:
             role_input["backend"] = role_backends[role_input["name"]]
+        if args.mode != DEFAULT_MODE:
+            role_input["access"] = args.mode
     workflow_input = {
         "team_id": team_id,
         "root": root,
@@ -554,12 +564,13 @@ def _project_dict(project: Project) -> dict[str, Any]:
         "root": project.root,
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
+        "mode": project.mode,
         "roles": [
             {
                 "name": r.name,
                 "persona": r.persona,
                 "backend": r.backend,
-                "access": r.access or "standard",
+                "access": r.access,
             }
             for r in project.roles
         ],
@@ -641,6 +652,7 @@ def _projects(args: argparse.Namespace) -> int:
                 max_tokens=args.max_tokens,
                 max_cost_usd=args.max_cost_usd,
                 backend=backend,
+                mode=args.mode,
             )
             print(json.dumps(_project_dict(project)))
             return EXIT_OK
@@ -752,6 +764,16 @@ def build_parser() -> argparse.ArgumentParser:
             "One shell command the delegation may run inside --root, shell-quoted "
             "(e.g. --allow 'go test'). Repeatable. Added to the built-in dev presets (tests, "
             "linters, builds, git) -- see docs-site/cli-reference.md."
+        ),
+    )
+    run_parser.add_argument(
+        "--mode",
+        choices=MODES,
+        default=DEFAULT_MODE,
+        help=(
+            "Permission mode (ADR-0025): ask-first (no shell command runs on its own), "
+            "standard (the built-in dev presets plus --allow; default) or auto (any "
+            "command except the never-allowed list)."
         ),
     )
     run_parser.add_argument(
@@ -875,6 +897,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "One shell command every role may run inside --root, on top of the built-in dev "
             "presets. Repeatable. Applies to all roles."
+        ),
+    )
+    run_team_parser.add_argument(
+        "--mode",
+        choices=MODES,
+        default=DEFAULT_MODE,
+        help=(
+            "Permission mode (ADR-0025): ask-first (no shell command runs on its own), "
+            "standard (the built-in dev presets plus --allow; default) or auto (any "
+            "command except the never-allowed list)."
         ),
     )
     run_team_parser.add_argument(
@@ -1065,6 +1097,16 @@ def build_parser() -> argparse.ArgumentParser:
             "inside --root, shell-quoted (e.g. --allow 'go test'). Repeatable. "
             "Applies to every daemon-started team (`cuttlefish serve`), which has "
             "no CLI --allow flag of its own (Q53). Added to the built-in dev presets."
+        ),
+    )
+    add_parser.add_argument(
+        "--mode",
+        choices=MODES,
+        default=DEFAULT_MODE,
+        help=(
+            "Permission mode (ADR-0025): ask-first (no shell command runs on its own), "
+            "standard (the built-in dev presets plus --allow; default) or auto (any "
+            "command except the never-allowed list)."
         ),
     )
     add_parser.add_argument(

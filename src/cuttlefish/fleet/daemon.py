@@ -35,6 +35,7 @@ from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.episodic.events import TeamResumed
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
+from cuttlefish.permissions import DEFAULT_MODE, effective_access
 from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
 from cuttlefish.steering import (
     SteeringDeliveryError,
@@ -101,8 +102,9 @@ def _build_role_inputs(project: Project, roles: list[RoleStart]) -> list[RoleInp
         }
         if role_def is not None and role_def.backend:
             role_input["backend"] = role_def.backend
-        if role_def is not None and role_def.access:
-            role_input["access"] = role_def.access
+        access = effective_access(project.mode, role_def.access if role_def else None)
+        if access != DEFAULT_MODE:
+            role_input["access"] = access
         inputs.append(role_input)
     return inputs
 

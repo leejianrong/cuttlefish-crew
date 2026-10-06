@@ -41,11 +41,18 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - `ClaudeCodeBackend`'s sandboxed path only works for an operator
   authenticated via `ANTHROPIC_API_KEY`, not Claude Code's own OAuth login.
   `docs/QUESTIONS.md` Q37.
-- A `read-only` role (reviewer, planner; ADR-0024) gets an inspection-only shell but
-  can still edit files: kopicode's gate treats in-root edits as implicit, Claude Code
-  runs under `acceptEdits`, and Codex's sandbox is chosen from the allow list, not
-  the role. Closing this is the permission-modes slice (V4-C); until then the
-  role's prompt is the only thing stopping an edit.
+- A `read-only` role (reviewer, planner; ADR-0024/0025) cannot edit files on Claude
+  Code (edit tools denied) or Codex (read-only sandbox), but can on kopicode: its
+  gate treats in-root edits as implicit and `serve` offers no way to refuse one. There
+  the role's prompt is the only guard.
+- **Ask first does not ask yet** (ADR-0025): a command that would need an answer is
+  refused until V4-H adds pending requests. On Codex it also cannot edit, since the
+  only sandbox without commands is read-only.
+- Auto on Claude Code denies `curl` and `wget` outright because a deny pattern cannot
+  express "piped into a shell"; kopicode's check is finer. Auto on Codex is just
+  `workspace-write`: the sandbox, not a policy, holds the never-allowed list. Auto's
+  write-outside-root check reads the command line as text (a script or a path built at
+  run time can still write elsewhere).
 - Its declared-allowlist-to-`--allowedTools` mapping is an honest
   approximation (the default presets pass through it too, so `find` and `rg`
   there are not protected from `-delete`/`--pre` the way kopicode's consent

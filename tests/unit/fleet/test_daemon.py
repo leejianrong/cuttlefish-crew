@@ -210,3 +210,46 @@ def test_role_backend_is_threaded_into_inputs_and_survives_the_persisted_checkpo
     assert "backend" not in role_inputs[0]  # falls through to the project's default
     assert role_inputs[1]["backend"] == "claude-code"
     assert _persisted_roles_to_inputs(_to_persisted_roles(role_inputs)) == role_inputs
+
+
+def _project_with_mode(tmp_path: Path, mode: str):  # type: ignore[no-untyped-def]
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
+    return daemon.projects.register(
+        name="alpha",
+        root=str(tmp_path / "alpha"),
+        mode=mode,
+        roles=(
+            RoleDefinition(name="builder"),
+            RoleDefinition(name="reviewer", access="read-only"),
+            RoleDefinition(name="tester", access="standard"),
+        ),
+    )
+
+
+def test_a_standard_project_passes_no_access_so_replay_arguments_are_unchanged(
+    tmp_path: Path,
+) -> None:
+    project = _project_with_mode(tmp_path, "standard")
+    inputs = _build_role_inputs(
+        project, [{"name": "builder", "text": "x"}, {"name": "tester", "text": "y"}]
+    )
+    assert all("access" not in role_input for role_input in inputs)
+
+
+def test_an_auto_project_gives_every_role_auto_except_where_it_overrides(tmp_path: Path) -> None:
+    project = _project_with_mode(tmp_path, "auto")
+    inputs = _build_role_inputs(
+        project,
+        [
+            {"name": "builder", "text": "x"},
+            {"name": "reviewer", "text": "y"},
+            {"name": "tester", "text": "z"},
+            {"name": "unregistered", "text": "w"},
+        ],
+    )
+    assert [role_input.get("access") for role_input in inputs] == [
+        "auto",
+        "read-only",
+        None,  # an explicit standard override is the default, so nothing is passed
+        "auto",
+    ]

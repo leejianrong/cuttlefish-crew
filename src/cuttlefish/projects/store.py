@@ -20,6 +20,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from cuttlefish.permissions import DEFAULT_MODE
+
 
 def default_projects_db() -> Path:
     """``~/.cuttlefish/projects.db`` — hardcoded this slice, no env override yet
@@ -47,7 +49,8 @@ CREATE TABLE IF NOT EXISTS projects (
     last_team_require_approval INTEGER NOT NULL DEFAULT 0,
     max_tokens INTEGER,
     max_cost_usd REAL,
-    backend TEXT
+    backend TEXT,
+    mode TEXT
 )
 """
 
@@ -92,6 +95,10 @@ _ADD_MAX_COST_USD_COLUMN = "ALTER TABLE projects ADD COLUMN max_cost_usd REAL"
 #: existing row keeps its exact prior behaviour. A role's own backend lives inside
 #: `roles_json`, which needed no migration.
 _ADD_BACKEND_COLUMN = "ALTER TABLE projects ADD COLUMN backend TEXT"
+
+#: `mode` was added for V4-C/ADR-0025 -- the project's permission mode, nullable and read as
+#: "standard" when `NULL`, so an existing row keeps its exact prior behaviour.
+_ADD_MODE_COLUMN = "ALTER TABLE projects ADD COLUMN mode TEXT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +161,9 @@ class Project:
     max_tokens: int | None = None
     max_cost_usd: float | None = None
     backend: str | None = None
+    #: The project's permission mode (ask-first, standard or auto; ADR-0025). A role's own
+    #: `access` overrides it.
+    mode: str = DEFAULT_MODE
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -245,6 +255,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         max_tokens=row["max_tokens"],
         max_cost_usd=row["max_cost_usd"],
         backend=row["backend"],
+        mode=row["mode"] or DEFAULT_MODE,
     )
 
 
@@ -268,6 +279,8 @@ class ProjectStore:
             self._conn.execute(_ADD_MAX_COST_USD_COLUMN)
         if "backend" not in columns:
             self._conn.execute(_ADD_BACKEND_COLUMN)
+        if "mode" not in columns:
+            self._conn.execute(_ADD_MODE_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -303,6 +316,7 @@ class ProjectStore:
         max_tokens: int | None = None,
         max_cost_usd: float | None = None,
         backend: str | None = None,
+        mode: str = DEFAULT_MODE,
     ) -> Project:
         """Register a new project. `secrets_scope` defaults to `name` (Q38)."""
         project = Project(
@@ -315,12 +329,13 @@ class ProjectStore:
             max_tokens=max_tokens,
             max_cost_usd=max_cost_usd,
             backend=backend,
+            mode=mode,
         )
         self._conn.execute(
             "INSERT INTO projects "
             "(id, name, root, secrets_scope, roles_json, last_team_id, allow_json, "
-            "last_team_roles_json, max_tokens, max_cost_usd, backend) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "last_team_roles_json, max_tokens, max_cost_usd, backend, mode) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.id,
                 project.name,
@@ -333,6 +348,7 @@ class ProjectStore:
                 project.max_tokens,
                 project.max_cost_usd,
                 project.backend,
+                project.mode,
             ),
         )
         self._conn.commit()
@@ -361,6 +377,13 @@ class ProjectStore:
         self._conn.execute(
             "UPDATE projects SET allow_json = ? WHERE id = ?", (_encode_allow(allow), project_id)
         )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_mode(self, project_id: str, mode: str) -> Project:
+        """Set this project's permission mode (V4-C/ADR-0025), applied from the next round."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute("UPDATE projects SET mode = ? WHERE id = ?", (mode, project_id))
         self._conn.commit()
         return self.get(project_id)
 

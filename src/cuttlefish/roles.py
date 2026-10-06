@@ -10,9 +10,10 @@ persona still equals the built-in prompt, so an edited role is just a role.
 a prompt here starts with the instruction, not with that sentence.
 
 ``access="read-only"`` restricts a role's shell to inspection (``presets.READ_ONLY_PRESETS``).
-It does **not** yet stop a role editing files: the Claude Code and Codex mappings, and
-what kopicode can do at all, land with the permission modes (V4-C, known-gaps.md). Until
-then a reviewer's prompt, not a gate, is what keeps it from editing.
+It also stops file edits on Claude Code (the edit tools are denied) and Codex (read-only
+sandbox) since V4-C; kopicode has no way to refuse an in-root edit, so there the prompt is
+the only guard (known-gaps.md, ADR-0025). ``standard`` here means "inherit the project's
+mode", stored as ``None``.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from typing import Literal
 from cuttlefish.projects.store import RoleDefinition
 
 Access = Literal["standard", "read-only"]
-ACCESS_LEVELS: tuple[str, ...] = ("standard", "read-only")
 
 
 @dataclass(frozen=True, slots=True)

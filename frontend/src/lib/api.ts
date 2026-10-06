@@ -4,13 +4,20 @@
 
 export type RoleStatus = "queued" | "working" | "blocked" | "done" | "failed";
 
+/** A project's permission mode (ADR-0025). */
+export type PermissionMode = "ask-first" | "standard" | "auto";
+
+/** A role's access: a mode, or read-only (roles only). */
+export type AccessLevel = PermissionMode | "read-only";
+
 export interface RoleDefinition {
   name: string;
   persona: string;
   /** KAN-1809: this role's own agent backend; null/absent uses the project's. */
   backend?: string | null;
-  /** V4-B: "read-only" restricts the role's shell to inspection; "standard" is the project's. */
-  access?: "standard" | "read-only";
+  /** V4-B/V4-C: null inherits the project's mode; otherwise this role's own level. Read-only
+   * blocks edits on Claude Code and Codex but not kopicode (ADR-0025). */
+  access?: AccessLevel | null;
   /** V4-B: true while a built-in role still carries its built-in prompt. Read-only. */
   default_prompt?: boolean;
 }
@@ -37,6 +44,8 @@ export interface ProjectSummary {
   secrets_scope: string;
   /** KAN-1809: the project's default backend; null uses the daemon's. */
   backend?: string | null;
+  /** V4-C: applies from the next round. */
+  mode: PermissionMode;
   roles: RoleDefinition[];
   last_team_id: string | null;
   allow: string[][];
@@ -171,6 +180,7 @@ export class FleetClient {
     /** Omit both `roles` and `template` for the default team (builder + reviewer). */
     roles?: RoleDefinition[];
     template?: string;
+    mode?: PermissionMode;
     allow?: string[][];
     max_tokens?: number | null;
     max_cost_usd?: number | null;
@@ -182,6 +192,13 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/roles`, {
       method: "PATCH",
       body: JSON.stringify({ roles }),
+    });
+  }
+
+  updateMode(id: string, mode: PermissionMode): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/mode`, {
+      method: "PATCH",
+      body: JSON.stringify({ mode }),
     });
   }
 

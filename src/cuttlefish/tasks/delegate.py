@@ -34,6 +34,7 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.agents.registry import resolve_backend
 from cuttlefish.delegate.presets import read_only_allow, resolve_allow
+from cuttlefish.permissions import READ_ONLY
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 
 
@@ -54,9 +55,11 @@ async def delegate_to_agent_backend(
     ``allow`` is what the operator *declared*; the built-in presets are added here, inside
     the side-effecting task, so the recorded arguments stay the raw declaration (V4-A).
 
-    ``access="read-only"`` (V4-B, ADR-0024) replaces all of that with inspection-only
-    commands. Like ``agent_backend`` it is passed only when set, so every other call's
-    recorded arguments are unchanged."""
+    ``access`` (V4-B/V4-C, ADR-0024/0025) is the effective permission level, passed only when
+    it is not ``standard`` so every other call's recorded arguments are unchanged:
+    ``read-only`` is inspection-only commands, ``ask-first`` is no command at all,
+    ``auto`` is the presets for backends that need a list (the backend widens it itself).
+    ``auto`` and ``read-only`` also reach the backend as ``mode``."""
     runtime_ = runtime.current()
     backend = resolve_backend(
         agent_backend or runtime_.agent_backend,
@@ -67,10 +70,18 @@ async def delegate_to_agent_backend(
     names = sorted(set(secret_names or []) | set(backend.CREDENTIAL_ENV_VARS))
     secrets_store = runtime_.secrets_store
     resolved_secrets = secrets_store.resolve(project, names) if secrets_store is not None else {}
+    if access == READ_ONLY:
+        effective_allow = read_only_allow()
+    elif access == "ask-first":
+        effective_allow = []
+    else:
+        effective_allow = resolve_allow(allow)
+    mode_kwargs = {"mode": access} if access in ("auto", READ_ONLY) else {}
     return await backend.delegate(
         task_text=task_text,
         root=root,
-        allow=read_only_allow() if access == "read-only" else resolve_allow(allow),
+        allow=effective_allow,
         secrets=resolved_secrets,
         sandbox_provider=runtime_.sandbox_provider,
+        **mode_kwargs,
     )

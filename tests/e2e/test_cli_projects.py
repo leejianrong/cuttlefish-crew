@@ -46,7 +46,7 @@ def test_add_then_list_round_trips(tmp_path: Path, capsys: pytest.CaptureFixture
             "name": "builder",
             "persona": "ships fast, terse commits",
             "backend": None,
-            "access": "standard",
+            "access": None,
         },
         {
             "name": "reviewer",

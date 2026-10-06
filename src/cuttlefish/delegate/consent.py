@@ -112,11 +112,16 @@ def _escapes_root(word: str) -> bool:
 class ConsentPolicy:
     """A role's consent policy, built from the role's declared ``allow`` list.
 
+    ``auto=True`` (permission mode Auto, V4-C) answers ``allow`` to every shell command that
+    is not never-allowed, whatever the list says; the plain-word-list rule does not apply,
+    so a chained or quoted command line is fine there. ``write_outside_root`` stays denied.
+
     The default -- no ``allow`` -- denies every shell command, which is exactly what a
     read-only role should get; ``write_outside_root`` is denied for every role, always.
     """
 
-    def __init__(self, allow: Sequence[Sequence[str]] | None = None) -> None:
+    def __init__(self, allow: Sequence[Sequence[str]] | None = None, *, auto: bool = False) -> None:
+        self._auto = auto
         self._patterns = tuple(_pattern_from_entry(entry) for entry in allow or ())
         self._commit_messages = _GIT_COMMIT in self._patterns
 
@@ -125,7 +130,7 @@ class ConsentPolicy:
             return _deny("write_outside_root_never")
         if kind != "run_shell":
             return _deny("unknown_kind")
-        if not self._patterns:
+        if not self._auto and not self._patterns:
             return _deny("no_shell_allowed")
         if not detail.startswith(_DETAIL_PREFIX):
             return _deny("not_a_sh_c_command")
@@ -135,6 +140,8 @@ class ConsentPolicy:
         reason = never_allowed_reason(line)
         if reason is not None:
             return _deny(reason)
+        if self._auto:
+            return ConsentDecision("allow", "auto")
         if self._commit_messages and _GIT_COMMIT_MESSAGE.fullmatch(line):
             return ConsentDecision("allow", "allow:git commit -m")
         words = line.split(" ")

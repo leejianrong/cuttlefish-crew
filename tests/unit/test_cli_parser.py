@@ -206,3 +206,22 @@ def test_resolve_agent_backend_override_beats_the_environment(
     assert resolve_agent_backend("claude-code") == "claude-code"
     with pytest.raises(ConfigError):
         resolve_agent_backend("nope")
+
+
+def test_mode_defaults_to_standard_and_is_omitted_from_a_default_runs_input() -> None:
+    from cuttlefish.cli import _mode_input, build_parser
+
+    assert build_parser().parse_args(["run", "t"]).mode == "standard"
+    assert _mode_input("standard") == {}
+    assert _mode_input("auto") == {"access": "auto"}
+    assert _mode_input("ask-first") == {"access": "ask-first"}
+
+
+def test_mode_rejects_a_value_that_is_not_a_project_mode() -> None:
+    import pytest
+
+    from cuttlefish.cli import build_parser
+
+    for bad in ("read-only", "yolo"):
+        with pytest.raises(SystemExit):
+            build_parser().parse_args(["run", "t", "--mode", bad])

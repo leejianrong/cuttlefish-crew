@@ -42,9 +42,9 @@ from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
+from cuttlefish.permissions import ACCESS_LEVELS, DEFAULT_MODE, MODES
 from cuttlefish.projects.store import ProjectNotFoundError, RoleDefinition
 from cuttlefish.roles import (
-    ACCESS_LEVELS,
     BUILTIN_ROLES,
     DEFAULT_TEMPLATE,
     TEMPLATES,
@@ -75,12 +75,13 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "root": project.root,
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
+        "mode": project.mode,
         "roles": [
             {
                 "name": r.name,
                 "persona": r.persona,
                 "backend": r.backend,
-                "access": r.access or "standard",
+                "access": r.access,
                 "default_prompt": is_default_prompt(r),
             }
             for r in project.roles
@@ -125,11 +126,20 @@ def _roles_from_body(body: dict[str, Any]) -> tuple[RoleDefinition, ...]:
 
 
 def _access_from(value: Any) -> str | None:
-    """A role's optional access level: ``"standard"`` and unset are the same (``None``)."""
-    if value in (None, "", "standard"):
+    """A role's optional access level: unset inherits the project's mode (``None``)."""
+    if value in (None, ""):
         return None
     if value not in ACCESS_LEVELS:
         raise HTTPException(400, f"'access' must be one of {', '.join(ACCESS_LEVELS)}")
+    return str(value)
+
+
+def _mode_from(value: Any) -> str:
+    """A request's permission mode; unset is the default (standard)."""
+    if value in (None, ""):
+        return DEFAULT_MODE
+    if value not in MODES:
+        raise HTTPException(400, f"'mode' must be one of {', '.join(MODES)}")
     return str(value)
 
 
@@ -303,6 +313,7 @@ def create_app(
             max_tokens=max_tokens,
             max_cost_usd=max_cost_usd,
             backend=_backend_from(body.get("backend")),
+            mode=_mode_from(body.get("mode")),
         )
         return _project_json(daemon, project.id)
 
@@ -335,6 +346,16 @@ def create_app(
         body = await _json_body(request)
         try:
             daemon.projects.update_allow(project_id, _allow_from_body(body))
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/mode")
+    async def update_mode(project_id: str, request: Request) -> dict[str, Any]:
+        body = await _json_body(request)
+        mode = _mode_from(body.get("mode"))
+        try:
+            daemon.projects.update_mode(project_id, mode)
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc

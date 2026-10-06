@@ -63,3 +63,47 @@ def test_unsafe_flags_are_found(words: list[str], flag: str) -> None:
 )
 def test_safe_flags_pass(words: list[str]) -> None:
     assert unsafe_flag(words) is None
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "rm -rf /",
+        "rm -rf ~",
+        "rm -rf ../other",
+        "rm -rf $HOME/x",
+        "rm -rf $(echo /)",
+        "make clean && rm -rf /usr",
+        "echo x > /etc/passwd",
+        "echo x >> ../outside.txt",
+        "echo x > ~/f",
+        "cp build/out /usr/local/bin/out",
+        "mv x ../x",
+        "dd if=a of=/dev/sda",
+        "touch /tmp/x",
+        "chmod 777 /etc/shadow",
+        "tee /etc/hosts",
+    ],
+)
+def test_writes_outside_the_root_are_never_allowed(line: str) -> None:
+    assert never_allowed_reason(line) == "never_allowed:write_outside_root"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "rm -rf build",
+        "rm -rf node_modules dist",
+        "echo x > out.txt",
+        "echo x >> logs/run.log",
+        "make test > /dev/null 2>&1",
+        "make test 2>&1 | tail -5",
+        "cp /etc/hosts ./hosts.copy",
+        "cp src/a.py src/b.py",
+        "cat /etc/hostname",
+        "git commit -m 'costs $5'",
+        "mkdir -p out/sub",
+    ],
+)
+def test_writes_inside_the_root_and_reads_anywhere_are_fine(line: str) -> None:
+    assert never_allowed_reason(line) is None

@@ -143,19 +143,19 @@ class _RecordingBackend:
 
     def __init__(self) -> None:
         self.allow: list[list[str]] | None = None
+        self.mode: str | None = None
 
-    async def delegate(self, *, allow: list[list[str]] | None, **_: object) -> object:
+    async def delegate(
+        self, *, allow: list[list[str]] | None, mode: str | None = None, **_: object
+    ) -> object:
         self.allow = allow
+        self.mode = mode
         return object()
 
 
-@pytest.mark.parametrize(
-    ("access", "expect_write"),
-    [(None, True), ("read-only", False)],
-)
-async def test_access_decides_which_shell_the_backend_is_given(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, access: str | None, expect_write: bool
-) -> None:
+async def _delegate_with(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, access: str | None
+) -> _RecordingBackend:
     backend = _RecordingBackend()
     monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
     store = EpisodicStore.open(tmp_path / "episodic.db")
@@ -164,12 +164,44 @@ async def test_access_decides_which_shell_the_backend_is_given(
             episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary="kopicode"
         )
     )
-
     kwargs = {"access": access} if access else {}
     await delegate_to_agent_backend("t", str(tmp_path), allow=[["go", "test"]], **kwargs)
-
-    assert backend.allow is not None
-    assert (["git", "add"] in backend.allow) is expect_write
-    assert (["go", "test"] in backend.allow) is expect_write  # read-only ignores declarations
-    assert ["git", "status"] in backend.allow  # everyone can look
     store.close()
+    return backend
+
+
+async def test_standard_gets_the_presets_plus_declared_and_passes_no_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = await _delegate_with(tmp_path, monkeypatch, None)
+    assert backend.allow is not None
+    assert ["git", "add"] in backend.allow
+    assert ["go", "test"] in backend.allow
+    assert backend.mode is None
+
+
+async def test_read_only_gets_inspection_only_and_ignores_declarations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = await _delegate_with(tmp_path, monkeypatch, "read-only")
+    assert backend.allow is not None
+    assert ["git", "status"] in backend.allow
+    assert ["git", "add"] not in backend.allow
+    assert ["go", "test"] not in backend.allow
+    assert backend.mode == "read-only"
+
+
+async def test_ask_first_gets_no_commands_and_passes_no_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = await _delegate_with(tmp_path, monkeypatch, "ask-first")
+    assert backend.allow == []
+    assert backend.mode is None
+
+
+async def test_auto_gets_the_presets_so_a_list_driven_backend_still_has_one_and_the_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend = await _delegate_with(tmp_path, monkeypatch, "auto")
+    assert backend.allow
+    assert backend.mode == "auto"

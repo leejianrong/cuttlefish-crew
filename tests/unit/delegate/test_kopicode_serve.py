@@ -154,7 +154,7 @@ async def test_a_denied_command_is_answered_deny_and_the_outcome_is_refused(
     assert outcome.kind == "refused"
     reply = next(m for m in sent(tmp_path) if m.get("id") == "c-1")
     assert reply["result"] == {"answer": "deny"}
-    assert [(r.answer, r.rule) for r in records] == [("deny", "not_a_plain_word_list")]
+    assert [(r.answer, r.rule) for r in records] == [("deny", "never_allowed:write_outside_root")]
     assert records[0].detail == SH + "uv run pytest && rm -rf /"
 
 
@@ -189,7 +189,7 @@ async def test_every_consent_decision_is_carried_on_the_outcome_in_order(
         ("run_shell", SH + "uv run pytest -q", "allow"),
         ("run_shell", SH + "uv run pytest && rm -rf /", "deny"),
     ]
-    assert outcome.consent_decisions[1].rule == "not_a_plain_word_list"
+    assert outcome.consent_decisions[1].rule == "never_allowed:write_outside_root"
 
 
 @pytest.mark.parametrize(

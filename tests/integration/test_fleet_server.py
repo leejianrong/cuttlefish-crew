@@ -60,7 +60,7 @@ def test_register_then_list_round_trips(client: TestClient, tmp_path: Path) -> N
             "name": "builder",
             "persona": "ships fast",
             "backend": None,
-            "access": "standard",
+            "access": None,
             "default_prompt": False,
         }
     ]
@@ -383,7 +383,7 @@ def test_register_with_no_roles_gets_the_default_template(
 ) -> None:
     body = client.post("/api/projects", json={"name": "demo", "root": str(tmp_path / "d")}).json()
     assert [r["name"] for r in body["roles"]] == ["builder", "reviewer"]
-    assert [r["access"] for r in body["roles"]] == ["standard", "read-only"]
+    assert [r["access"] for r in body["roles"]] == [None, "read-only"]
     assert all(r["default_prompt"] for r in body["roles"])
 
 
@@ -442,3 +442,52 @@ def test_the_role_library_and_templates_are_served(client: TestClient) -> None:
         "builder-reviewer",
         "full-crew",
     ]
+
+
+def test_a_project_defaults_to_standard_and_the_mode_can_be_set_at_register_and_patched(
+    client: TestClient, tmp_path: Path
+) -> None:
+    plain = client.post("/api/projects", json={"name": "a", "root": str(tmp_path / "a")}).json()
+    assert plain["mode"] == "standard"
+    auto = client.post(
+        "/api/projects", json={"name": "b", "root": str(tmp_path / "b"), "mode": "auto"}
+    ).json()
+    assert auto["mode"] == "auto"
+    patched = client.patch(f"/api/projects/{plain['id']}/mode", json={"mode": "ask-first"}).json()
+    assert patched["mode"] == "ask-first"
+    assert client.get(f"/api/projects/{plain['id']}").json()["mode"] == "ask-first"
+
+
+def test_an_unknown_mode_is_400_and_read_only_is_not_a_project_mode(
+    client: TestClient, tmp_path: Path
+) -> None:
+    for bad in ("yolo", "read-only"):
+        response = client.post(
+            "/api/projects", json={"name": "a", "root": str(tmp_path / "a"), "mode": bad}
+        )
+        assert response.status_code == 400
+    created = client.post("/api/projects", json={"name": "a", "root": str(tmp_path / "a")}).json()
+    assert (
+        client.patch(f"/api/projects/{created['id']}/mode", json={"mode": "x"}).status_code == 400
+    )
+
+
+def test_patching_the_mode_of_an_unknown_project_is_404(client: TestClient) -> None:
+    assert client.patch("/api/projects/nope/mode", json={"mode": "auto"}).status_code == 404
+
+
+def test_a_role_can_carry_an_explicit_access_override(client: TestClient, tmp_path: Path) -> None:
+    body = client.post(
+        "/api/projects",
+        json={
+            "name": "a",
+            "root": str(tmp_path / "a"),
+            "mode": "auto",
+            "roles": [
+                {"name": "r", "access": "read-only"},
+                {"name": "s", "access": "standard"},
+                {"name": "t"},
+            ],
+        },
+    ).json()
+    assert [r["access"] for r in body["roles"]] == ["read-only", "standard", None]

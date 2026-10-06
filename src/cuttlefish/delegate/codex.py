@@ -100,7 +100,11 @@ _REJECTION_MARKER = "rejected"
 
 
 def build_codex_argv(
-    binary: str, task_text: str, *, allow: list[list[str]] | None = None
+    binary: str,
+    task_text: str,
+    *,
+    allow: list[list[str]] | None = None,
+    mode: str = "standard",
 ) -> list[str]:
     """The argv for one ``binary exec --json task_text`` invocation.
 
@@ -113,7 +117,10 @@ def build_codex_argv(
     plain scratch checkout that isn't a git repository, exactly the kind of
     root V1's own original delegation already runs against.
     """
-    sandbox_mode = "workspace-write" if allow else "read-only"
+    # Codex has one coarse dial (V4-C, ADR-0025): a read-only role and an empty allow list
+    # (ask-first) get the read-only sandbox; everything else, auto included, gets
+    # workspace-write, whose own network and path limits are what hold the never-allowed list.
+    sandbox_mode = "workspace-write" if allow and mode != "read-only" else "read-only"
     return [
         binary,
         "exec",
@@ -285,6 +292,7 @@ async def run_codex(
     task_text: str,
     root: str,
     allow: list[list[str]] | None = None,
+    mode: str = "standard",
     env: Mapping[str, str] | None = None,
     timeout: float | None = None,
 ) -> DelegationOutcome:
@@ -294,7 +302,7 @@ async def run_codex(
     the binary missing, a non-JSON line, or a stream with no
     `turn.completed`/`turn.failed` event.
     """
-    args = build_codex_argv(binary, task_text, allow=allow)
+    args = build_codex_argv(binary, task_text, allow=allow, mode=mode)
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -335,6 +343,7 @@ async def run_codex_in_sandbox(
     task_text: str,
     root: str,
     allow: list[list[str]] | None = None,
+    mode: str = "standard",
     timeout: float | None = None,
 ) -> DelegationOutcome:
     """Run Codex inside an already-created sandbox and classify what it did.
@@ -346,7 +355,7 @@ async def run_codex_in_sandbox(
     at all, verified live) -- a sandboxed call here reliably fails closed on
     a 401, not a silent success.
     """
-    args = build_codex_argv(binary, task_text, allow=allow)
+    args = build_codex_argv(binary, task_text, allow=allow, mode=mode)
     try:
         result = await provider.exec(handle, args, cwd=root, timeout=timeout)
     except SandboxError as exc:

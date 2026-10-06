@@ -59,8 +59,12 @@ and this folder disagree after a slice lands, update this folder.
 - The builder prompt's "ask one specific question" line is not in the shipped prompt:
   only kopicode can ask today (V4-H), so it says to state the assumption and take the
   most conservative reading. Restore the question once asking works on every backend.
-- Role access is `standard` or `read-only` (`GET /api/roles`); read-only is a shell
-  restriction only until V4-C, so the UI must not call it "can't edit".
+- Project mode is `ask-first`, `standard` or `auto`; a role's `access` is null (inherit),
+  one of those, or `read-only`. Read-only blocks edits on Claude Code and Codex only, so the
+  UI must not call it "can't edit" without the per-backend caveat. Ask first does not ask
+  until V4-H; do not show an "answer" affordance for it before then.
+- Auto is answered by cuttlefish (`ConsentPolicy(auto=True)`), so it is available on kopicode
+  now; it needs the `serve` transport.
 - `make` commands are on by default (not in the Permissions mockup).
 
 ## Known gaps in the mockup
