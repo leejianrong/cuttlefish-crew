@@ -18,12 +18,15 @@ import asyncio
 import collections
 import dataclasses
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from cuttlefish.delegate.consent import (
+    ConsentDecision,
+    ConsentPolicy,
     ConsentPolicyError,
+    command_line,
     suggest_rule,
     validate_always_rule,
 )
@@ -34,6 +37,17 @@ Answer = Literal["allow_once", "allow_always", "deny"]
 Resolution = Literal[
     "allowed_once", "allowed_always", "denied", "expired", "cancelled", "abandoned"
 ]
+
+#: The cancel message a serve child's reader gives the waits it abandons when the process
+#: exits, so :meth:`RequestBroker.hold` can say ``abandoned`` rather than ``cancelled``.
+CHILD_EXITED = "child_exited"
+
+#: Why the agent was stopped, in the words a card shows, by the rule that refused the command.
+WHY = {
+    "no_shell_allowed": "Every command waits for you in Ask first.",
+    "no_matching_allow_entry": "It is not on this project's command list.",
+    "not_a_plain_word_list": "It chains or quotes commands, so it cannot be matched to the list.",
+}
 
 #: How many finished requests the broker remembers, to answer a repeat idempotently.
 _REMEMBERED = 200
@@ -197,8 +211,9 @@ class RequestBroker:
             return await asyncio.wait_for(asyncio.shield(request._future), remaining)
         except TimeoutError:
             return self.resolve_system(request.id, "expired", by="timeout")
-        except asyncio.CancelledError:
-            self.resolve_system(request.id, "cancelled", by="system")
+        except asyncio.CancelledError as exc:
+            exited = bool(exc.args) and exc.args[0] == CHILD_EXITED
+            self.resolve_system(request.id, "abandoned" if exited else "cancelled", by="system")
             raise
 
     # -- ending -----------------------------------------------------------------------
@@ -240,10 +255,14 @@ class RequestBroker:
             return existing
         return self._finish(pending, Outcome(request_id, resolution, by))
 
-    def abandon_team(self, team_id: str) -> list[Outcome]:
-        """End every request a team still has pending (its agent process ended)."""
+    def end_team(
+        self, team_id: str, resolution: Literal["cancelled", "abandoned"]
+    ) -> list[Outcome]:
+        """End every request a team still has pending: ``cancelled`` when the operator stops
+        the team (the held agent is told no and its round can end), ``abandoned`` when the
+        process that was waiting is gone."""
         return [
-            self.resolve_system(p.id, "abandoned", by="system")
+            self.resolve_system(p.id, resolution, by="system")
             for p in list(self._pending.values())
             if p.team_id == team_id
         ]
@@ -279,3 +298,117 @@ class RequestBroker:
     def seed_grants(self, team_id: str, rules: Sequence[Sequence[str]]) -> None:
         """Restore a resumed team's grants from its own journal (never from ``Project.allow``)."""
         self._grants[team_id] = [tuple(rule) for rule in rules]
+
+
+def unresolved(events: Iterable[EpisodicEvent]) -> list[RequestRaised]:
+    """The requests a journal raised and never resolved (what a restart must abandon)."""
+    raised: dict[str, RequestRaised] = {}
+    for event in events:
+        payload = event.payload
+        if isinstance(payload, RequestRaised):
+            raised[payload.request_id] = payload
+        elif isinstance(payload, RequestResolved):
+            raised.pop(payload.request_id, None)
+    return list(raised.values())
+
+
+def granted_rules(events: Iterable[EpisodicEvent]) -> list[list[str]]:
+    """The "always" rules a team's journal records, to re-seed a resumed team with."""
+    return [
+        e.payload.rule
+        for e in events
+        if isinstance(e.payload, RequestResolved)
+        and e.payload.resolution == "allowed_always"
+        and e.payload.rule
+    ]
+
+
+@dataclasses.dataclass(slots=True)
+class RequestContext:
+    """What a running team's delegations need to ask a person: the broker and who is asking.
+
+    Carried on ``Runtime`` (never a task argument, ADR-0006). ``role_for`` attributes a request
+    to a role by the task text the team dispatched, because ``satay.gather`` runs durable calls
+    in satay's own tasks and a task argument for the role would change every recorded call.
+    """
+
+    broker: RequestBroker
+    project_id: str
+    team_id: str
+    window_s: float
+    _roles: dict[str, str | None] = dataclasses.field(default_factory=dict)
+
+    def note_role(self, role: str, text: str) -> None:
+        known = self._roles.get(text, role)
+        self._roles[text] = role if known == role else None  # two roles, one text: unknown
+
+    def role_for(self, text: str) -> str | None:
+        return self._roles.get(text)
+
+    def asker(self, *, role: str | None, backend: str) -> ShellAsker:
+        return ShellAsker(self, role, backend)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ShellAsker:
+    """Raises a permission request for one shell command and holds until it ends."""
+
+    context: RequestContext
+    role: str | None
+    backend: str
+
+    @property
+    def window_s(self) -> float:
+        return self.context.window_s
+
+    def grants(self) -> list[tuple[str, ...]]:
+        return self.context.broker.grants(self.context.team_id)
+
+    async def __call__(self, line: str, why: str, *, window_s: float) -> Outcome:
+        request = self.context.broker.raise_permission(
+            project_id=self.context.project_id,
+            team_id=self.context.team_id,
+            role=self.role,
+            backend=self.backend,
+            line=line,
+            why=why,
+            window_s=window_s,
+        )
+        return await self.context.broker.hold(request)
+
+
+class AskingDecider:
+    """A consent decider that asks a person about a denial one could override.
+
+    ``decide`` is the same :class:`ConsentPolicy` as without asking, rebuilt per decision with
+    the team's granted rules so an "Always allow" applies at once. Only an *askable* denial
+    becomes a request; an allow, and every denial no answer could change, is answered as before.
+    ``deadline`` outlasts the request window so the broker's own expiry is what ends the wait.
+    """
+
+    def __init__(
+        self,
+        allow: Sequence[Sequence[str]] | None,
+        asker: ShellAsker,
+        *,
+        window_s: float,
+        auto: bool = False,
+    ) -> None:
+        self._allow = [list(entry) for entry in allow or ()]
+        self._asker = asker
+        self._window_s = window_s
+        self._auto = auto
+        self.deadline = window_s + 5.0
+
+    async def __call__(self, kind: str, detail: str) -> ConsentDecision:
+        policy = ConsentPolicy([*self._allow, *self._asker.grants()], auto=self._auto)
+        decision = policy.decide(kind, detail)
+        line = command_line(detail)
+        if decision.answer == "allow" or not decision.askable or line is None:
+            return decision
+        outcome = await self._asker(
+            line, WHY.get(decision.rule, decision.rule), window_s=self._window_s
+        )
+        return ConsentDecision(
+            "allow" if outcome.allows else "deny", f"asked:{outcome.resolution}", asked=True
+        )

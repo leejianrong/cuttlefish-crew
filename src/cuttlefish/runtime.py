@@ -25,6 +25,7 @@ from dataclasses import dataclass
 
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.provider import LlmProvider
+from cuttlefish.requests import RequestContext
 from cuttlefish.sandbox.provider import SandboxProvider
 from cuttlefish.secrets.store import SecretsStore
 
@@ -52,6 +53,10 @@ class Runtime:
     who never sets ``CUTTLEFISH_SECRETS_KEY`` gets today's exact V1/V2
     behaviour, every credential still resolved from ``os.environ`` by each
     backend's own ``_credential_envs``.
+
+    ``requests`` is ``None`` outside the fleet daemon (``cuttlefish run`` has no inbox, so a
+    command nothing approves is refused at once, as before); the daemon sets it so a kopicode
+    delegation can ask a person (ADR-0028).
     """
 
     episodic_store: EpisodicStore
@@ -62,6 +67,7 @@ class Runtime:
     agent_backend: str = "kopicode"
     sandbox_provider: SandboxProvider | None = None
     secrets_store: SecretsStore | None = None
+    requests: RequestContext | None = None
 
 
 _runtime: contextvars.ContextVar[Runtime | None] = contextvars.ContextVar(

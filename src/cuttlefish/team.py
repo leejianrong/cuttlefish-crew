@@ -153,6 +153,10 @@ async def _dispatch_round(
     collect-mode contract by hand, catching each role's failure rather than
     letting one role's exception stop the rest of the round.
     """
+    requests = runtime.current().requests
+    if requests is not None:
+        for name in active_names:
+            requests.note_role(name, current_text[name])
     if _needs_sequential_dispatch(active_names, backend_by_name):
         outcomes: list[DelegationOutcome | BaseException] = []
         for name in active_names:

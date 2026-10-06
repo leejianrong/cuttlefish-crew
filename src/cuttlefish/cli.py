@@ -44,6 +44,8 @@ from cuttlefish.config import (
     AGENT_BACKEND_ENV,
     ConfigError,
     prepare_run,
+    resolve_needs_you,
+    resolve_request_window,
     secrets_db_path,
     validate_backend_name,
 )
@@ -671,8 +673,13 @@ def _projects(args: argparse.Namespace) -> int:
 
 
 async def _serve(args: argparse.Namespace) -> int:
+    try:
+        request_window = resolve_request_window()
+    except ConfigError as exc:
+        print(f"cuttlefish serve: {exc}", file=sys.stderr)
+        return EXIT_TASK_FAILED
     store = ProjectStore.open()
-    daemon = FleetDaemon(store)
+    daemon = FleetDaemon(store, request_window_s=request_window, ask_people=resolve_needs_you())
     try:
         # ADR-0010/KAN-1703: resume every project whose last team was still
         # running when this process (or a prior `cuttlefish serve`) died, before

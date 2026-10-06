@@ -177,13 +177,13 @@ async def test_cancelling_the_held_agent_resolves_cancelled() -> None:
     assert broker.pending() == []
 
 
-async def test_abandon_team_ends_only_that_teams_requests() -> None:
+async def test_end_team_ends_only_that_teams_requests() -> None:
     broker = RequestBroker(Journal().append)
     mine = _raise(broker)
     other = broker.raise_permission(
         project_id="p2", team_id="t2", role=None, backend=None, line="make", why="x", window_s=60
     )
-    ended = broker.abandon_team("t1")
+    ended = broker.end_team("t1", "abandoned")
     assert [o.resolution for o in ended] == ["abandoned"]
     assert broker.pending() == [other] and mine.id not in {p.id for p in broker.pending()}
 

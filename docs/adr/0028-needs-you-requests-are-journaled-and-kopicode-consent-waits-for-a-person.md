@@ -63,9 +63,10 @@ API never serves an unredacted copy). It is a cache of the journal and starts em
 correct because nothing can be pending after a restart (decision 2). History comes from folding
 the project's last team's events.
 
-**Owner:** the team (and so the project and the role). The role comes from a `contextvars`
-variable `team.py` sets around each role's delegation; it propagates into the satay task for the
-same reason `Runtime` does. Verified by a test in H2, not assumed to hold.
+**Owner:** the team (and so the project and the role). The role comes from `RequestContext.role_for(task_text)`: `team.py` notes which role it
+dispatched each text to, and the delegation task looks its own text up (two roles with one
+text are shown without a role). A contextvar set around the call does not reach satay's own
+tasks, and a `role` task argument would change every team call's recorded arguments.
 
 **Kinds.** V4-H raises only `permission`, and only for kopicode. `question` and `blocked` are in
 the model so V4-I and the Claude Code and Codex slices add producers without a second ADR.
@@ -102,8 +103,13 @@ The wait:
   margin). `expires_at` is the effective window, so a card never promises time it does not have.
 - **Expiry denies.** Timeout resolves `expired` / `timeout`, replies `deny`, and the agent is
   told no, as with any refusal.
-- **Stop or cancel.** `cancel_session` already cancels the per-request tasks and replies
-  `deny`; the decider's `CancelledError` path resolves each `cancelled` / `system`.
+- **Stop or cancel.** `cancel_session` (a delegation cancelled in-process) already cancels the
+  per-request tasks and replies `deny`; the decider's `CancelledError` path resolves each
+  `cancelled` / `system`. But the operator's Stop goes through satay's `cancel_run`, which
+  only lands when the round ends, and a round held open for a person does not end (found in
+  H2, not in the first draft of this ADR). So `FleetDaemon.stop` also resolves the team's
+  pending requests `cancelled`, which tells the waiting agent no and lets the round, and then
+  the cancel, finish.
 - **The child exits** while a request waits: the reader's exit path cancels the waits, which
   resolve `abandoned` / `system` ("the agent process ended").
 - **The daemon restarts.** The held request cannot survive: the child dies with the daemon's
@@ -154,10 +160,10 @@ The wait:
 **Not live in V4-H.** kopicode has no `ask` request on the wire (see Context): its `ask` calls
 get the process-level note or the fixed refusal, and that cannot be changed per session or
 answered later. Wrapping it would mean inventing a protocol, which CLAUDE.md and ADR-0003 rule
-out. What is assumed and must be checked in H2 before anything is shown: that the `ask` tool call
-appears in `session.event`. If it does, a kopicode `ask` is shown in the activity log as "asked
-a question nobody could answer". If it does not, nothing is shown, and that goes in
-known-gaps.md.
+out. Checked in H2: kopicode's engine events include `ask_requested` and `ask_answered`, and serve
+tees every non-delta journal event, so an `ask` call appears in `session.event`. cuttlefish does
+not record them yet; H4 shows a kopicode `ask` in the activity log as "asked a question nobody
+could answer".
 
 Recommendation: file an upstream kopicode issue for an `ask.request` server-to-client request
 shaped like `consent.request` (id, session, question, context; reply `{text}`; same bounded
@@ -247,9 +253,9 @@ All under the existing token or session; answering grants shell execution, the s
 1. **H1 Model and validation.** `RequestRaised`/`RequestResolved`, the broker (in-memory
    index, one-resolve rule, grants), `validate_allow_entry`, the askable table in
    `ConsentPolicy`, and `PATCH /allow` validation. No behaviour change for a running team.
-2. **H2 kopicode wiring.** `Runtime.requests`, role contextvar, the async decider, window probe
+2. **H2 kopicode wiring.** `Runtime.requests`, role attribution by dispatched task text (a contextvar does not reach `satay.gather`'s tasks, and a task argument would change every recorded call), the async decider, window probe
    and `--consent-timeout`, cancel/exit/restart handling, the startup sweep, the `ask` event
-   check. Behaviour is switched on for ask-first and standard only when a broker is present.
+   check. Behaviour is switched on for ask-first and standard only when a broker is present, and the daemon only attaches one when `CUTTLEFISH_NEEDS_YOU=1` (a team that stops for a person nobody can yet answer would be a regression); H4 removes the switch.
    Stub-child integration tests. No UI yet, so the daemon answers by an internal call only.
 3. **H3 API.** The three endpoints, `ProjectStore.add_allow`, live grants, re-seeding on
    resume. Ask-first copy in `GET /api/permissions` and known-gaps.md change here, with the

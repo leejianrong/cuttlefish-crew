@@ -28,6 +28,8 @@ was never told to look for).
 
 from __future__ import annotations
 
+from typing import Any
+
 import satay
 
 from cuttlefish import runtime
@@ -80,7 +82,15 @@ async def delegate_to_agent_backend(
         effective_allow = []
     else:
         effective_allow = resolve_allow(allow, presets)
-    mode_kwargs = {"mode": access} if access in ("auto", READ_ONLY) else {}
+    mode_kwargs: dict[str, Any] = {"mode": access} if access in ("auto", READ_ONLY) else {}
+    # A person can be asked (ADR-0028) only inside the fleet daemon, only of kopicode (the one
+    # backend that can pause for a consent), and never for Auto or a read-only role. It rides
+    # the runtime, not the task arguments, so recorded calls and replay are unchanged.
+    requests = runtime_.requests
+    if requests is not None and backend.NAME == "kopicode" and access not in ("auto", READ_ONLY):
+        mode_kwargs["asker"] = requests.asker(
+            role=requests.role_for(task_text), backend=backend.NAME
+        )
     return await backend.delegate(
         task_text=task_text,
         root=root,

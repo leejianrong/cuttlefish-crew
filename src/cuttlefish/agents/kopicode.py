@@ -14,15 +14,22 @@ import functools
 import os
 import shutil
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import ClassVar, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
 from cuttlefish.delegate.kopicode import run_kopicode, run_kopicode_in_sandbox
-from cuttlefish.delegate.kopicode_serve import ServePool, run_kopicode_serve
+from cuttlefish.delegate.kopicode_serve import (
+    UNCONFIGURABLE_WINDOW,
+    Decider,
+    ServePool,
+    run_kopicode_serve,
+    serve_supports_consent_timeout,
+)
 from cuttlefish.delegate.policy import write_policy_file
+from cuttlefish.requests import AskingDecider, ShellAsker
 from cuttlefish.sandbox.provider import (
     SandboxHandle,
     SandboxProvider,
@@ -109,12 +116,13 @@ class KopicodeBackend:
         secrets: Mapping[str, str],
         sandbox_provider: SandboxProvider | None,
         mode: str = "standard",
+        asker: ShellAsker | None = None,
     ) -> DelegationOutcome:
+        """``asker`` (ADR-0028) lets a command nothing approves be put to a person, who has
+        ``asker.window_s`` to answer (less when this kopicode cannot wait that long). Only the
+        ``serve`` transport can hold a request open; ``run --print`` ignores it."""
         if self._transport == "serve" and sandbox_provider is None:
-            try:
-                policy = ConsentPolicy(allow, auto=mode == "auto")
-            except ConsentPolicyError as exc:
-                raise DelegationError(f"unusable shell allowlist: {exc}") from exc
+            policy, consent_timeout = await self._consent(allow, mode, asker)
             return await run_kopicode_serve(
                 binary=self._binary,
                 task_text=task_text,
@@ -122,18 +130,17 @@ class KopicodeBackend:
                 policy=policy,
                 env=_credential_envs(secrets),
                 pool=self._pool,
+                consent_timeout=consent_timeout,
             )
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
-            try:
-                policy = ConsentPolicy(allow, auto=mode == "auto")
-            except ConsentPolicyError as exc:
-                raise DelegationError(f"unusable shell allowlist: {exc}") from exc
+            policy, consent_timeout = await self._consent(allow, mode, asker)
             return await self._delegate_serve_inside_sandbox(
                 sandbox_provider,
                 task_text=task_text,
                 root=root,
                 policy=policy,
                 secrets=secrets,
+                consent_timeout=consent_timeout,
             )
         if mode == "auto":
             raise DelegationError(
@@ -163,14 +170,31 @@ class KopicodeBackend:
         finally:
             policy_path.unlink(missing_ok=True)
 
+    async def _consent(
+        self, allow: Sequence[Sequence[str]] | None, mode: str, asker: ShellAsker | None
+    ) -> tuple[ConsentPolicy | Decider, float | None]:
+        """Who answers kopicode's consent requests, and the ``--consent-timeout`` it needs."""
+        try:
+            policy = ConsentPolicy(allow, auto=mode == "auto")
+        except ConsentPolicyError as exc:
+            raise DelegationError(f"unusable shell allowlist: {exc}") from exc
+        if asker is None or mode in ("auto", "read-only"):
+            return policy, None
+        if await serve_supports_consent_timeout(self._binary):
+            window, timeout = asker.window_s, asker.window_s + 30.0
+        else:
+            window, timeout = min(asker.window_s, UNCONFIGURABLE_WINDOW), None
+        return AskingDecider(allow, asker, window_s=window), timeout
+
     async def _delegate_serve_inside_sandbox(
         self,
         provider: SandboxProvider,
         *,
         task_text: str,
         root: str,
-        policy: ConsentPolicy,
+        policy: ConsentPolicy | Decider,
         secrets: Mapping[str, str],
+        consent_timeout: float | None = None,
     ) -> DelegationOutcome:
         """One sandbox, one ``serve`` child, one session; the sandbox is destroyed after.
 
@@ -194,16 +218,23 @@ class KopicodeBackend:
                 root=root,
                 policy=policy,
                 env=env,
-                process_factory=functools.partial(self._spawn_serve, provider, handle, cwd=root),
+                process_factory=functools.partial(
+                    self._spawn_serve, provider, handle, cwd=root, consent_timeout=consent_timeout
+                ),
             )
         finally:
             await asyncio.shield(provider.destroy(handle))
 
     @staticmethod
     async def _spawn_serve(
-        provider: StreamingSandboxProvider, handle: SandboxHandle, *, cwd: str
+        provider: StreamingSandboxProvider,
+        handle: SandboxHandle,
+        *,
+        cwd: str,
+        consent_timeout: float | None = None,
     ) -> asyncio.subprocess.Process:
-        return await provider.spawn(handle, [_SANDBOX_KOPICODE_BINARY, "serve"], cwd=cwd)
+        flags = [] if consent_timeout is None else ["--consent-timeout", f"{int(consent_timeout)}s"]
+        return await provider.spawn(handle, [_SANDBOX_KOPICODE_BINARY, "serve", *flags], cwd=cwd)
 
     async def _delegate_inside_sandbox(
         self,
