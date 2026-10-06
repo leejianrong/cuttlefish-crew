@@ -44,15 +44,27 @@ export function removeCommand(lines: readonly string[], line: string): string[] 
   return lines.filter((entry) => entry !== line);
 }
 
+const ACCESS_NAMES: Record<string, string> = {
+  "ask-first": "Ask first",
+  standard: "Standard",
+  auto: "Auto",
+  "read-only": "Read-only",
+};
+
+/** A mode or access level as words: "ask-first" is "Ask first". */
+export function modeLabel(mode: string): string {
+  return ACCESS_NAMES[mode] ?? mode;
+}
+
 /** A role's access as words, falling back to the project's mode when it sets none. */
 export function accessLabel(access: AccessLevel | null | undefined, projectMode: string): string {
-  const names: Record<string, string> = {
-    "ask-first": "Ask first",
-    standard: "Standard",
-    auto: "Auto",
-    "read-only": "Read-only",
-  };
-  return access ? names[access] : `Project default (${names[projectMode] ?? projectMode})`;
+  return access ? modeLabel(access) : `Project default (${modeLabel(projectMode)})`;
+}
+
+/** The agent behind a name from the daemon: "claude-code" is "Claude Code". */
+export function backendLabel(name: string): string {
+  const names: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex" };
+  return names[name] ?? name;
 }
 
 export function builtinByName(
@@ -121,4 +133,18 @@ export function replaceRole(
 
 export function removeRole(roles: readonly RoleDefinition[], name: string): RoleDefinition[] {
   return roles.filter((role) => role.name !== name);
+}
+
+/**
+ * The command groups a new project should start with: the defaults, plus Go and Rust when the
+ * folder looks like one, so a Go project can run `go test` without a visit to Permissions.
+ * `null` means "just the defaults" (send nothing).
+ */
+export function presetsForLanguages(
+  languages: readonly string[],
+  defaults: readonly string[],
+): string[] | null {
+  const wantsGoRust = languages.some((language) => language === "Go" || language === "Rust");
+  if (!wantsGoRust || defaults.includes("go-rust")) return null;
+  return [...defaults, "go-rust"];
 }

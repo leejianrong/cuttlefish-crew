@@ -42,8 +42,7 @@ MODE_INFO: dict[str, tuple[str, str]] = {
     ),
     "auto": (
         "Auto",
-        "Any command inside the project folder runs without asking. The always-blocked list "
-        "still applies.",
+        "Any command runs without asking, except the always-blocked list.",
     ),
 }
 
@@ -52,7 +51,7 @@ MODE_INFO: dict[str, tuple[str, str]] = {
 BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
     (
         "kopicode",
-        "Answered live",
+        "Decided live, no prompt yet",
         "Exact rules, decided for every command. Auto allows everything that is not blocked. "
         "A read-only role can still edit files: kopicode has no way to refuse an edit.",
     ),

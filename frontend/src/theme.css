@@ -36,7 +36,8 @@
   --border: var(--md-sys-color-outline-variant);
   --text: var(--md-sys-color-on-surface);
   --text-muted: var(--md-sys-color-on-surface-variant);
-  --text-faint: var(--md-sys-color-outline);
+  /* Text, not a border: `outline` is 4.2:1 on the page in the light theme, below AA. */
+  --text-faint: var(--md-sys-color-on-surface-variant);
   --accent: var(--md-sys-color-primary);
   --accent-text: var(--md-sys-color-on-primary);
   --danger: var(--md-sys-color-error);

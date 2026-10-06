@@ -46,24 +46,41 @@
 
   const firstRole = () => project.roles[0]?.name ?? null;
   let selectedName = $state<string | null>(firstRole());
-  // The role being edited, copied so Save and Cancel mean something.
-  let draft = $state<RoleDefinition | null>(null);
-  let draftFor: string | null = null;
+  // Edits in progress, one per role, so moving to another role never loses them.
+  let drafts = $state<Record<string, RoleDefinition>>({});
   let adding = $state(false);
   let newName = $state("");
   let confirmTemplate = $state<string | null>(null);
+  let confirmingRemove = $state(false);
   let saving = $state(false);
   let error = $state<string | null>(null);
   let notice = $state<string | null>(null);
 
   const selected = $derived(project.roles.find((role) => role.name === selectedName) ?? null);
-  const dirty = $derived(
-    draft !== null &&
-      selected !== null &&
-      (draft.persona !== selected.persona ||
-        (draft.backend ?? null) !== (selected.backend ?? null) ||
-        (draft.access ?? null) !== (selected.access ?? null)),
-  );
+  const draft = $derived(selected ? (drafts[selected.name] ?? selected) : null);
+  const dirty = $derived(selected !== null && differs(draft, selected));
+
+  function differs(a: RoleDefinition | null, b: RoleDefinition | null): boolean {
+    if (!a || !b) return false;
+    return (
+      a.persona !== b.persona ||
+      (a.backend ?? null) !== (b.backend ?? null) ||
+      (a.access ?? null) !== (b.access ?? null)
+    );
+  }
+
+  function isEdited(role: RoleDefinition): boolean {
+    return differs(drafts[role.name] ?? role, role);
+  }
+
+  function edit(patch: Partial<RoleDefinition>) {
+    if (!selected || !draft) return;
+    drafts[selected.name] = { ...draft, ...patch };
+  }
+
+  function discard() {
+    if (selected) delete drafts[selected.name];
+  }
   const addable = $derived(addableBuiltins(project.roles, builtins));
   const newNameProblem = $derived(newName ? roleNameProblem(newName, project.roles) : null);
 
@@ -77,16 +94,9 @@
     );
   });
 
-  // Start a fresh draft whenever a different role is selected.
-  $effect(() => {
-    if (selectedName !== draftFor) {
-      draftFor = selectedName;
-      draft = selected ? { ...selected } : null;
-    }
-  });
-
   function select(name: string) {
     selectedName = name;
+    confirmingRemove = false;
     error = null;
     notice = null;
   }
@@ -110,11 +120,13 @@
 
   async function saveRole() {
     if (!draft || !selected) return;
-    await write(replaceRole(project.roles, selected.name, draft), `Saved ${selected.name}.`);
+    const name = selected.name;
+    const ok = await write(replaceRole(project.roles, name, draft), `Saved ${name}.`);
+    if (ok) delete drafts[name];
   }
 
   function resetDraft() {
-    if (draft) draft = resetRole(draft, builtins);
+    if (draft) edit(resetRole(draft, builtins));
   }
 
   async function addBuiltin(name: string) {
@@ -147,7 +159,11 @@
     const name = selected.name;
     const remaining = removeRole(project.roles, name);
     const ok = await write(remaining, `Removed ${name}.`);
-    if (ok) selectedName = remaining[0]?.name ?? null;
+    if (ok) {
+      delete drafts[name];
+      confirmingRemove = false;
+      selectedName = remaining[0]?.name ?? null;
+    }
   }
 
   async function applyTemplate(name: string) {
@@ -160,8 +176,8 @@
     const ok = await write(roles, `Team replaced with ${template.title}.`);
     if (ok) {
       confirmTemplate = null;
+      drafts = {};
       selectedName = roles[0]?.name ?? null;
-      draftFor = null;
     }
   }
 
@@ -231,6 +247,7 @@
                 {builtinByName(builtins, role.name)?.summary ?? "Custom role"}
               </span>
             </span>
+            {#if isEdited(role)}<span class="tag attn">Unsaved</span>{/if}
             {#if role.access === "read-only"}<span class="tag primary">Read-only</span>{/if}
           </button>
         {:else}
@@ -274,7 +291,9 @@
         <div class="card editor">
           <div class="editor-head">
             <h3 class="title-large">{selected.name}</h3>
-            {#if isDefaultPrompt(draft, builtins)}
+            {#if dirty}
+              <span class="tag attn">Unsaved changes</span>
+            {:else if isDefaultPrompt(draft, builtins)}
               <span class="tag primary">Default prompt</span>
             {:else if builtinByName(builtins, selected.name)}
               <span class="tag">Edited</span>
@@ -282,6 +301,7 @@
             <button
               class="btn btn-text sm reset"
               disabled={!canReset(draft, builtins)}
+              title="Puts the built-in prompt and permissions back in the editor. Press Save role to keep it."
               onclick={resetDraft}
             >
               <Icon name="refresh" size={16} />Reset to default
@@ -293,7 +313,7 @@
               <span class="field-label">Agent</span>
               <select
                 value={draft.backend ?? ""}
-                onchange={(event) => draft && (draft = { ...draft, backend: field(event) || null })}
+                onchange={(event) => edit({ backend: field(event) || null })}
               >
                 {#each BACKENDS as option (option.value)}
                   <option value={option.value}>{option.label}</option>
@@ -304,8 +324,7 @@
               <span class="field-label">Permissions</span>
               <select
                 value={draft.access ?? ""}
-                onchange={(event) =>
-                  draft && (draft = { ...draft, access: (field(event) || null) as AccessLevel | null })}
+                onchange={(event) => edit({ access: (field(event) || null) as AccessLevel | null })}
               >
                 {#each ACCESS as option (option.value)}
                   <option value={option.value}>{option.label}</option>
@@ -325,17 +344,23 @@
             <textarea
               rows="12"
               value={draft.persona}
-              oninput={(event) => draft && (draft = { ...draft, persona: field(event) })}
+              oninput={(event) => edit({ persona: field(event) })}
             ></textarea>
           </label>
 
           {#if error}<p class="body-small error" role="alert">{error}</p>{/if}
           <div class="editor-actions">
-            <button class="btn btn-danger-text" disabled={saving} onclick={remove}>
-              <Icon name="trash" size={18} />Remove role
-            </button>
+            {#if confirmingRemove}
+              <span class="body-small" role="alert">Remove {selected.name} from this project?</span>
+              <button class="btn btn-danger sm" disabled={saving} onclick={remove}>Remove</button>
+              <button class="btn btn-text sm" onclick={() => (confirmingRemove = false)}>Keep it</button>
+            {:else}
+              <button class="btn btn-danger-text" disabled={saving} onclick={() => (confirmingRemove = true)}>
+                <Icon name="trash" size={18} />Remove role
+              </button>
+            {/if}
             <span class="grow"></span>
-            <button class="btn btn-text" disabled={!dirty || saving} onclick={() => (draft = selected ? { ...selected } : null)}>
+            <button class="btn btn-text" disabled={!dirty || saving} onclick={discard}>
               Discard changes
             </button>
             <button class="btn btn-filled" disabled={!dirty || saving} onclick={saveRole}>

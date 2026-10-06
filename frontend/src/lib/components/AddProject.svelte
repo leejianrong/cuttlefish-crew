@@ -8,6 +8,8 @@
     type TeamTemplate,
   } from "../api";
   import { folderName, parseAllow, parseLimit } from "../folders";
+  import { radiogroup } from "../radiogroup";
+  import { presetsForLanguages } from "../team";
   import FolderPicker from "./FolderPicker.svelte";
   import Icon from "./Icon.svelte";
 
@@ -49,6 +51,7 @@
   let template = $state("");
   let mode = $state<PermissionMode>("standard");
   let recent = $state<string[]>([]);
+  let defaultPresets = $state<string[]>([]);
 
   let advancedOpen = $state(false);
   let name = $state("");
@@ -64,6 +67,11 @@
   const chosenTemplate = $derived(templates.find((entry) => entry.name === template));
   const projectName = $derived(name.trim() || (selected ? folderName(selected) : ""));
   const folderLabel = $derived(selected ? folderName(selected) : "");
+  const startingPresets = $derived(
+    inspection && defaultPresets.length > 0
+      ? presetsForLanguages(inspection.languages, defaultPresets)
+      : null,
+  );
 
   $effect(() => {
     client.listTemplates().then(
@@ -74,6 +82,12 @@
       () => {
         error = "Couldn't load the team templates. Check that the daemon is still running.";
       },
+    );
+    client.listPermissions().then(
+      (result) => {
+        defaultPresets = result.presets.filter((preset) => preset.default).map((p) => p.name);
+      },
+      () => {},
     );
     client.listProjects().then(
       (result) => {
@@ -128,6 +142,7 @@
         root: selected,
         template,
         mode,
+        ...(startingPresets ? { presets: startingPresets } : {}),
         backend: backend || null,
         allow: parseAllow(allowText),
         max_tokens: maxTokens,
@@ -174,12 +189,13 @@
 
       <section aria-labelledby="team-heading">
         <h2 id="team-heading" class="title-large">Team</h2>
-        <div class="templates" role="radiogroup" aria-labelledby="team-heading">
+        <div class="templates" role="radiogroup" aria-labelledby="team-heading" use:radiogroup>
           {#each templates as entry (entry.name)}
             <button
               type="button"
               role="radio"
               aria-checked={entry.name === template}
+              tabindex={entry.name === template ? 0 : -1}
               class="opt template"
               class:selected={entry.name === template}
               onclick={() => (template = entry.name)}
@@ -201,12 +217,13 @@
 
       <section aria-labelledby="mode-heading">
         <h2 id="mode-heading" class="title-large">What can the agents do without asking?</h2>
-        <div class="seg" role="radiogroup" aria-labelledby="mode-heading">
+        <div class="seg" role="radiogroup" aria-labelledby="mode-heading" use:radiogroup>
           {#each MODES as entry (entry.id)}
             <button
               type="button"
               role="radio"
               aria-checked={entry.id === mode}
+              tabindex={entry.id === mode ? 0 : -1}
               class:selected={entry.id === mode}
               onclick={() => (mode = entry.id)}
             >
@@ -309,6 +326,9 @@
           <dd class="title-small">{MODES.find((entry) => entry.id === mode)?.label}</dd>
         </div>
       </dl>
+      {#if startingPresets}
+        <p class="body-small muted">Go and Rust commands will be switched on for this project.</p>
+      {/if}
       {#if inspection && !inspection.is_git}
         <p class="body-small notice">
           Agents can't undo their edits here: this folder isn't a git repository.
@@ -329,6 +349,15 @@
         <button type="button" class="btn btn-text" onclick={onCancel}>Cancel</button>
       </div>
     </aside>
+  </div>
+
+  <div class="bar">
+    <span class="body-medium bar-text">
+      {selected ? `Add ${projectName}` : "Pick a folder to continue"}
+    </span>
+    <button type="submit" class="btn btn-filled" disabled={submitting || !selected}>
+      {submitting ? "Adding…" : "Add project"}
+    </button>
   </div>
 </form>
 
@@ -503,7 +532,50 @@
     gap: 8px;
   }
 
+  /* On a narrow screen the summary sits below the form, so the primary action is pinned
+   * instead (above the phone's navigation bar). Hidden on wide screens. */
+  .bar {
+    display: none;
+  }
+
+  @media (max-width: 640px) {
+    .bar {
+      --bar-bottom: 5.5rem;
+    }
+  }
+
   @media (max-width: 900px) {
+    .bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      bottom: var(--bar-bottom, 1rem);
+      z-index: 5;
+      padding: 10px 16px;
+      border-radius: var(--md-sys-shape-corner-large);
+      background: var(--md-sys-color-inverse-surface);
+      color: var(--md-sys-color-inverse-on-surface);
+      box-shadow: var(--md-sys-elevation-level2);
+    }
+
+    .bar-text {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .bar :global(.btn-filled) {
+      background: var(--md-sys-color-inverse-primary);
+      color: var(--md-sys-color-inverse-surface);
+    }
+
+    .actions .btn-filled {
+      display: none;
+    }
+
     .layout {
       grid-template-columns: minmax(0, 1fr);
     }

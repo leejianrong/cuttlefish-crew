@@ -15,6 +15,7 @@
   } = $props();
 
   const roleEntries = $derived(Object.entries(project.status));
+  let confirming = $state<"stop" | "remove" | null>(null);
 </script>
 
 <article class="card filled project">
@@ -40,12 +41,22 @@
   {/if}
 
   <footer>
-    {#if project.running}
+    {#if confirming === "stop"}
+      <span class="confirm-text body-small" role="alert">Stop this team? Starting again begins a new run.</span>
       <button class="btn btn-danger sm" onclick={onStop}>Stop</button>
+      <button class="btn btn-text sm" onclick={() => (confirming = null)}>Keep running</button>
+    {:else if confirming === "remove"}
+      <span class="confirm-text body-small" role="alert">Remove this project from cuttlefish? Your folder is not touched.</span>
+      <button class="btn btn-danger sm" onclick={onRemove}>Remove</button>
+      <button class="btn btn-text sm" onclick={() => (confirming = null)}>Keep it</button>
     {:else}
-      <button class="btn btn-filled sm" onclick={onOpen}>Start…</button>
+      {#if project.running}
+        <button class="btn btn-danger sm" onclick={() => (confirming = "stop")}>Stop</button>
+      {:else}
+        <button class="btn btn-filled sm" onclick={onOpen}>Open</button>
+      {/if}
+      <button class="btn btn-text sm remove" onclick={() => (confirming = "remove")}>Remove</button>
     {/if}
-    <button class="btn btn-text sm remove" onclick={onRemove}>Remove</button>
   </footer>
 </article>
 
@@ -133,9 +144,14 @@
   }
 
   footer {
+    flex-wrap: wrap;
     display: flex;
     gap: 0.5rem;
     margin-top: 0.4rem;
+  }
+
+  .confirm-text {
+    flex-basis: 100%;
   }
 
   .remove {

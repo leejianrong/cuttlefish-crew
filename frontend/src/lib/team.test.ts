@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 import type { BuiltinRole, RoleDefinition } from "./api";
 import {
   accessLabel,
+  backendLabel,
+  modeLabel,
   addCommand,
   addableBuiltins,
   allowToLines,
   canReset,
   isDefaultPrompt,
   parseCommand,
+  presetsForLanguages,
   removeCommand,
   removeRole,
   replaceRole,
@@ -135,5 +138,27 @@ describe("role list edits", () => {
     expect(roleNameProblem("  ", team)).toBe("empty");
     expect(roleNameProblem("builder", team)).toBe("duplicate");
     expect(roleNameProblem(" poet ", team)).toBeNull();
+  });
+});
+
+describe("presetsForLanguages", () => {
+  const defaults = ["inspect", "git-read", "python"];
+  it("adds Go and Rust for a Go or Rust folder", () => {
+    expect(presetsForLanguages(["Go"], defaults)).toEqual([...defaults, "go-rust"]);
+    expect(presetsForLanguages(["Python", "Rust"], defaults)).toEqual([...defaults, "go-rust"]);
+  });
+  it("sends nothing when the defaults already fit", () => {
+    expect(presetsForLanguages(["Python"], defaults)).toBeNull();
+    expect(presetsForLanguages([], defaults)).toBeNull();
+    expect(presetsForLanguages(["Go"], [...defaults, "go-rust"])).toBeNull();
+  });
+});
+
+describe("labels", () => {
+  it("names modes and backends in words", () => {
+    expect(modeLabel("ask-first")).toBe("Ask first");
+    expect(modeLabel("auto")).toBe("Auto");
+    expect(backendLabel("claude-code")).toBe("Claude Code");
+    expect(backendLabel("kopicode")).toBe("kopicode");
   });
 });
