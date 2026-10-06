@@ -57,10 +57,10 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   (v0.3.0 has none; `ask.request`, kopicode#173, is on its `main`, unreleased). The model gets
   its fixed "no human is present" reply, and the dashboard shows the call in Recent activity as a
   question nobody could answer. A live question card waits for that release.
-- **Two V4-H behaviours were only checked against a scripted child, not a live model**: that a
-  held request survives past kopicode's default 60 seconds with `--consent-timeout`, and what a
-  real model does after a deny, an expiry or an Always. The live tests
-  (`test_kopicode_serve_needs_you_live.py`) cover the first when a key is present.
+- **V4-H live checks that remain**: what a real model does after a request expires or an
+  Always allow, and the `ask` event shape (read from kopicode's source, never seen live). The
+  hold past kopicode's default 60 seconds and the answers reaching kopicode were checked live
+  (`test_kopicode_serve_needs_you_live.py`, kopicode v0.3.0).
 - **A pending request does not survive a restart** and is not re-asked: it is journaled as
   abandoned, and a resumed run asks again if it needs to. The window is daemon-wide, not per
   project.
