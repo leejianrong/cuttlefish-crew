@@ -121,6 +121,7 @@ concurrently, in one process.
 | `--port PORT` | Auto-picks a free port if the default is taken. |
 | `--tailscale` | Bind directly to this machine's own Tailscale IPv4 address — the recommended remote-access path. Overrides `--host`. |
 | `--allow-origin ORIGIN` | A browser origin the dashboard may be served from in non-loopback mode. Repeatable. |
+| `--browse-root PATH` | A folder the dashboard's folder picker may browse: its subfolders only, with hidden folders and links out of the tree excluded. Repeatable. Default: your home directory. Registering a project is not limited to these. In non-loopback mode, set it to a workspaces folder rather than your home. |
 | `--dashboard-dir PATH` | Serve the dashboard's own production build from this directory, same-origin with the JSON API. Default: auto-detect `./frontend/dist`. |
 
 ## `cuttlefish mcp`

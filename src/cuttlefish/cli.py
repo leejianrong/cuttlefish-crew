@@ -705,6 +705,7 @@ async def _serve(args: argparse.Namespace) -> int:
                 password=os.environ.get("CUTTLEFISH_SERVE_PASSWORD"),
                 cors_origins=args.allow_origin or (),
                 dashboard_dir=_resolve_dashboard_dir(args.dashboard_dir),
+                browse_roots=[Path(root) for root in args.browse_root or ()],
             )
         except (ValueError, WeakPasswordError) as exc:
             print(f"cuttlefish serve: {exc}", file=sys.stderr)
@@ -1172,6 +1173,16 @@ def build_parser() -> argparse.ArgumentParser:
             "served from when --host is non-loopback (ADR-0011). Repeatable. Ignored "
             "in loopback mode, which already allows same-machine origins. Default: "
             "none -- only same-machine browser access works until this is set."
+        ),
+    )
+    serve_parser.add_argument(
+        "--browse-root",
+        action="append",
+        metavar="PATH",
+        help=(
+            "A folder the dashboard's folder picker may browse (V4-E, ADR-0026); "
+            "subfolders only, hidden ones and links out of the tree excluded. Repeatable. "
+            "Default: your home directory. Registering a project is not limited to these."
         ),
     )
     serve_parser.add_argument(

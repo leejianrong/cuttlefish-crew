@@ -22,6 +22,41 @@ export interface RoleDefinition {
   default_prompt?: boolean;
 }
 
+/** One folder in the picker (V4-E). */
+export interface FolderEntry {
+  name: string;
+  path: string;
+  is_git: boolean;
+}
+
+export interface FolderListing {
+  path: string;
+  root: string;
+  roots: string[];
+  /** null at a browse root: there is nowhere further up to go. */
+  parent: string | null;
+  truncated: boolean;
+  folders: FolderEntry[];
+}
+
+export interface FolderInspection {
+  path: string;
+  name: string;
+  is_git: boolean;
+  branch: string | null;
+  /** null when git could not say (not a repo, or it timed out). */
+  dirty: boolean | null;
+  last_commit: string | null;
+  languages: string[];
+}
+
+export interface TeamTemplate {
+  name: string;
+  title: string;
+  summary: string;
+  roles: string[];
+}
+
 /** One role's cumulative usage so far (KAN-1712/ADR-0017), derived from the
  * episodic journal -- `cost_usd` is `null` when no backend reported a dollar
  * figure (kopicode, Codex), which is "unknown", not "free" (KAN-1810). */
@@ -158,6 +193,20 @@ export class FleetClient {
       return undefined as T;
     }
     return (await response.json()) as T;
+  }
+
+  /** Subfolders of `path` (default: the first browse root). 403 outside the browse roots. */
+  listFolders(path?: string): Promise<FolderListing> {
+    const query = path ? `?path=${encodeURIComponent(path)}` : "";
+    return this.request(`/api/fs${query}`);
+  }
+
+  inspectFolder(path: string): Promise<FolderInspection> {
+    return this.request(`/api/fs/inspect?path=${encodeURIComponent(path)}`);
+  }
+
+  listTemplates(): Promise<{ default: string; templates: TeamTemplate[] }> {
+    return this.request("/api/templates");
   }
 
   listProjects(): Promise<{ projects: ProjectSummary[] }> {

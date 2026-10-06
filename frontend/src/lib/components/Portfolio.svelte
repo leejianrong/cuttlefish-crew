@@ -1,14 +1,16 @@
 <script lang="ts">
   import type { FleetClient, ProjectSummary } from "../api";
   import ProjectCard from "./ProjectCard.svelte";
-  import RegisterProjectForm from "./RegisterProjectForm.svelte";
+  import Icon from "./Icon.svelte";
 
   let {
     client,
     onOpenProject,
+    onAddProject,
   }: {
     client: FleetClient;
     onOpenProject: (id: string) => void;
+    onAddProject: () => void;
   } = $props();
 
   let projects = $state<ProjectSummary[]>([]);
@@ -48,6 +50,9 @@
   <header class="topbar">
     <h1 class="headline-medium">Projects</h1>
     <span class="endpoint mono">{client.baseUrl}</span>
+    <button class="btn btn-filled add" onclick={onAddProject}>
+      <Icon name="plus" size={18} />Add project
+    </button>
   </header>
 
   {#if unreachable}
@@ -63,11 +68,10 @@
         onRemove={() => remove(project.id)}
       />
     {/each}
-    <RegisterProjectForm {client} onRegistered={refresh} />
   </div>
 
   {#if loaded && projects.length === 0}
-    <p class="empty-state">No projects registered yet -- add one above.</p>
+    <p class="empty-state">No projects yet. Add one to get a team working in a folder.</p>
   {/if}
 </div>
 
@@ -94,6 +98,11 @@
   .endpoint {
     color: var(--text-faint);
     font-size: 0.78rem;
+  }
+
+  .add {
+    margin-left: auto;
+    padding-left: 16px;
   }
 
   .warning {
