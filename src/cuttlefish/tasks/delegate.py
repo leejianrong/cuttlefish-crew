@@ -33,6 +33,7 @@ import satay
 from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.agents.registry import resolve_backend
+from cuttlefish.delegate.presets import resolve_allow
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 
 
@@ -47,7 +48,10 @@ async def delegate_to_agent_backend(
 ) -> DelegationOutcome:
     """``agent_backend`` (KAN-1809) is a per-call override of the runtime's default;
     callers pass it only when set, so a call that names none has the identical
-    recorded arguments it always had (replay-safe for an in-flight run)."""
+    recorded arguments it always had (replay-safe for an in-flight run).
+
+    ``allow`` is what the operator *declared*; the built-in presets are added here, inside
+    the side-effecting task, so the recorded arguments stay the raw declaration (V4-A)."""
     runtime_ = runtime.current()
     backend = resolve_backend(
         agent_backend or runtime_.agent_backend,
@@ -61,7 +65,7 @@ async def delegate_to_agent_backend(
     return await backend.delegate(
         task_text=task_text,
         root=root,
-        allow=allow,
+        allow=resolve_allow(allow),
         secrets=resolved_secrets,
         sandbox_provider=runtime_.sandbox_provider,
     )

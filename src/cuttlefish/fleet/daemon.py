@@ -87,9 +87,9 @@ def _build_role_inputs(project: Project, roles: list[RoleStart]) -> list[RoleInp
     """`roles`, composed with `project`'s own persistent state -- its registered
     personas (`_compose_role_text`) and its declared `allow` (Q53), applied
     team-wide, the same "one flag, every role" posture the CLI's own
-    `run-team --allow` already holds. A project with no declared `allow` still
-    gets `policy.DEFAULT_SHELL_ALLOWLIST` (no shell command at all) -- see
-    `cuttlefish.team.RoleInput`'s own docstring for that default."""
+    `run-team --allow` already holds. A project with no declared `allow` gets
+    the built-in dev presets (`presets.resolve_allow`, ADR-0023), applied at delegation
+    time -- the declaration stored and journaled here stays raw."""
     allow = [list(command) for command in project.allow]
     inputs: list[RoleInput] = []
     for role in roles:

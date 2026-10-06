@@ -101,8 +101,8 @@
       <textarea bind:value={rolesText} rows="3"></textarea>
     </label>
     <label>
-      Allowed shell commands (one per line, e.g. <code>uv run pytest</code>; none allowed
-      by default)
+      Extra shell commands (one per line, e.g. <code>go test</code>). Tests, linters,
+      builds and everyday git are already allowed.
       <textarea bind:value={allowText} rows="2"></textarea>
     </label>
     <div class="row">

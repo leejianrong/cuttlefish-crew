@@ -75,6 +75,20 @@ _TYPE_RESULT = "result"
 _EDIT_TOOL_NAMES = frozenset({"Write", "Edit", "MultiEdit"})
 
 
+#: The never-allowed list (``never_allowed``) as Claude Code deny patterns, added next to
+#: every ``--allowedTools``. Only the prefix-shaped members map; the pipe-to-shell form
+#: cannot be a Bash prefix. Not yet verified live that a deny pattern beats an allow
+#: pattern for the same command, so this is belt, not braces.
+_NEVER_ALLOWED_BASH_PREFIXES = (
+    "sudo",
+    "su",
+    "doas",
+    "git push --force",
+    "git push -f",
+    "git push --force-with-lease",
+)
+
+
 def build_claude_code_argv(
     binary: str, task_text: str, *, allow: list[list[str]] | None = None
 ) -> list[str]:
@@ -99,6 +113,8 @@ def build_claude_code_argv(
     if allow:
         args.append("--allowedTools")
         args.extend(f"Bash({shlex.join(command)}:*)" for command in allow)
+        args.append("--disallowedTools")
+        args.extend(f"Bash({prefix}:*)" for prefix in _NEVER_ALLOWED_BASH_PREFIXES)
     else:
         args.extend(["--disallowedTools", "Bash"])
     return args

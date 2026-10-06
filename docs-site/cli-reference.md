@@ -19,7 +19,7 @@ uv run cuttlefish run "run the test suite" --allow "go test" --allow "npm test"
 | Flag | What it does |
 |---|---|
 | `--root ROOT` | The checkout to delegate against (default: CWD). |
-| `--allow CMD` | One shell command the delegation may run inside `--root`, shell-quoted. Repeatable. Default: none. |
+| `--allow CMD` | One shell command the delegation may run inside `--root`, shell-quoted. Repeatable. Added to the built-in dev presets (see [Default permissions](#default-permissions)). |
 | `--token-budget N` | Working-memory handover threshold, in estimated tokens. |
 | `--project NAME` | This task's secrets scope. Default: `--root`'s own directory name. |
 | `--secret NAME` | One named secret this task's backend may read (needs `CUTTLEFISH_SECRETS_KEY`). Repeatable. |
@@ -155,3 +155,25 @@ agent backend are selected: `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY` for
 kopicode and the reasoning provider, Claude Code's own login or
 `ANTHROPIC_API_KEY`, and `codex login` for Codex (`codex exec` ignores an
 ambient `OPENAI_API_KEY`, ADR-0018).
+
+
+## Default permissions
+
+A delegation with nothing declared is not shell-less: it gets the built-in presets, and
+`--allow` (or a project's own allow list) adds to them. Enabled by default: **inspect**
+(`ls`, `cat`, `grep`, `rg`, `find`, ...), **git-read** (`git status|diff|log|show`),
+**git-save** (`git add`, `git commit -m '<message>'`, `git switch -c`), **python**
+(`uv run pytest|ruff|mypy`, `uv sync`), **javascript** (`npm test|ci`, `npm run
+test|build|lint|check`, `npx tsc`) and **make** (`make test|check|lint|build|ci`). **go-rust**
+and **containers** exist but are off unless declared.
+
+Never approved, whatever is declared: `sudo`/`su`/`doas`, a forced `git push`, a
+download piped into a shell (`curl ... | sh`), and arguments that reach outside `--root`.
+`find -delete`/`-exec`, `rg --pre` and `git commit --no-verify` are refused too.
+
+Matching is by argv prefix on a plain word list, so a chained or quoted command line
+(`a && b`, `$(...)`) is denied. The one exception is `git commit -m '<message>'`.
+kopicode checks this live; for Claude Code the same list is passed as `--allowedTools`
+(plus deny patterns for the never-allowed prefixes) and for Codex it only switches the
+sandbox to `workspace-write` -- see the known gaps. The `print` transport's exact-match
+policy file cannot express prefixes, so it sees the presets but matches almost nothing.

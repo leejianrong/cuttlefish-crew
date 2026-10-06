@@ -54,12 +54,13 @@ def test_build_claude_code_argv_with_a_declared_allowlist_allows_only_those_comm
     argv = build_claude_code_argv(
         "claude", "run the tests", allow=[["go", "test"], ["npm", "test"]]
     )
-    assert argv[-3:] == [
-        "--allowedTools",
-        "Bash(go test:*)",
-        "Bash(npm test:*)",
-    ]
-    assert "--disallowedTools" not in argv
+    allowed = argv[argv.index("--allowedTools") + 1 : argv.index("--disallowedTools")]
+    assert allowed == ["Bash(go test:*)", "Bash(npm test:*)"]
+    # The never-allowed list rides along as deny patterns, and Bash itself stays available.
+    denied = argv[argv.index("--disallowedTools") + 1 :]
+    assert "Bash(sudo:*)" in denied
+    assert "Bash(git push --force:*)" in denied
+    assert "Bash" not in denied
 
 
 async def test_run_claude_code_in_sandbox_execs_the_right_argv_at_the_right_cwd() -> None:

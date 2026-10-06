@@ -134,9 +134,8 @@ class Project:
     ``allow`` is durable here for the same reason ``persona`` is (Q31, Q53): a
     project's trusted shell-command set is reviewed once, not retyped per
     `FleetDaemon.start` call — a daemon-launched team has no CLI `--allow` flag
-    of its own to carry it. Defaults to ``()``, the same "no shell command
-    allowed" posture `policy.DEFAULT_SHELL_ALLOWLIST` already holds everywhere
-    else nothing is declared.
+    of its own to carry it. Defaults to ``()``: nothing declared on top of the
+    built-in dev presets (ADR-0023).
     """
 
     id: str

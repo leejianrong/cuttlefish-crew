@@ -31,6 +31,7 @@ from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.budget import cumulative_usage
 from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
+from cuttlefish.delegate.presets import resolve_allow
 from cuttlefish.episodic.events import (
     ApprovalDecision,
     ConsentDecided,
@@ -56,9 +57,9 @@ class RoleInput(TypedDict):
     """One team member: a name and its own task text.
 
     ``allow``/``secret_names`` default to the same "nothing declared" posture a
-    plain ``cuttlefish run`` takes (``policy.DEFAULT_SHELL_ALLOWLIST``, no declared
-    secrets) — a role that needs its own broader policy declares it explicitly, the
-    same discipline every other cuttlefish affordance already holds to.
+    plain ``cuttlefish run`` takes (no declared commands, which ``presets.resolve_allow``
+    turns into the built-in dev presets, ADR-0023; no declared secrets) — a role that
+    needs more declares it, and what it declares is added to the presets.
     """
 
     name: str
@@ -238,7 +239,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 DelegationStarted(
                     task_text=current_text[name],
                     root=root,
-                    policy_allow=role.get("allow", DEFAULT_SHELL_ALLOWLIST),
+                    policy_allow=resolve_allow(role.get("allow", DEFAULT_SHELL_ALLOWLIST)),
                     sandbox=sandbox_name,
                     backend=backend_by_name[name],
                     project=project,
