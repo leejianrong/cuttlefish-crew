@@ -77,6 +77,8 @@ describe("summarize", () => {
     );
     expect(text).toBe("did the thing");
     expect(summarize(event("TeamResumed", { resumed_from_seq: 12 }))).not.toContain("12");
+    expect(eventLabel("TeamStopped")).toBe("Stopped");
+    expect(summarize(event("TeamStopped", {}))).toContain("You stopped the team");
   });
   it("shows an unknown event as JSON instead of dropping it", () => {
     expect(summarize(event("Mystery", { a: 1 }))).toBe('{"a":1}');

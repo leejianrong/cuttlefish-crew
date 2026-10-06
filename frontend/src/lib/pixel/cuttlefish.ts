@@ -46,6 +46,7 @@ const TINTS: Record<RoleStatus, { H: string; T: string }> = {
   blocked: { H: "#ffb15e", T: "#d98a3d" },
   done: { H: "#5bd88a", T: "#2f9f5c" },
   failed: { H: "#ff6b5e", T: "#c94236" },
+  stopped: { H: "#7d8594", T: "#5d6573" },
 };
 
 export function paletteFor(status: RoleStatus): Record<string, string> {
@@ -60,4 +61,5 @@ export const STATUS_GLYPH: Record<RoleStatus, string | null> = {
   blocked: "!",
   done: "✓",
   failed: "×",
+  stopped: "■",
 };

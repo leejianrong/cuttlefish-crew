@@ -144,6 +144,7 @@ class RequestBroker:
             collections.OrderedDict()
         )
         self._grants: dict[str, list[tuple[str, ...]]] = {}
+        self._closed: set[str] = set()
 
     # -- raising ----------------------------------------------------------------------
 
@@ -272,12 +273,18 @@ class RequestBroker:
     ) -> list[Outcome]:
         """End every request a team still has pending: ``cancelled`` when the operator stops
         the team (the held agent is told no and its round can end), ``abandoned`` when the
-        process that was waiting is gone."""
+        process that was waiting is gone. A team ended this way asks nobody anything more
+        (:meth:`is_closed`), so an agent that carries on after a stop cannot raise a fresh one."""
+        self._closed.add(team_id)
         return [
             self.resolve_system(p.id, resolution, by="system")
             for p in list(self._pending.values())
             if p.team_id == team_id
         ]
+
+    def is_closed(self, team_id: str) -> bool:
+        """Whether the team was stopped or has ended: nothing it asks now can be answered."""
+        return team_id in self._closed
 
     def _finish(self, pending: PendingRequest, outcome: Outcome) -> Outcome:
         self._append(
@@ -402,6 +409,9 @@ class ShellAsker:
         return self.context.broker.grants(self.context.team_id)
 
     async def __call__(self, line: str, why: str, *, window_s: float) -> Outcome:
+        if self.context.broker.is_closed(self.context.team_id):
+            # The operator stopped this team; do not raise a card nobody will see in time.
+            return Outcome("", "cancelled", "system")
         request = self.context.broker.raise_permission(
             project_id=self.context.project_id,
             team_id=self.context.team_id,

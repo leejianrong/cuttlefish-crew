@@ -180,7 +180,12 @@
             />
           {/each}
         </section>
-        {#if confirmingStop}
+        {#if project.stopping}
+          <p class="banner" role="status">
+            Stopping. The agent finishes the step it is on first, which can take a minute or two.
+            Anything it asks for in the meantime is refused.
+          </p>
+        {:else if confirmingStop}
           <div class="confirm" role="alert">
             <span class="body-medium">
               Stop the team? Its roles stop, and starting again begins a new run.
@@ -354,6 +359,14 @@
 
   .stop {
     margin-bottom: 2rem;
+  }
+
+  .banner {
+    margin: 0 0 2rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--md-sys-shape-corner-medium, 12px);
+    background: var(--status-queued-bg);
+    color: var(--status-queued-fg);
   }
 
   .confirm {

@@ -16,6 +16,7 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    TeamStopped,
 )
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.status import role_statuses, roles_in
@@ -115,3 +116,40 @@ def test_roles_in_collects_every_role_name_a_lifecycle_event_mentions() -> None:
         DelegationStarted(task_text="review it", root="/tmp", role="reviewer"),
     )
     assert roles_in(events) == {"builder", "reviewer"}
+
+
+def test_a_stopped_team_reads_stopped_not_blocked_for_roles_that_had_not_finished() -> None:
+    events = _events(
+        TaskSubmitted(text="a", role="builder"),
+        DelegationStarted(task_text="do it", root="/tmp", role="builder"),
+        DelegationCompleted(summary="done", role="builder"),
+        TaskSubmitted(text="b", role="reviewer"),
+        TeamStopped(),
+    )
+    assert role_statuses(events, ["builder", "reviewer"]) == {
+        "builder": "stopped",
+        "reviewer": "stopped",
+    }
+
+
+def test_a_stopped_team_keeps_the_terminal_state_of_a_role_that_finished() -> None:
+    events = _events(
+        TaskSubmitted(text="a", role="builder"),
+        TaskCompleted(result="ok", role="builder"),
+        TaskSubmitted(text="b", role="reviewer"),
+        DelegationStarted(task_text="do it", root="/tmp", role="reviewer"),
+        TeamStopped(),
+    )
+    assert role_statuses(events, ["builder", "reviewer"]) == {
+        "builder": "done",
+        "reviewer": "stopped",
+    }
+
+
+def test_a_role_that_starts_again_after_a_stop_is_working() -> None:
+    events = _events(
+        DelegationStarted(task_text="do it", root="/tmp", role="builder"),
+        TeamStopped(),
+        DelegationStarted(task_text="do it", root="/tmp", role="builder"),
+    )
+    assert role_statuses(events, ["builder"]) == {"builder": "working"}

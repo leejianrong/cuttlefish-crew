@@ -60,6 +60,9 @@
   .glyph-blocked {
     color: var(--status-blocked-fg);
   }
+  .glyph-stopped {
+    color: var(--status-queued-fg);
+  }
   .glyph-done {
     color: var(--status-done-fg);
   }

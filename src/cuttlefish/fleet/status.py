@@ -21,10 +21,11 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    TeamStopped,
 )
 from cuttlefish.episodic.store import EpisodicEvent
 
-RoleStatus = Literal["queued", "working", "blocked", "done", "failed"]
+RoleStatus = Literal["queued", "working", "blocked", "done", "failed", "stopped"]
 
 #: Event types that actually drive a role's own state machine -- deliberately
 #: excludes `HandoverWritten`/`SteeringMessage`/`ApprovalDecision`: all three are
@@ -67,6 +68,13 @@ def role_statuses(events: Iterable[EpisodicEvent], roles: Sequence[str]) -> dict
     latest: dict[str, EventPayload] = {}
     for event in events:
         payload = event.payload
+        if isinstance(payload, TeamStopped):
+            # The operator stopped the team: a role that had not finished is stopped, not
+            # blocked. One that had keeps its terminal state.
+            for name in roles:
+                if not isinstance(latest.get(name), TaskCompleted | TaskFailed):
+                    latest[name] = payload
+            continue
         if not isinstance(payload, _LIFECYCLE_TYPES):
             continue
         role = payload.role  # type: ignore[union-attr]  # every _LIFECYCLE_TYPES member declares it
@@ -79,6 +87,8 @@ def role_statuses(events: Iterable[EpisodicEvent], roles: Sequence[str]) -> dict
 def _status_from(payload: EventPayload | None) -> RoleStatus:
     if payload is None or isinstance(payload, TaskSubmitted):
         return "queued"
+    if isinstance(payload, TeamStopped):
+        return "stopped"
     if isinstance(payload, TaskCompleted):
         return "done"
     if isinstance(payload, TaskFailed):

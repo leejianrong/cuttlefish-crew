@@ -61,6 +61,12 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Always allow, and the `ask` event shape (read from kopicode's source, never seen live). The
   hold past kopicode's default 60 seconds and the answers reaching kopicode were checked live
   (`test_kopicode_serve_needs_you_live.py`, kopicode v0.3.0).
+- **Stop lands when the round ends, not at once.** satay's cancel is delivered between
+  rounds, so a role mid-round keeps working (and editing) until that round finishes, which can
+  take minutes. Since KAN-1896 the dashboard says "Stopping" immediately, a stopped team asks
+  for nothing more (every later Needs-you request is refused), and a role cut off reads
+  "stopped" instead of "blocked". Interrupting a round in flight would need kopicode's own
+  `session.cancel` driven from the daemon, which is not built.
 - **A pending request does not survive a restart** and is not re-asked: it is journaled as
   abandoned, and a resumed run asks again if it needs to. The window is daemon-wide, not per
   project.

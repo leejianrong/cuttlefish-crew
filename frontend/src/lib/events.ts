@@ -15,6 +15,7 @@ const LABELS: Record<string, string> = {
   TaskCompleted: "Finished",
   TaskFailed: "Failed",
   TeamResumed: "Resumed",
+  TeamStopped: "Stopped",
   ToolCallRecorded: "Tool",
   ConsentDecided: "Command",
   RequestRaised: "Needs you",
@@ -83,6 +84,8 @@ export function summarize(event: EpisodicEventView): string {
       return String(p.result);
     case "TaskFailed":
       return String(p.error);
+    case "TeamStopped":
+      return "You stopped the team. Roles that had not finished are stopped; starting again begins a new run.";
     case "TeamResumed":
       return "A daemon restart found this run still in progress, and it picked up where it left off.";
     case "ToolCallRecorded":

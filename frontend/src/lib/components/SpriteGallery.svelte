@@ -11,6 +11,7 @@
     { status: "blocked", blurb: "the backend refused and needs a human" },
     { status: "done", blurb: "reached TaskCompleted" },
     { status: "failed", blurb: "reached TaskFailed" },
+    { status: "stopped", blurb: "the operator stopped the team before this role finished" },
   ];
 </script>
 
