@@ -25,8 +25,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-#: V1's original default, still the fallback when a call declares no policy of
-#: its own: no shell command may run at all. Confining writes to the
+#: What a call that declares no policy of its own passes down: an empty declaration.
+#: ``presets.resolve_allow`` (ADR-0023) turns that into the built-in dev presets at
+#: delegation time; before V4-A it meant no shell command at all. Confining writes to the
 #: delegation's own root remains the narrowest capability that still lets
 #: kopicode land a real edit unattended.
 DEFAULT_SHELL_ALLOWLIST: list[list[str]] = []

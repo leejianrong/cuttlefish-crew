@@ -42,7 +42,10 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   authenticated via `ANTHROPIC_API_KEY`, not Claude Code's own OAuth login.
   `docs/QUESTIONS.md` Q37.
 - Its declared-allowlist-to-`--allowedTools` mapping is an honest
-  approximation, not full parity with kopicode's KAN-987 policy gate.
+  approximation (the default presets pass through it too, so `find` and `rg`
+  there are not protected from `-delete`/`--pre` the way kopicode's consent
+  policy protects them; and a deny pattern beating an allow pattern is not yet
+  verified live), not full parity with kopicode's KAN-987 policy gate.
   `docs/QUESTIONS.md` Q36.
 - `CodexBackend`'s sandboxed path fails closed on a 401 for every operator,
   not just an unauthenticated one -- verified live that `codex exec` does

@@ -25,6 +25,8 @@ import shlex
 from collections.abc import Sequence
 from typing import Literal
 
+from cuttlefish.delegate.never_allowed import never_allowed_reason, unsafe_flag
+
 Answer = Literal["allow", "deny"]
 
 #: Longest command line ever considered; a longer one is denied unread.
@@ -36,6 +38,17 @@ MAX_COMMAND_CHARS = 1024
 _WORD = re.compile(r"[A-Za-z0-9_.,:=@%+/-]+")
 
 _SH_C_PREFIX = ("/bin/sh", "-c")
+
+#: The one command whose argument is prose: ``git commit -m '<message>'`` (or ``-am``). A
+#: message needs quotes, which the plain-word rule above refuses, so it gets its own narrow
+#: match. Single quotes hold anything but a quote or newline; double quotes additionally
+#: exclude every character ``/bin/sh`` would still expand inside them (``$``, backtick,
+#: backslash, ``!``). No other flag is accepted, so nothing else rides along.
+_GIT_COMMIT_MESSAGE = re.compile(
+    r"git commit (?:-a )?-m (?:'[^'\n]{1,500}'|\"[^\"$`\\!\n]{1,500}\")"
+    r"|git commit -am (?:'[^'\n]{1,500}'|\"[^\"$`\\!\n]{1,500}\")"
+)
+_GIT_COMMIT = ("git", "commit")
 
 #: What kopicode puts in a ``run_shell`` ``consent.request``'s ``detail``: the argv it will run,
 #: ``["/bin/sh", "-c", <line>]``, joined by spaces (``internal/permission/gate.go``), so the
@@ -79,6 +92,8 @@ def _pattern_from_entry(entry: Sequence[str]) -> tuple[str, ...]:
             raise ConsentPolicyError(f"allow entry {list(entry)!r}: {exc}") from exc
     if not words:
         raise ConsentPolicyError("allow entry is empty")
+    if (reason := never_allowed_reason(" ".join(words))) is not None:
+        raise ConsentPolicyError(f"allow entry {list(entry)!r} is never allowed ({reason})")
     for word in words:
         if not _WORD.fullmatch(word):
             raise ConsentPolicyError(
@@ -103,6 +118,7 @@ class ConsentPolicy:
 
     def __init__(self, allow: Sequence[Sequence[str]] | None = None) -> None:
         self._patterns = tuple(_pattern_from_entry(entry) for entry in allow or ())
+        self._commit_messages = _GIT_COMMIT in self._patterns
 
     def decide(self, kind: str, detail: str) -> ConsentDecision:
         if kind == "write_outside_root":
@@ -116,12 +132,19 @@ class ConsentPolicy:
         line = detail[len(_DETAIL_PREFIX) :]
         if not line or len(line) > MAX_COMMAND_CHARS:
             return _deny("command_length")
+        reason = never_allowed_reason(line)
+        if reason is not None:
+            return _deny(reason)
+        if self._commit_messages and _GIT_COMMIT_MESSAGE.fullmatch(line):
+            return ConsentDecision("allow", "allow:git commit -m")
         words = line.split(" ")
         if not all(_WORD.fullmatch(word) for word in words):
             return _deny("not_a_plain_word_list")
         for pattern in self._patterns:
             if tuple(words[: len(pattern)]) != pattern:
                 continue
+            if unsafe_flag(words) is not None:
+                return _deny("unsafe_flag")
             if any(_escapes_root(word) for word in words[len(pattern) :]):
                 return _deny("argument_escapes_root")
             return ConsentDecision("allow", "allow:" + " ".join(pattern))

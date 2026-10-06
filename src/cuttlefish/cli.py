@@ -128,7 +128,8 @@ def _parse_allow(values: list[str] | None) -> list[list[str]]:
     """Each ``--allow`` value is one allowed command, shell-quoted (e.g. ``"go
     test"``), split into the argv list kopicode's own declared-allowlist grammar
     expects (KAN-1011, docs/SLICES.md V2 step 3). No flag at all keeps V1's
-    original default: no shell command allowed.
+    original default is empty, which `delegate.presets.resolve_allow` turns into the built-in
+    dev presets at delegation time.
     """
     return [shlex.split(value) for value in values] if values else []
 
@@ -727,7 +728,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="CMD",
         help=(
             "One shell command the delegation may run inside --root, shell-quoted "
-            "(e.g. --allow 'go test'). Repeatable. Default: no shell command allowed."
+            "(e.g. --allow 'go test'). Repeatable. Added to the built-in dev presets (tests, "
+            "linters, builds, git) -- see docs-site/cli-reference.md."
         ),
     )
     run_parser.add_argument(
@@ -849,7 +851,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="CMD",
         help=(
-            "One shell command every role may run inside --root. Repeatable. Applies to all roles."
+            "One shell command every role may run inside --root, on top of the built-in dev "
+            "presets. Repeatable. Applies to all roles."
         ),
     )
     run_team_parser.add_argument(
@@ -1030,7 +1033,7 @@ def build_parser() -> argparse.ArgumentParser:
             "One shell command every role in this project's team may run "
             "inside --root, shell-quoted (e.g. --allow 'go test'). Repeatable. "
             "Applies to every daemon-started team (`cuttlefish serve`), which has "
-            "no CLI --allow flag of its own (Q53). Default: no shell command allowed."
+            "no CLI --allow flag of its own (Q53). Added to the built-in dev presets."
         ),
     )
     add_parser.add_argument(

@@ -53,9 +53,9 @@ class TaskInput(TypedDict):
     — a test lowers it to force a handover deterministically rather than growing a
     real episodic window large enough to cross a realistic one.
 
-    ``allow`` is optional and defaults to ``policy.DEFAULT_SHELL_ALLOWLIST`` (V1's
-    original, hardcoded no-shell-commands-at-all policy) — the operator-declared,
-    per-task policy KAN-1011 adds (docs/SLICES.md V2 step 3), each entry one
+    ``allow`` is optional and defaults to ``policy.DEFAULT_SHELL_ALLOWLIST`` (empty,
+    which ``presets.resolve_allow`` turns into the built-in dev presets, ADR-0023) —
+    the operator-declared, per-task policy KAN-1011 adds (docs/SLICES.md V2 step 3), each entry one
     allowed command as an argv list, in kopicode's own declared-allowlist grammar.
 
     ``project``/``secret_names`` (ADR-0006) are both optional and default to
