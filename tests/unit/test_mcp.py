@@ -35,6 +35,13 @@ async def test_list_tools_exposes_exactly_the_expected_surface(server: Any) -> N
         "steer_project",
         "approve_project",
         "get_events",
+        "get_permissions",
+        "list_builtin_roles",
+        "list_templates",
+        "set_project_mode",
+        "update_roles",
+        "list_requests",
+        "answer_request",
     }
 
 
@@ -172,3 +179,90 @@ async def test_a_fleet_api_error_is_never_silently_swallowed(
     monkeypatch.setattr(mcp_module, "_request", raise_error)
     with pytest.raises(UnexpectedToolError):
         await server.call_tool("list_projects", {})
+
+
+async def test_register_project_forwards_mode_and_template(
+    server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _stub_request(monkeypatch, {"id": "new"})
+    await server.call_tool(
+        "register_project",
+        {"name": "demo", "root": "/tmp/demo", "mode": "ask-first", "template": "builder-reviewer"},
+    )
+    assert calls[0][4] == {
+        "name": "demo",
+        "root": "/tmp/demo",
+        "mode": "ask-first",
+        "template": "builder-reviewer",
+    }
+
+
+@pytest.mark.parametrize(
+    ("tool", "args", "method", "path", "body"),
+    [
+        ("get_permissions", {}, "GET", "/api/permissions", None),
+        ("list_builtin_roles", {}, "GET", "/api/roles", None),
+        ("list_templates", {}, "GET", "/api/templates", None),
+        (
+            "set_project_mode",
+            {"project_id": "p", "mode": "auto"},
+            "PATCH",
+            "/api/projects/p/mode",
+            {"mode": "auto"},
+        ),
+        (
+            "update_roles",
+            {"project_id": "p", "roles": [{"name": "reviewer", "access": "read-only"}]},
+            "PATCH",
+            "/api/projects/p/roles",
+            {"roles": [{"name": "reviewer", "access": "read-only"}]},
+        ),
+        ("list_requests", {}, "GET", "/api/requests", None),
+        ("list_requests", {"project_id": "p"}, "GET", "/api/projects/p/requests", None),
+        (
+            "answer_request",
+            {"project_id": "p", "request_id": "r1", "answer": "deny"},
+            "POST",
+            "/api/projects/p/requests/r1/answer",
+            {"answer": "deny"},
+        ),
+        (
+            "answer_request",
+            {
+                "project_id": "p",
+                "request_id": "r1",
+                "answer": "allow_always",
+                "rule": ["docker", "compose"],
+            },
+            "POST",
+            "/api/projects/p/requests/r1/answer",
+            {"answer": "allow_always", "rule": ["docker", "compose"]},
+        ),
+    ],
+)
+async def test_the_v4_tools_call_the_right_route(
+    server: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    tool: str,
+    args: dict[str, Any],
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+) -> None:
+    calls = _stub_request(monkeypatch, {})
+    result = await server.call_tool(tool, args)
+    assert not result.is_error
+    assert calls == [("http://127.0.0.1:9999", "test-token", method, path, body)]
+
+
+async def test_a_409_from_answering_a_request_is_not_hidden(
+    server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def refuse(*_: Any, **__: Any) -> dict[str, Any]:
+        raise FleetApiError("POST /x -> 409: already denied")
+
+    monkeypatch.setattr(mcp_module, "_request", refuse)
+    with pytest.raises(UnexpectedToolError):
+        await server.call_tool(
+            "answer_request", {"project_id": "p", "request_id": "r", "answer": "allow_once"}
+        )
