@@ -135,9 +135,16 @@ dashboard directly.
 uv run cuttlefish mcp --base-url http://127.0.0.1:8420 --token <token>
 ```
 
-Eight tools: `list_projects`, `get_project`, `register_project`,
-`start_project`, `stop_project`, `steer_project`, `approve_project`,
-`get_events`.
+Fifteen tools. Run and watch: `list_projects`, `get_project`, `register_project` (also takes
+`mode` and `template`), `start_project`, `stop_project`, `steer_project`, `approve_project`,
+`get_events`. Permissions: `get_permissions` (modes, command groups, the never-allowed list and the
+per-backend notes), `list_builtin_roles`, `list_templates`, `set_project_mode` and `update_roles`
+(which replaces the whole role list, including each role's `access`); both apply the next time the
+team starts. Needs you: `list_requests` (the fleet, or one project) and `answer_request`
+(`allow_once`, `allow_always` with a `rule`, or `deny`), which wrap the
+[request routes](#needs-you-requests-over-http) and keep their behaviour: the same answer twice is
+fine, a different or late one is a 409, an unknown request a 404 and a refused rule a 422. Answering
+lets an agent run a shell command, so it is as weighty as `start_project`.
 
 ## Configuration
 
