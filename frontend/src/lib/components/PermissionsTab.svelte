@@ -9,6 +9,7 @@
     parseCommand,
     removeCommand,
     sameSet,
+    saveFailure,
     togglePreset,
   } from "../team";
   import Icon from "./Icon.svelte";
@@ -97,11 +98,8 @@
       }
       await onChanged();
       saved = true;
-    } catch {
-      saveError =
-        applied.length > 0
-          ? `Saved ${applied.join(" and ")}, but not the rest. Check that the daemon is still running, then save again.`
-          : "Couldn't save those changes. Check that the daemon is still running, then try again.";
+    } catch (error) {
+      saveError = saveFailure(error, applied);
       await onChanged().catch(() => {});
     } finally {
       saving = false;

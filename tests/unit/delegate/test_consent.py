@@ -188,6 +188,18 @@ def test_validate_allow_entry_refuses_what_a_hand_typed_entry_would_be_refused()
             validate_allow_entry(bad)
 
 
+@pytest.mark.parametrize("broad", [["sh"], ["python"], ["bash"], ["node", "-e"], ["env"]])
+def test_validate_allow_entry_refuses_a_launcher_that_would_allow_any_script(
+    broad: list[str],
+) -> None:
+    with pytest.raises(ConsentPolicyError, match="too broad"):
+        validate_allow_entry(broad)
+
+
+def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> None:
+    assert validate_allow_entry(["python", "-m", "pytest"]) == ("python", "-m", "pytest")
+
+
 @pytest.mark.parametrize(
     ("line", "expected"),
     [

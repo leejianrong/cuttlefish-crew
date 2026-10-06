@@ -1,7 +1,7 @@
 // Pure helpers for the Permissions and Team tabs: drafts, comparisons, role edits. Nothing
 // here touches the network or the DOM, so each rule is testable on its own.
 
-import type { AccessLevel, BuiltinRole, RoleDefinition } from "./api";
+import { FleetApiError, type AccessLevel, type BuiltinRole, type RoleDefinition } from "./api";
 
 /** Whether two lists hold the same items, ignoring order. */
 export function sameSet(a: readonly string[], b: readonly string[]): boolean {
@@ -147,4 +147,17 @@ export function presetsForLanguages(
   const wantsGoRust = languages.some((language) => language === "Go" || language === "Rust");
   if (!wantsGoRust || defaults.includes("go-rust")) return null;
   return [...defaults, "go-rust"];
+}
+
+/** What to tell a person whose Save failed. The daemon refuses a bad command with a reason
+ * (a 400 naming the command), and that reason is the useful part; anything else is most likely
+ * the daemon being away. `applied` lists what an earlier step of the same Save did save. */
+export function saveFailure(error: unknown, applied: readonly string[]): string {
+  const saved = applied.length > 0 ? `Saved ${applied.join(" and ")}, but not the rest. ` : "";
+  if (error instanceof FleetApiError && error.status === 400) {
+    return `${saved}Couldn't save: ${error.message}.`;
+  }
+  return applied.length > 0
+    ? `${saved}Check that the daemon is still running, then save again.`
+    : "Couldn't save those changes. Check that the daemon is still running, then try again.";
 }

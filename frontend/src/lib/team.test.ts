@@ -1,7 +1,7 @@
 // Unit: the Permissions and Team tabs' pure helpers (team.ts).
 
 import { describe, expect, it } from "vitest";
-import type { BuiltinRole, RoleDefinition } from "./api";
+import { FleetApiError, type BuiltinRole, type RoleDefinition } from "./api";
 import {
   accessLabel,
   backendLabel,
@@ -20,6 +20,7 @@ import {
   roleFromBuiltin,
   roleNameProblem,
   sameSet,
+  saveFailure,
   togglePreset,
 } from "./team";
 
@@ -160,5 +161,28 @@ describe("labels", () => {
     expect(modeLabel("auto")).toBe("Auto");
     expect(backendLabel("claude-code")).toBe("Claude Code");
     expect(backendLabel("kopicode")).toBe("kopicode");
+  });
+});
+
+describe("saveFailure", () => {
+  it("shows the reason the daemon gave for a refused command", () => {
+    const refused = new FleetApiError(400, "'sh': 'sh' is too broad: it would allow any script to run");
+    expect(saveFailure(refused, [])).toBe(
+      "Couldn't save: 'sh': 'sh' is too broad: it would allow any script to run.",
+    );
+  });
+
+  it("says what was saved before the refusal", () => {
+    const refused = new FleetApiError(400, "'sudo x': sudo is never allowed");
+    expect(saveFailure(refused, ["the mode"])).toBe(
+      "Saved the mode, but not the rest. Couldn't save: 'sudo x': sudo is never allowed.",
+    );
+  });
+
+  it("keeps the daemon hint for anything that is not a refusal", () => {
+    expect(saveFailure(new Error("down"), [])).toContain("Check that the daemon is still running");
+    expect(saveFailure(new FleetApiError(500, "boom"), ["the mode"])).toContain(
+      "Saved the mode, but not the rest. Check that the daemon",
+    );
   });
 });

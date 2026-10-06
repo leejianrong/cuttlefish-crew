@@ -246,7 +246,7 @@ def _allow_from_body(body: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
         try:
             validate_allow_entry(command)
         except ConsentPolicyError as exc:
-            raise HTTPException(400, str(exc)) from exc
+            raise HTTPException(400, f"{' '.join(command)!r}: {exc}") from exc
         entries.append(tuple(command))
     return tuple(entries)
 
