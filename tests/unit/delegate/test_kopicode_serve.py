@@ -158,6 +158,40 @@ async def test_a_denied_command_is_answered_deny_and_the_outcome_is_refused(
     assert records[0].detail == SH + "uv run pytest && rm -rf /"
 
 
+@pytest.mark.parametrize(
+    ("extra", "rule"),
+    [
+        # v0.3.0's exact argv and command agree with detail: decided as ever (ls is allowed below).
+        ({"argv": ["/bin/sh", "-c", "ls"], "command": "ls"}, "allow:ls"),
+        # an older kopicode sends neither
+        ({}, "allow:ls"),
+        # an argv that is not exactly /bin/sh -c <line> would read as the line "ls x" in detail
+        ({"argv": ["/bin/sh", "-c", "ls", "x"]}, "not_a_sh_c_command"),
+        ({"argv": ["/bin/bash", "-c", "ls"], "command": "ls"}, "not_a_sh_c_command"),
+        ({"argv": ["/bin/sh", "-c", "ls"], "command": "ls; rm x"}, "not_a_sh_c_command"),
+    ],
+)
+async def test_the_exact_argv_kopicode_sends_must_be_sh_dash_c_a_line(
+    fake: Callable[[list[Any]], str],
+    tmp_path: Path,
+    extra: dict[str, Any],
+    rule: str,
+) -> None:
+    binary = fake(
+        [
+            {"start": True},
+            {"consent": {"id": "c-1", "kind": "run_shell", "detail": SH + "ls", **extra}},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    records: list[ConsentRecord] = []
+    await run(binary, tmp_path, on_consent=records.append, policy=ConsentPolicy([["ls"]]))
+
+    assert [r.rule for r in records] == [rule]
+
+
 async def test_every_consent_decision_is_carried_on_the_outcome_in_order(
     fake: Callable[[list[Any]], str], tmp_path: Path
 ) -> None:

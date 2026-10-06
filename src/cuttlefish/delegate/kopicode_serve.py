@@ -375,6 +375,8 @@ class ServeChild:
         if not (isinstance(session, str) and isinstance(kind, str) and isinstance(detail, str)):
             decision = ConsentDecision("deny", "malformed_request")
             session, kind, detail = str(session), str(kind), str(detail)
+        elif kind == "run_shell" and not _argv_is_sh_c(fields):
+            decision = ConsentDecision("deny", "not_a_sh_c_command")
         else:
             decide = self._deciders.get(session)
             try:
@@ -464,6 +466,25 @@ class ServeChild:
                 await asyncio.wait_for(task, 5.0)
         for task in list(self._pending_consent.values()):
             task.cancel()
+
+
+def _argv_is_sh_c(fields: Mapping[str, Any]) -> bool:
+    """Whether a ``run_shell`` consent request is exactly ``/bin/sh -c <line>``.
+
+    kopicode v0.3.0 sends the exact ``argv`` (and ``command``, the line) beside ``detail``, which
+    is only that argv joined by spaces, so an argv of another shape would read as a line. An
+    older kopicode sends neither, and ``detail`` alone is then all there is to go on."""
+    argv, command = fields.get("argv"), fields.get("command")
+    if argv is None and command is None:
+        return True
+    return (
+        isinstance(argv, list)
+        and len(argv) == 3
+        and argv[0] == "/bin/sh"
+        and argv[1] == "-c"
+        and isinstance(argv[2], str)
+        and (command is None or argv[2] == command)
+    )
 
 
 def _log_consent(record: ConsentRecord) -> None:
