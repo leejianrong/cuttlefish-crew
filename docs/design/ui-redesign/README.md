@@ -28,7 +28,7 @@ and this folder disagree after a slice lands, update this folder.
   (hover .08, focus .12), standard easing. All in `m3.css`. Seed color is teal
   (`#00696f` primary), not M3's baseline purple. Light theme only so far; a dark scheme
   must be derived from the same seed, not hand-darkened.
-- **Coral (the tertiary role) means "needs you", and only that.** Used for the Fleet
+- **Coral (the custom `attention` role) means "needs you", and only that.** Used for the Fleet
   badge in the nav rail, the "Needs you" tab, request tags and the Default/Recommended
   tags. Do not spend it on decoration.
 - **Type:** Bricolage Grotesque for the brand slot (display, headline, title-large),
@@ -52,6 +52,20 @@ and this folder disagree after a slice lands, update this folder.
   `aria-label`, visible focus ring, reduced motion respected.
 
 ## Built since the mockup
+
+- **V4-D (theme and shell) shipped.** Source of truth for the look is now
+  `frontend/src/theme-tokens.css` (generated roles, light and dark) and `theme.css` (scales,
+  primitives); `m3.css` here is only the mockups' copy. Roles come from
+  `@material/material-color-utilities` (`SchemeTonalSpot`, seed `#00696f`). The mockup's
+  coral was hand-picked and sat on the tertiary role; the generated tertiary is a muted
+  blue-grey, so coral is a custom `attention` role (and `success` another) harmonised to the seed.
+  Regenerate both schemes together; never hand-edit a role.
+- Screenshots of what shipped (V4-D, projects screen in light, dark and phone width) are in
+  `shipped/`. They are the baseline to compare later slices against.
+- Fonts are self-hosted (`@fontsource-variable/*`), so the dashboard makes no external request.
+- The nav rail lists only screens that exist (`frontend/src/lib/nav.ts`); Fleet and Roles
+  join it with V4-H and V4-F. The rail becomes a bottom bar under 640px. A theme button
+  cycles system, light, dark and is remembered per browser.
 
 - Stored role prompts open with the instruction, not "You are the builder.", because
   cuttlefish prepends "You are {name}." to every task. The prompt shown in

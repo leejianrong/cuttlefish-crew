@@ -73,9 +73,9 @@
 </script>
 
 {#if !open}
-  <button class="add-button" onclick={() => (open = true)}>+ Register a project</button>
+  <button class="btn btn-outlined add-button" onclick={() => (open = true)}>+ Register a project</button>
 {:else}
-  <form onsubmit={submit}>
+  <form class="card filled" onsubmit={submit}>
     <div class="row">
       <label>
         Name
@@ -119,8 +119,8 @@
       <p class="error">{error}</p>
     {/if}
     <div class="actions">
-      <button type="button" class="ghost" onclick={() => (open = false)}>Cancel</button>
-      <button type="submit" disabled={submitting}>
+      <button type="button" class="btn btn-text" onclick={() => (open = false)}>Cancel</button>
+      <button type="submit" class="btn btn-filled" disabled={submitting}>
         {submitting ? "Registering…" : "Register"}
       </button>
     </div>
@@ -128,27 +128,18 @@
 {/if}
 
 <style>
-  .add-button {
-    background: none;
-    border: 1px dashed var(--border);
-    border-radius: 10px;
-    color: var(--text-muted);
-    padding: 0.9rem;
-    width: 100%;
-    text-align: left;
-    font-weight: 500;
-  }
 
-  .add-button:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-  }
 
   form {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     padding: 1.25rem;
+  }
+
+  .add-button {
+    width: 100%;
+    justify-content: flex-start;
+    height: 56px;
+    border-style: dashed;
+    border-radius: var(--md-sys-shape-corner-medium);
   }
 
   .row {
@@ -175,8 +166,8 @@
     margin-top: 0.35rem;
     padding: 0.5rem 0.65rem;
     background: var(--bg-inset);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-extra-small);
     color: var(--text);
     resize: vertical;
   }
@@ -187,22 +178,7 @@
     gap: 0.6rem;
   }
 
-  button[type="submit"] {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 8px;
-    background: var(--accent);
-    color: var(--accent-text);
-    font-weight: 600;
-  }
 
-  button.ghost {
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: none;
-    color: var(--text-muted);
-  }
 
   .error {
     color: var(--danger);

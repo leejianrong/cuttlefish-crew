@@ -1,0 +1,181 @@
+/*
+ * Material 3 scales and component primitives. Colour roles live in theme-tokens.css.
+ * Source of truth for the dashboard's look; docs/design/ui-redesign/m3.css is the mockups' copy.
+ */
+
+:root {
+  /* shape */
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small: 8px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full: 9999px;
+
+  /* elevation: shadow plus a surface-tint wash comes from the container tiers */
+  --md-sys-elevation-level1: 0 1px 2px rgb(0 0 0 / 0.3), 0 1px 3px 1px rgb(0 0 0 / 0.15);
+  --md-sys-elevation-level2: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 6px 2px rgb(0 0 0 / 0.15);
+
+  /* motion */
+  --md-sys-motion-duration-short2: 100ms;
+  --md-sys-motion-duration-short3: 150ms;
+  --md-sys-motion-duration-medium2: 300ms;
+  --md-sys-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized: cubic-bezier(0.2, 0, 0, 1);
+
+  /* type: brand slot (display, headline, title-large) and plain slot (the rest) */
+  --md-ref-typeface-brand: "Bricolage Grotesque Variable", "Figtree Variable", system-ui, sans-serif;
+  --md-ref-typeface-plain: "Figtree Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --md-ref-typeface-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* The names the dashboard's components were written against, mapped onto M3 roles so
+   * they re-skin without edits. New code should use the --md-sys-* roles directly. */
+  --bg: var(--md-sys-color-surface);
+  --bg-elevated: var(--md-sys-color-surface-container-low);
+  --bg-inset: var(--md-sys-color-surface-container);
+  --border: var(--md-sys-color-outline-variant);
+  --text: var(--md-sys-color-on-surface);
+  --text-muted: var(--md-sys-color-on-surface-variant);
+  --text-faint: var(--md-sys-color-outline);
+  --accent: var(--md-sys-color-primary);
+  --accent-text: var(--md-sys-color-on-primary);
+  --danger: var(--md-sys-color-error);
+  --font-sans: var(--md-ref-typeface-plain);
+  --font-mono: var(--md-ref-typeface-mono);
+
+  --status-queued-bg: var(--md-sys-color-surface-container-high);
+  --status-queued-fg: var(--md-sys-color-on-surface-variant);
+  --status-working-bg: var(--md-sys-color-primary-container);
+  --status-working-fg: var(--md-sys-color-on-primary-container);
+  --status-blocked-bg: var(--md-sys-color-attention-container);
+  --status-blocked-fg: var(--md-sys-color-on-attention-container);
+  --status-done-bg: var(--md-sys-color-success-container);
+  --status-done-fg: var(--md-sys-color-on-success-container);
+  --status-failed-bg: var(--md-sys-color-error-container);
+  --status-failed-fg: var(--md-sys-color-on-error-container);
+}
+
+/* type scale */
+.display-small { font: 400 2.25rem/2.75rem var(--md-ref-typeface-brand); }
+.headline-medium { font: 500 1.75rem/2.25rem var(--md-ref-typeface-brand); }
+.headline-small { font: 500 1.5rem/2rem var(--md-ref-typeface-brand); }
+.title-large { font: 500 1.375rem/1.75rem var(--md-ref-typeface-brand); }
+.title-medium { font: 500 1rem/1.5rem var(--md-ref-typeface-plain); letter-spacing: 0.009375rem; }
+.title-small { font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.00625rem; }
+.body-large { font: 400 1rem/1.5rem var(--md-ref-typeface-plain); letter-spacing: 0.03125rem; }
+.body-medium { font: 400 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.015625rem; }
+.body-small { font: 400 0.75rem/1rem var(--md-ref-typeface-plain); letter-spacing: 0.025rem; }
+.label-large { font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain); letter-spacing: 0.00625rem; }
+.label-medium { font: 500 0.75rem/1rem var(--md-ref-typeface-plain); letter-spacing: 0.03125rem; }
+.label-small { font: 500 0.6875rem/1rem var(--md-ref-typeface-plain); letter-spacing: 0.03125rem; }
+.muted { color: var(--md-sys-color-on-surface-variant); }
+
+svg.i { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+svg.i.sm { width: 18px; height: 18px; }
+
+/* state layer: every interactive element keeps hover (.08), focus (.12), pressed (.12) */
+.btn, .chip, .item, .opt {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.btn::before, .chip::before, .item::before, .opt::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.btn:hover::before, .chip:hover::before, .item:hover::before, .opt:hover::before { opacity: 0.08; }
+.btn:focus-visible::before, .chip:focus-visible::before, .item:focus-visible::before, .opt:focus-visible::before,
+.btn:active::before, .chip:active::before, .item:active::before, .opt:active::before { opacity: 0.12; }
+.btn:disabled { opacity: 0.38; cursor: default; }
+.btn:disabled::before { display: none; }
+:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+
+/* buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: var(--md-sys-shape-corner-full);
+  font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain);
+  letter-spacing: 0.00625rem;
+  white-space: nowrap;
+}
+.btn.sm { height: 32px; padding: 0 16px; }
+.btn-filled { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.btn-tonal { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.btn-outlined { background: transparent; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline); }
+.btn-text { background: transparent; color: var(--md-sys-color-primary); padding: 0 12px; }
+.btn-danger { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
+.btn-danger-text { background: transparent; color: var(--md-sys-color-error); padding: 0 12px; }
+.icon-btn { width: 40px; height: 40px; padding: 0; }
+
+/* chips and tags */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--md-sys-shape-corner-small);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+  font: 500 0.875rem/1.25rem var(--md-ref-typeface-plain);
+  white-space: nowrap;
+}
+.chip.selected { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); border-color: transparent; }
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--md-sys-shape-corner-full);
+  font: 500 0.75rem/1rem var(--md-ref-typeface-plain);
+  letter-spacing: 0.03125rem;
+  white-space: nowrap;
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.tag.primary { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.tag.attn { background: var(--md-sys-color-attention-container); color: var(--md-sys-color-on-attention-container); }
+.tag.error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
+
+/* cards */
+.card { border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-surface-container-lowest); border: 1px solid var(--md-sys-color-outline-variant); }
+.card.filled { background: var(--md-sys-color-surface-container-low); border-color: transparent; }
+.card.elevated { background: var(--md-sys-color-surface-container-low); border-color: transparent; box-shadow: var(--md-sys-elevation-level1); }
+
+/* outlined text field: wrap a label and an input/textarea/select */
+.field {
+  display: block;
+  position: relative;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  padding: 18px 16px 8px;
+}
+.field > .field-label {
+  position: absolute;
+  top: -9px;
+  left: 12px;
+  padding: 0 4px;
+  background: var(--md-sys-color-surface);
+  font: 400 0.75rem/1rem var(--md-ref-typeface-plain);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.field input, .field textarea, .field select { width: 100%; border: 0; outline: 0; background: transparent; resize: vertical; color: inherit; }
+.field:focus-within { border: 2px solid var(--md-sys-color-primary); padding: 17px 15px 7px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}

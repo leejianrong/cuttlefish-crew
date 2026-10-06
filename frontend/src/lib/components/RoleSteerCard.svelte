@@ -80,7 +80,7 @@
   }
 </script>
 
-<div class="role-card">
+<div class="card filled role-card">
   <div class="role-head">
     <span class="role-name">{role}</span>
     <StatusChip {status} />
@@ -104,7 +104,7 @@
       placeholder="Redirect {role}'s work… (takes effect at the next round boundary)"
       rows="2"
     ></textarea>
-    <button onclick={send} disabled={sending || !message.trim()}>
+    <button class="btn btn-filled" onclick={send} disabled={sending || !message.trim()}>
       {sent ? "Sent" : sending ? "Sending…" : "Send"}
     </button>
   </div>
@@ -122,11 +122,11 @@
         rows="2"
       ></textarea>
       <div class="approval-actions">
-        <button class="approve" onclick={() => decide(true)} disabled={deciding}>
+        <button class="btn btn-tonal" onclick={() => decide(true)} disabled={deciding}>
           {decided === "approved" ? "Approved" : "Approve"}
         </button>
         <button
-          class="reject"
+          class="btn btn-danger"
           onclick={() => decide(false)}
           disabled={deciding || !approvalComment.trim()}
         >
@@ -160,9 +160,6 @@
 
 <style>
   .role-card {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     padding: 1rem 1.15rem;
   }
 
@@ -199,24 +196,10 @@
     flex: 1;
     padding: 0.5rem 0.65rem;
     background: var(--bg-inset);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-extra-small);
     color: var(--text);
     resize: vertical;
-  }
-
-  button {
-    padding: 0.5rem 0.9rem;
-    border: none;
-    border-radius: 8px;
-    background: var(--accent);
-    color: var(--accent-text);
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
-  button:disabled {
-    opacity: 0.5;
   }
 
   .approval {
@@ -239,16 +222,6 @@
   .approval-actions {
     display: flex;
     gap: 0.6rem;
-  }
-
-  button.approve {
-    background: var(--status-done-bg);
-    color: var(--status-done-fg);
-  }
-
-  button.reject {
-    background: var(--status-failed-bg);
-    color: var(--status-failed-fg);
   }
 
   .continuity {

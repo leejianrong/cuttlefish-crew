@@ -6,13 +6,9 @@
   let {
     client,
     onOpenProject,
-    onDisconnect,
-    onShowGallery,
   }: {
     client: FleetClient;
     onOpenProject: (id: string) => void;
-    onDisconnect: () => void;
-    onShowGallery: () => void;
   } = $props();
 
   let projects = $state<ProjectSummary[]>([]);
@@ -50,12 +46,8 @@
 
 <div class="page">
   <header class="topbar">
-    <h1>Fleet</h1>
-    <div class="topbar-right">
-      <span class="endpoint mono">{client.baseUrl}</span>
-      <button class="ghost" onclick={onShowGallery}>Sprite gallery</button>
-      <button class="ghost" onclick={onDisconnect}>Disconnect</button>
-    </div>
+    <h1 class="headline-medium">Projects</h1>
+    <span class="endpoint mono">{client.baseUrl}</span>
   </header>
 
   {#if unreachable}
@@ -88,20 +80,15 @@
 
   .topbar {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
     margin-bottom: 1.75rem;
   }
 
   h1 {
-    font-size: 1.4rem;
     margin: 0;
-  }
-
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 0.9rem;
   }
 
   .endpoint {
@@ -113,7 +100,7 @@
     background: var(--status-blocked-bg);
     color: var(--status-blocked-fg);
     padding: 0.6rem 0.9rem;
-    border-radius: 8px;
+    border-radius: var(--md-sys-shape-corner-small);
     font-size: 0.85rem;
     margin-bottom: 1.25rem;
   }
@@ -127,14 +114,5 @@
   .empty-state {
     color: var(--text-faint);
     margin-top: 2rem;
-  }
-
-  button.ghost {
-    padding: 0.4rem 0.8rem;
-    border-radius: 7px;
-    font-size: 0.82rem;
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
   }
 </style>
