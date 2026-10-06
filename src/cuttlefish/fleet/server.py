@@ -40,6 +40,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from cuttlefish.config import ConfigError, validate_backend_name
+from cuttlefish.delegate.consent import ConsentPolicyError, validate_allow_entry
 from cuttlefish.delegate.never_allowed import NEVER_ALLOWED_SUMMARY
 from cuttlefish.delegate.presets import (
     DEFAULT_PRESETS,
@@ -184,7 +185,21 @@ def _backend_from(value: Any) -> str | None:
 
 
 def _allow_from_body(body: dict[str, Any]) -> tuple[tuple[str, ...], ...]:
-    return tuple(tuple(command) for command in body.get("allow", []))
+    """The project's own commands off a request body, each checked as ``ConsentPolicy`` will
+    read it (ADR-0028), so a bad entry is a 400 now and not a refused delegation later."""
+    raw = body.get("allow", [])
+    if not isinstance(raw, list):
+        raise HTTPException(400, "allow must be a list of commands")
+    entries: list[tuple[str, ...]] = []
+    for command in raw:
+        if not (isinstance(command, list) and all(isinstance(word, str) for word in command)):
+            raise HTTPException(400, "each allowed command must be a list of words")
+        try:
+            validate_allow_entry(command)
+        except ConsentPolicyError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        entries.append(tuple(command))
+    return tuple(entries)
 
 
 def _budget_from_body(body: dict[str, Any]) -> tuple[int | None, float | None]:

@@ -60,18 +60,24 @@ _DETAIL_PREFIX = " ".join(_SH_C_PREFIX) + " "
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ConsentDecision:
-    """One answer to one ``consent.request``, with why -- what gets journaled."""
+    """One answer to one ``consent.request``, with why -- what gets journaled.
+
+    ``askable`` marks a denial a person could override (ADR-0028): the command is merely not
+    approved by any rule. A never-allowed command, an unsafe flag or a path escape is never
+    askable, because no answer could change it.
+    """
 
     answer: Answer
     rule: str
+    askable: bool = False
 
 
 class ConsentPolicyError(ValueError):
     """A declared allow entry this policy cannot express safely (raised at config time)."""
 
 
-def _deny(rule: str) -> ConsentDecision:
-    return ConsentDecision("deny", rule)
+def _deny(rule: str, *, askable: bool = False) -> ConsentDecision:
+    return ConsentDecision("deny", rule, askable)
 
 
 def _pattern_from_entry(entry: Sequence[str]) -> tuple[str, ...]:
@@ -103,6 +109,91 @@ def _pattern_from_entry(entry: Sequence[str]) -> tuple[str, ...]:
     return words
 
 
+def command_line(detail: str) -> str | None:
+    """The shell line in a ``run_shell`` ``consent.request`` ``detail``, or ``None`` when the
+    detail is not ``/bin/sh -c <line>`` or the line is empty or longer than
+    :data:`MAX_COMMAND_CHARS`."""
+    if not detail.startswith(_DETAIL_PREFIX):
+        return None
+    line = detail[len(_DETAIL_PREFIX) :]
+    if not line or len(line) > MAX_COMMAND_CHARS:
+        return None
+    return line
+
+
+def validate_allow_entry(entry: Sequence[str]) -> tuple[str, ...]:
+    """One allow entry as plain words, or :class:`ConsentPolicyError` saying why not.
+
+    The one check every route into a project's commands shares: a hand-typed entry and an
+    "Always allow" answer (ADR-0028). Plain words only, and nothing never-allowed.
+    """
+    return _pattern_from_entry(entry)
+
+
+#: Programs that run whatever they are handed. A rule naming only one of these would approve
+#: any script (ADR-0021's ``["python"]`` warning), so "Always allow" refuses it.
+_LAUNCHERS = frozenset(
+    {
+        "sh", "bash", "zsh", "dash", "ksh", "fish", "env", "xargs", "eval", "exec", "source",
+        "command", "builtin", "time", "nohup", "nice", "timeout", "watch", "python", "python3",
+        "node", "nodejs", "deno", "bun", "ruby", "perl", "php", "lua", "uv", "pipx", "npx", "bunx",
+    }
+)  # fmt: skip
+_CODE_FLAGS = frozenset({"-c", "-e", "--eval", "--command", "-exec"})
+
+
+def _too_broad(words: Sequence[str]) -> bool:
+    return words[0] in _LAUNCHERS and (len(words) == 1 or words[-1] in _CODE_FLAGS)
+
+
+def _plain_words(line: str) -> list[str] | None:
+    words = line.split(" ")
+    return words if all(_WORD.fullmatch(word) for word in words) else None
+
+
+def _is_flag_or_path(word: str) -> bool:
+    return word.startswith(("-", ".")) or "/" in word or "=" in word
+
+
+def suggest_rule(line: str) -> tuple[str, ...] | None:
+    """The rule "Always allow" proposes for ``line``: its leading words up to the first flag or
+    path-like word, at most three (``docker compose up -d postgres`` -> ``docker compose up``).
+    ``None`` when the line is not a plain word list or nothing narrow enough can be proposed."""
+    words = _plain_words(line)
+    if words is None or never_allowed_reason(line) is not None:
+        return None
+    for stop in (_is_flag_or_path, lambda word: word.startswith("-")):
+        rule: list[str] = []
+        for word in words[:3]:
+            if stop(word):
+                break
+            rule.append(word)
+        if rule and not _too_broad(rule):
+            return tuple(rule)
+    return None
+
+
+def validate_always_rule(line: str, rule: Sequence[str]) -> tuple[str, ...]:
+    """The rule a person may "Always allow" for ``line``, or :class:`ConsentPolicyError`.
+
+    It must be a word-prefix of this very line (a person cannot grant what the agent did not
+    ask for), the line a plain word list, the entry valid as if hand-typed, and not so broad it
+    would approve any script. Never-allowed always wins afterwards, because the rule is applied
+    through :class:`ConsentPolicy`, whose ``decide`` checks that list first.
+    """
+    words = _plain_words(line)
+    if words is None:
+        raise ConsentPolicyError("this command has shell syntax, so it can only be allowed once")
+    pattern = validate_allow_entry(rule)
+    if tuple(words[: len(pattern)]) != pattern:
+        raise ConsentPolicyError("the rule must be the start of the command the agent asked to run")
+    if _too_broad(pattern):
+        raise ConsentPolicyError(
+            f"{' '.join(pattern)!r} is too broad: it would allow any script to run"
+        )
+    return pattern
+
+
 def _escapes_root(word: str) -> bool:
     """Whether an argument reaches outside the working tree: absolute, or with a ``..``
     segment -- in the word itself or in a ``--flag=value`` value."""
@@ -130,13 +221,17 @@ class ConsentPolicy:
             return _deny("write_outside_root_never")
         if kind != "run_shell":
             return _deny("unknown_kind")
+        line = command_line(detail)
         if not self._auto and not self._patterns:
-            return _deny("no_shell_allowed")
-        if not detail.startswith(_DETAIL_PREFIX):
-            return _deny("not_a_sh_c_command")
-        line = detail[len(_DETAIL_PREFIX) :]
-        if not line or len(line) > MAX_COMMAND_CHARS:
-            return _deny("command_length")
+            # Nothing is allowed, so a person may be asked -- but only about a line that no
+            # never-allowed rule refuses (ADR-0028).
+            if line is None or never_allowed_reason(line) is not None:
+                return _deny("no_shell_allowed")
+            return _deny("no_shell_allowed", askable=True)
+        if line is None:
+            return _deny(
+                "not_a_sh_c_command" if not detail.startswith(_DETAIL_PREFIX) else "command_length"
+            )
         reason = never_allowed_reason(line)
         if reason is not None:
             return _deny(reason)
@@ -146,7 +241,7 @@ class ConsentPolicy:
             return ConsentDecision("allow", "allow:git commit -m")
         words = line.split(" ")
         if not all(_WORD.fullmatch(word) for word in words):
-            return _deny("not_a_plain_word_list")
+            return _deny("not_a_plain_word_list", askable=True)
         for pattern in self._patterns:
             if tuple(words[: len(pattern)]) != pattern:
                 continue
@@ -155,4 +250,4 @@ class ConsentPolicy:
             if any(_escapes_root(word) for word in words[len(pattern) :]):
                 return _deny("argument_escapes_root")
             return ConsentDecision("allow", "allow:" + " ".join(pattern))
-        return _deny("no_matching_allow_entry")
+        return _deny("no_matching_allow_entry", askable=True)

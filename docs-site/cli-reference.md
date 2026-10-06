@@ -213,7 +213,8 @@ changes the library.
 
 The same settings over HTTP: `GET /api/permissions` (modes, presets, blocked list, backend notes),
 `PATCH /api/projects/{id}/mode`, `PATCH /api/projects/{id}/presets` (`{"presets": [...]}`, names
-from the catalogue), `PATCH /api/projects/{id}/allow` (your own commands) and
+from the catalogue), `PATCH /api/projects/{id}/allow` (your own commands; an entry with shell syntax or a
+never-allowed command is refused with a 400) and
 `PATCH /api/projects/{id}/roles` (replaces the whole list). **Every change applies the next time
 the team starts**, not to a team already running.
 
