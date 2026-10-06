@@ -35,7 +35,7 @@ def _pump() -> None:
     lines.put(None)
 
 
-log.write(json.dumps({"pid": os.getpid()}) + "\n")
+log.write(json.dumps({"pid": os.getpid(), "argv": sys.argv[1:]}) + "\n")
 threading.Thread(target=_pump, daemon=True).start()
 ctx: dict[str, Any] = {}
 

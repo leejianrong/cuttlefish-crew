@@ -59,6 +59,35 @@ def resolve_codex_binary() -> str:
     return os.environ.get(CODEX_BIN_ENV, DEFAULT_CODEX_BIN)
 
 
+#: How long a person has to answer a Needs-you request, in seconds (ADR-0028).
+REQUEST_WINDOW_ENV = "CUTTLEFISH_REQUEST_WINDOW"
+DEFAULT_REQUEST_WINDOW_S = 600.0
+
+
+#: Until the dashboard can answer (ADR-0028 H4), asking a person is opt-in: a daemon team would
+#: otherwise stop at every command off the list with nobody able to reply. H4 removes this.
+NEEDS_YOU_ENV = "CUTTLEFISH_NEEDS_YOU"
+
+
+def resolve_needs_you() -> bool:
+    return os.environ.get(NEEDS_YOU_ENV, "") == "1"
+
+
+def resolve_request_window() -> float:
+    """``CUTTLEFISH_REQUEST_WINDOW`` seconds (10 s to 24 h), default 10 minutes. The kopicode
+    binary may allow less (see ``serve_supports_consent_timeout``)."""
+    raw = os.environ.get(REQUEST_WINDOW_ENV)
+    if raw is None:
+        return DEFAULT_REQUEST_WINDOW_S
+    try:
+        seconds = float(raw)
+    except ValueError:
+        seconds = -1.0
+    if not 10.0 <= seconds <= 86400.0:
+        raise ConfigError(f"{REQUEST_WINDOW_ENV}={raw!r} must be a number of seconds, 10 to 86400")
+    return seconds
+
+
 def validate_backend_name(choice: str, *, source: str) -> str:
     if choice not in ("kopicode", "claude-code", "codex"):
         raise ConfigError(

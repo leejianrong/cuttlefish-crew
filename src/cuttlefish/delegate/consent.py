@@ -70,6 +70,8 @@ class ConsentDecision:
     answer: Answer
     rule: str
     askable: bool = False
+    #: A person answered (ADR-0028): journaled as the request pair, not as ``ConsentDecided``.
+    asked: bool = False
 
 
 class ConsentPolicyError(ValueError):

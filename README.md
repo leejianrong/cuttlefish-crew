@@ -132,6 +132,8 @@ cost ceilings, Tailscale access, the MCP server, every flag) is in the
 | `CUTTLEFISH_AGENT_BACKEND` | `kopicode` | `kopicode`, `claude-code`, or `codex`; one choice per process. |
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own summarising calls: `openrouter`, `claude`, or `replay` (no key, placeholder summaries). |
 | `CUTTLEFISH_SANDBOX` | `none` | `none`, `container` (local Docker), or `e2b`. |
+| `CUTTLEFISH_NEEDS_YOU` | unset | `1` lets a `cuttlefish serve` kopicode team stop and ask a person about a command nothing approves (ADR-0028). Experimental: nothing in the dashboard can answer until a later slice, so leave it unset for now. |
+| `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds a person has to answer such a request before it is denied (10 to 86400). A kopicode older than the `--consent-timeout` flag allows 45. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Turns on the encrypted, project-scoped secrets store. |
 
 Binary paths, serve/MCP settings and the rest are in the

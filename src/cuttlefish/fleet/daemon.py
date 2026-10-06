@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
@@ -33,11 +35,18 @@ from cuttlefish import runtime
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
-from cuttlefish.episodic.events import TeamResumed
+from cuttlefish.episodic.events import EventPayload, RequestResolved, TeamResumed
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
 from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
+from cuttlefish.requests import (
+    Outcome,
+    RequestBroker,
+    RequestContext,
+    granted_rules,
+    unresolved,
+)
 from cuttlefish.steering import (
     SteeringDeliveryError,
     cancel_run,
@@ -165,9 +174,57 @@ class ResumeAttempt:
 class FleetDaemon:
     """Owns the `Project` registry and every currently-running team."""
 
-    def __init__(self, project_store: ProjectStore) -> None:
+    def __init__(
+        self,
+        project_store: ProjectStore,
+        *,
+        request_window_s: float = 600.0,
+        ask_people: bool = False,
+    ) -> None:
         self._projects = project_store
         self._running: dict[str, RunningTeam] = {}
+        #: How long a person has to answer a request (ADR-0028); the kopicode binary may allow less.
+        self._request_window_s = request_window_s
+        #: Whether a team's delegations may stop to ask a person (opt-in until the dashboard
+        #: can answer; see `config.NEEDS_YOU_ENV`).
+        self._ask_people = ask_people
+        #: team id -> the episodic store its requests are journaled to, while it runs.
+        self._team_stores: dict[str, EpisodicStore] = {}
+        self.requests = RequestBroker(self._append_for_team)
+
+    def _append_for_team(self, team_id: str, payload: EventPayload) -> EpisodicEvent:
+        return self._team_stores[team_id].append(team_id, payload)
+
+    def answer_request(
+        self, request_id: str, answer: str, *, rule: Sequence[str] | None = None
+    ) -> Outcome:
+        """Answer a pending request (ADR-0028). Raises the broker's `RequestError`s."""
+        return self.requests.answer(request_id, answer, rule=rule)
+
+    def sweep_abandoned(self) -> int:
+        """Resolve as `abandoned` every request a project's last team raised and never resolved.
+
+        A pending request cannot outlive the `kopicode serve` child waiting on it, so after a
+        restart any unresolved one is dead (ADR-0028). Journaled straight to each project's own
+        store, like `_mark_resumed`. Returns how many were abandoned."""
+        count = 0
+        for project in self._projects.list():
+            path = Path(project.root) / ".cuttlefish" / "episodic.db"
+            if project.last_team_id is None or not path.exists():
+                continue
+            store = EpisodicStore.open(path)
+            try:
+                for raised in unresolved(store.read(project.last_team_id)):
+                    store.append(
+                        project.last_team_id,
+                        RequestResolved(
+                            request_id=raised.request_id, resolution="abandoned", by="system"
+                        ),
+                    )
+                    count += 1
+            finally:
+                store.close()
+        return count
 
     @property
     def projects(self) -> ProjectStore:
@@ -245,7 +302,20 @@ class FleetDaemon:
                     agent_backend=project.backend,
                     extra_backends=[r["backend"] for r in role_inputs if r.get("backend")],
                 )
-                runtime.configure(prepared.as_runtime())
+                self._team_stores[team_id] = prepared.episodic_store
+                self.requests.seed_grants(
+                    team_id, granted_rules(prepared.episodic_store.read(team_id))
+                )
+                runtime.configure(
+                    dataclasses.replace(
+                        prepared.as_runtime(),
+                        requests=RequestContext(
+                            self.requests, project.id, team_id, self._request_window_s
+                        )
+                        if self._ask_people
+                        else None,
+                    )
+                )
                 workflow_input: TeamInput = {
                     "team_id": team_id,
                     "root": project.root,
@@ -276,6 +346,10 @@ class FleetDaemon:
                 raise
             finally:
                 if prepared is not None:
+                    # Whatever a person was still being asked ends with the team, journaled
+                    # while its store is open.
+                    self.requests.end_team(team_id, "abandoned")
+                    self._team_stores.pop(team_id, None)
                     prepared.close()
 
         task = asyncio.create_task(_drive())
@@ -342,6 +416,7 @@ class FleetDaemon:
         last team already reached a terminal state is skipped too -- nothing to
         resume.
         """
+        self.sweep_abandoned()
         attempts: list[ResumeAttempt] = []
         for project in self._projects.list():
             team_id = project.last_team_id
@@ -382,6 +457,9 @@ class FleetDaemon:
             )
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc
+        # satay's cancel only lands when the round ends, and a round held open for a person
+        # would not end: tell the waiting agent no, so it can (ADR-0028).
+        self.requests.end_team(running.team_id, "cancelled")
 
     async def steer(self, project_id: str, role: str, text: str) -> None:
         """See `stop`'s own docstring -- `asyncio.to_thread` for the identical

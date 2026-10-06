@@ -53,6 +53,7 @@ from cuttlefish.agents.outcome import (
 from cuttlefish.delegate.consent import ConsentDecision, ConsentPolicy
 from cuttlefish.delegate.kopicode import _redacted_stderr_tail, classify_stream
 from cuttlefish.delegate.subprocess_env import merge_env
+from cuttlefish.requests import CHILD_EXITED
 from cuttlefish.sandbox.provider import SandboxError
 
 _LOG = logging.getLogger("cuttlefish.delegate.consent")
@@ -103,6 +104,45 @@ class ConsentRecord:
     detail: str
     answer: str
     rule: str
+    #: A person answered it (ADR-0028); journaled as the request pair instead.
+    asked: bool = False
+
+
+#: The most a person gets to answer when this binary has no ``--consent-timeout``: kopicode
+#: v0.2.0 denies after a fixed 60s, and the answer must land before that.
+UNCONFIGURABLE_WINDOW = 45.0
+
+_TIMEOUT_FLAG_SUPPORT: dict[str, bool] = {}
+
+
+async def serve_supports_consent_timeout(binary: str) -> bool:
+    """Whether ``binary serve`` has ``--consent-timeout`` (kopicode#169, after v0.2.0).
+
+    Probed once per binary from ``serve --help`` and remembered; any failure to find out is
+    ``False``, which only shortens the window a person gets, never lengthens it."""
+    if binary in _TIMEOUT_FLAG_SUPPORT:
+        return _TIMEOUT_FLAG_SUPPORT[binary]
+    supported = False
+    try:
+        process = await asyncio.create_subprocess_exec(
+            binary,
+            "serve",
+            "--help",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            output, _ = await asyncio.wait_for(process.communicate(), 5.0)
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+            output = b""
+        supported = b"consent-timeout" in output
+    except (OSError, ValueError):
+        supported = False
+    _TIMEOUT_FLAG_SUPPORT[binary] = supported
+    return supported
 
 
 def failure_kind_for(stop: object, exit_code: object, text: str) -> str:
@@ -173,11 +213,14 @@ class ServeChild:
         env: Mapping[str, str] | None = None,
         consent_deadline: float = DEFAULT_CONSENT_DEADLINE,
         on_consent: Callable[[ConsentRecord], None] | None = None,
+        consent_timeout: float | None = None,
     ) -> ServeChild:
+        flags = [] if consent_timeout is None else ["--consent-timeout", f"{int(consent_timeout)}s"]
         try:
             process = await asyncio.create_subprocess_exec(
                 binary,
                 "serve",
+                *flags,
                 cwd=cwd,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
@@ -277,6 +320,9 @@ class ServeChild:
             for future in self._responses.values():
                 if not future.done():
                     future.set_exception(gone)
+            # A request a person is still being asked about has nobody left to answer to.
+            for task in list(self._pending_consent.values()):
+                task.cancel(CHILD_EXITED)
 
     def _dispatch(self, raw: bytes) -> None:
         try:
@@ -339,7 +385,8 @@ class ServeChild:
                 else:
                     outcome = decide(kind, detail)
                 if inspect.isawaitable(outcome):
-                    outcome = await asyncio.wait_for(outcome, self._deadline)
+                    deadline = getattr(decide, "deadline", self._deadline)
+                    outcome = await asyncio.wait_for(outcome, deadline)
                 decision = outcome
             except TimeoutError:
                 decision = ConsentDecision("deny", "decider_timeout")
@@ -349,7 +396,9 @@ class ServeChild:
                 _LOG.exception("consent decider raised; denying")
                 decision = ConsentDecision("deny", "decider_error")
         answer = decision.answer if decision.answer in ("allow", "deny") else "deny"
-        record = ConsentRecord(session, kind, detail[:_LOG_DETAIL_CHARS], answer, decision.rule)
+        record = ConsentRecord(
+            session, kind, detail[:_LOG_DETAIL_CHARS], answer, decision.rule, decision.asked
+        )
         if session in self._deciders:  # an unknown session has no one to collect it
             self.consents.setdefault(session, []).append(record)
         self._on_consent(record)
@@ -483,7 +532,7 @@ class ServePool:
     """
 
     def __init__(self) -> None:
-        self._children: dict[tuple[str, tuple[tuple[str, str], ...]], ServeChild] = {}
+        self._children: dict[tuple[str, tuple[tuple[str, str], ...], float | None], ServeChild] = {}
         self._lock: asyncio.Lock | None = None
 
     async def child_for(
@@ -493,9 +542,10 @@ class ServePool:
         env: Mapping[str, str] | None,
         consent_deadline: float = DEFAULT_CONSENT_DEADLINE,
         on_consent: Callable[[ConsentRecord], None] | None = None,
+        consent_timeout: float | None = None,
     ) -> ServeChild:
         loop = asyncio.get_running_loop()
-        key = (binary, tuple(sorted((env or {}).items())))
+        key = (binary, tuple(sorted((env or {}).items())), consent_timeout)
         if self._lock is None:
             self._lock = asyncio.Lock()
         async with self._lock:
@@ -505,7 +555,11 @@ class ServePool:
             if child is not None:
                 child.kill()  # dead, or bound to a loop that is gone
             child = await ServeChild.spawn(
-                binary=binary, env=env, consent_deadline=consent_deadline, on_consent=on_consent
+                binary=binary,
+                env=env,
+                consent_deadline=consent_deadline,
+                on_consent=on_consent,
+                consent_timeout=consent_timeout,
             )
             self._children[key] = child
             return child
@@ -529,6 +583,7 @@ async def run_kopicode_serve(
     timeout: float | None = None,
     consent_deadline: float = DEFAULT_CONSENT_DEADLINE,
     on_consent: Callable[[ConsentRecord], None] | None = None,
+    consent_timeout: float | None = None,
     session_id: str | None = None,
     pool: ServePool | None = None,
     process_factory: Callable[[], Awaitable[asyncio.subprocess.Process]] | None = None,
@@ -539,6 +594,9 @@ async def run_kopicode_serve(
     this call alone and shut down after. Either way the session is closed with
     ``session.close``, so its ``session_ended`` (and failure ``text``) is in hand before the
     outcome is classified and its working tree is free for the next delegation.
+
+    ``consent_timeout`` (seconds) is passed to a child this call spawns as ``--consent-timeout``,
+    so kopicode waits that long for an answer; a decider that asks a person needs it (ADR-0028).
 
     ``process_factory`` starts the ``serve`` process somewhere other than this host (a
     sandbox's streaming ``spawn``, KAN-1793); the child it yields is used for this call alone
@@ -565,11 +623,19 @@ async def run_kopicode_serve(
         )
     elif pool is not None:
         child = await pool.child_for(
-            binary=binary, env=env, consent_deadline=consent_deadline, on_consent=on_consent
+            binary=binary,
+            env=env,
+            consent_deadline=consent_deadline,
+            on_consent=on_consent,
+            consent_timeout=consent_timeout,
         )
     else:
         child = await ServeChild.spawn(
-            binary=binary, env=env, consent_deadline=consent_deadline, on_consent=on_consent
+            binary=binary,
+            env=env,
+            consent_deadline=consent_deadline,
+            on_consent=on_consent,
+            consent_timeout=consent_timeout,
         )
     child.register(session, decide)
     try:
@@ -605,6 +671,7 @@ async def run_kopicode_serve(
                 r.kind, r.detail, "allow" if r.answer == "allow" else "deny", r.rule
             )
             for r in child.take_consents(session)
+            if not r.asked
         ]
         if pool is None:
             await asyncio.shield(child.close())
