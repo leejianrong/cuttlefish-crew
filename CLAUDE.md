@@ -120,7 +120,8 @@ own doc comment all beat a paragraph). Start reading at
   where it landed; [`docs/SLICES.md`](docs/SLICES.md) — the build order.
 - [`docs/research/`](docs/research/) — the hands-on Paperclip comparison.
 - [`docs/design/ui-redesign/`](docs/design/ui-redesign/README.md) — the agreed
-  dashboard target (M3 tokens in `m3.css`, four screens, design decisions).
+  dashboard target (four screens, design decisions). Tokens and primitives live in
+  `frontend/src/theme-tokens.css` and `theme.css`; use the `--md-sys-*` roles, never raw hex.
   Read it before any `frontend/` work and follow it; use the `frontend-design`
   and `material-design-3` skills. Update it when a slice changes the design.
 - Pandan board `cuttlefish-agent` (key `CUT`) — build-plan progress.

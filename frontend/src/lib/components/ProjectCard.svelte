@@ -17,9 +17,9 @@
   const roleEntries = $derived(Object.entries(project.status));
 </script>
 
-<article class="card">
+<article class="card filled project">
   <header>
-    <button class="title" onclick={onOpen}>{project.name}</button>
+    <button class="title title-medium" onclick={onOpen}>{project.name}</button>
     {#if project.running}
       <span class="running-dot" title="a team is running"></span>
     {/if}
@@ -41,19 +41,16 @@
 
   <footer>
     {#if project.running}
-      <button class="danger" onclick={onStop}>Stop</button>
+      <button class="btn btn-danger sm" onclick={onStop}>Stop</button>
     {:else}
-      <button class="primary" onclick={onOpen}>Start…</button>
+      <button class="btn btn-filled sm" onclick={onOpen}>Start…</button>
     {/if}
-    <button class="ghost" onclick={onRemove}>Remove</button>
+    <button class="btn btn-text sm remove" onclick={onRemove}>Remove</button>
   </footer>
 </article>
 
 <style>
-  .card {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
+  .project {
     padding: 1.1rem 1.2rem;
     display: flex;
     flex-direction: column;
@@ -70,8 +67,6 @@
     background: none;
     border: none;
     padding: 0;
-    font-size: 1rem;
-    font-weight: 600;
     color: var(--text);
     text-align: left;
   }
@@ -114,7 +109,7 @@
     margin: 0.3rem 0;
     padding: 0.5rem 0.6rem;
     background: var(--bg-inset);
-    border-radius: 8px;
+    border-radius: var(--md-sys-shape-corner-small);
   }
 
   .role-row {
@@ -143,30 +138,7 @@
     margin-top: 0.4rem;
   }
 
-  button.primary,
-  button.danger,
-  button.ghost {
-    padding: 0.4rem 0.85rem;
-    border-radius: 7px;
-    font-size: 0.82rem;
-    font-weight: 600;
-    border: 1px solid transparent;
-  }
-
-  button.primary {
-    background: var(--accent);
-    color: var(--accent-text);
-  }
-
-  button.danger {
-    background: var(--status-failed-bg);
-    color: var(--status-failed-fg);
-  }
-
-  button.ghost {
-    background: none;
-    border-color: var(--border);
-    color: var(--text-muted);
+  .remove {
     margin-left: auto;
   }
 </style>

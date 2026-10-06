@@ -76,8 +76,8 @@
 
 <div class="wrap">
   {#if step === "url"}
-    <form onsubmit={checkBaseUrl}>
-      <h1>cuttlefish-crew</h1>
+    <form class="card elevated" onsubmit={checkBaseUrl}>
+      <h1 class="headline-small">cuttlefish-crew</h1>
       <p class="hint">
         Connect to a running <code>cuttlefish serve</code> -- its base URL is printed to that
         process's own stdout at startup.
@@ -92,17 +92,17 @@
         <p class="error">{error}</p>
       {/if}
 
-      <button type="submit" disabled={connecting}>
+      <button type="submit" class="btn btn-filled submit" disabled={connecting}>
         {connecting ? "Checking…" : "Continue"}
       </button>
 
-      <button type="button" class="gallery-link" onclick={onShowGallery}>
+      <button type="button" class="btn btn-text gallery-link" onclick={onShowGallery}>
         No daemon running yet? See the sprites first &rarr;
       </button>
     </form>
   {:else}
-    <form onsubmit={connect}>
-      <h1>cuttlefish-crew</h1>
+    <form class="card elevated" onsubmit={connect}>
+      <h1 class="headline-small">cuttlefish-crew</h1>
       {#if mode === "password"}
         <p class="hint">
           This daemon is bound non-loopback and needs its own login (ADR-0011) -- the password is
@@ -131,11 +131,11 @@
         <p class="error">{error}</p>
       {/if}
 
-      <button type="submit" disabled={connecting}>
+      <button type="submit" class="btn btn-filled submit" disabled={connecting}>
         {connecting ? "Connecting…" : "Connect"}
       </button>
 
-      <button type="button" class="gallery-link" onclick={backToUrl}>
+      <button type="button" class="btn btn-text gallery-link" onclick={backToUrl}>
         &larr; back
       </button>
     </form>
@@ -154,15 +154,11 @@
   form {
     width: 100%;
     max-width: 26rem;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     padding: 2rem;
   }
 
   h1 {
     margin: 0 0 0.5rem;
-    font-size: 1.3rem;
   }
 
   .hint {
@@ -188,30 +184,20 @@
     width: 100%;
     margin-top: 0.35rem;
     padding: 0.55rem 0.7rem;
-    background: var(--bg-inset);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: transparent;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-extra-small);
     color: var(--text);
   }
 
   input:focus {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--md-sys-color-primary);
     outline-offset: -1px;
+    border-color: var(--md-sys-color-primary);
   }
 
-  button {
+  .submit {
     width: 100%;
-    padding: 0.65rem;
-    border: none;
-    border-radius: 8px;
-    background: var(--accent);
-    color: var(--accent-text);
-    font-weight: 600;
-  }
-
-  button:disabled {
-    opacity: 0.6;
-    cursor: default;
   }
 
   .error {
@@ -221,17 +207,12 @@
   }
 
   .gallery-link {
-    width: auto;
-    background: none;
-    color: var(--text-muted);
-    font-weight: 500;
-    font-size: 0.8rem;
-    padding: 0.6rem 0;
-    margin: 0 auto;
-    display: block;
-  }
-
-  .gallery-link:hover {
-    color: var(--accent);
+    display: flex;
+    margin: 0.5rem auto 0;
+    height: auto;
+    min-height: 40px;
+    padding: 0.5rem 0.75rem;
+    white-space: normal;
+    text-align: center;
   }
 </style>

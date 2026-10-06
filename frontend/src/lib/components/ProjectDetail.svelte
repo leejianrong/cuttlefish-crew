@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { EpisodicEventView, FleetClient, ProjectSummary } from "../api";
   import EventLog from "./EventLog.svelte";
+  import Icon from "./Icon.svelte";
   import OfficeScene from "./OfficeScene.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
 
@@ -72,11 +73,11 @@
 </script>
 
 <div class="page">
-  <button class="back" onclick={onBack}>&larr; Fleet</button>
+  <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Projects</button>
 
   {#if project}
     <header>
-      <h1>{project.name}</h1>
+      <h1 class="headline-small">{project.name}</h1>
       <p class="root mono">{project.root}</p>
     </header>
 
@@ -105,9 +106,9 @@
           />
         {/each}
       </section>
-      <button class="stop" onclick={stop}>Stop team</button>
+      <button class="btn btn-danger stop" onclick={stop}>Stop team</button>
     {:else}
-      <section class="start-form">
+      <section class="card filled start-form">
         <h2>Start a team</h2>
         {#if project.roles.length === 0}
           <p class="hint">
@@ -124,7 +125,7 @@
                 <span class="persona">[{role.backend ?? project.backend}]</span>
               {/if}
               {#if role.persona}
-                <span class="persona">{role.persona}</span>
+                <span class="persona persona-text" title={role.persona}>{role.persona}</span>
               {/if}
               <textarea
                 bind:value={taskTexts[role.name]}
@@ -140,14 +141,14 @@
           {#if startError}
             <p class="error">{startError}</p>
           {/if}
-          <button class="primary" onclick={start} disabled={starting}>
+          <button class="btn btn-filled" onclick={start} disabled={starting}>
             {starting ? "Starting…" : "Start team"}
           </button>
         {/if}
       </section>
     {/if}
 
-    <section class="events">
+    <section class="card filled events">
       <h2>Recent activity</h2>
       <EventLog {events} />
     </section>
@@ -162,20 +163,12 @@
   }
 
   .back {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    padding: 0 0 1.25rem;
-    font-size: 0.85rem;
-  }
-
-  .back:hover {
-    color: var(--accent);
+    margin: 0 0 0.75rem -12px;
+    padding: 0 16px 0 12px;
   }
 
   h1 {
     margin: 0;
-    font-size: 1.4rem;
   }
 
   .root {
@@ -185,7 +178,7 @@
   }
 
   h2 {
-    font-size: 0.95rem;
+    font: 500 1rem/1.5rem var(--md-ref-typeface-plain);
     color: var(--text-muted);
     margin: 0 0 0.9rem;
   }
@@ -201,7 +194,7 @@
     background: var(--status-blocked-bg);
     color: var(--status-blocked-fg);
     border: 1px solid var(--status-blocked-fg);
-    border-radius: 8px;
+    border-radius: var(--md-sys-shape-corner-small);
     padding: 0.6rem 0.9rem;
     font-size: 0.85rem;
     font-weight: 600;
@@ -209,19 +202,10 @@
   }
 
   .stop {
-    padding: 0.5rem 1rem;
-    border: none;
-    border-radius: 8px;
-    background: var(--status-failed-bg);
-    color: var(--status-failed-fg);
-    font-weight: 600;
     margin-bottom: 2rem;
   }
 
   .start-form {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     padding: 1.25rem;
     margin-bottom: 2rem;
   }
@@ -264,29 +248,32 @@
     font-size: 0.8rem;
   }
 
+  /* A built-in role's prompt runs to several lines; show two and keep the rest in the title. */
+  .persona-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin: 0.15rem 0 0.1rem;
+  }
+
   textarea {
     display: block;
     width: 100%;
     margin-top: 0.4rem;
     padding: 0.5rem 0.65rem;
     background: var(--bg-inset);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-extra-small);
     color: var(--text);
     resize: vertical;
   }
 
-  button.primary {
-    padding: 0.55rem 1.1rem;
-    border: none;
-    border-radius: 8px;
-    background: var(--accent);
-    color: var(--accent-text);
-    font-weight: 600;
-  }
-
-  button.primary:disabled {
-    opacity: 0.6;
+  textarea:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 0;
+    border-color: var(--md-sys-color-primary);
   }
 
   .error {
@@ -295,9 +282,6 @@
   }
 
   .events {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 12px;
     padding: 1.1rem 1.25rem;
   }
 </style>

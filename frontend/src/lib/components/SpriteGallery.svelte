@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from "./Icon.svelte";
   import type { RoleStatus } from "../api";
   import RoleSprite from "./RoleSprite.svelte";
 
@@ -14,7 +15,7 @@
 </script>
 
 <div class="page">
-  <button class="back" onclick={onBack}>&larr; Back</button>
+  <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Back</button>
   <h1>Sprite gallery</h1>
   <p class="hint">
     Every role status this app can show, live-rendered -- no daemon connection needed. This
@@ -43,15 +44,8 @@
   }
 
   .back {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    padding: 0 0 1.25rem;
-    font-size: 0.85rem;
-  }
-
-  .back:hover {
-    color: var(--accent);
+    margin: 0 0 0.75rem -12px;
+    padding: 0 16px 0 12px;
   }
 
   h1 {
@@ -76,7 +70,7 @@
   .cell {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--md-sys-shape-corner-medium);
     padding: 1.25rem 1rem;
     display: flex;
     flex-direction: column;
