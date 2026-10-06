@@ -53,6 +53,15 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   the very server it's waiting on. `cuttlefish.fleet.daemon.FleetDaemon
   .stop`/`.steer`'s own docstrings; verified live, not just reasoned about.
 
+- **The never-allowed command list holds in every permission mode, Auto
+  included** (`sudo`, `rm -rf` outside the root, `git push --force`,
+  `curl ... | sh`, writes outside the root). One shared constant, never
+  duplicated per backend, never overridable by a rule or an answer. V4 in
+  `docs/SLICES.md`.
+- **Never imply a live prompt where there is none.** Only kopicode can pause
+  for a permission today; Claude Code and Codex run one-shot, so the dashboard
+  must say when their answer lands until their live-prompt slices ship.
+
 ## Gotchas that have already cost a session
 
 - **Only the fleet daemon resumes on its own after a crash.** The one-shot
@@ -110,4 +119,8 @@ own doc comment all beat a paragraph). Start reading at
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed; [`docs/SLICES.md`](docs/SLICES.md) — the build order.
 - [`docs/research/`](docs/research/) — the hands-on Paperclip comparison.
+- [`docs/design/ui-redesign/`](docs/design/ui-redesign/README.md) — the agreed
+  dashboard target (M3 tokens in `m3.css`, four screens, design decisions).
+  Read it before any `frontend/` work and follow it; use the `frontend-design`
+  and `material-design-3` skills. Update it when a slice changes the design.
 - Pandan board `cuttlefish-agent` (key `CUT`) — build-plan progress.

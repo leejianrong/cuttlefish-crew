@@ -727,3 +727,81 @@ Named and real, sketched in `docs/PLAN.md`'s Open risks and
 - **Slice F - meetings, explicitly last**: agent-requested or on-demand
   meetings, TTS + an avatar presenting project status over existing
   video-call infrastructure cuttlefish-crew facilitates rather than builds.
+
+## V4: Usable out of the box, and live prompts
+
+**Why:** operator feedback (2026-10-06): agents can't run any command by default, a
+denied permission can't be granted from the dashboard, the register form is hard to use,
+and every team needs a hand-written prompt. Target design:
+[`docs/design/ui-redesign/`](design/ui-redesign/README.md). Frontend slices use the
+`frontend-design` and `material-design-3` guidance and the tokens in that folder's
+`m3.css`.
+
+**Decisions made:** `git commit -m '<msg>'` is allowed through a narrow quote-aware
+rule (not by loosening the plain-word-list match). Permission modes are Ask first,
+Standard (default) and Auto; Auto keeps a hard never-allowed list (`sudo`, `rm -rf`
+outside the root, `git push --force`, `curl ... | sh`, writes outside the root).
+kopicode needs an `auto` consent mode first:
+[kopicode#164](https://github.com/leejianrong/kopicode/issues/164). Live prompts for
+Claude Code and Codex are real but unverified, so each gets a spike before its build.
+
+**Build plan** (order is the dependency order; each is its own PR)
+
+*Defaults (backend; unblocks agents today)*
+
+1. **V4-A: default allow presets.** A `dev-default` preset (inspect, git read, git
+   save-work, Python, JS/TS) applied when a project or role declares no `allow`; opt-in
+   presets (Go/Rust, containers); declared entries add to the preset. The never-allowed
+   list lives here as one shared constant. Quote-aware `git commit -m '<msg>'` rule in
+   `delegate/consent.py`. Mapping to `--allowedTools` and `--sandbox` stays the
+   documented approximation. Update `known-gaps.md`, README and `docs-site/`.
+2. **V4-B: built-in roles and team templates.** Builder, reviewer, tester, planner,
+   docs writer, each with a real prompt, a default permission preset (reviewer and
+   planner read-only) and a suggested backend; templates Solo builder, Builder +
+   reviewer (default), Full crew. A role's prompt reads "default" until edited, with
+   reset. API and CLI (`projects add --template`).
+3. **V4-C: permission modes.** The Ask first / Standard / Auto model, persisted per
+   project with per-role override; API; mode-to-backend mapping (kopicode, Claude
+   Code `--permission-mode`, Codex `--sandbox`) written down with its honest gaps. Auto
+   for kopicode is wired when kopicode#164 lands; until then Auto is unavailable on that
+   backend, stated plainly. ADR for the mode model.
+
+*Dashboard (frontend; needs 1-3 for real data)*
+
+4. **V4-D: theme and shell.** M3 tokens and the navigation rail from `m3.css`, existing
+   screens re-skinned, no behaviour change. Light and dark derived from the one seed.
+5. **V4-E: folder picker and the short register flow.** `GET /api/fs` (list
+   directories under a configured base, git state, no symlink escape, no hidden paths)
+   and the screen-1 flow, with Advanced collapsed.
+6. **V4-F: Permissions tab and roles/teams editor.** Screens 3 and 4 on the V4-A to
+   V4-C APIs.
+7. **V4-G: UX review.** One sub-agent reviews the built screens against the mockup and
+   against Claude Projects and Paperclip; findings become fixes before moving on.
+
+*Live prompts (the "Needs you" inbox)*
+
+8. **V4-H: pending-request model and kopicode live prompts.** A journaled pending
+   request (permission, question, blocked action) with an answer API and a timeout that
+   denies. kopicode: hold the `consent.request` open for Allow once / Always allow /
+   Deny (Always writes a rule into the project's allow list); bubble kopicode's `ask`
+   tool questions up. Screen 2. ADR for the request model.
+9. **V4-I: blocked-action fallback.** For any backend without a live path: record
+   what was blocked or asked, show it under Needs you labelled with when the answer
+   lands, and "Allow and rerun round" / resume with the answer (`claude --resume`).
+10. **V4-J: Claude Code spike.** Run a real `claude` under `--input-format stream-json`
+    plus `canUseTool` or `--permission-prompt-tool`; record the actual permission and
+    `AskUserQuestion` message shapes and the answer round trip in a research note. No
+    product code.
+11. **V4-K: Claude Code live prompts**, only if V4-J works, on the shapes it recorded.
+12. **V4-L: Codex spike.** Install `codex`, drive `codex app-server`, record the
+    approval and user-input requests (note open Codex issues #14192 and #21982). No
+    product code.
+13. **V4-M: Codex live prompts**, only if V4-L works.
+
+**Demo:** register a folder with two clicks and a template; the builder runs tests and
+commits unattended; the reviewer is read-only; a command off the list shows up under
+Needs you and the answer reaches the agent.
+
+**Rests on assumptions:** Claude Code's `canUseTool` carries `AskUserQuestion` answers
+back to the model (documented only in part; V4-J settles it); Codex `app-server`
+approvals are reliable enough to build on (V4-L settles it).

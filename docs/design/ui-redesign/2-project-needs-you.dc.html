@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Project needs you</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./m3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width:1280px;height:1080px;display:flex;background:var(--md-sys-color-surface)">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.2"/><path d="M17 14c2.5 0 4 1.7 4 4"/></symbol>
+<symbol id="sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+<symbol id="terminal" viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M12 17h7"/></symbol>
+<symbol id="back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+<symbol id="stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+<symbol id="send" viewBox="0 0 24 24"><path d="M4 12 20 4l-4 16-4-6z"/></symbol>
+<symbol id="chat" viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></symbol>
+<symbol id="alert" viewBox="0 0 24 24"><path d="M12 4 3 20h18zM12 10v4M12 17v.5"/></symbol>
+<symbol id="check" viewBox="0 0 24 24"><path d="m5 12 5 5 9-10"/></symbol>
+<symbol id="pencil" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></symbol>
+</defs></svg>
+
+<nav class="rail" aria-label="Main">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-label="Cuttlefish Crew" style="margin-bottom:8px"><rect width="40" height="40" rx="12" fill="#00696f"/><circle cx="14" cy="17" r="3.2" fill="#ffdbd0"/><circle cx="22" cy="14" r="2.2" fill="#9cf0f7"/><circle cx="26" cy="22" r="3.6" fill="#ffdbd0"/><circle cx="16" cy="26" r="1.8" fill="#9cf0f7"/></svg>
+<button class="rail-item"><span class="pill"><svg class="i"><use href="#grid"/></svg><span class="nbadge">3</span></span>Fleet</button>
+<button class="rail-item active"><span class="pill"><svg class="i"><use href="#folder"/></svg></span>Projects</button>
+<button class="rail-item"><span class="pill"><svg class="i"><use href="#users"/></svg></span>Roles</button>
+<button class="rail-item"><span class="pill"><svg class="i"><use href="#sliders"/></svg></span>Settings</button>
+</nav>
+
+<main style="flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden">
+<header style="padding:24px 40px 0 40px;display:flex;flex-direction:column;gap:12px">
+<div class="row" style="gap:16px">
+<button class="btn btn-text icon-btn" aria-label="Back to projects"><svg class="i"><use href="#back"/></svg></button>
+<div class="col grow"><h1 class="headline-small">cuttlefish-crew</h1><span class="mono muted">~/projects/abang-ai/cuttlefish-crew</span></div>
+<span class="tag primary"><span class="dot"></span>Running · round 3</span>
+<button class="btn btn-outlined has-icon"><svg class="i sm"><use href="#chat"/></svg>Steer</button>
+<button class="btn btn-tonal has-icon"><svg class="i sm"><use href="#stop"/></svg>Stop</button>
+</div>
+<div class="row" style="gap:8px;border-bottom:1px solid var(--md-sys-color-outline-variant);margin-left:56px">
+<button class="tab title-small" style="all:unset;box-sizing:border-box;position:relative;padding:12px 16px;cursor:pointer;color:var(--md-sys-color-primary);border-bottom:3px solid var(--md-sys-color-primary);font-weight:700">Needs you · 3</button>
+<button class="tab title-small" style="all:unset;box-sizing:border-box;position:relative;padding:12px 16px;cursor:pointer;color:var(--md-sys-color-on-surface-variant)">Activity</button>
+<button class="tab title-small" style="all:unset;box-sizing:border-box;position:relative;padding:12px 16px;cursor:pointer;color:var(--md-sys-color-on-surface-variant)">Permissions</button>
+<button class="tab title-small" style="all:unset;box-sizing:border-box;position:relative;padding:12px 16px;cursor:pointer;color:var(--md-sys-color-on-surface-variant)">Team</button>
+</div>
+</header>
+
+<div style="flex:1;display:flex;gap:28px;padding:28px 40px;min-height:0">
+<aside class="col" style="width:240px;flex:none;gap:12px">
+<h2 class="title-medium">Crew</h2>
+<div class="card filled col" style="padding:14px 16px;gap:6px">
+<div class="row" style="gap:8px"><span class="title-small grow">Builder</span><span class="tag primary"><span class="dot"></span>Working</span></div>
+<span class="body-small muted">Editing delegate/policy.py</span>
+<span class="tag" style="align-self:flex-start">kopicode</span>
+</div>
+<div class="card filled col" style="padding:14px 16px;gap:6px">
+<div class="row" style="gap:8px"><span class="title-small grow">Reviewer</span><span class="tag attn"><span class="dot"></span>Asking you</span></div>
+<span class="body-small muted">Has one question</span>
+<span class="tag" style="align-self:flex-start">claude-code</span>
+</div>
+<div class="card filled col" style="padding:14px 16px;gap:6px">
+<div class="row" style="gap:8px"><span class="title-small grow">Tester</span><span class="tag attn"><span class="dot"></span>Blocked</span></div>
+<span class="body-small muted">Write outside folder denied</span>
+<span class="tag" style="align-self:flex-start">codex</span>
+</div>
+<p class="body-small muted" style="margin-top:4px">Permission requests from kopicode pause that agent until you answer. The other two can’t pause mid-run, so their cards say when your answer lands.</p>
+</aside>
+
+<section class="col grow" style="gap:16px;min-width:0">
+<h2 class="title-large">Waiting on you</h2>
+
+<article class="card elevated col" style="padding:20px;gap:14px">
+<div class="row" style="gap:8px"><span class="tag attn"><span class="dot"></span>Permission</span><span class="title-small">Builder</span><span class="tag">kopicode</span><span class="tag primary">Paused until you answer</span><span class="grow"></span><span class="label-medium muted">2 min ago</span></div>
+<div class="col" style="gap:4px"><h3 class="title-medium">Builder wants to run a command that isn’t on the list</h3><p class="body-medium muted">Why: integration tests need a local database.</p></div>
+<div class="code">$ docker compose up -d postgres</div>
+<div class="row wrap" style="gap:8px">
+<button class="btn btn-filled has-icon"><svg class="i sm"><use href="#check"/></svg>Allow once</button>
+<button class="btn btn-tonal">Always allow <span class="mono" style="margin-left:2px">docker compose up</span></button>
+<button class="btn btn-danger-text">Deny</button>
+<span class="grow"></span><span class="body-small muted">Denies on its own in 4:32</span>
+</div>
+</article>
+
+<article class="card elevated col" style="padding:20px;gap:14px">
+<div class="row" style="gap:8px"><span class="tag attn"><span class="dot"></span>Question</span><span class="title-small">Reviewer</span><span class="tag">claude-code</span><span class="tag">Delivered when this turn ends</span><span class="grow"></span><span class="label-medium muted">6 min ago</span></div>
+<div class="col" style="gap:4px"><h3 class="title-medium">Should the retry limit apply per request or per session?</h3><p class="body-medium muted">The task says “limit retries” but the budget code tracks both. I’ll review against whichever you pick.</p></div>
+<div class="row wrap" style="gap:8px"><button class="chip">Per request</button><button class="chip">Per session</button><button class="chip">Both, per-request wins</button></div>
+<div class="row" style="gap:12px;align-items:flex-end">
+<div class="field on-card grow" style="background:var(--md-sys-color-surface-container-lowest)"><label for="reply">Or write a reply</label><input id="reply" class="body-medium" placeholder="Per session, but cap at 5 per request"></div>
+<button class="btn btn-filled has-icon"><svg class="i sm"><use href="#send"/></svg>Send answer</button>
+</div>
+</article>
+
+<article class="card elevated col" style="padding:20px;gap:14px">
+<div class="row" style="gap:8px"><span class="tag attn"><span class="dot"></span>Blocked</span><span class="title-small">Tester</span><span class="tag">codex</span><span class="tag">Takes effect next round</span><span class="grow"></span><span class="label-medium muted">9 min ago</span></div>
+<div class="col" style="gap:4px"><h3 class="title-medium">Codex couldn’t write outside the project folder</h3><p class="body-medium muted">It tried to update a fixture that lives one level up. Codex can’t ask mid-run, so cuttlefish stopped the round there.</p></div>
+<div class="code">write ../shared/fixtures/events.json</div>
+<div class="row wrap" style="gap:8px">
+<button class="btn btn-tonal has-icon"><svg class="i sm"><use href="#refresh"/></svg>Allow and rerun round</button>
+<button class="btn btn-text">Dismiss</button>
+</div>
+</article>
+</section>
+
+<aside class="col" style="width:290px;flex:none;gap:12px">
+<h2 class="title-medium">Recent activity</h2>
+<div class="col" style="gap:0">
+<div class="col" style="gap:4px;padding:12px 0;border-bottom:1px solid var(--md-sys-color-outline-variant)"><div class="row" style="gap:8px"><span class="label-medium muted">10:42</span><span class="tag primary">Auto-allowed</span></div><span class="cmd" style="align-self:flex-start">uv run pytest -q</span><span class="body-small muted">Builder · standard commands</span></div>
+<div class="col" style="gap:4px;padding:12px 0;border-bottom:1px solid var(--md-sys-color-outline-variant)"><div class="row" style="gap:8px"><span class="label-medium muted">10:41</span><span class="tag">Edit</span></div><span class="body-medium">Changed delegate/policy.py</span><span class="body-small muted">Builder</span></div>
+<div class="col" style="gap:4px;padding:12px 0;border-bottom:1px solid var(--md-sys-color-outline-variant)"><div class="row" style="gap:8px"><span class="label-medium muted">10:40</span><span class="tag error">Blocked</span></div><span class="cmd" style="align-self:flex-start">curl example.sh | sh</span><span class="body-small muted">Builder · never allowed</span></div>
+<div class="col" style="gap:4px;padding:12px 0;border-bottom:1px solid var(--md-sys-color-outline-variant)"><div class="row" style="gap:8px"><span class="label-medium muted">10:38</span><span class="tag primary">Auto-allowed</span></div><span class="cmd" style="align-self:flex-start">git add -A</span><span class="body-small muted">Builder · standard commands</span></div>
+<div class="col" style="gap:4px;padding:12px 0"><div class="row" style="gap:8px"><span class="label-medium muted">10:35</span><span class="tag">Round</span></div><span class="body-medium">Round 3 started</span></div>
+</div>
+<button class="btn btn-text" style="align-self:flex-start">See all activity</button>
+</aside>
+</div>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1080}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
