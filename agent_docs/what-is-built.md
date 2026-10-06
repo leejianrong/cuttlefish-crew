@@ -5,7 +5,7 @@ shipped slices, kept for the *why* behind each; `git log --oneline`,
 `docs/adr/` (0001-0021 and counting) and each module's own doc comment are
 the authority, and anything here that disagrees with the code is stale.
 Slices after KAN-1764 (for example ADR-0021, kopicode over `serve`) are in
-`git log` and the ADRs, not below.
+`git log` and the ADRs, not below, except V4-H at the end.
 
 V1, V2 (a durable, sandboxed kopicode delegation), slice A (the pluggable
 `AgentBackend` seam — `KopicodeBackend` and `ClaudeCodeBackend`, selected via
@@ -256,3 +256,22 @@ verbs. Live-verified end to end: a real `mcp.client` session driving a real
 `cuttlefish mcp` subprocess over stdio, registering a project, starting a
 real kopicode team, and reading its real episodic journal back through
 `get_events` -- not just built and unit-tested.
+
+V4-H (ADR-0028, #73 to #78): **Needs you**. A kopicode agent in Ask first or Standard that asks
+for a command nothing approves is paused until a person answers, instead of being refused.
+`consent.request` was already answered by an async decider under a deadline, so holding it open
+needed no new transport: `AskingDecider` raises a request and waits. A request is two journal
+events, `RequestRaised` and `RequestResolved`, and its state is folded from them; there is no
+requests table (ADR-0004), and the broker's in-memory index only caches the pending ones, which
+is correct because nothing can be pending after a restart (the daemon marks leftovers
+`abandoned` on start). The broker reaches the delegation task through `Runtime`, never a task
+argument (ADR-0006), and a request's role is found from the task text the team dispatched,
+because `satay.gather` runs calls in satay's own tasks where a contextvar does not reach.
+Always allow goes through the same `ConsentPolicy` check as a hand-typed command, so the
+never-allowed list still wins, and it applies to the running team at once and is saved to the
+project. Stop resolves the team's requests `cancelled`, because satay's cancel only lands when the
+round ends and a round held open for a person does not end. The window is
+`CUTTLEFISH_REQUEST_WINDOW` (default 10 minutes), passed to kopicode as `--consent-timeout` when
+`serve --help` lists it (v0.3.0 and later), else 45 seconds under kopicode's fixed 60. Claude Code
+and Codex cannot pause, so they still refuse; `ask` questions are not live (no released kopicode
+wire). Real-kopicode checks are in `tests/integration/delegate/`; the live-model ones need a key.

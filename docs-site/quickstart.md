@@ -81,7 +81,21 @@ uv run cuttlefish approve <task-id> --role builder                        # fina
 uv run cuttlefish approve <task-id> --role builder --reject "use .dockerignore instead"  # one more round
 ```
 
-## 5. Reach it from another device
+## 5. Answer an agent that needs you
+
+In **Ask first** and **Standard**, a kopicode agent that wants to run a command nothing approves
+stops and waits. It shows up under **Needs you** (a tab on the project, and a destination in the
+rail with a count) with the command, why it stopped and a countdown. Choose **Allow once**,
+**Always allow** (the start of the command, which applies to the running team at once and is saved
+to the project's own commands for later starts), or **Deny**. If you do nothing, the request denies
+itself when `CUTTLEFISH_REQUEST_WINDOW` runs out (ten minutes by default) and the agent carries on
+with a refusal. Restarting the daemon abandons a waiting request; it is not asked again.
+
+Only kopicode can pause. Claude Code and Codex refuse the command and say so in the activity log,
+and a team started with `cuttlefish run` or `run-team` has no inbox, so it refuses too. The same
+requests are available over HTTP (see the [CLI reference](cli-reference.md)).
+
+## 6. Reach it from another device
 
 ```bash
 cuttlefish serve --tailscale

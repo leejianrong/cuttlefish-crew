@@ -294,3 +294,32 @@ All under the existing token or session; answering grants shell execution, the s
 4. The upstream asks are filed on kopicode: #173 (`ask.request`), #174 (a release with
    `--consent-timeout`), #175 (version and capability list), #176 (read-only session option),
    #177 (structured command field), #178 (per-session consent timeout).
+
+## Update (V4-H5, 2026-10-06): what the real kopicode showed
+
+The decisions above stand. Three of its premises about kopicode have moved, and one claim was
+checked against kopicode's source rather than a live run.
+
+- **The flag is released.** kopicode **v0.3.0** (released the same day) carries
+  `--consent-timeout` (#169), so "no release has it" no longer holds: the 10-minute window
+  applies on v0.3.0 and later, and the 45-second fallback applies only to v0.2.0 and older. CI
+  builds kopicode from `main` (`ci.yml` clones it unpinned, not a release), so the flag is
+  there; nothing was pinned or bumped. v0.3.0 also lists the flag in `kopicode version --json`
+  (`features: consent_timeout.flag`, #175), and a real-binary test checks that cuttlefish's
+  help-text probe agrees with it. Moving the probe to that list is possible and not done.
+- **`ask` has a wire on kopicode `main`, not in v0.3.0.** `ask.request` (#173, ADR-0020, merged
+  after v0.3.0, with `ask_mode: "remote"` on `session.start`) puts the model's `ask` to the client
+  and takes `{text}` back, with the same bounded timeout. Decision 4 ("not live") is still true
+  for every released kopicode and for what cuttlefish does today; a live question card is a
+  later slice once kopicode releases it. v0.3.0 also adds `consent.request` `command`/`argv`
+  (#177) and a per-session `consent_timeout` (#178); cuttlefish uses neither yet.
+- **What an `ask` call looks like in `session.event`** (read from kopicode's `internal/engine/
+  event.go`, not seen live): `tool_call_parsed` with `tool: "ask"` and `detail` the call's raw
+  arguments, `{"question":...,"context":...}`, whitespace-collapsed and cut at 120 characters
+  with `…`; then `ask_requested` and `ask_answered` (`source: "policy"`, `reason: "refused"`
+  when nobody was present). So the dashboard's JSON parse of `detail` is right for a short
+  question and wrong for a long one; the fix (#79) reads the question out of the cut text.
+- **Not checked live** (no model credential was available): that a held request survives past 60
+  seconds under `--consent-timeout`, and the `permission_decided` `source: remote` events for
+  answers given through the broker. Both are covered by `requires_live_credential` tests
+  (`test_kopicode_serve_needs_you_live.py`) that run when a key is present.
