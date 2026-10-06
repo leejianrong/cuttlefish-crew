@@ -57,6 +57,31 @@ export interface TeamTemplate {
   roles: string[];
 }
 
+/** A built-in role from the library (V4-B). */
+export interface BuiltinRole {
+  name: string;
+  summary: string;
+  prompt: string;
+  access: "standard" | "read-only";
+}
+
+export interface PermissionPreset {
+  name: string;
+  title: string;
+  summary: string;
+  /** Command prefixes, each as one line ("uv run pytest"). */
+  commands: string[];
+  default: boolean;
+}
+
+/** What the Permissions tab shows that the daemon owns, so the screen cannot drift from it. */
+export interface PermissionsCatalog {
+  modes: { name: PermissionMode; title: string; summary: string }[];
+  presets: PermissionPreset[];
+  never_allowed: { label: string; summary: string }[];
+  backends: { name: string; when: string; summary: string }[];
+}
+
 /** One role's cumulative usage so far (KAN-1712/ADR-0017), derived from the
  * episodic journal -- `cost_usd` is `null` when no backend reported a dollar
  * figure (kopicode, Codex), which is "unknown", not "free" (KAN-1810). */
@@ -79,8 +104,10 @@ export interface ProjectSummary {
   secrets_scope: string;
   /** KAN-1809: the project's default backend; null uses the daemon's. */
   backend?: string | null;
-  /** V4-C: applies from the next round. */
+  /** V4-C: applies the next time the team starts, not to a team already running. */
   mode: PermissionMode;
+  /** V4-F: the command groups switched on (names from the permissions catalogue). */
+  presets: string[];
   roles: RoleDefinition[];
   last_team_id: string | null;
   allow: string[][];
@@ -205,6 +232,21 @@ export class FleetClient {
     return this.request(`/api/fs/inspect?path=${encodeURIComponent(path)}`);
   }
 
+  listPermissions(): Promise<PermissionsCatalog> {
+    return this.request("/api/permissions");
+  }
+
+  listBuiltinRoles(): Promise<{ roles: BuiltinRole[] }> {
+    return this.request("/api/roles");
+  }
+
+  updatePresets(id: string, presets: string[]): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/presets`, {
+      method: "PATCH",
+      body: JSON.stringify({ presets }),
+    });
+  }
+
   listTemplates(): Promise<{ default: string; templates: TeamTemplate[] }> {
     return this.request("/api/templates");
   }
@@ -230,6 +272,7 @@ export class FleetClient {
     roles?: RoleDefinition[];
     template?: string;
     mode?: PermissionMode;
+    presets?: string[];
     allow?: string[][];
     max_tokens?: number | null;
     max_cost_usd?: number | null;

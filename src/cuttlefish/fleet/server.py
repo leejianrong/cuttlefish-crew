@@ -40,11 +40,25 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from cuttlefish.config import ConfigError, validate_backend_name
+from cuttlefish.delegate.never_allowed import NEVER_ALLOWED_SUMMARY
+from cuttlefish.delegate.presets import (
+    DEFAULT_PRESETS,
+    PRESET_INFO,
+    PRESETS,
+    UnknownPresetError,
+    validate_presets,
+)
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
-from cuttlefish.permissions import ACCESS_LEVELS, DEFAULT_MODE, MODES
+from cuttlefish.permissions import (
+    ACCESS_LEVELS,
+    BACKEND_NOTES,
+    DEFAULT_MODE,
+    MODE_INFO,
+    MODES,
+)
 from cuttlefish.projects.store import ProjectNotFoundError, RoleDefinition
 from cuttlefish.roles import (
     BUILTIN_ROLES,
@@ -78,6 +92,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
         "mode": project.mode,
+        "presets": list(project.presets if project.presets is not None else DEFAULT_PRESETS),
         "roles": [
             {
                 "name": r.name,
@@ -134,6 +149,18 @@ def _access_from(value: Any) -> str | None:
     if value not in ACCESS_LEVELS:
         raise HTTPException(400, f"'access' must be one of {', '.join(ACCESS_LEVELS)}")
     return str(value)
+
+
+def _presets_from(value: Any) -> tuple[str, ...] | None:
+    """A request's optional command groups; unset keeps the defaults (`None`)."""
+    if value is None:
+        return None
+    if not isinstance(value, list) or not all(isinstance(name, str) for name in value):
+        raise HTTPException(400, "'presets' must be a list of preset names")
+    try:
+        return validate_presets(value)
+    except UnknownPresetError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def _mode_from(value: Any) -> str:
@@ -312,6 +339,32 @@ def create_app(
             "languages": list(found.languages),
         }
 
+    @app.get("/api/permissions")
+    async def permissions_catalog() -> dict[str, Any]:
+        return {
+            "modes": [
+                {"name": name, "title": title, "summary": summary}
+                for name, (title, summary) in MODE_INFO.items()
+            ],
+            "presets": [
+                {
+                    "name": name,
+                    "title": PRESET_INFO[name][0],
+                    "summary": PRESET_INFO[name][1],
+                    "commands": [" ".join(command) for command in commands],
+                    "default": name in DEFAULT_PRESETS,
+                }
+                for name, commands in PRESETS.items()
+            ],
+            "never_allowed": [
+                {"label": label, "summary": summary} for label, summary in NEVER_ALLOWED_SUMMARY
+            ],
+            "backends": [
+                {"name": name, "when": when, "summary": summary}
+                for name, when, summary in BACKEND_NOTES
+            ],
+        }
+
     @app.get("/api/roles")
     async def list_builtin_roles() -> dict[str, Any]:
         return {
@@ -363,6 +416,7 @@ def create_app(
             max_cost_usd=max_cost_usd,
             backend=_backend_from(body.get("backend")),
             mode=_mode_from(body.get("mode")),
+            presets=_presets_from(body.get("presets")),
         )
         return _project_json(daemon, project.id)
 
@@ -396,6 +450,21 @@ def create_app(
         try:
             daemon.projects.update_allow(project_id, _allow_from_body(body))
             return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/presets")
+    async def update_presets(project_id: str, request: Request) -> dict[str, Any]:
+        body = await _json_body(request)
+        names = body.get("presets")
+        if not isinstance(names, list) or not all(isinstance(name, str) for name in names):
+            raise HTTPException(400, "'presets' must be a list of preset names")
+        try:
+            chosen = validate_presets(names)
+            daemon.projects.update_presets(project_id, chosen)
+            return _project_json(daemon, project_id)
+        except UnknownPresetError as exc:
+            raise HTTPException(400, str(exc)) from exc
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 

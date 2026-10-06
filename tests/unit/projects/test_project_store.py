@@ -365,3 +365,37 @@ def test_a_role_access_round_trips(tmp_path: Path) -> None:
     )
     assert [r.access for r in store.get(project.id).roles] == ["read-only", None]
     store.close()
+
+
+def test_presets_default_to_none_and_round_trip(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    plain = store.register(name="a", root=str(tmp_path / "a"))
+    chosen = store.register(name="b", root=str(tmp_path / "b"), presets=("inspect", "containers"))
+    assert plain.presets is None
+    assert store.get(chosen.id).presets == ("inspect", "containers")
+    store.close()
+
+
+def test_update_presets_sets_and_restores_the_defaults(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="a", root=str(tmp_path / "a"), mode="auto")
+    updated = store.update_presets(project.id, ("inspect",))
+    assert (updated.presets, updated.mode) == (("inspect",), "auto")
+    assert store.update_presets(project.id, None).presets is None
+    store.close()
+
+
+def test_a_persisted_roles_presets_round_trip(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="a", root=str(tmp_path / "a"))
+    store.record_team_started(
+        project.id,
+        "team-1",
+        [
+            PersistedRole(name="x", text="t", presets=("inspect",)),
+            PersistedRole(name="y", text="t"),
+        ],
+    )
+    roles = store.get(project.id).last_team_roles
+    assert [r.presets for r in roles] == [("inspect",), None]
+    store.close()

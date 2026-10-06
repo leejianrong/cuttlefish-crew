@@ -125,16 +125,54 @@ def read_only_allow() -> list[list[str]]:
     return preset_allow(READ_ONLY_PRESETS)
 
 
-def resolve_allow(declared: Sequence[Sequence[str]] | None = None) -> list[list[str]]:
-    """The effective allow list: the default presets, then `declared` on top.
+#: What each preset is, for the dashboard's Permissions tab: a title and one plain line.
+PRESET_INFO: Mapping[str, tuple[str, str]] = {
+    "inspect": ("Inspect files", "Read and search files and folders."),
+    "git-read": ("Git, read only", "Look at status, history and diffs."),
+    "git-save": ("Git, save work", "Stage and commit. Never pushes."),
+    "python": ("Python", "Run tests, linters and type checks with uv."),
+    "javascript": (
+        "JavaScript and TypeScript",
+        "Run npm scripts, install from the lockfile, type-check.",
+    ),
+    "make": ("Make", "Run the project's own make targets: test, check, lint, build, ci."),
+    "go-rust": ("Go and Rust", "Test, build and lint Go and Rust code."),
+    "containers": (
+        "Containers",
+        "Start and inspect compose services. Off by default: containers can reach outside "
+        "the folder.",
+    ),
+}
 
-    Additive and order-preserving, with duplicates dropped, so passing a list that
-    already includes the presets is a no-op. There is no "declare nothing at all" form
-    here yet; a read-only role is a later slice (V4-B/V4-C), not a way to pass ``[]``.
+
+class UnknownPresetError(ValueError):
+    """A preset name that is not one of :data:`PRESETS`."""
+
+
+def validate_presets(names: Sequence[str]) -> tuple[str, ...]:
+    """`names` as a tuple, in the catalogue's order and without repeats, or raise."""
+    unknown = [name for name in names if name not in PRESETS]
+    if unknown:
+        raise UnknownPresetError(
+            f"unknown preset {unknown[0]!r} (choose from {', '.join(PRESETS)})"
+        )
+    return tuple(name for name in PRESETS if name in names)
+
+
+def resolve_allow(
+    declared: Sequence[Sequence[str]] | None = None, presets: Sequence[str] | None = None
+) -> list[list[str]]:
+    """The effective allow list: the project's presets, then `declared` on top.
+
+    `presets` is the project's chosen set; ``None`` means the defaults. Additive and
+    order-preserving, with duplicates dropped, so passing a list that already includes the
+    presets is a no-op. There is no "declare nothing at all" form here; a read-only role or
+    ask-first mode is how a delegation gets less than the presets.
     """
     effective: list[list[str]] = []
     seen: set[Command] = set()
-    for entry in (*preset_allow(DEFAULT_PRESETS), *(declared or ())):
+    chosen = DEFAULT_PRESETS if presets is None else tuple(presets)
+    for entry in (*preset_allow(chosen), *(declared or ())):
         key = tuple(entry)
         if key not in seen:
             seen.add(key)

@@ -47,6 +47,7 @@ async def delegate_to_agent_backend(
     secret_names: list[str] | None = None,
     agent_backend: str | None = None,
     access: str | None = None,
+    presets: list[str] | None = None,
 ) -> DelegationOutcome:
     """``agent_backend`` (KAN-1809) is a per-call override of the runtime's default;
     callers pass it only when set, so a call that names none has the identical
@@ -59,7 +60,10 @@ async def delegate_to_agent_backend(
     it is not ``standard`` so every other call's recorded arguments are unchanged:
     ``read-only`` is inspection-only commands, ``ask-first`` is no command at all,
     ``auto`` is the presets for backends that need a list (the backend widens it itself).
-    ``auto`` and ``read-only`` also reach the backend as ``mode``."""
+    ``auto`` and ``read-only`` also reach the backend as ``mode``.
+
+    ``presets`` (V4-F) is the project's chosen command groups, passed only when it differs from
+    the defaults, for the same replay reason."""
     runtime_ = runtime.current()
     backend = resolve_backend(
         agent_backend or runtime_.agent_backend,
@@ -75,7 +79,7 @@ async def delegate_to_agent_backend(
     elif access == "ask-first":
         effective_allow = []
     else:
-        effective_allow = resolve_allow(allow)
+        effective_allow = resolve_allow(allow, presets)
     mode_kwargs = {"mode": access} if access in ("auto", READ_ONLY) else {}
     return await backend.delegate(
         task_text=task_text,

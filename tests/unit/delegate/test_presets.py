@@ -6,7 +6,15 @@ import pytest
 
 from cuttlefish.delegate.consent import ConsentPolicy
 from cuttlefish.delegate.never_allowed import never_allowed_reason
-from cuttlefish.delegate.presets import DEFAULT_PRESETS, PRESETS, preset_allow, resolve_allow
+from cuttlefish.delegate.presets import (
+    DEFAULT_PRESETS,
+    PRESET_INFO,
+    PRESETS,
+    UnknownPresetError,
+    preset_allow,
+    resolve_allow,
+    validate_presets,
+)
 
 SH = "/bin/sh -c "
 
@@ -191,3 +199,31 @@ def test_auto_mode_ignores_the_allow_list() -> None:
     assert (
         ConsentPolicy([["ls"]], auto=True).decide("run_shell", SH + "make test").answer == "allow"
     )
+
+
+def test_a_chosen_set_of_presets_replaces_the_defaults_and_declarations_still_add() -> None:
+    effective = resolve_allow([["go", "test"]], ["inspect", "containers"])
+    assert ["ls"] in effective
+    assert ["docker", "compose", "up"] in effective
+    assert ["go", "test"] in effective
+    assert ["uv", "run", "pytest"] not in effective  # python is not chosen
+    assert ["git", "add"] not in effective
+
+
+def test_an_empty_choice_is_no_presets_at_all_not_the_defaults() -> None:
+    assert resolve_allow(None, []) == []
+    assert resolve_allow([["go", "test"]], []) == [["go", "test"]]
+
+
+def test_validate_presets_orders_by_the_catalogue_and_drops_repeats() -> None:
+    assert validate_presets(["python", "inspect", "python"]) == ("inspect", "python")
+
+
+def test_validate_presets_names_the_choices_for_an_unknown_one() -> None:
+    with pytest.raises(UnknownPresetError, match="inspect"):
+        validate_presets(["inspect", "nope"])
+
+
+def test_every_preset_has_a_title_and_a_summary() -> None:
+    assert set(PRESET_INFO) == set(PRESETS)
+    assert all(title and summary for title, summary in PRESET_INFO.values())

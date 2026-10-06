@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS projects (
     max_tokens INTEGER,
     max_cost_usd REAL,
     backend TEXT,
-    mode TEXT
+    mode TEXT,
+    presets_json TEXT
 )
 """
 
@@ -100,6 +101,10 @@ _ADD_BACKEND_COLUMN = "ALTER TABLE projects ADD COLUMN backend TEXT"
 #: "standard" when `NULL`, so an existing row keeps its exact prior behaviour.
 _ADD_MODE_COLUMN = "ALTER TABLE projects ADD COLUMN mode TEXT"
 
+#: `presets_json` was added for V4-F -- the command groups a project has switched on (a JSON
+#: list of preset names). `NULL` means the defaults, so an existing row is unchanged.
+_ADD_PRESETS_COLUMN = "ALTER TABLE projects ADD COLUMN presets_json TEXT"
+
 
 @dataclass(frozen=True, slots=True)
 class RoleDefinition:
@@ -132,6 +137,7 @@ class PersistedRole:
     allow: tuple[tuple[str, ...], ...] = field(default_factory=tuple)
     backend: str | None = None
     access: str | None = None
+    presets: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +170,9 @@ class Project:
     #: The project's permission mode (ask-first, standard or auto; ADR-0025). A role's own
     #: `access` overrides it.
     mode: str = DEFAULT_MODE
+    #: The command groups switched on (names from `delegate.presets.PRESETS`), or `None` for
+    #: the defaults. `allow` is what is declared on top of them.
+    presets: tuple[str, ...] | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -205,6 +214,10 @@ def _decode_roles(raw: str) -> tuple[RoleDefinition, ...]:
     )
 
 
+def _decode_presets(raw: str | None) -> tuple[str, ...] | None:
+    return None if raw is None else tuple(json.loads(raw))
+
+
 def _encode_allow(allow: tuple[tuple[str, ...], ...]) -> str:
     return json.dumps([list(command) for command in allow])
 
@@ -222,6 +235,7 @@ def _encode_persisted_roles(roles: tuple[PersistedRole, ...]) -> str:
                 "allow": [list(c) for c in r.allow],
                 **({"backend": r.backend} if r.backend else {}),
                 **({"access": r.access} if r.access else {}),
+                **({"presets": list(r.presets)} if r.presets is not None else {}),
             }
             for r in roles
         ]
@@ -236,6 +250,7 @@ def _decode_persisted_roles(raw: str) -> tuple[PersistedRole, ...]:
             allow=tuple(tuple(c) for c in r.get("allow", [])),
             backend=r.get("backend"),
             access=r.get("access"),
+            presets=tuple(r["presets"]) if r.get("presets") is not None else None,
         )
         for r in json.loads(raw)
     )
@@ -256,6 +271,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         max_cost_usd=row["max_cost_usd"],
         backend=row["backend"],
         mode=row["mode"] or DEFAULT_MODE,
+        presets=_decode_presets(row["presets_json"]),
     )
 
 
@@ -281,6 +297,8 @@ class ProjectStore:
             self._conn.execute(_ADD_BACKEND_COLUMN)
         if "mode" not in columns:
             self._conn.execute(_ADD_MODE_COLUMN)
+        if "presets_json" not in columns:
+            self._conn.execute(_ADD_PRESETS_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -317,6 +335,7 @@ class ProjectStore:
         max_cost_usd: float | None = None,
         backend: str | None = None,
         mode: str = DEFAULT_MODE,
+        presets: tuple[str, ...] | None = None,
     ) -> Project:
         """Register a new project. `secrets_scope` defaults to `name` (Q38)."""
         project = Project(
@@ -330,12 +349,13 @@ class ProjectStore:
             max_cost_usd=max_cost_usd,
             backend=backend,
             mode=mode,
+            presets=presets,
         )
         self._conn.execute(
             "INSERT INTO projects "
             "(id, name, root, secrets_scope, roles_json, last_team_id, allow_json, "
-            "last_team_roles_json, max_tokens, max_cost_usd, backend, mode) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "last_team_roles_json, max_tokens, max_cost_usd, backend, mode, presets_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.id,
                 project.name,
@@ -349,6 +369,7 @@ class ProjectStore:
                 project.max_cost_usd,
                 project.backend,
                 project.mode,
+                None if project.presets is None else json.dumps(list(project.presets)),
             ),
         )
         self._conn.commit()
@@ -381,9 +402,21 @@ class ProjectStore:
         return self.get(project_id)
 
     def update_mode(self, project_id: str, mode: str) -> Project:
-        """Set this project's permission mode (V4-C/ADR-0025), applied from the next round."""
+        """Set this project's permission mode (V4-C/ADR-0025), applied the next time the team starts
+        (the daemon composes each role's settings once, at start)."""
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute("UPDATE projects SET mode = ? WHERE id = ?", (mode, project_id))
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_presets(self, project_id: str, presets: tuple[str, ...] | None) -> Project:
+        """Set the project's command groups (`None` restores the defaults). Like the mode, it
+        applies the next time the team starts."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET presets_json = ? WHERE id = ?",
+            (None if presets is None else json.dumps(list(presets)), project_id),
+        )
         self._conn.commit()
         return self.get(project_id)
 

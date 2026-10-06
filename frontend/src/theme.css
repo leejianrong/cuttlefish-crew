@@ -173,6 +173,12 @@ svg.i.sm { width: 18px; height: 18px; }
 .item.selected { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .divider { height: 1px; background: var(--md-sys-color-outline-variant); border: 0; margin: 0; }
 
+/* switch */
+.switch { width: 52px; height: 32px; border-radius: 16px; border: 2px solid var(--md-sys-color-outline); background: var(--md-sys-color-surface-container-highest); position: relative; flex: none; cursor: pointer; padding: 0; transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard); }
+.switch::after { content: ""; position: absolute; top: 8px; left: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--md-sys-color-outline); transition: all var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard); }
+.switch[aria-checked="true"] { background: var(--md-sys-color-primary); border-color: var(--md-sys-color-primary); }
+.switch[aria-checked="true"]::after { left: 24px; top: 4px; width: 20px; height: 20px; background: var(--md-sys-color-on-primary); }
+
 /* selectable option (radio card) and segmented button */
 .opt {
   display: block;

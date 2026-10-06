@@ -157,6 +157,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
             ),
         )
 
+        extra_kwargs: dict[str, Any] = {"access": access} if access else {}
         try:
             outcome = await delegate_to_agent_backend(
                 current_text,
@@ -164,7 +165,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
                 allow=allow,
                 project=project,
                 secret_names=secret_names,
-                **({"access": access} if access else {}),
+                **extra_kwargs,
             )
         except DelegationError as exc:
             # A plain (non-collected) awaited task's failure re-raises the task body's

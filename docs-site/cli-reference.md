@@ -201,11 +201,27 @@ ignores any declared `--allow`. It does not yet stop a role editing files, becau
 needs per-backend handling that arrives with the permission modes; until then the
 reviewer's and planner's prompts are what keep them from editing.
 
+## Permissions and team, in the dashboard
+
+A project's page has three tabs. **Permissions** sets the mode, switches command groups on and
+off (the same presets as above, plus your own commands) and shows the always-blocked list and
+how each agent receives a mode. **Team** edits the project's roles: change a role's prompt,
+agent and permissions, add a built-in or custom role, remove one, reset a built-in to its default
+prompt, or replace the whole team from a template. The **Roles** destination lists the built-in
+roles and teams read-only; each project keeps its own copy of a role, so editing one never
+changes the library.
+
+The same settings over HTTP: `GET /api/permissions` (modes, presets, blocked list, backend notes),
+`PATCH /api/projects/{id}/mode`, `PATCH /api/projects/{id}/presets` (`{"presets": [...]}`, names
+from the catalogue), `PATCH /api/projects/{id}/allow` (your own commands) and
+`PATCH /api/projects/{id}/roles` (replaces the whole list). **Every change applies the next time
+the team starts**, not to a team already running.
+
 ## Permission modes
 
 `run`, `run-team` and `projects add` take `--mode ask-first|standard|auto` (default
-`standard`); a project's mode is also set with `PATCH /api/projects/{id}/mode` and applies from
-the next round. A role may override it with its own `access` (`ask-first`, `standard`, `auto`
+`standard`); a project's mode is also set with `PATCH /api/projects/{id}/mode` and applies the
+next time the team starts, not to one already running. A role may override it with its own `access` (`ask-first`, `standard`, `auto`
 or `read-only`), and the role's own setting wins.
 
 | Mode | Shell commands | File edits |

@@ -122,3 +122,13 @@ def unsafe_flag(words: list[str]) -> str | None:
             if word in flags or word.split("=", 1)[0] in flags:
                 return word
     return None
+
+
+#: The list as the dashboard shows it: a command-shaped label and a plain line each. One place,
+#: next to the rules above, so the screen cannot drift from what is enforced.
+NEVER_ALLOWED_SUMMARY: tuple[tuple[str, str], ...] = (
+    ("sudo, su, doas", "Anything that gains privileges"),
+    ("git push --force", "Rewriting or deleting history on a remote"),
+    ("curl ... | sh", "A download piped into a shell"),
+    ("rm, mv, cp, tee, >", "Changing a path outside the project folder"),
+)

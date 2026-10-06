@@ -9,5 +9,6 @@ export interface NavItem {
 
 export const NAV_ITEMS: NavItem[] = [
   { id: "projects", label: "Projects", icon: "folder" },
+  { id: "roles", label: "Roles", icon: "users" },
   { id: "sprites", label: "Sprites", icon: "sprite" },
 ];

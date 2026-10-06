@@ -67,6 +67,7 @@ class RoleInput(TypedDict):
     secret_names: NotRequired[list[str]]
     backend: NotRequired[str]
     access: NotRequired[str]
+    presets: NotRequired[list[str]]
 
 
 class TeamInput(TypedDict):
@@ -121,16 +122,19 @@ def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[st
     return sum(backend_by_name[name] == "kopicode" for name in active_names) > 1
 
 
-def _backend_kwargs(role: RoleInput) -> dict[str, str]:
-    """A role's backend and access overrides as call kwargs -- empty when it sets
+def _backend_kwargs(role: RoleInput) -> dict[str, Any]:
+    """A role's backend, access and presets overrides as call kwargs -- empty when it sets
     neither, so an unchanged role's task arguments stay byte-identical (replay-safe)."""
-    kwargs: dict[str, str] = {}
+    kwargs: dict[str, Any] = {}
     backend = role.get("backend")
     if backend:
         kwargs["agent_backend"] = backend
     access = role.get("access")
     if access:
         kwargs["access"] = access
+    presets = role.get("presets")
+    if presets is not None:
+        kwargs["presets"] = presets
     return kwargs
 
 

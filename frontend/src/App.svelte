@@ -2,6 +2,7 @@
   import { FleetClient } from "./lib/api";
   import AddProject from "./lib/components/AddProject.svelte";
   import ConnectScreen from "./lib/components/ConnectScreen.svelte";
+  import RolesLibrary from "./lib/components/RolesLibrary.svelte";
   import Portfolio from "./lib/components/Portfolio.svelte";
   import ProjectDetail from "./lib/components/ProjectDetail.svelte";
   import Shell from "./lib/components/Shell.svelte";
@@ -16,12 +17,13 @@
   );
   let openProjectId = $state<string | null>(null);
   let showGallery = $state(false);
+  let showRoles = $state(false);
   let adding = $state(false);
   const storedTheme = loadTheme();
   applyTheme(storedTheme);
   let theme = $state<ThemePreference>(storedTheme);
 
-  const active = $derived(showGallery ? "sprites" : "projects");
+  const active = $derived(showGallery ? "sprites" : showRoles ? "roles" : "projects");
 
   function onConnected(newClient: FleetClient) {
     client = newClient;
@@ -32,12 +34,14 @@
     client = null;
     openProjectId = null;
     showGallery = false;
+    showRoles = false;
     adding = false;
     clearConnection();
   }
 
   function navigate(id: string) {
     showGallery = id === "sprites";
+    showRoles = id === "roles";
     // Choosing Projects from inside a project or the add screen goes back to the list.
     if (id === "projects") {
       openProjectId = null;
@@ -63,6 +67,8 @@
   >
     {#if showGallery}
       <SpriteGallery onBack={() => (showGallery = false)} />
+    {:else if showRoles}
+      <RolesLibrary {client} />
     {:else if adding}
       <AddProject
         {client}
