@@ -86,8 +86,10 @@ def pytest_collection_modifyitems(items: Sequence[pytest.Item]) -> None:
         os.environ.get("OPENROUTER_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
     )
 
-    skip_e2b = pytest.mark.skip(reason="no live E2B_API_KEY available")
-    has_e2b_credential = bool(os.environ.get("E2B_API_KEY"))
+    skip_e2b = pytest.mark.skip(reason="no live E2B_API_KEY available (a real one starts e2b_)")
+    # E2B rejects a key without its ``e2b_`` prefix with a 401, so a placeholder in .env must
+    # skip the live test rather than fail it.
+    has_e2b_credential = os.environ.get("E2B_API_KEY", "").startswith("e2b_")
 
     skip_docker = pytest.mark.skip(reason="no docker binary on PATH")
     has_docker = shutil.which("docker") is not None
