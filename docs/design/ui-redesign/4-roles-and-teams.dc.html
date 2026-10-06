@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Roles and teams</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="./m3.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="width:1280px;height:1120px;display:flex;background:var(--md-sys-color-surface)">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5"/><circle cx="17" cy="9" r="2.2"/><path d="M17 14c2.5 0 4 1.7 4 4"/></symbol>
+<symbol id="sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5"/></symbol>
+<symbol id="chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+</defs></svg>
+
+<nav class="rail" aria-label="Main">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-label="Cuttlefish Crew" style="margin-bottom:8px"><rect width="40" height="40" rx="12" fill="#00696f"/><circle cx="14" cy="17" r="3.2" fill="#ffdbd0"/><circle cx="22" cy="14" r="2.2" fill="#9cf0f7"/><circle cx="26" cy="22" r="3.6" fill="#ffdbd0"/><circle cx="16" cy="26" r="1.8" fill="#9cf0f7"/></svg>
+<button class="rail-item"><span class="pill"><svg class="i"><use href="#grid"/></svg><span class="nbadge">3</span></span>Fleet</button>
+<button class="rail-item"><span class="pill"><svg class="i"><use href="#folder"/></svg></span>Projects</button>
+<button class="rail-item active"><span class="pill"><svg class="i"><use href="#users"/></svg></span>Roles</button>
+<button class="rail-item"><span class="pill"><svg class="i"><use href="#sliders"/></svg></span>Settings</button>
+</nav>
+
+<main style="flex:1;min-width:0;padding:36px 40px 0 40px;display:flex;flex-direction:column;gap:28px;overflow:hidden">
+<header class="col" style="gap:4px">
+<h1 class="headline-medium">Roles and teams</h1>
+<p class="body-large muted">Ready-made prompts and permissions. Use them as they are, or edit any one. Edits apply to new rounds.</p>
+</header>
+
+<section class="col" style="gap:12px">
+<div class="row" style="justify-content:space-between"><h2 class="title-large">Team templates</h2><button class="btn btn-outlined has-icon sm"><svg class="i sm"><use href="#plus"/></svg>New template</button></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+<div class="card filled col" style="padding:16px;gap:8px"><span class="title-medium">Solo builder</span><span class="body-small muted">One agent for small changes and quick fixes.</span><div class="row wrap" style="gap:6px"><span class="tag">Builder</span></div></div>
+<div class="card filled col" style="padding:16px;gap:8px"><div class="row" style="gap:8px"><span class="title-medium grow">Builder + reviewer</span><span class="tag attn">Default</span></div><span class="body-small muted">The builder ships, the reviewer reads the diff.</span><div class="row wrap" style="gap:6px"><span class="tag">Builder</span><span class="tag">Reviewer</span></div></div>
+<div class="card filled col" style="padding:16px;gap:8px"><span class="title-medium">Full crew</span><span class="body-small muted">Plan, build, test and review larger features.</span><div class="row wrap" style="gap:6px"><span class="tag">Planner</span><span class="tag">Builder</span><span class="tag">Tester</span><span class="tag">Reviewer</span></div></div>
+</div>
+</section>
+
+<section class="col" style="gap:12px;flex:1;min-height:0">
+<h2 class="title-large">Roles</h2>
+<div style="display:flex;gap:24px;align-items:flex-start">
+<div class="col" style="width:320px;flex:none;gap:4px">
+<button class="item selected" style="min-height:64px"><span class="col grow"><span class="title-medium">Builder</span><span class="body-small">Writes code and runs the tests</span></span><span class="tag" style="background:var(--md-sys-color-surface-container-lowest)">Standard</span></button>
+<button class="item" style="min-height:64px"><span class="col grow"><span class="title-medium">Reviewer</span><span class="body-small muted">Reads the diff, flags risk</span></span><span class="tag primary">Read-only</span></button>
+<button class="item" style="min-height:64px"><span class="col grow"><span class="title-medium">Tester</span><span class="body-small muted">Writes and runs tests</span></span><span class="tag">Standard</span></button>
+<button class="item" style="min-height:64px"><span class="col grow"><span class="title-medium">Planner</span><span class="body-small muted">Breaks a goal into steps</span></span><span class="tag primary">Read-only</span></button>
+<button class="item" style="min-height:64px"><span class="col grow"><span class="title-medium">Docs writer</span><span class="body-small muted">Keeps README and docs current</span></span><span class="tag">Docs only</span></button>
+<button class="btn btn-text has-icon" style="align-self:flex-start;margin-top:8px"><svg class="i sm"><use href="#plus"/></svg>New role</button>
+</div>
+
+<div class="card col grow" style="padding:24px;gap:20px;min-width:0">
+<div class="row" style="gap:12px"><h3 class="title-large grow">Builder</h3><span class="tag primary">Default prompt</span><button class="btn btn-text has-icon sm" disabled style="opacity:.5"><svg class="i sm"><use href="#refresh"/></svg>Reset to default</button></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+<div class="field on-card"><label for="bk">Agent</label><div class="row" style="justify-content:space-between"><span id="bk" class="body-large">Project default (kopicode)</span><svg class="i sm"><use href="#chev-down"/></svg></div></div>
+<div class="field on-card"><label for="pm">Permissions</label><div class="row" style="justify-content:space-between"><span id="pm" class="body-large">Project default (Standard)</span><svg class="i sm"><use href="#chev-down"/></svg></div></div>
+</div>
+<div class="field on-card" style="padding-top:22px"><label for="pr">Prompt</label><textarea id="pr" class="body-medium" rows="12" style="line-height:1.5rem">You are the builder. Implement the task you are given in small, working steps.
+
+Read the code around a change before you make it, and match the style already there.
+Run the project's tests and linters after each meaningful change. Fix failures before moving on.
+Commit small, focused changes with clear messages. Never push.
+If the task is ambiguous in a way that would change the design, ask one specific question instead of guessing.
+When you finish, summarise what changed, how you tested it, and anything you left undone.</textarea></div>
+<div class="row" style="justify-content:space-between"><span class="body-small muted">The agent also gets the project’s own instructions file (CLAUDE.md or AGENTS.md) if it has one.</span><div class="row" style="gap:8px"><button class="btn btn-text">Cancel</button><button class="btn btn-filled">Save role</button></div></div>
+</div>
+</div>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1120}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
