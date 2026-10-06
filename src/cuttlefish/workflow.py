@@ -19,7 +19,6 @@ from cuttlefish.agents.outcome import DelegationError
 from cuttlefish.budget import cumulative_usage
 from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
-from cuttlefish.delegate.presets import resolve_allow
 from cuttlefish.episodic.events import (
     ApprovalDecision,
     ConsentDecided,
@@ -148,7 +147,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
             DelegationStarted(
                 task_text=current_text,
                 root=root,
-                policy_allow=resolve_allow(allow),
+                policy_allow=allow,
                 sandbox=sandbox_name,
                 backend=runtime_.agent_backend,
                 project=project,

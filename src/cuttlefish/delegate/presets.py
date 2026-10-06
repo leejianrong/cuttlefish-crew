@@ -3,9 +3,9 @@
 A project that declares nothing used to get no shell command at all, so a freshly
 registered team could edit files but not run its own tests (operator feedback,
 2026-10-06, docs/SLICES.md V4-A). ``resolve_allow`` is the one place the default is
-applied: the built-in presets, then whatever the operator declared on top. It runs inside
-the delegation task and where the journal records the policy, never in a task argument, so
-replay arguments do not change.
+applied: the built-in presets, then whatever the operator declared on top. It runs only inside
+the delegation task, never in a task argument or the journaled declaration, so replay
+arguments do not change.
 
 Every entry is a plain argv prefix in ``consent.ConsentPolicy``'s grammar. Prefix matching
 means ``uv run pytest`` also covers ``uv run pytest -q tests/``; arguments that reach outside

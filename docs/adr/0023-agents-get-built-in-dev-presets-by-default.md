@@ -15,9 +15,10 @@ do everyday software work out of the box.
   set is inspect, git-read, git-save, python, javascript and make; go-rust and containers
   exist but are opt-in. A declaration (`--allow`, a project's allow list) is added on top;
   nothing replaces the presets yet. A read-only role is a later slice (V4-B/V4-C).
-- `resolve_allow` is applied **inside the side-effecting delegation task** and where the
-  policy is journaled, never in a task argument, so recorded arguments stay the raw
-  declaration and an in-flight run still replays. A preset change between a crash and a
+- `resolve_allow` is applied **only inside the side-effecting delegation task**, never in a
+  task argument, so recorded arguments and `DelegationStarted.policy_allow` stay the raw
+  declaration (the effective decisions are journaled per command as `ConsentDecided`) and
+  an in-flight run still replays. A preset change between a crash and a
   resume therefore applies on resume; accepted, the presets only grow.
 - `cuttlefish.delegate.never_allowed` is the one shared never-allowed list: privilege
   escalation, a forced `git push`, a download piped into a shell, plus flags that make
