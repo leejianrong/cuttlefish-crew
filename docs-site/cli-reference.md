@@ -147,7 +147,7 @@ Eight tools: `list_projects`, `get_project`, `register_project`,
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
-| `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. A kopicode without the `--consent-timeout` flag allows 45. |
+| `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. cuttlefish asks kopicode for `--consent-timeout` when `serve --help` lists it (kopicode v0.3.0 and later). An older kopicode denies after its own fixed 60 seconds, so there you get 45. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` are unavailable. |
 | `CUTTLEFISH_SERVE_PASSWORD` | unset | Required for any non-loopback `cuttlefish serve` bind. |
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |

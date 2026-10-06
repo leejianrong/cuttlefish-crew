@@ -47,14 +47,20 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   the role's prompt is the only guard.
 - **Only kopicode can ask** (ADR-0028). In Ask first and Standard a command that is not
   allowed stops a kopicode agent and waits under Needs you, for the request window (default 10
-  minutes, `CUTTLEFISH_REQUEST_WINDOW`; 45 seconds on a kopicode without `--consent-timeout`).
+  minutes, `CUTTLEFISH_REQUEST_WINDOW`; 45 seconds on a kopicode before v0.3.0, which has no
+  `--consent-timeout`).
   Claude Code and Codex cannot pause mid-run, so there the command is refused (V4-I adds a
   blocked-action card, V4-J to V4-M the live prompts). On Codex Ask first also cannot edit,
   since the only sandbox without commands is read-only. `cuttlefish run` and `run-team` have no
   inbox and refuse as before.
-- **A kopicode `ask` question cannot be answered**: kopicode has no wire for it
-  (kopicode#173); the model gets its fixed "no human is present" reply, and the dashboard
-  shows the call in Recent activity as a question nobody could answer.
+- **A kopicode `ask` question cannot be answered**: no released kopicode has a wire for it
+  (v0.3.0 has none; `ask.request`, kopicode#173, is on its `main`, unreleased). The model gets
+  its fixed "no human is present" reply, and the dashboard shows the call in Recent activity as a
+  question nobody could answer. A live question card waits for that release.
+- **Two V4-H behaviours were only checked against a scripted child, not a live model**: that a
+  held request survives past kopicode's default 60 seconds with `--consent-timeout`, and what a
+  real model does after a deny, an expiry or an Always. The live tests
+  (`test_kopicode_serve_needs_you_live.py`) cover the first when a key is present.
 - **A pending request does not survive a restart** and is not re-asked: it is journaled as
   abandoned, and a resumed run asks again if it needs to. The window is daemon-wide, not per
   project.

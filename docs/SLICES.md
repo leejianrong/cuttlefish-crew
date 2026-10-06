@@ -785,6 +785,14 @@ Claude Code and Codex are real but unverified, so each gets a spike before its b
    denies. kopicode: hold the `consent.request` open for Allow once / Always allow /
    Deny (Always writes a rule into the project's allow list); bubble kopicode's `ask`
    tool questions up. Screen 2. ADR for the request model.
+   **Shipped in five parts (ADR-0028, #73 to #78):** H1 model and validation, H2 kopicode wiring,
+   H3 HTTP API, H4 dashboard, H5 real-kopicode tests and docs. What moved: kopicode's `ask`
+   questions are **not** bubbled up (no released kopicode has a wire for them; `ask.request` is on
+   kopicode `main`), so a question shows in activity as one nobody could answer. The Ask-first
+   wording moved from H3 to H4, shipped with the screen and with asking on by default. A request's
+   role comes from the task text a role was dispatched, not a contextvar or task argument. Stop
+   cancels a team's pending requests so a round held open for a person can end. Standard asks as
+   well as Ask first, on kopicode only; `cuttlefish run` has no inbox.
 9. **V4-I: blocked-action fallback.** For any backend without a live path: record
    what was blocked or asked, show it under Needs you labelled with when the answer
    lands, and "Allow and rerun round" / resume with the answer (`claude --resume`).
