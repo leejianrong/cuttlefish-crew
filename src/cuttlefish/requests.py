@@ -140,7 +140,9 @@ class RequestBroker:
         self._append = append
         self._now = now
         self._pending: dict[str, PendingRequest] = {}
-        self._finished: collections.OrderedDict[str, Outcome] = collections.OrderedDict()
+        self._finished: collections.OrderedDict[str, tuple[str, Outcome]] = (
+            collections.OrderedDict()
+        )
         self._grants: dict[str, list[tuple[str, ...]]] = {}
 
     # -- raising ----------------------------------------------------------------------
@@ -218,15 +220,25 @@ class RequestBroker:
 
     # -- ending -----------------------------------------------------------------------
 
-    def answer(self, request_id: str, answer: str, *, rule: Sequence[str] | None = None) -> Outcome:
-        """A person's answer. Raises :class:`UnknownRequestError`, :class:`AlreadyResolvedError` or
-        :class:`InvalidAnswerError`; a refused Always leaves the request pending."""
+    def answer(
+        self,
+        request_id: str,
+        answer: str,
+        *,
+        rule: Sequence[str] | None = None,
+        project_id: str | None = None,
+    ) -> Outcome:
+        """A person's answer. Raises :class:`UnknownRequestError`, :class:`AlreadyResolvedError`
+        or :class:`InvalidAnswerError`; a refused Always leaves the request pending. With
+        ``project_id`` the request must belong to that project (the route's own)."""
         pending = self._pending.get(request_id)
         if pending is None:
             finished = self._finished.get(request_id)
-            if finished is None:
+            if finished is None or project_id not in (None, finished[0]):
                 raise UnknownRequestError(f"no request {request_id!r}")
-            raise AlreadyResolvedError(finished)
+            raise AlreadyResolvedError(finished[1])
+        if project_id not in (None, pending.project_id):
+            raise UnknownRequestError(f"no request {request_id!r}")
         if answer not in pending.record.answers:
             raise InvalidAnswerError(f"{answer!r} is not an answer to this request")
         chosen: tuple[str, ...] | None = None
@@ -252,7 +264,7 @@ class RequestBroker:
             existing = self._finished.get(request_id)
             if existing is None:
                 raise UnknownRequestError(f"no request {request_id!r}")
-            return existing
+            return existing[1]
         return self._finish(pending, Outcome(request_id, resolution, by))
 
     def end_team(
@@ -278,7 +290,7 @@ class RequestBroker:
             ),
         )
         del self._pending[pending.id]
-        self._finished[pending.id] = outcome
+        self._finished[pending.id] = (pending.project_id, outcome)
         while len(self._finished) > _REMEMBERED:
             self._finished.popitem(last=False)
         if not pending._future.done():
@@ -310,6 +322,31 @@ def unresolved(events: Iterable[EpisodicEvent]) -> list[RequestRaised]:
         elif isinstance(payload, RequestResolved):
             raised.pop(payload.request_id, None)
     return list(raised.values())
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class HistoryEntry:
+    """A request as the journal tells it: what was raised, and how (if yet) it ended."""
+
+    raised: RequestRaised
+    raised_at: datetime
+    resolved: RequestResolved | None
+    resolved_at: datetime | None
+
+
+def history(events: Iterable[EpisodicEvent]) -> list[HistoryEntry]:
+    """Every request a journal raised, oldest first, each joined to its resolution."""
+    raised: dict[str, tuple[RequestRaised, datetime]] = {}
+    resolved: dict[str, tuple[RequestResolved, datetime]] = {}
+    for event in events:
+        payload = event.payload
+        if isinstance(payload, RequestRaised):
+            raised[payload.request_id] = (payload, event.ts)
+        elif isinstance(payload, RequestResolved) and payload.request_id not in resolved:
+            resolved[payload.request_id] = (payload, event.ts)
+    return [
+        HistoryEntry(r, at, *(resolved.get(rid) or (None, None))) for rid, (r, at) in raised.items()
+    ]
 
 
 def granted_rules(events: Iterable[EpisodicEvent]) -> list[list[str]]:

@@ -220,6 +220,23 @@ never-allowed command is refused with a 400) and
 `PATCH /api/projects/{id}/roles` (replaces the whole list). **Every change applies the next time
 the team starts**, not to a team already running.
 
+### Needs-you requests over HTTP
+
+Experimental until the dashboard shows them (`CUTTLEFISH_NEEDS_YOU=1`, see the table above).
+When a kopicode agent asks to run a command nothing approves, the daemon holds it as a request:
+
+- `GET /api/requests`: every pending request across the fleet, with the project, the role, the
+  command, why it stopped, the answers allowed, a suggested "always" rule and `expires_in_s`.
+- `GET /api/projects/{id}/requests`: `pending`, then the last 50 that `resolved`.
+- `POST /api/projects/{id}/requests/{request_id}/answer` with `{"answer": "allow_once" |
+  "allow_always" | "deny", "rule": [...]}` (`rule` only for `allow_always`, and it must be the start
+  of the command that was asked). `allow_always` applies to the running team at once and is saved to
+  the project's own commands for later starts. The same answer sent twice returns `already: true`;
+  a different one, or one after the window closed, is a 409 naming how the request ended; an
+  unknown request is a 404; a refused rule is a 422 with the reason and the request stays pending.
+
+An unanswered request denies when its window closes, and a restart abandons it.
+
 ## Permission modes
 
 `run`, `run-team` and `projects add` take `--mode ask-first|standard|auto` (default

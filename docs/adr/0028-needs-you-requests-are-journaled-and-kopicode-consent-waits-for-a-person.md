@@ -258,8 +258,10 @@ All under the existing token or session; answering grants shell execution, the s
    check. Behaviour is switched on for ask-first and standard only when a broker is present, and the daemon only attaches one when `CUTTLEFISH_NEEDS_YOU=1` (a team that stops for a person nobody can yet answer would be a regression); H4 removes the switch.
    Stub-child integration tests. No UI yet, so the daemon answers by an internal call only.
 3. **H3 API.** The three endpoints, `ProjectStore.add_allow`, live grants, re-seeding on
-   resume. Ask-first copy in `GET /api/permissions` and known-gaps.md change here, with the
-   behaviour.
+   resume. The Ask-first wording (`GET /api/permissions`, known-gaps.md, the dashboard) does
+   **not** change here: asking is still behind `CUTTLEFISH_NEEDS_YOU` until H4, and saying
+   "asks" before it is on by default would be the false claim CLAUDE.md forbids. It moves to H4 with
+   the switch.
 4. **H4 Dashboard.** Needs-you tab, rail destination and badge, the copy changes in
    AddProject and PermissionsTab, design README, docs site.
 5. **H5 Real kopicode and docs.** The `requires_kopicode` test once a release carries the flag;

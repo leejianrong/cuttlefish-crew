@@ -29,6 +29,7 @@ import asyncio
 import dataclasses
 import socket
 from collections.abc import Awaitable, Callable, Collection, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +61,13 @@ from cuttlefish.permissions import (
     MODE_INFO,
     MODES,
 )
-from cuttlefish.projects.store import ProjectNotFoundError, RoleDefinition
+from cuttlefish.projects.store import Project, ProjectNotFoundError, RoleDefinition
+from cuttlefish.requests import (
+    AlreadyResolvedError,
+    HistoryEntry,
+    PendingRequest,
+    RequestError,
+)
 from cuttlefish.roles import (
     BUILTIN_ROLES,
     DEFAULT_TEMPLATE,
@@ -114,6 +121,48 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
             for name, totals in daemon.usage(project.id).items()
         },
     }
+
+
+def _pending_json(daemon: FleetDaemon, pending: PendingRequest) -> dict[str, Any]:
+    """A pending request as the dashboard shows it: the journaled (redacted) record, never the
+    agent's raw command line (ADR-0028)."""
+    record = pending.record
+    try:
+        project_name = daemon.projects.get(pending.project_id).name
+    except ProjectNotFoundError:
+        project_name = pending.project_id
+    return {
+        **dataclasses.asdict(record),
+        "id": record.request_id,
+        "state": "pending",
+        "project_id": pending.project_id,
+        "project_name": project_name,
+        "team_id": pending.team_id,
+        "expires_in_s": max(0, round((pending.deadline - datetime.now(UTC)).total_seconds())),
+    }
+
+
+def _resolved_json(project: Project, entry: HistoryEntry) -> dict[str, Any]:
+    resolved = entry.resolved
+    assert resolved is not None
+    return {
+        **dataclasses.asdict(entry.raised),
+        "id": entry.raised.request_id,
+        "state": resolved.resolution,
+        "by": resolved.by,
+        "rule": resolved.rule,
+        "project_id": project.id,
+        "project_name": project.name,
+        "raised_at": entry.raised_at.isoformat(),
+        "resolved_at": entry.resolved_at.isoformat() if entry.resolved_at else None,
+    }
+
+
+_ANSWER_RESOLUTION = {
+    "allow_once": "allowed_once",
+    "allow_always": "allowed_always",
+    "deny": "denied",
+}
 
 
 def _event_json(event: EpisodicEvent) -> dict[str, Any]:
@@ -569,6 +618,60 @@ def create_app(
         except FleetError as exc:
             raise HTTPException(409, str(exc)) from exc
         return {"status": "sent"}
+
+    @app.get("/api/requests")
+    async def list_requests() -> dict[str, Any]:
+        return {"requests": [_pending_json(daemon, p) for p in daemon.requests.pending()]}
+
+    @app.get("/api/projects/{project_id}/requests")
+    async def list_project_requests(project_id: str) -> dict[str, Any]:
+        try:
+            project = daemon.projects.get(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {
+            "pending": [_pending_json(daemon, p) for p in daemon.requests.pending(project_id)],
+            "resolved": [_resolved_json(project, e) for e in daemon.request_history(project_id)],
+        }
+
+    @app.post("/api/projects/{project_id}/requests/{request_id}/answer")
+    async def answer_request(project_id: str, request_id: str, request: Request) -> Response:
+        body = await _json_body(request)
+        answer, rule = body.get("answer"), body.get("rule")
+        if not isinstance(answer, str):
+            raise HTTPException(400, "'answer' (str) is required")
+        if rule is not None and not (
+            isinstance(rule, list) and all(isinstance(w, str) for w in rule)
+        ):
+            raise HTTPException(400, "'rule', if given, must be a list of words")
+        try:
+            outcome = daemon.answer_request(project_id, request_id, answer, rule=rule)
+            already = False
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except AlreadyResolvedError as exc:
+            outcome = exc.outcome
+            if outcome.by != "person" or outcome.resolution != _ANSWER_RESOLUTION.get(answer):
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "detail": str(exc),
+                        "resolution": outcome.resolution,
+                        "by": outcome.by,
+                    },
+                )
+            already = True  # the same answer again: done, not an error
+        except RequestError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
+        return JSONResponse(
+            {
+                "request_id": outcome.request_id,
+                "resolution": outcome.resolution,
+                "by": outcome.by,
+                "rule": list(outcome.rule) if outcome.rule else None,
+                "already": already,
+            }
+        )
 
     if dashboard_dir is not None:
         # Registered last (ADR-0012): Starlette matches routes in registration

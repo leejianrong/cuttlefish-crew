@@ -399,3 +399,12 @@ def test_a_persisted_roles_presets_round_trip(tmp_path: Path) -> None:
     roles = store.get(project.id).last_team_roles
     assert [r.presets for r in roles] == [("inspect",), None]
     store.close()
+
+
+def test_add_allow_appends_once(tmp_path: Path) -> None:
+    store = ProjectStore.open(tmp_path / "projects.db")
+    project = store.register(name="a", root=str(tmp_path), allow=(("make", "test"),))
+    store.add_allow(project.id, ("docker", "compose", "up"))
+    store.add_allow(project.id, ("docker", "compose", "up"))
+    store.add_allow(project.id, ("make", "test"))
+    assert store.get(project.id).allow == (("make", "test"), ("docker", "compose", "up"))
