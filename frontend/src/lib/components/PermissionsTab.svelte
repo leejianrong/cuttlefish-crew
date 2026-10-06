@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { FleetClient, PermissionMode, PermissionsCatalog, ProjectSummary } from "../api";
+  import { radiogroup } from "../radiogroup";
   import {
     accessLabel,
+    backendLabel,
     addCommand,
     allowToLines,
     parseCommand,
@@ -15,7 +17,15 @@
     client,
     project,
     onChanged,
-  }: { client: FleetClient; project: ProjectSummary; onChanged: () => Promise<void> } = $props();
+    onOpenTeam,
+    onDirtyChange,
+  }: {
+    client: FleetClient;
+    project: ProjectSummary;
+    onChanged: () => Promise<void>;
+    onOpenTeam: () => void;
+    onDirtyChange: (dirty: boolean) => void;
+  } = $props();
 
   const MODE_ICONS: Record<string, string> = { "ask-first": "chat", standard: "check", auto: "bolt" };
 
@@ -41,6 +51,7 @@
       !sameSet(presets, project.presets) ||
       !sameSet(extras, savedExtras),
   );
+  $effect(() => onDirtyChange(dirty));
   const catalogueOrder = $derived(catalog?.presets.map((preset) => preset.name) ?? []);
 
   $effect(() => {
@@ -69,17 +80,29 @@
     saving = true;
     saveError = null;
     saved = false;
+    const applied: string[] = [];
     try {
-      if (mode !== project.mode) await client.updateMode(project.id, mode);
-      if (!sameSet(presets, project.presets)) await client.updatePresets(project.id, presets);
+      if (mode !== project.mode) {
+        await client.updateMode(project.id, mode);
+        applied.push("the mode");
+      }
+      if (!sameSet(presets, project.presets)) {
+        await client.updatePresets(project.id, presets);
+        applied.push("the command groups");
+      }
       if (!sameSet(extras, savedExtras)) {
         const argv = extras.map((line) => parseCommand(line) ?? []);
         await client.updateAllow(project.id, argv.filter((command) => command.length > 0));
+        applied.push("your own commands");
       }
       await onChanged();
       saved = true;
     } catch {
-      saveError = "Couldn't save those changes. Check that the daemon is still running, then try again.";
+      saveError =
+        applied.length > 0
+          ? `Saved ${applied.join(" and ")}, but not the rest. Check that the daemon is still running, then save again.`
+          : "Couldn't save those changes. Check that the daemon is still running, then try again.";
+      await onChanged().catch(() => {});
     } finally {
       saving = false;
     }
@@ -100,12 +123,13 @@
     <section aria-labelledby="mode-heading">
       <h2 id="mode-heading" class="title-large">How much can agents do on their own?</h2>
       <p class="body-medium muted">Roles can override this on the Team tab.</p>
-      <div class="modes" role="radiogroup" aria-labelledby="mode-heading">
+      <div class="modes" role="radiogroup" aria-labelledby="mode-heading" use:radiogroup>
         {#each catalog?.modes ?? [] as entry (entry.name)}
           <button
             type="button"
             role="radio"
             aria-checked={entry.name === mode}
+            tabindex={entry.name === mode ? 0 : -1}
             class="opt mode"
             class:selected={entry.name === mode}
             onclick={() => (mode = entry.name)}
@@ -208,7 +232,7 @@
         {#if index > 0}<hr class="divider" />{/if}
         <div class="backend">
           <div class="backend-head">
-            <span class="title-small">{backend.name}</span>
+            <span class="title-small">{backendLabel(backend.name)}</span>
             <span class="tag" class:primary={backend.name === "kopicode"}>{backend.when}</span>
           </div>
           <span class="body-small muted">{backend.summary}</span>
@@ -228,24 +252,35 @@
       {:else}
         <p class="body-small muted">This project has no roles yet. Add them on the Team tab.</p>
       {/each}
+      <button type="button" class="btn btn-text sm change-roles" onclick={onOpenTeam}>
+        Change a role's permissions on the Team tab
+      </button>
     </section>
 
-    {#if saveError}
-      <p class="error" role="alert">{saveError}</p>
-    {/if}
-    {#if saved && !dirty}
-      <p class="body-small muted" role="status">Saved.</p>
-    {/if}
-    <div class="actions">
-      <button type="button" class="btn btn-text" disabled={!dirty || saving} onclick={discard}>
-        Discard changes
-      </button>
-      <button type="button" class="btn btn-filled" disabled={!dirty || saving} onclick={save}>
-        {saving ? "Saving…" : "Save permissions"}
-      </button>
-    </div>
   </aside>
 </div>
+
+{#if dirty || saveError || saved}
+  <div class="bar" class:unsaved={dirty} role="region" aria-label="Unsaved changes">
+    <span class="bar-text body-medium" role={saveError ? "alert" : "status"}>
+      {#if saveError}
+        {saveError}
+      {:else if dirty}
+        You have unsaved changes. They apply the next time the team starts.
+      {:else}
+        Saved. It applies the next time the team starts.
+      {/if}
+    </span>
+    {#if dirty}
+      <button type="button" class="btn btn-text" disabled={saving} onclick={discard}>
+        Discard changes
+      </button>
+      <button type="button" class="btn btn-filled" disabled={saving} onclick={save}>
+        {saving ? "Saving…" : "Save permissions"}
+      </button>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .layout {
@@ -451,10 +486,46 @@
     justify-content: space-between;
   }
 
-  .actions {
+  .change-roles {
+    align-self: flex-start;
+  }
+
+  /* Save and Discard stay in reach: pinned to the bottom of the viewport while there is
+   * something to save, above the phone's navigation bar. */
+  .bar {
+    position: sticky;
+    bottom: 1rem;
+    margin-top: 1.5rem;
+    z-index: 5;
     display: flex;
+    align-items: center;
     gap: 8px;
-    justify-content: flex-end;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+    border-radius: var(--md-sys-shape-corner-large);
+    background: var(--md-sys-color-inverse-surface);
+    color: var(--md-sys-color-inverse-on-surface);
+    box-shadow: var(--md-sys-elevation-level2);
+  }
+
+  .bar-text {
+    flex: 1;
+    min-width: 12rem;
+  }
+
+  .bar :global(.btn-text) {
+    color: var(--md-sys-color-inverse-primary);
+  }
+
+  .bar :global(.btn-filled) {
+    background: var(--md-sys-color-inverse-primary);
+    color: var(--md-sys-color-inverse-surface);
+  }
+
+  @media (max-width: 640px) {
+    .bar {
+      bottom: 5.5rem;
+    }
   }
 
   @media (max-width: 960px) {

@@ -35,13 +35,25 @@
     return () => clearInterval(interval);
   });
 
+  let actionError = $state<string | null>(null);
+
   async function stop(id: string) {
-    await client.stopProject(id);
+    actionError = null;
+    try {
+      await client.stopProject(id);
+    } catch {
+      actionError = "Couldn't stop that team. Check that the daemon is still running.";
+    }
     await refresh();
   }
 
   async function remove(id: string) {
-    await client.deregisterProject(id);
+    actionError = null;
+    try {
+      await client.deregisterProject(id);
+    } catch {
+      actionError = "Couldn't remove that project. Check that the daemon is still running.";
+    }
     await refresh();
   }
 </script>
@@ -55,8 +67,12 @@
     </button>
   </header>
 
+  {#if actionError}
+    <p class="warning" role="alert">{actionError}</p>
+  {/if}
+
   {#if unreachable}
-    <p class="warning">Lost connection to the daemon -- retrying…</p>
+    <p class="warning">Lost connection to the daemon. Retrying…</p>
   {/if}
 
   <div class="grid">
@@ -71,7 +87,16 @@
   </div>
 
   {#if loaded && projects.length === 0}
-    <p class="empty-state">No projects yet. Add one to get a team working in a folder.</p>
+    <div class="card filled empty-state">
+      <h2 class="title-large">No projects yet</h2>
+      <p class="body-medium muted">
+        A project is a folder with a team of agents working in it. Pick a folder and a team and
+        you can start a first task in a couple of minutes.
+      </p>
+      <button class="btn btn-filled" onclick={onAddProject}>
+        <Icon name="plus" size={18} />Add your first project
+      </button>
+    </div>
   {/if}
 </div>
 
@@ -121,7 +146,17 @@
   }
 
   .empty-state {
-    color: var(--text-faint);
-    margin-top: 2rem;
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    max-width: 32rem;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .empty-state h2,
+  .empty-state p {
+    margin: 0;
   }
 </style>

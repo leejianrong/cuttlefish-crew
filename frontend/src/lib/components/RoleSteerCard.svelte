@@ -112,9 +112,9 @@
   {#if status === "blocked"}
     <div class="approval">
       <p class="hint">
-        If {role} is waiting on a review gate (KAN-1711) or just crossed its own
-        token/cost ceiling (KAN-1712), decide here -- harmless if it's just the
-        ordinary steering pause instead.
+        {role} is blocked. That can mean it is waiting for your review, it reached its token or
+        cost limit, or an action was refused. If it is waiting on you, approve or reject here;
+        rejecting needs a comment saying what to change.
       </p>
       <textarea
         bind:value={approvalComment}

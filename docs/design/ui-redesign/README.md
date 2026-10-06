@@ -78,6 +78,10 @@ and this folder disagree after a slice lands, update this folder.
   on Team); Save and Discard are explicit; a running team shows that changes apply at the next
   start. "Tester: Standard + containers" per-role command groups are not built: command groups
   are per project.
+- **V4-G (UX review) shipped.** Findings, what was fixed and what was deferred are in
+  `ux-review-v4g.md`. The `shipped/` screenshots were retaken after the fixes and now include the
+  Connect screen and the Overview tab. Overview's "Start a team" follows the design system and
+  a pinned bar carries Save/Discard on Permissions and "Add project" on narrow screens.
 - Fonts are self-hosted (`@fontsource-variable/*`), so the dashboard makes no external request.
 - The nav rail lists only screens that exist (`frontend/src/lib/nav.ts`); Fleet and Roles
   join it with V4-H and V4-F. The rail becomes a bottom bar under 640px. A theme button

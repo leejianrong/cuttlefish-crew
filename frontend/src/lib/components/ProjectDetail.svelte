@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EpisodicEventView, FleetClient, ProjectSummary } from "../api";
+  import { modeLabel } from "../team";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
   import OfficeScene from "./OfficeScene.svelte";
@@ -14,23 +15,35 @@
     onBack,
   }: { client: FleetClient; projectId: string; onBack: () => void } = $props();
 
+  type TabId = "overview" | "permissions" | "team";
+
   let project = $state<ProjectSummary | null>(null);
   let events = $state<EpisodicEventView[]>([]);
+  let unreachable = $state(false);
   let starting = $state(false);
   let startError = $state<string | null>(null);
   let taskTexts = $state<Record<string, string>>({});
   let requireApproval = $state(false);
-  let tab = $state<"overview" | "permissions" | "team">("overview");
+  let confirmingStop = $state(false);
+  let stopping = $state(false);
+  let permissionsDirty = $state(false);
+  let tab = $state<TabId>("overview");
   const TABS = [
     { id: "overview", label: "Overview" },
     { id: "permissions", label: "Permissions" },
     { id: "team", label: "Team" },
   ];
 
-  // ADR-0010/KAN-1705: continuity, made visible rather than just trusted -- a
-  // per-role timeline of handover checkpoints (RoleSteerCard renders each
-  // role's own slice), and every TeamResumed marker this team's journal holds,
-  // surfaced as its own banner above the role cards, not buried in the log.
+  // A starting point for a blank task box; picking one fills the first role's task.
+  const EXAMPLES = [
+    "Run the tests and fix anything that fails.",
+    "Review the most recent commits for bugs.",
+    "Find the most under-tested module and add tests for it.",
+  ];
+
+  // Continuity, made visible rather than just trusted: a per-role timeline of handover
+  // checkpoints (RoleSteerCard renders each role's own slice), and every resume marker this
+  // team's journal holds, surfaced as a banner above the role cards, not buried in the log.
   const handoversByRole = $derived.by(() => {
     const grouped: Record<string, EpisodicEventView[]> = {};
     for (const event of events) {
@@ -41,10 +54,25 @@
     return grouped;
   });
   const resumedEvents = $derived(events.filter((event) => event.event_type === "TeamResumed"));
+  const summaryLine = $derived(
+    project
+      ? `${modeLabel(project.mode)} mode · ${
+          project.roles.map((role) => role.name).join(", ") || "no roles"
+        }`
+      : "",
+  );
+  const noTaskYet = $derived(
+    project !== null && project.roles.every((role) => !(taskTexts[role.name] ?? "").trim()),
+  );
 
   async function refresh() {
-    project = await client.getProject(projectId);
-    events = (await client.getEvents(projectId)).events;
+    try {
+      project = await client.getProject(projectId);
+      events = (await client.getEvents(projectId)).events;
+      unreachable = false;
+    } catch {
+      unreachable = true;
+    }
   }
 
   $effect(() => {
@@ -53,13 +81,21 @@
     return () => clearInterval(interval);
   });
 
+  // Unsaved Permissions edits are the one thing a stray reload would lose.
+  $effect(() => {
+    if (!permissionsDirty) return;
+    const guard = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  });
+
   async function start() {
     if (!project) return;
     const roles = project.roles
       .map((role) => ({ name: role.name, text: (taskTexts[role.name] ?? "").trim() }))
       .filter((role) => role.text.length > 0);
     if (roles.length === 0) {
-      startError = "give at least one role something to do";
+      startError = "Give at least one role something to do.";
       return;
     }
     starting = true;
@@ -69,20 +105,37 @@
       taskTexts = {};
       await refresh();
     } catch {
-      startError = "couldn't start that team -- check the daemon's own log";
+      startError = "Couldn't start that team. Check the daemon's own log for why.";
     } finally {
       starting = false;
     }
   }
 
   async function stop() {
-    await client.stopProject(projectId);
-    await refresh();
+    stopping = true;
+    try {
+      await client.stopProject(projectId);
+      confirmingStop = false;
+      await refresh();
+    } catch {
+      startError = "Couldn't stop the team. Check that the daemon is still running.";
+    } finally {
+      stopping = false;
+    }
+  }
+
+  function useExample(text: string) {
+    const first = project?.roles[0];
+    if (first) taskTexts[first.name] = text;
   }
 </script>
 
-<div class="page" class:wide={tab !== "overview"}>
+<div class="page">
   <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Projects</button>
+
+  {#if unreachable}
+    <p class="warning" role="status">Lost connection to the daemon. Retrying…</p>
+  {/if}
 
   {#if project}
     <header>
@@ -90,105 +143,150 @@
       <p class="root mono">{project.root}</p>
     </header>
 
-    <Tabs
-      tabs={TABS}
-      active={tab}
-      label="Project"
-      onSelect={(id) => (tab = id as typeof tab)}
-    />
+    <Tabs tabs={TABS} active={tab} label="Project" onSelect={(id) => (tab = id as TabId)} />
 
-    <div id="panel-{tab}" role="tabpanel" aria-labelledby="tab-{tab}">
-    {#if tab === "permissions"}
-      <PermissionsTab {client} {project} onChanged={refresh} />
-    {:else if tab === "team"}
-      <TeamTab {client} {project} onChanged={refresh} />
-    {:else}
+    <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== "overview"}>
+      {#if resumedEvents.length > 0}
+        <p class="resumed-banner">
+          &#8635; This project's team was resumed after a restart{resumedEvents.length > 1
+            ? ` (${resumedEvents.length} times)`
+            : ""}. Recent activity below shows where each pickup happened.
+        </p>
+      {/if}
 
-    {#if resumedEvents.length > 0}
-      <p class="resumed-banner">
-        &#8635; this project's team was resumed after a restart {resumedEvents.length > 1
-          ? `(${resumedEvents.length} times)`
-          : ""} -- see "Recent activity" below for exactly where each pickup happened.
-      </p>
-    {/if}
-
-    {#if project.running}
-      <OfficeScene
-        roles={Object.entries(project.status).map(([name, status]) => ({ name, status }))}
-      />
-      <section class="roles">
-        {#each Object.entries(project.status) as [role, status] (role)}
-          <RoleSteerCard
-            {client}
-            {projectId}
-            {role}
-            {status}
-            handovers={handoversByRole[role] ?? []}
-            usage={project.usage[role]}
-            budget={project.budget}
-          />
-        {/each}
-      </section>
-      <button class="btn btn-danger stop" onclick={stop}>Stop team</button>
-    {:else}
-      <section class="card filled start-form">
-        <h2>Start a team</h2>
-        {#if project.roles.length === 0}
-          <p class="hint">
-            This project has no registered roles yet. Register some from the fleet view
-            first, or start it from the CLI: <code
-              >cuttlefish run-team --root {project.root} --role NAME:TASK</code
-            >.
-          </p>
-        {:else}
-          {#each project.roles as role (role.name)}
-            <label>
-              <span class="role-label">{role.name}</span>
-              {#if role.backend ?? project.backend}
-                <span class="persona">[{role.backend ?? project.backend}]</span>
-              {/if}
-              {#if role.persona}
-                <span class="persona persona-text" title={role.persona}>{role.persona}</span>
-              {/if}
-              <textarea
-                bind:value={taskTexts[role.name]}
-                placeholder="What should {role.name} do?"
-                rows="2"
-              ></textarea>
-            </label>
+      {#if project.running}
+        <OfficeScene
+          roles={Object.entries(project.status).map(([name, status]) => ({ name, status }))}
+        />
+        <section class="roles">
+          {#each Object.entries(project.status) as [role, status] (role)}
+            <RoleSteerCard
+              {client}
+              {projectId}
+              {role}
+              {status}
+              handovers={handoversByRole[role] ?? []}
+              usage={project.usage[role]}
+              budget={project.budget}
+            />
           {/each}
-          <label class="approval-toggle">
-            <input type="checkbox" bind:checked={requireApproval} />
-            Require my approval before each round finishes (KAN-1711)
-          </label>
-          {#if startError}
-            <p class="error">{startError}</p>
-          {/if}
-          <button class="btn btn-filled" onclick={start} disabled={starting}>
-            {starting ? "Starting…" : "Start team"}
+        </section>
+        {#if confirmingStop}
+          <div class="confirm" role="alert">
+            <span class="body-medium">
+              Stop the team? Its roles stop, and starting again begins a new run.
+            </span>
+            <button class="btn btn-danger" disabled={stopping} onclick={stop}>Stop team</button>
+            <button class="btn btn-text" onclick={() => (confirmingStop = false)}>Keep running</button>
+          </div>
+        {:else}
+          <button class="btn btn-danger stop" onclick={() => (confirmingStop = true)}>
+            Stop team
           </button>
         {/if}
-      </section>
-    {/if}
+        {#if startError}<p class="error" role="alert">{startError}</p>{/if}
+      {:else}
+        <section class="card filled start-form" aria-labelledby="start-heading">
+          <h2 id="start-heading" class="title-large">Start a team</h2>
+          {#if project.roles.length === 0}
+            <p class="hint">
+              This project has no roles yet. Add some on the Team tab, or start one from the
+              command line:
+              <code>cuttlefish run-team --root {project.root} --role NAME:TASK</code>.
+            </p>
+          {:else}
+            <p class="body-medium muted summary">{summaryLine}</p>
+            {#if noTaskYet}
+              <div class="examples">
+                <span class="label-medium muted">Try</span>
+                {#each EXAMPLES as example (example)}
+                  <button type="button" class="chip" onclick={() => useExample(example)}>
+                    {example}
+                  </button>
+                {/each}
+              </div>
+            {/if}
+            {#each project.roles as role (role.name)}
+              <div class="task">
+                <label class="field">
+                  <span class="field-label">
+                    {role.name}{role.backend ?? project.backend
+                      ? ` · ${role.backend ?? project.backend}`
+                      : ""}
+                  </span>
+                  <textarea
+                    bind:value={taskTexts[role.name]}
+                    placeholder="What should {role.name} do?"
+                    rows="2"
+                  ></textarea>
+                </label>
+                {#if role.persona}
+                  <details class="prompt">
+                    <summary>What {role.name} is told</summary>
+                    <p>{role.persona}</p>
+                  </details>
+                {/if}
+              </div>
+            {/each}
+            <div class="approval">
+              <button
+                type="button"
+                class="switch"
+                role="switch"
+                aria-checked={requireApproval}
+                aria-labelledby="approval-label"
+                onclick={() => (requireApproval = !requireApproval)}
+              ></button>
+              <span class="approval-text">
+                <span id="approval-label" class="title-small">Approve each round before it ends</span>
+                <span class="body-small muted">
+                  Every role pauses at the end of a round until you approve or reject it.
+                </span>
+              </span>
+            </div>
+            {#if startError}
+              <p class="error" role="alert">{startError}</p>
+            {/if}
+            <button class="btn btn-filled start" onclick={start} disabled={starting}>
+              {starting ? "Starting…" : "Start team"}
+            </button>
+          {/if}
+        </section>
+      {/if}
 
-    <section class="card filled events">
-      <h2>Recent activity</h2>
-      <EventLog {events} />
-    </section>
-    {/if}
+      <section class="card filled events" aria-labelledby="activity-heading">
+        <h2 id="activity-heading" class="title-medium">Recent activity</h2>
+        <EventLog {events} onOpenPermissions={() => (tab = "permissions")} />
+      </section>
     </div>
+
+    <div id="panel-permissions" role="tabpanel" aria-labelledby="tab-permissions" hidden={tab !== "permissions"}>
+      <PermissionsTab
+        {client}
+        {project}
+        onChanged={refresh}
+        onOpenTeam={() => (tab = "team")}
+        onDirtyChange={(dirty) => (permissionsDirty = dirty)}
+      />
+    </div>
+
+    <div id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden={tab !== "team"}>
+      <TeamTab {client} {project} onChanged={refresh} />
+    </div>
+  {:else if !unreachable}
+    <p class="muted" role="status">Loading…</p>
   {/if}
 </div>
 
 <style>
-  .page.wide {
-    max-width: 72rem;
-  }
-
   .page {
-    max-width: 56rem;
+    max-width: 72rem;
     margin: 0 auto;
     padding: 2rem 1.5rem 4rem;
+  }
+
+  [role="tabpanel"][hidden] {
+    display: none;
   }
 
   .back {
@@ -196,20 +294,24 @@
     padding: 0 16px 0 12px;
   }
 
-  h1 {
+  h1,
+  h2 {
     margin: 0;
   }
 
   .root {
     color: var(--text-faint);
     font-size: 0.8rem;
-    margin: 0.3rem 0 1.75rem;
+    margin: 0.3rem 0 1.25rem;
   }
 
-  h2 {
-    font: 500 1rem/1.5rem var(--md-ref-typeface-plain);
-    color: var(--text-muted);
-    margin: 0 0 0.9rem;
+  .warning {
+    background: var(--status-blocked-bg);
+    color: var(--status-blocked-fg);
+    padding: 0.6rem 0.9rem;
+    border-radius: var(--md-sys-shape-corner-small);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
   }
 
   .roles {
@@ -234,83 +336,108 @@
     margin-bottom: 2rem;
   }
 
-  .start-form {
-    padding: 1.25rem;
+  .confirm {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
     margin-bottom: 2rem;
+    padding: 0.75rem 1rem;
+    border-radius: var(--md-sys-shape-corner-medium);
+    background: var(--md-sys-color-error-container);
+    color: var(--md-sys-color-on-error-container);
+  }
+
+  .start-form {
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    max-width: 56rem;
+  }
+
+  .summary {
+    margin: -0.5rem 0 0;
   }
 
   .hint {
     color: var(--text-muted);
     font-size: 0.85rem;
     line-height: 1.6;
+    margin: 0;
   }
 
   .hint code {
     color: var(--text);
   }
 
-  label {
-    display: block;
-    margin-bottom: 1rem;
-  }
-
-  .approval-toggle {
+  .examples {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    font-weight: normal;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
-  .approval-toggle input {
-    width: auto;
+  .task {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
-  .role-label {
-    font-weight: 600;
-    margin-right: 0.5rem;
+  .start-form :global(.field-label) {
+    background: var(--md-sys-color-surface-container-low);
   }
 
-  .persona {
-    color: var(--text-faint);
+  .field textarea {
+    line-height: 1.5rem;
+  }
+
+  .prompt {
     font-size: 0.8rem;
+    color: var(--text-muted);
   }
 
-  /* A built-in role's prompt runs to several lines; show two and keep the rest in the title. */
-  .persona-text {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    margin: 0.15rem 0 0.1rem;
+  .prompt summary {
+    cursor: pointer;
+    width: fit-content;
   }
 
-  textarea {
-    display: block;
-    width: 100%;
-    margin-top: 0.4rem;
-    padding: 0.5rem 0.65rem;
-    background: var(--bg-inset);
-    border: 1px solid var(--md-sys-color-outline);
-    border-radius: var(--md-sys-shape-corner-extra-small);
-    color: var(--text);
-    resize: vertical;
+  .prompt p {
+    white-space: pre-wrap;
+    margin: 0.5rem 0 0;
+    padding: 0.75rem 1rem;
+    border-radius: var(--md-sys-shape-corner-small);
+    background: var(--md-sys-color-surface-container);
+    line-height: 1.5;
   }
 
-  textarea:focus-visible {
-    outline: 2px solid var(--md-sys-color-primary);
-    outline-offset: 0;
-    border-color: var(--md-sys-color-primary);
+  .approval {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .approval-text {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .start {
+    align-self: flex-start;
   }
 
   .error {
     color: var(--danger);
-    font-size: 0.82rem;
+    font-size: 0.85rem;
+    margin: 0;
   }
 
   .events {
     padding: 1.1rem 1.25rem;
+  }
+
+  .events h2 {
+    margin-bottom: 0.75rem;
   }
 </style>

@@ -32,7 +32,7 @@
       mode = await fetchAuthMode(baseUrl.replace(/\/$/, ""));
       step = "credential";
     } catch (err) {
-      error = err instanceof FleetUnreachableError ? err.message : "something went wrong";
+      error = err instanceof FleetUnreachableError ? err.message : "Something went wrong. Check the address and try again.";
     } finally {
       connecting = false;
     }
@@ -55,7 +55,7 @@
       } else if (err instanceof FleetApiError) {
         error = err.status === 401 ? credentialRejectedMessage() : err.message;
       } else {
-        error = "something went wrong connecting";
+        error = "Something went wrong connecting. Check the address and try again.";
       }
     } finally {
       connecting = false;
@@ -63,7 +63,7 @@
   }
 
   function credentialRejectedMessage(): string {
-    return mode === "password" ? "that password was rejected" : "that token was rejected";
+    return mode === "password" ? "That password was rejected." : "That token was rejected.";
   }
 
   function backToUrl() {
@@ -79,8 +79,8 @@
     <form class="card elevated" onsubmit={checkBaseUrl}>
       <h1 class="headline-small">cuttlefish-crew</h1>
       <p class="hint">
-        Connect to a running <code>cuttlefish serve</code> -- its base URL is printed to that
-        process's own stdout at startup.
+        Connect to a running <code>cuttlefish serve</code>. Its address is printed in the
+        terminal where you started it.
       </p>
 
       <label>
@@ -89,7 +89,7 @@
       </label>
 
       {#if error}
-        <p class="error">{error}</p>
+        <p class="error" role="alert">{error}</p>
       {/if}
 
       <button type="submit" class="btn btn-filled submit" disabled={connecting}>
@@ -105,30 +105,30 @@
       <h1 class="headline-small">cuttlefish-crew</h1>
       {#if mode === "password"}
         <p class="hint">
-          This daemon is bound non-loopback and needs its own login (ADR-0011) -- the password is
-          whatever <code>CUTTLEFISH_SERVE_PASSWORD</code> was set to when it started.
+          This daemon is reachable from other machines, so it asks for a password: the one you set
+          in <code>CUTTLEFISH_SERVE_PASSWORD</code> when you started it.
         </p>
         <label>
           Password
           <input
             type="password"
             bind:value={credential}
-            placeholder="CUTTLEFISH_SERVE_PASSWORD"
+            placeholder="Password"
             required
           />
         </label>
       {:else}
         <p class="hint">
-          Its token is printed to that process's own stdout at startup.
+          Its token is printed in that same terminal, after the address.
         </p>
         <label>
           Token
-          <input type="password" bind:value={credential} placeholder="x-cuttlefish-token" required />
+          <input type="password" bind:value={credential} placeholder="Token" required />
         </label>
       {/if}
 
       {#if error}
-        <p class="error">{error}</p>
+        <p class="error" role="alert">{error}</p>
       {/if}
 
       <button type="submit" class="btn btn-filled submit" disabled={connecting}>

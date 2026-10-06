@@ -8,7 +8,7 @@
   const STATUSES: { status: RoleStatus; blurb: string }[] = [
     { status: "queued", blurb: "declared, hasn't started its first round yet" },
     { status: "working", blurb: "a round is in flight" },
-    { status: "blocked", blurb: "the backend refused -- needs a human" },
+    { status: "blocked", blurb: "the backend refused and needs a human" },
     { status: "done", blurb: "reached TaskCompleted" },
     { status: "failed", blurb: "reached TaskFailed" },
   ];
@@ -18,7 +18,7 @@
   <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Back</button>
   <h1>Sprite gallery</h1>
   <p class="hint">
-    Every role status this app can show, live-rendered -- no daemon connection needed. This
+    Every role status this app can show, live-rendered, no daemon connection needed. This
     is what a role's own cuttlefish looks like at each point in `cuttlefish.fleet.status
     .RoleStatus`.
   </p>

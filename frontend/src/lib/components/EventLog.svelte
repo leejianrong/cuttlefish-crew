@@ -1,52 +1,21 @@
 <script lang="ts">
   import type { EpisodicEventView } from "../api";
+  import { eventLabel, formatWhen, isRefusedCommand, summarize } from "../events";
 
-  let { events }: { events: EpisodicEventView[] } = $props();
-
-  function summarize(event: EpisodicEventView): string {
-    const p = event.payload;
-    switch (event.event_type) {
-      case "TaskSubmitted":
-        return `submitted: ${p.text}`;
-      case "DelegationStarted":
-        return `round started: ${p.task_text}`;
-      case "DelegationCompleted":
-        return `round completed: ${p.summary}`;
-      case "DelegationRefused":
-        return `refused: ${p.reason}`;
-      case "DelegationFailed":
-        return `failed: ${p.reason}`;
-      case "SteeringMessage":
-        return `operator: ${p.text}`;
-      case "HandoverWritten":
-        // The checkpoint's own text, not just the fact one was written -- this
-        // is the load-bearing content a continuity chain carries forward
-        // (ADR-0010/KAN-1705), worth reading at a glance, not just trusting.
-        return `checkpoint (covers seq ${p.covers_seq_from}–${p.covers_seq_to}): ${p.summary}`;
-      case "TaskCompleted":
-        return `done: ${p.result}`;
-      case "TaskFailed":
-        return `failed: ${p.error}`;
-      case "TeamResumed":
-        return `a daemon restart found this run still in progress and resumed it -- the journal picks back up from seq ${p.resumed_from_seq}`;
-      case "ToolCallRecorded":
-        return `${p.tool} (${p.status}): ${p.detail}`;
-      case "ConsentDecided":
-        return `${p.answer} ${p.kind} (${p.rule}): ${p.detail}`;
-      default:
-        return JSON.stringify(p);
-    }
-  }
+  let {
+    events,
+    onOpenPermissions,
+  }: { events: EpisodicEventView[]; onOpenPermissions?: () => void } = $props();
 </script>
 
 <div class="log">
   {#if events.length === 0}
-    <p class="empty">no events yet</p>
+    <p class="empty">Nothing has happened yet.</p>
   {/if}
   {#each events as event (event.seq)}
     {#if event.event_type === "TeamResumed"}
       <div class="row resumed">
-        <span class="ts mono">{new Date(event.ts).toLocaleTimeString()}</span>
+        <span class="ts mono" title={event.ts}>{formatWhen(event.ts)}</span>
         <span class="resumed-icon">&#8635;</span>
         <span class="text">{summarize(event)}</span>
       </div>
@@ -60,12 +29,17 @@
         class:tool-error={event.event_type === "ToolCallRecorded" &&
           event.payload.status === "error"}
       >
-        <span class="ts mono">{new Date(event.ts).toLocaleTimeString()}</span>
+        <span class="ts mono" title={event.ts}>{formatWhen(event.ts)}</span>
         {#if event.payload.role}
           <span class="role mono">{event.payload.role}</span>
         {/if}
-        <span class="type">{event.event_type}</span>
-        <span class="text">{summarize(event)}</span>
+        <span class="type" title="{event.event_type}, #{event.seq}">{eventLabel(event.event_type)}</span>
+        <span class="text">
+          {summarize(event)}
+          {#if onOpenPermissions && isRefusedCommand(event)}
+            <button type="button" class="link" onclick={onOpenPermissions}>Change permissions</button>
+          {/if}
+        </span>
       </div>
     {/if}
   {/each}
@@ -79,6 +53,19 @@
     max-height: 22rem;
     overflow-y: auto;
     font-size: 0.82rem;
+  }
+
+  .link {
+    all: unset;
+    cursor: pointer;
+    color: var(--md-sys-color-primary);
+    text-decoration: underline;
+    margin-left: 0.4rem;
+  }
+
+  .link:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 2px;
   }
 
   .empty {
