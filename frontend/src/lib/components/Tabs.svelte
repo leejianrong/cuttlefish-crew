@@ -2,6 +2,8 @@
   export interface TabItem {
     id: string;
     label: string;
+    /** Waiting items, shown beside the label in the attention colour; nothing at zero. */
+    badge?: number;
   }
 
   let {
@@ -39,6 +41,7 @@
       onkeydown={(event) => onKeydown(event, index)}
     >
       {tab.label}
+      {#if tab.badge}<span class="count" aria-label="{tab.badge} waiting">{tab.badge}</span>{/if}
     </button>
   {/each}
 </div>
@@ -65,6 +68,20 @@
     border-bottom: 3px solid transparent;
     margin-bottom: -1px;
     transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  }
+
+  .count {
+    display: inline-grid;
+    place-items: center;
+    min-width: 20px;
+    height: 20px;
+    margin-left: 8px;
+    padding: 0 6px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background: var(--md-sys-color-attention);
+    color: var(--md-sys-color-on-attention);
+    font: 700 0.75rem/1 var(--md-ref-typeface-plain);
   }
 
   .tab:hover {

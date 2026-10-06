@@ -45,9 +45,22 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Code (edit tools denied) or Codex (read-only sandbox), but can on kopicode: its
   gate treats in-root edits as implicit and `serve` offers no way to refuse one. There
   the role's prompt is the only guard.
-- **Ask first does not ask yet** (ADR-0025): a command that would need an answer is
-  refused until V4-H adds pending requests. On Codex it also cannot edit, since the
-  only sandbox without commands is read-only.
+- **Only kopicode can ask** (ADR-0028). In Ask first and Standard a command that is not
+  allowed stops a kopicode agent and waits under Needs you, for the request window (default 10
+  minutes, `CUTTLEFISH_REQUEST_WINDOW`; 45 seconds on a kopicode without `--consent-timeout`).
+  Claude Code and Codex cannot pause mid-run, so there the command is refused (V4-I adds a
+  blocked-action card, V4-J to V4-M the live prompts). On Codex Ask first also cannot edit,
+  since the only sandbox without commands is read-only. `cuttlefish run` and `run-team` have no
+  inbox and refuse as before.
+- **A kopicode `ask` question cannot be answered**: kopicode has no wire for it
+  (kopicode#173); the model gets its fixed "no human is present" reply, and the dashboard
+  shows the call in Recent activity as a question nobody could answer.
+- **A pending request does not survive a restart** and is not re-asked: it is journaled as
+  abandoned, and a resumed run asks again if it needs to. The window is daemon-wide, not per
+  project.
+- **Always allow is project-wide**, saved to the project's own commands and applied to the
+  running team at once; it is not per role, and the Permissions tab's draft can overwrite it on
+  Save if it was open at the time.
 - Auto on Claude Code denies `curl` and `wget` outright because a deny pattern cannot
   express "piped into a shell"; kopicode's check is finer. Auto on Codex is just
   `workspace-write`: the sandbox, not a policy, holds the never-allowed list. Auto's

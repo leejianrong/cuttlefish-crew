@@ -67,8 +67,7 @@ and this folder disagree after a slice lands, update this folder.
   team templates; the three modes; a summary column with git state and detected languages; and
   collapsed Advanced options. Screenshots in `shipped/v4e-*`. Differences from the mockup:
   no "New folder" button; "Recent" lists the folders of already-registered projects; the
-  summary column stacks below the form under 900px; Ask first's description says plainly that
-  nothing asks yet (ADR-0025). Registering opens the new project's page.
+  summary column stacks below the form under 900px. Registering opens the new project's page.
 - **V4-F (Permissions and Team tabs) shipped.** A project page now has Overview, Permissions
   and Team tabs; the **Roles** rail destination is a read-only library. Screenshots in
   `shipped/v4f-*`. Differences from the mockups: the roles editor lives on the project (roles
@@ -83,23 +82,38 @@ and this folder disagree after a slice lands, update this folder.
   Connect screen and the Overview tab. Overview's "Start a team" follows the design system and
   a pinned bar carries Save/Discard on Permissions and "Add project" on narrow screens.
 - Fonts are self-hosted (`@fontsource-variable/*`), so the dashboard makes no external request.
-- The nav rail lists only screens that exist (`frontend/src/lib/nav.ts`); Fleet and Roles
-  join it with V4-H and V4-F. The rail becomes a bottom bar under 640px. A theme button
+- The nav rail lists only screens that exist (`frontend/src/lib/nav.ts`); Roles and Needs you
+  joined it with V4-F and V4-H. The rail becomes a bottom bar under 640px. A theme button
   cycles system, light, dark and is remembered per browser.
 
 - Stored role prompts open with the instruction, not "You are the builder.", because
   cuttlefish prepends "You are {name}." to every task. The prompt shown in
   `4-roles-and-teams.dc.html` should drop that opener when the screen is built.
 - The builder prompt's "ask one specific question" line is not in the shipped prompt:
-  only kopicode can ask today (V4-H), so it says to state the assumption and take the
+  only kopicode can pause for a permission and no backend can take an agent's question
+  mid-run today (kopicode#173), so it says to state the assumption and take the
   most conservative reading. Restore the question once asking works on every backend.
 - Project mode is `ask-first`, `standard` or `auto`; a role's `access` is null (inherit),
   one of those, or `read-only`. Read-only blocks edits on Claude Code and Codex only, so the
-  UI must not call it "can't edit" without the per-backend caveat. Ask first does not ask
-  until V4-H; do not show an "answer" affordance for it before then.
+  UI must not call it "can't edit" without the per-backend caveat. Ask first and Standard ask
+  only on kopicode; say so wherever a mode is described, never "asks" without it.
 - Auto is answered by cuttlefish (`ConsentPolicy(auto=True)`), so it is available on kopicode
   now; it needs the `serve` transport.
 - `make` commands are on by default (not in the Permissions mockup).
+
+- **V4-H (Needs you) shipped.** Screenshots in `shipped/v4h-*`. A project page has a **Needs you**
+  tab with a coral count; the rail has a **Needs you** destination (the mockup called it Fleet)
+  with the total waiting across projects and a screen that groups them by project. A permission
+  card shows the command in mono, why the agent stopped, Allow once, Deny, a countdown ("Denies on
+  its own in 4:26", coral and bold under 30 s) and an editable "Always allow commands that start
+  with" field that is disabled unless it is the start of the command; a command with shell syntax
+  offers only Allow once and says why. Answered requests collapse to rows under "Answered recently".
+  Differences from the mockup: only the permission card exists (question and blocked cards come
+  with V4-I and the Claude Code and Codex slices, and the model already has the kinds); there is
+  no per-card "Allow and rerun round"; the rail badge and tab count are polled every 2.5 s with the
+  rest of the page, and the countdown runs client-side between polls. A kopicode `ask` call shows
+  in Recent activity as "Asked a question nobody could answer". The project tab and Add project
+  say Ask first and Standard ask **on kopicode only**.
 
 ## Known gaps in the mockup
 

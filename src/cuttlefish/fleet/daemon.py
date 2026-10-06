@@ -184,15 +184,11 @@ class FleetDaemon:
         project_store: ProjectStore,
         *,
         request_window_s: float = 600.0,
-        ask_people: bool = False,
     ) -> None:
         self._projects = project_store
         self._running: dict[str, RunningTeam] = {}
         #: How long a person has to answer a request (ADR-0028); the kopicode binary may allow less.
         self._request_window_s = request_window_s
-        #: Whether a team's delegations may stop to ask a person (opt-in until the dashboard
-        #: can answer; see `config.NEEDS_YOU_ENV`).
-        self._ask_people = ask_people
         #: team id -> the episodic store its requests are journaled to, while it runs.
         self._team_stores: dict[str, EpisodicStore] = {}
         self.requests = RequestBroker(self._append_for_team)
@@ -353,9 +349,7 @@ class FleetDaemon:
                         prepared.as_runtime(),
                         requests=RequestContext(
                             self.requests, project.id, team_id, self._request_window_s
-                        )
-                        if self._ask_people
-                        else None,
+                        ),
                     )
                 )
                 workflow_input: TeamInput = {

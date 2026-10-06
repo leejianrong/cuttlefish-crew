@@ -23,6 +23,8 @@
     refresh: "M20 12a8 8 0 1 1-2.5-5.8M20 4v5h-5",
     trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
     code: "m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14",
+    bell: "M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 21a2 2 0 0 0 4 0",
+    clock: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7v5l3 2",
   };
 
   let { name, size = 24 }: { name: keyof typeof paths | string; size?: number } = $props();
