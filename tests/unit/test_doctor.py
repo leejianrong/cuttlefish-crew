@@ -164,4 +164,36 @@ def test_a_long_list_of_withheld_names_is_shortened() -> None:
 
     (check,) = doctor.check_agent_environment(environ)
 
-    assert "20 variables are not passed" in check.detail and "and 8 more" in check.detail
+    assert "20 variables in this shell are not passed" in check.detail
+    assert "and 8 more" in check.detail
+
+
+def test_the_names_a_person_most_likely_wants_come_first_and_all_env_lists_everything() -> None:
+    environ = {f"AAA_{i:02d}": "x" for i in range(20)} | {
+        "SSH_AUTH_SOCK": "/s",
+        "GH_TOKEN": "t",
+        "E2B_API_KEY": "k",
+    }
+
+    (short,) = doctor.check_agent_environment(environ)
+    (full,) = doctor.check_agent_environment(environ, show_all=True)
+
+    assert short.detail.index("E2B_API_KEY") < short.detail.index("AAA_00")
+    assert "SSH_AUTH_SOCK" in short.detail and "GH_TOKEN" in short.detail
+    assert "Git over SSH needs SSH_AUTH_SOCK" in short.detail
+    assert "--all-env" in short.detail and "AAA_19" not in short.detail
+    assert "AAA_19" in full.detail and "more" not in full.detail
+
+
+def test_doctor_all_env_flag_reaches_the_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from cuttlefish import cli
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for index in range(20):
+        monkeypatch.setenv(f"ZZZ_PLAIN_{index:02d}", "x")
+
+    cli.main(["doctor", "--all-env"])
+
+    assert "ZZZ_PLAIN_19" in capsys.readouterr().out

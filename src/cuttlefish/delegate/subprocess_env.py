@@ -174,6 +174,7 @@ def merge_env(
         *backend_prefixes,
         *(_TOOL_PREFIXES if tools else ()),
     )
+    declared = env or {}
     kept: dict[str, str] = {}
     withheld: list[str] = []
     for name, value in os.environ.items():
@@ -181,7 +182,7 @@ def merge_env(
             continue
         if _matches(name, exact, prefixes):
             kept[name] = value
-        else:
+        elif name not in declared:  # a declared credential is passed, so it is not withheld
             withheld.append(name)
     path = _clean_path(os.environ.get("PATH", ""))
     if root is not None:

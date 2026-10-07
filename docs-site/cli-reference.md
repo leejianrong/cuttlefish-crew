@@ -219,8 +219,8 @@ loaded from `.env` and everything `uv run` added are not passed. `PATH` has cutt
 `Environment:` note saying so.
 
 A variable an agent needs and does not get (for example `SSH_AUTH_SOCK` for `git` over SSH, or `AWS_*` for Claude
-Code on Bedrock) goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. `cuttlefish doctor` lists the names that are withheld, never
-the values.
+Code on Bedrock) goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. `cuttlefish doctor` lists the names that are withheld from this shell's environment, never the values (credentials, SSH and
+cloud names first; `cuttlefish doctor --all-env` lists them all).
 
 ## Default permissions
 

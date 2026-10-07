@@ -343,4 +343,8 @@ last. Per-backend names (`KOPICODE_*`, `CLAUDE_*`, `CODEX_*`) and the operator's
 installs also get the package tools' settings. The resident `kopicode serve` child is keyed by project root (it reads its
 environment once). Each role's brief gets an `Environment:` note from `environment.brief`. `cuttlefish doctor` lists the
 withheld names. The scripted fake agent logs the environment it sees, so tests assert what an agent really received.
+Found by driving it with a daemon started by `uv run` and fake secrets, and fixed before merge: the DEBUG "withheld" line listed a
+credential the backend had declared (and so was passed); the doctor line showed the first twelve names alphabetically, hiding
+the ones a person wants (now credentials, SSH and cloud names come first, `doctor --all-env` lists everything, and it hints that
+git over SSH needs `SSH_AUTH_SOCK`).
 

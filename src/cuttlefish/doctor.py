@@ -156,19 +156,37 @@ def check_path(environ: Mapping[str, str], *, prefix: str | None = None) -> list
     return checks or [Check("ok", "PATH", "no misleading entries")]
 
 
-def check_agent_environment(environ: Mapping[str, str]) -> list[Check]:
-    """What an agent is *not* given from the daemon's environment, by name (never value): an
-    allowlist, so a variable an agent needs and does not get is easy to explain (V5-E4)."""
-    names = withheld_names(environ)
+#: Names worth seeing first in the withheld list: the ones a person is likely to want an agent
+#: to have (credentials, git over SSH, cloud accounts), ahead of the alphabet.
+_NOTABLE = ("KEY", "TOKEN", "SECRET", "PASSWORD", "AUTH", "SSH", "GIT", "AWS_", "GOOGLE_", "GH_")
+
+
+def _notable_first(names: list[str]) -> list[str]:
+    return sorted(names, key=lambda n: (not any(part in n for part in _NOTABLE), n))
+
+
+def check_agent_environment(environ: Mapping[str, str], *, show_all: bool = False) -> list[Check]:
+    """What an agent is *not* given from this shell's environment (the daemon's may differ), by
+    name (never value): an allowlist, so a variable an agent needs and does not get is easy to
+    explain (V5-E4). The names a person most likely wants (credentials, SSH, cloud accounts) come
+    first; `show_all` lists every one."""
+    names = _notable_first(withheld_names(environ))
     if not names:
-        return [Check("ok", "agent environment", "every variable in the daemon's is passed")]
-    shown = ", ".join(names[:12]) + (f", and {len(names) - 12} more" if len(names) > 12 else "")
+        return [Check("ok", "agent environment", "every variable in this shell's is passed")]
+    limit = len(names) if show_all else 12
+    shown = ", ".join(names[:limit]) + (
+        f", and {len(names) - limit} more (`cuttlefish doctor --all-env` lists them)"
+        if len(names) > limit
+        else ""
+    )
+    hint = " Git over SSH needs SSH_AUTH_SOCK." if "SSH_AUTH_SOCK" in names else ""
     return [
         Check(
             "ok",
             "agent environment",
-            f"{len(names)} variables are not passed to agents: {shown}. Name one an agent needs "
-            "in CUTTLEFISH_AGENT_ENV_PASSTHROUGH (comma-separated, `*` ends a prefix)",
+            f"{len(names)} variables in this shell are not passed to agents: {shown}.{hint} Name "
+            "one an agent needs in CUTTLEFISH_AGENT_ENV_PASSTHROUGH (comma-separated, `*` ends a "
+            "prefix)",
         )
     ]
 
@@ -216,13 +234,17 @@ def check_projects(projects: Iterable[Project]) -> list[Check]:
 
 
 def run_checks(
-    *, environ: Mapping[str, str], projects: Sequence[Project], log_path: Path
+    *,
+    environ: Mapping[str, str],
+    projects: Sequence[Project],
+    log_path: Path,
+    show_all_env: bool = False,
 ) -> list[Check]:
     return [
         *check_backends(environ),
         *check_credentials(environ),
         *check_path(environ),
-        *check_agent_environment(environ),
+        *check_agent_environment(environ, show_all=show_all_env),
         *check_log(log_path),
         *check_projects(projects),
     ]

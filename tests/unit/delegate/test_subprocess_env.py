@@ -268,3 +268,20 @@ def test_a_declared_value_still_beats_the_overlay(tmp_path: Path) -> None:
     _make_venv(tmp_path)
 
     assert merge_env({"VIRTUAL_ENV": "/explicit"}, root=tmp_path)["VIRTUAL_ENV"] == "/explicit"
+
+
+def test_a_declared_credential_is_not_reported_as_withheld(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import logging
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-x")
+    monkeypatch.setenv("E2B_API_KEY", "e2b_x")
+
+    with caplog.at_level(logging.DEBUG, logger="cuttlefish.delegate.subprocess_env"):
+        merged = merge_env({"OPENROUTER_API_KEY": "sk-or-x"})
+
+    message = caplog.records[-1].getMessage()
+    assert merged["OPENROUTER_API_KEY"] == "sk-or-x"
+    assert "E2B_API_KEY" in message and "OPENROUTER_API_KEY" not in message
+    assert "sk-or-x" not in message and "e2b_x" not in message
