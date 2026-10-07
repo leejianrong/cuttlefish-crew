@@ -103,7 +103,7 @@ def _install_failure_text(ecosystem: str, result: envprep.StepResult) -> str:
     }.get(str(result.failure), str(result.failure))
     return (
         f"couldn't install the {ecosystem} dependencies ({cause}). "
-        "The install row above has the output; start with prepare=skip to go without."
+        "The install row above has the output; start again with "Start without installing" (prepare=skip over the API) to go without."
     )
 
 
