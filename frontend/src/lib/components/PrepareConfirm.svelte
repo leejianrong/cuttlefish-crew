@@ -34,7 +34,7 @@
     before the team starts, so the agents don't spend their turns finding out.
   </p>
   <ul class="steps">
-    {#each lines as line (line.name)}
+    {#each lines as line (line.key)}
       <li>
         <span class="title-small">{line.name}</span>
         <span class="body-small muted">{line.reason}</span>

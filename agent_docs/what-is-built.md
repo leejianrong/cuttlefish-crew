@@ -381,3 +381,11 @@ to an install, never an agent. `environment.brief` says how to run things for ea
 already), which made the very next start see a "change" and install again. The daemon now records `fingerprint_now` (the files after
 the install). Java was not run (no Maven or Gradle here).
 
+V5-E6b (ADR-0029): **monorepo subfolders.** `detect` runs the same detectors on the root and then on each folder directly under it
+(`_subfolders`: not hidden, not `node_modules`/`vendor`/`target`/`dist`/..., not a symlink), tags each hit with `EcosystemEnv.path`, skips
+an ecosystem the root already has (workspaces), and stops at `MAX_SUBPROJECTS` (12). `PrepareStep.path` makes `run_step` run in that
+folder; `env.json` keys are `node:frontend` for a nested project and the bare ecosystem for the root (so old files stay valid);
+`EnvironmentPrepareStarted`/`EnvironmentPrepared` gained `path` (default `.`). The agent's `PATH` overlay is unchanged (root only):
+`environment.brief` gives a nested project its own line (where it is, `cd` there, its `.venv` is not on `PATH`). The dashboard keys rows,
+steps and progress by ecosystem and folder and says "Node in web/".
+

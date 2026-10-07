@@ -379,6 +379,8 @@ class EnvironmentPrepareStarted:
     commands: list[list[str]]
     reason: str
     role: str | None = None
+    #: The subfolder it ran in (V5-E6b); ``.`` is the project root, and what every older event is.
+    path: str = "."
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -395,6 +397,7 @@ class EnvironmentPrepared:
     tail: str
     failure: str | None = None
     role: str | None = None
+    path: str = "."
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

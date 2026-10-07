@@ -68,6 +68,12 @@ _TAIL_CHARS = 4000
 _FINGERPRINT_CAP = 5_000_000
 
 
+def state_key(ecosystem: str, path: str = ".") -> str:
+    """The ``env.json`` key: the ecosystem for the project root (what it always was), and
+    ``ecosystem:folder`` for one nested in a subfolder."""
+    return ecosystem if path in (".", "") else f"{ecosystem}:{path}"
+
+
 def state_path(root: str | Path) -> Path:
     return Path(root) / ".cuttlefish" / "env.json"
 
@@ -84,10 +90,13 @@ class PrepareStep:
     fingerprint: str
     #: Extra settings for these commands only (``POETRY_VIRTUALENVS_IN_PROJECT``...).
     env: tuple[tuple[str, str], ...] = ()
+    #: The folder the commands run in, relative to the project root.
+    path: str = "."
 
     def to_json(self) -> dict[str, Any]:
         return {
             "ecosystem": self.ecosystem,
+            "path": self.path,
             "name": ecosystem_name(self.ecosystem),
             "commands": [list(c) for c in self.commands],
             "reason": self.reason,
@@ -101,7 +110,7 @@ class PreparePlan:
     unsupported: tuple[tuple[Ecosystem, str], ...] = ()
     #: Ecosystems with an install the person made themselves, to remember so a later change to
     #: their files is noticed (``record_adopted``).
-    adopt: tuple[tuple[Ecosystem, str], ...] = ()
+    adopt: tuple[tuple[str, str], ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -134,6 +143,7 @@ def fingerprint(root: Path, env: EcosystemEnv) -> str:
     """A hash of everything that decides what an install should contain: the manifests and
     lockfile (bytes, capped), and the version asked for."""
     digest = hashlib.sha256()
+    root = root / env.path
     names = [*env.manifests, *([env.lockfile] if env.lockfile else [])]
     for name in sorted(set(names)):
         digest.update(name.encode())
@@ -148,15 +158,17 @@ def fingerprint(root: Path, env: EcosystemEnv) -> str:
     return digest.hexdigest()
 
 
-def fingerprint_now(root: str | Path, ecosystem: Ecosystem, *, default: str) -> str:
+def fingerprint_now(
+    root: str | Path, ecosystem: Ecosystem, *, default: str, path: str = "."
+) -> str:
     """The fingerprint of `ecosystem`'s files as they are now. An install can write its own
     lockfile (``cargo fetch``, ``poetry install`` and ``uv sync`` without one do), so what to
     remember after it is what is on disk then, not what was planned: otherwise the next start
     would see a "change" nobody made and install again. `default` when it cannot be read."""
-    path = Path(root)
-    for env in detect(path).ecosystems:
-        if env.ecosystem == ecosystem:
-            return fingerprint(path, env)
+    base, folder = Path(root), path
+    for env in detect(base).ecosystems:
+        if env.ecosystem == ecosystem and env.path == folder:
+            return fingerprint(base, env)
     return default
 
 
@@ -173,7 +185,7 @@ def read_state(root: str | Path) -> dict[str, dict[str, Any]]:
 
 def write_state(
     root: str | Path,
-    ecosystem: Ecosystem,
+    ecosystem: str,
     *,
     fingerprint: str,
     how: str,
@@ -303,23 +315,26 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
     state = read_state(path)
     steps: list[PrepareStep] = []
     unsupported: list[tuple[Ecosystem, str]] = []
-    adopt: list[tuple[Ecosystem, str]] = []
+    adopt: list[tuple[str, str]] = []
     for env in found.ecosystems:
         settings: Settings = ()
+        base = path / env.path
+        where = "" if env.path == "." else f"in {env.path}/: "
         if env.ecosystem == "python":
             commands, settings, why_not = _python_commands(env)
         elif env.ecosystem == "node":
-            commands, why_not = _node_commands(path, env)
+            commands, why_not = _node_commands(base, env)
         elif env.ecosystem in _NO_FOLDER:
-            commands, settings, why_not = _other_commands(path, env)
+            commands, settings, why_not = _other_commands(base, env)
         else:  # pragma: no cover - every detected ecosystem is handled above
             unsupported.append((env.ecosystem, "cuttlefish does not install this one yet"))
             continue
         if why_not is not None:
-            unsupported.append((env.ecosystem, why_not))
+            unsupported.append((env.ecosystem, where + why_not))
             continue
         current = fingerprint(path, env)
-        record = state.get(env.ecosystem, {})
+        key = state_key(env.ecosystem, env.path)
+        record = state.get(key, {})
         recorded = record.get("fingerprint")
         how = record.get("how")
         folder = env.env_dir or (".venv" if env.ecosystem == "python" else "node_modules")
@@ -347,7 +362,7 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
             reason = f"{changed} changed since the last install"
         else:
             if recorded is None:
-                adopt.append((env.ecosystem, current))
+                adopt.append((key, current))
             continue
         steps.append(
             PrepareStep(
@@ -356,6 +371,7 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
                 reason=reason,
                 fingerprint=current,
                 env=settings,
+                path=env.path,
             )
         )
     return PreparePlan(steps=tuple(steps), unsupported=tuple(unsupported), adopt=tuple(adopt))
@@ -363,8 +379,8 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
 
 def record_adopted(root: str | Path, found: PreparePlan) -> None:
     """Remember the installs a person made themselves, so a later change is noticed."""
-    for ecosystem, current in found.adopt:
-        write_state(root, ecosystem, fingerprint=current, how="adopted")
+    for key, current in found.adopt:
+        write_state(root, key, fingerprint=current, how="adopted")
 
 
 # --- running -------------------------------------------------------------------------------
@@ -391,13 +407,13 @@ _QUIET_ENV = {
 }
 
 
-def produced_env(root: str | Path, ecosystem: Ecosystem) -> bool:
+def produced_env(root: str | Path, ecosystem: Ecosystem, path: str = ".") -> bool:
     """Whether the ecosystem's own install folder exists now (after an install). An ecosystem
     that keeps nothing in the project has no folder to be missing."""
     if ecosystem in _NO_FOLDER:
         return True
     folder = ".venv" if ecosystem == "python" else "node_modules"
-    return (Path(root) / folder).exists()
+    return (Path(root) / path / folder).exists()
 
 
 def prepare_timeout() -> float:
@@ -435,6 +451,7 @@ async def run_step(
     """Run `step`'s commands in order from `root`. Stops at the first failure, a timeout, or
     when `cancel` is set; the child's whole process group is killed in the last two cases."""
     limit = timeout if timeout is not None else prepare_timeout()
+    root = Path(root) / step.path
     child_env = {**merge_env(None, tools=True), **_QUIET_ENV, **dict(step.env)}
     if which is None:
         # Looked up on the PATH the child will get, which has cuttlefish's own venv removed.

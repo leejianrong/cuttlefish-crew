@@ -188,7 +188,7 @@ agent's turns, so an agent does not spend them discovering that `.venv` or `node
 runs `uv sync` (`--frozen` when there is a `uv.lock`, so your lockfile is never rewritten; `uv venv` plus
 `uv pip install -r requirements.txt` for a requirements project) or `npm ci`, `pnpm install
 --frozen-lockfile`, `yarn install --frozen-lockfile` (`--immutable` for Yarn Berry), `bun install
---frozen-lockfile`, from the project folder, with cuttlefish's own venv removed from the environment. It also
+--frozen-lockfile`, from the project folder (or the subfolder the project is in), with cuttlefish's own venv removed from the environment. It also
 runs `poetry install` and `pipenv sync` (or `pipenv install` with no `Pipfile.lock`), both told to keep the
 environment in the project's `.venv`; `go mod download`; `cargo fetch` (`--locked` with a `Cargo.lock`);
 `bundle install` (frozen with a `Gemfile.lock`); and for Java `mvn -B dependency:resolve` or Gradle's
@@ -287,7 +287,7 @@ The same settings over HTTP: `GET /api/permissions` (modes, presets, blocked lis
 from the catalogue), `PATCH /api/projects/{id}/allow` (your own commands; an entry with shell syntax, a
 never-allowed command, or a launcher on its own such as `sh` or `python` is refused with a 400
 naming the entry and the reason) and
-`PATCH /api/projects/{id}/roles` (replaces the whole list). `GET /api/projects/{id}/environment` is read-only: the ecosystems the project's files point to, each with its package tool, lockfile, the version it asks for and whether its own `.venv` or `node_modules` is there (the dashboard's Environment card), and under `prepare` the install steps a start would run now. Only the project root is read, and nothing is run. `PATCH /api/projects/{id}/environment` with `{"prepare": "ask" | "auto" | "off"}` sets whether cuttlefish installs dependencies before a team starts (below). **Every change applies the next time
+`PATCH /api/projects/{id}/roles` (replaces the whole list). `GET /api/projects/{id}/environment` is read-only: the ecosystems the project's files point to, each with its package tool, lockfile, the version it asks for and whether its own `.venv` or `node_modules` is there (the dashboard's Environment card), and under `prepare` the install steps a start would run now. The project root and the folders directly under it are read (a `frontend/package.json` counts, a deeper one does not, and a folder of an ecosystem the root already has is treated as a workspace member and skipped); each ecosystem reports its `path`. Nothing is run. `PATCH /api/projects/{id}/environment` with `{"prepare": "ask" | "auto" | "off"}` sets whether cuttlefish installs dependencies before a team starts (below). **Every change applies the next time
 the team starts**, not to a team already running.
 
 ### Needs-you requests over HTTP

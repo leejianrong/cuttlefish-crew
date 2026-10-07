@@ -18,8 +18,15 @@ const NAMES: Record<EcosystemEnv["ecosystem"], string> = {
   ruby: "Ruby",
 };
 
+/** " in web/" for a project in a subfolder, nothing for the root. */
+export function inFolder(path: string | undefined): string {
+  return path && path !== "." ? ` in ${path}/` : "";
+}
+
 export interface EnvironmentRow {
   name: string;
+  /** Unique among the rows: the ecosystem and its folder. */
+  key: string;
   /** Tool, version and lockfile, as short phrases for one line. */
   details: string[];
   /** What a person can act on: the project's own install is there, missing, or there but due
@@ -35,17 +42,19 @@ export function environmentRow(env: EcosystemEnv): EnvironmentRow {
   if (env.version_hint) details.push(`wants ${env.version_hint}`);
   if (env.lockfile) details.push(env.lockfile);
   details.push(...env.notes);
-  const folder = env.ecosystem === "python" ? ".venv" : "node_modules";
+  const prefix = env.path && env.path !== "." ? `${env.path}/` : "";
+  const folder = prefix + (env.ecosystem === "python" ? ".venv" : "node_modules");
   const state = env.installed === null ? null : env.installed ? "installed" : "missing";
   return {
-    name: NAMES[env.ecosystem],
+    name: NAMES[env.ecosystem] + inFolder(env.path),
+    key: `${env.ecosystem}:${env.path ?? "."}`,
     details,
     state,
     stateLabel:
       state === null
         ? null
         : state === "installed"
-          ? `${env.env_dir ?? folder} is there`
+          ? `${prefix}${env.env_dir ?? folder.slice(prefix.length)} is there`
           : `${folder} is missing`,
   };
 }
@@ -55,7 +64,9 @@ export function environmentRows(spec: EnvironmentSpec): EnvironmentRow[] {
     const row = environmentRow(env);
     // An install that is there can still be due: say why, in the plan's own words, rather than
     // claiming it is fine (a half-made .venv from a failed install looks installed).
-    const step = spec.prepare.steps.find((entry) => entry.ecosystem === env.ecosystem);
+    const step = spec.prepare.steps.find(
+      (entry) => entry.ecosystem === env.ecosystem && (entry.path ?? ".") === (env.path ?? "."),
+    );
     // Go, Rust, Java and Ruby keep nothing in the project folder (state null): a step for them
     // means their dependencies are not fetched, or are out of date.
     return step && (row.state === "installed" || row.state === null)
@@ -99,6 +110,7 @@ export function missingInstallNote(setting: PrepareSetting): string {
 
 export interface StepLine {
   name: string;
+  key: string;
   /** Exactly what runs, one command per line (a step can be several). */
   commands: string[];
   reason: string;
@@ -106,7 +118,8 @@ export interface StepLine {
 
 export function stepLines(prepare: PrepareInfo): StepLine[] {
   return prepare.steps.map((step) => ({
-    name: step.name,
+    name: step.name + inFolder(step.path),
+    key: `${step.ecosystem}:${step.path ?? "."}`,
     commands: step.commands.map((command) => command.join(" ")),
     reason: step.reason,
   }));
@@ -124,14 +137,17 @@ export function installProgress(events: readonly EpisodicEventView[]): InstallPr
   const open = new Map<string, InstallProgress>();
   for (const event of events) {
     const ecosystem = String(event.payload.ecosystem ?? "");
+    const key = `${ecosystem}:${String(event.payload.path ?? ".")}`;
     if (event.event_type === "EnvironmentPrepareStarted") {
-      open.set(ecosystem, {
-        name: NAMES[ecosystem as EcosystemEnv["ecosystem"]] ?? ecosystem,
+      open.set(key, {
+        name:
+          (NAMES[ecosystem as EcosystemEnv["ecosystem"]] ?? ecosystem) +
+          inFolder(event.payload.path as string | undefined),
         commands: (event.payload.commands as string[][]).map((c) => c.join(" ")).join(" && "),
         reason: String(event.payload.reason),
       });
     } else if (event.event_type === "EnvironmentPrepared") {
-      open.delete(ecosystem);
+      open.delete(key);
     }
   }
   const last = [...open.values()].at(-1);

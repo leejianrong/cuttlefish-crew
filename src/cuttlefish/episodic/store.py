@@ -81,6 +81,10 @@ def _log_event(task_id: str, payload: EventPayload) -> None:
         _LOG.log(level, "%s: %s", name, message, extra=extra)
 
 
+def _where(ecosystem: str, folder: str) -> str:
+    return ecosystem if folder in (".", "") else f"{ecosystem} in {folder}/"
+
+
 def _describe(payload: EventPayload) -> tuple[int, str]:
     match payload:
         case TaskSubmitted(text=text):
@@ -108,14 +112,24 @@ def _describe(payload: EventPayload) -> tuple[int, str]:
             return logging.INFO, f"{rid} kind={kind} {title}"
         case RequestResolved(request_id=rid, resolution=resolution, by=by):
             return logging.INFO, f"{rid} {resolution} by={by}"
-        case EnvironmentPrepareStarted(ecosystem=ecosystem, commands=commands, reason=reason):
+        case EnvironmentPrepareStarted(
+            ecosystem=ecosystem, commands=commands, reason=reason, path=folder
+        ):
+            ecosystem = _where(ecosystem, folder)
             lines = " && ".join(" ".join(c) for c in commands)
             return logging.INFO, f"{ecosystem}: {lines} ({reason})"
-        case EnvironmentPrepared(ok=True, ecosystem=ecosystem, duration_s=seconds):
+        case EnvironmentPrepared(ok=True, ecosystem=ecosystem, duration_s=seconds, path=folder):
+            ecosystem = _where(ecosystem, folder)
             return logging.INFO, f"{ecosystem}: ok in {seconds:.1f}s"
         case EnvironmentPrepared(
-            ecosystem=ecosystem, exit_code=code, failure=failure, duration_s=seconds, tail=tail
+            ecosystem=ecosystem,
+            exit_code=code,
+            failure=failure,
+            duration_s=seconds,
+            tail=tail,
+            path=folder,
         ):
+            ecosystem = _where(ecosystem, folder)
             how = f"exit code {code}" if failure == "exit" else str(failure)
             return (
                 logging.WARNING,

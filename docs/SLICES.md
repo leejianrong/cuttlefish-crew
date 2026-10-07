@@ -876,8 +876,9 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    `superseded`) when the role is steered or decided on, or with the team. Same API and MCP `list_requests`.
 7. **V5-E6: more ecosystems and isolation**, in three PRs. Node version managers are not part of it.
    **E6a (shipped):** prepare poetry, pipenv, Go, Rust, Ruby and Java (see the ADR's update).
-   **E6b:** monorepo subfolders (detection reads only the root today).
-   **E6c:** a design note for a hermetic per-project container through the sandbox seam
+   **E6b (shipped):** monorepo subfolders: the root and the folders directly under it; each nested project has its
+   own `path`, install, `env.json` key (`node:frontend`) and journal events.
+   **E6c (shipped, with E6a):** a design note for a hermetic per-project container through the sandbox seam
    (ADR-0002). No product code for the container.
 
 **Demo:** register a folder with its own `.venv`; the Environment card says what it found;

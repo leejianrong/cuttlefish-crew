@@ -69,11 +69,16 @@ const PREPARE_FAILURES: Record<string, string> = {
   cancelled: "you stopped the team while it was installing",
 };
 
+/** The ecosystem and, for a project in a subfolder, where: `node (web/)`. */
+function ecosystemLabel(p: Record<string, unknown>): string {
+  return p.path && p.path !== "." ? `${p.ecosystem} (${p.path}/)` : String(p.ecosystem);
+}
+
 function preparedText(p: Record<string, unknown>): string {
   const seconds = Number(p.duration_s).toFixed(1);
-  if (p.ok) return `Installed the ${p.ecosystem} dependencies in ${seconds}s.`;
+  if (p.ok) return `Installed the ${ecosystemLabel(p)} dependencies in ${seconds}s.`;
   const why = PREPARE_FAILURES[String(p.failure)] ?? String(p.failure);
-  return `Couldn't install the ${p.ecosystem} dependencies: ${why}.`;
+  return `Couldn't install the ${ecosystemLabel(p)} dependencies: ${why}.`;
 }
 
 const STOP_REASON = /^stop=\w+/;
@@ -184,7 +189,7 @@ export function summarize(event: EpisodicEventView): string {
         ? "The task ended because its last round failed."
         : String(p.error);
     case "EnvironmentPrepareStarted":
-      return `${p.ecosystem}: ${(p.commands as string[][]).map((c) => c.join(" ")).join(" && ")} (${p.reason})`;
+      return `${ecosystemLabel(p)}: ${(p.commands as string[][]).map((c) => c.join(" ")).join(" && ")} (${p.reason})`;
     case "EnvironmentPrepared":
       return preparedText(p);
     case "TeamStopped":
