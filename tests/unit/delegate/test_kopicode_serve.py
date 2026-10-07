@@ -831,3 +831,23 @@ async def test_the_sandbox_is_destroyed_even_when_the_delegation_fails(
             sandbox_provider=provider,  # type: ignore[arg-type]
         )
     assert provider.calls[-1] == "destroy"
+
+
+async def test_the_sessions_own_record_directory_is_carried_on_the_outcome(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    """A failure should point at kopicode's own record of it (ADR-0029)."""
+    binary = fake(
+        [
+            {"start": True},
+            {"emit": respond(stop="max_turns", exit_code=4)},
+            {"close": [ended(reason="max_turns", exit_code=4)]},
+            {"eof": []},
+        ]
+    )
+
+    outcome = await run(binary, tmp_path)
+
+    assert outcome.kind == "failed"
+    assert outcome.failure_kind == "max_turns"
+    assert outcome.record == "/r"

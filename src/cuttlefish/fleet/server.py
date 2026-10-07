@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import logging
 import socket
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from datetime import UTC, datetime
@@ -36,9 +37,11 @@ from typing import Any
 import satay.control
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.delegate.consent import ConsentPolicyError, validate_allow_entry
@@ -89,6 +92,8 @@ DEFAULT_FLEET_PORT = 8420
 #: dashboard must be able to tell which mode is active, and log in, before it
 #: has ever held a token or session.
 _PUBLIC_PATHS = frozenset({"/api/auth-mode", "/api/login"})
+
+_LOG = logging.getLogger(__name__)
 
 
 def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
@@ -320,8 +325,26 @@ def create_app(
                     origin=request.headers.get("origin"),
                 )
             except satay.control.AuthError as exc:
+                _LOG.warning("%s %s rejected: %s %s", request.method, path, exc.status, exc.detail)
                 return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
         return await call_next(request)
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _log_http_error(request: Request, exc: StarletteHTTPException) -> Response:
+        # The dashboard only shows a generic line for a failed start; the real reason is
+        # in `detail`, and until now nothing wrote it down (ADR-0029). A 404 is routine
+        # (a missing asset, an unknown project) and stays at DEBUG.
+        level = (
+            logging.ERROR
+            if exc.status_code >= 500
+            else logging.DEBUG
+            if exc.status_code == 404
+            else logging.WARNING
+        )
+        _LOG.log(
+            level, "%s %s -> %s: %s", request.method, request.url.path, exc.status_code, exc.detail
+        )
+        return await http_exception_handler(request, exc)
 
     # Registered *after* `_check_security` so it wraps *outside* it (Starlette
     # applies the most-recently-added middleware first) -- a browser's CORS
@@ -796,6 +819,7 @@ async def run_daemon(
             f"{dashboard_note}",
             flush=True,
         )
+    _LOG.info("listening on http://%s:%s%s", host, resolved_port, dashboard_note)
     app = create_app(
         daemon,
         security=security,

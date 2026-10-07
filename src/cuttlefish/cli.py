@@ -40,7 +40,7 @@ import satay.control
 from dotenv import load_dotenv
 from satay.journal.events import TERMINAL_STATUSES
 
-from cuttlefish import onboarding, resume, runtime
+from cuttlefish import logsetup, onboarding, resume, runtime
 from cuttlefish.config import (
     AGENT_BACKEND_ENV,
     ConfigError,
@@ -1253,8 +1253,9 @@ def _run_serve(args: argparse.Namespace) -> int:
     `KeyboardInterrupt`; unhandled, that prints a traceback. Teams still running are
     resumed by the next `cuttlefish serve` (`resume_pending`), as after any stop.
     """
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    log_file = logsetup.configure()
+    logging.getLogger(__name__).info(
+        "cuttlefish serve starting (pid %s), log file %s", os.getpid(), log_file or "unavailable"
     )
     try:
         return asyncio.run(_closing_serve_children(_serve(args)))

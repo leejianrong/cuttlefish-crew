@@ -208,6 +208,8 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
                     reason=outcome.reason or outcome.summary,
                     tokens=outcome.tokens,
                     cost_usd=outcome.cost_usd,
+                    failure_kind=outcome.failure_kind,
+                    record=outcome.record,
                 ),
             )
 

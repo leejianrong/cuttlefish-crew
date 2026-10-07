@@ -17,9 +17,11 @@ make demo
 This builds the dashboard once, then starts `cuttlefish serve` — one
 process serving both the JSON API and the dashboard itself, same origin.
 It prints a URL and a token; open the URL and paste in the token. Ctrl-C stops
-it cleanly. The daemon's log goes to this terminal; `make demo LOG=1` also
-copies it to `/tmp/cuttlefish.log` (or `LOG=<path>` for another file), which is
-where a failed team start says why.
+it cleanly. The daemon's log goes to this terminal and always to
+`~/.cuttlefish/logs/cuttlefish.log` (rotating; `CUTTLEFISH_LOG_LEVEL=DEBUG` adds
+every tool call). Each line names its project, team and role, and a failed team
+start says why there. `make demo LOG=1` also copies the output to
+`/tmp/cuttlefish.log` (or `LOG=<path>` for another file).
 
 No daemon at hand yet and just want to look around? The dashboard's own
 connect screen links to a sprite gallery that needs no connection at all.
