@@ -83,6 +83,8 @@ const FAILURE_KINDS: Record<string, string> = {
   verification_failed: "Its own check of the work (the project's tests) failed",
   budget_exhausted: "It reached the token or cost limit",
   cancelled: "It was cancelled",
+  environment_stuck:
+    "It kept failing on the project's environment (a missing tool or package), so cuttlefish stopped it",
   provider_auth: "The model provider rejected the API key",
   provider_credits: "The model provider account is out of credit",
   provider_rate_limit: "The model provider kept rate-limiting it",
@@ -137,9 +139,12 @@ export function commandText(detail: string): string {
   return detail.startsWith(SHELL_PREFIX) ? detail.slice(SHELL_PREFIX.length) : detail;
 }
 
-/** The end of an install's output, when it has any: shown under the row, not in the sentence. */
+/** The end of an install's output, or the last output of a stuck agent's failing command, when
+ * there is any: shown under the row, not in the sentence. */
 export function installOutput(event: EpisodicEventView): string {
-  return event.event_type === "EnvironmentPrepared" ? String(event.payload.tail ?? "").trim() : "";
+  if (event.event_type === "EnvironmentPrepared") return String(event.payload.tail ?? "").trim();
+  if (event.event_type === "DelegationFailed") return String(event.payload.detail ?? "").trim();
+  return "";
 }
 
 export function isRefusedCommand(event: EpisodicEventView): boolean {

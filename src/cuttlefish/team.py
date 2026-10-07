@@ -314,6 +314,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                         cost_usd=outcome.cost_usd,
                         failure_kind=outcome.failure_kind,
                         record=outcome.record,
+                        detail=outcome.detail,
                     ),
                 )
             final_outcome[name] = outcome

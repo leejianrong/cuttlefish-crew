@@ -58,6 +58,14 @@ from cuttlefish.delegate.kopicode import _redacted_stderr_tail, classify_stream
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.requests import CHILD_EXITED
 from cuttlefish.sandbox.provider import SandboxError
+from cuttlefish.stuck import (
+    SHELL_TOOL,
+    SessionRecord,
+    ShellResult,
+    StuckDetector,
+    StuckVerdict,
+    threshold_from_env,
+)
 
 _LOG = logging.getLogger("cuttlefish.delegate.consent")
 
@@ -73,6 +81,7 @@ FAILURE_KINDS = (
     "verification_failed",
     "budget_exhausted",
     "cancelled",
+    "environment_stuck",  # cuttlefish cancelled it: N shell failures in a row on the environment
     "open_failed",  # session.start refused: a bad model, a missing credential
     "protocol_error",  # a -32xxx reply, or a stop this client does not know
 )
@@ -203,6 +212,12 @@ class ServeChild:
         self.events: dict[str, list[Mapping[str, Any]]] = {}
         #: session id -> the consent decisions made for it so far, in order.
         self.consents: dict[str, list[ConsentRecord]] = {}
+        #: session id -> what watches it for an agent stuck on its environment (ADR-0029).
+        self._watches: dict[str, tuple[SessionRecord, StuckDetector]] = {}
+        #: session id -> why cuttlefish cancelled it, once the detector fired.
+        self.stuck: dict[str, StuckVerdict] = {}
+        #: one read of a record at a time, so two checks never consume the same lines.
+        self._stuck_lock = asyncio.Lock()
         self.stderr = bytearray()
         self.unparsed_lines = 0
         self._reader = asyncio.create_task(self._read_stdout(process.stdout))
@@ -259,9 +274,15 @@ class ServeChild:
     def register(self, session: str, decide: Decider) -> None:
         self._deciders[session] = decide
 
+    def watch(self, session: str, record: SessionRecord, detector: StuckDetector) -> None:
+        """Have the child cancel ``session`` if its agent is stuck on the environment."""
+        if detector.enabled:
+            self._watches[session] = (record, detector)
+
     def forget(self, session: str) -> list[Mapping[str, Any]]:
         """Drop a finished session's decider and hand back (and free) its events."""
         self._deciders.pop(session, None)
+        self._watches.pop(session, None)
         return self.events.pop(session, [])
 
     def take_consents(self, session: str) -> list[ConsentRecord]:
@@ -361,6 +382,48 @@ class ServeChild:
         session, event = params.get("session"), params.get("event")
         if isinstance(session, str) and isinstance(event, dict):
             self.events.setdefault(session, []).append(event)
+            if (
+                event.get("kind") == "tool_result"
+                and event.get("tool") == SHELL_TOOL
+                and session in self._watches
+                and session not in self.stuck
+            ):
+                task = asyncio.create_task(self._check_stuck(session))
+                self._background.add(task)
+                task.add_done_callback(self._background.discard)
+
+    async def _check_stuck(self, session: str) -> None:
+        """Read what the session's record gained and cancel the session if its agent has
+        failed on the environment N times running. The stream has no command output, so this
+        is the one place cuttlefish reads it (ADR-0029). Fails open: any trouble reading is
+        "no evidence"."""
+        try:
+            async with self._stuck_lock:
+                watch = self._watches.get(session)
+                if watch is None or session in self.stuck:
+                    return
+                record, detector = watch
+                results = await asyncio.to_thread(record.new_shell_results)
+                await self._feed_stuck(session, detector, results)
+        except Exception:
+            _LOG.exception("stuck check for session %s failed", session)
+
+    async def _feed_stuck(
+        self, session: str, detector: StuckDetector, results: list[ShellResult]
+    ) -> None:
+        for result in results:
+            verdict = detector.feed(result)
+            if verdict is None:
+                continue
+            self.stuck[session] = verdict
+            _LOG.warning(
+                "session %s stuck on its environment after %d shell failures (%s)",
+                session,
+                verdict.count,
+                verdict.signature,
+            )
+            await self.cancel_session(session)
+            return
 
     def _start_consent(self, request_id: object, params: object) -> None:
         if not isinstance(request_id, str | int) or isinstance(request_id, bool):
@@ -545,6 +608,25 @@ def classify_turn(
     )
 
 
+def _stuck_outcome(
+    outcome: DelegationOutcome, verdict: StuckVerdict, env: Mapping[str, str] | None
+) -> DelegationOutcome:
+    """The round cuttlefish ended because its agent kept failing on the environment: a failure
+    that says so, with the last failing output as its ``detail`` (redacted here as every
+    failure text is, and again at journal write)."""
+    return dataclasses.replace(
+        outcome,
+        kind="failed",
+        summary="kopicode was stopped: it kept failing on its environment (environment_stuck)",
+        reason=(
+            f"stopped after {verdict.count} shell commands in a row failed on the environment "
+            f"(matched {verdict.signature!r})"
+        ),
+        failure_kind="environment_stuck",
+        detail=_redacted_stderr_tail(verdict.evidence, env) or None,
+    )
+
+
 _RPC_FAILURE_KIND = {-32002: "open_failed", -32003: "protocol_error"}
 
 
@@ -617,6 +699,7 @@ async def run_kopicode_serve(
     session_id: str | None = None,
     pool: ServePool | None = None,
     process_factory: Callable[[], Awaitable[asyncio.subprocess.Process]] | None = None,
+    stuck_threshold: int | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
 
@@ -627,6 +710,11 @@ async def run_kopicode_serve(
 
     ``consent_timeout`` (seconds) is passed to a child this call spawns as ``--consent-timeout``,
     so kopicode waits that long for an answer; a decider that asks a person needs it (ADR-0028).
+
+    ``stuck_threshold`` is how many shell commands in a row may fail on the environment before
+    the session is cancelled (``None``: ``CUTTLEFISH_STUCK_THRESHOLD``, default 5; ``0``: never).
+    The evidence is read from the session's record in ``root``, so a child that runs elsewhere
+    (``process_factory``) is not watched.
 
     ``process_factory`` starts the ``serve`` process somewhere other than this host (a
     sandbox's streaming ``spawn``, KAN-1793); the child it yields is used for this call alone
@@ -670,6 +758,9 @@ async def run_kopicode_serve(
             consent_timeout=consent_timeout,
         )
     child.register(session, decide)
+    if process_factory is None:
+        threshold = threshold_from_env() if stuck_threshold is None else stuck_threshold
+        child.watch(session, SessionRecord(root, session), StuckDetector(threshold))
     try:
         try:
             pending = await child.request(
@@ -698,6 +789,7 @@ async def run_kopicode_serve(
             await asyncio.shield(child.end_session(session))
     finally:
         events = child.forget(session)
+        verdict = child.stuck.pop(session, None)
         consents = [
             ConsentDecisionRecord(
                 r.kind, r.detail, "allow" if r.answer == "allow" else "deny", r.rule
@@ -729,6 +821,8 @@ async def run_kopicode_serve(
     if not isinstance(result, dict):
         raise DelegationError("kopicode serve replied with neither result nor error")
     outcome = classify_turn(events, result, env=env)
+    if verdict is not None and outcome.kind != "completed":
+        outcome = _stuck_outcome(outcome, verdict, env)
     record = result.get("record")
     return dataclasses.replace(
         outcome,

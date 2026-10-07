@@ -210,6 +210,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
                     cost_usd=outcome.cost_usd,
                     failure_kind=outcome.failure_kind,
                     record=outcome.record,
+                    detail=outcome.detail,
                 ),
             )
 

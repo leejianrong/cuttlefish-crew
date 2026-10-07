@@ -9,6 +9,8 @@ line (``"$session"``/``"$start_id"`` are substituted); ``{"consent": {...}, "wai
 sends a consent.request and records the reply (or ``"timeout"`` after ``wait`` seconds);
 ``{"wait_for": "session.cancel"}`` blocks until that method arrives; ``{"close": [<msg>...]}``
 waits for session.close, writes the messages (``session_ended``), then acknowledges it;
+``{"record": [<line>...]}`` appends those JSON lines to the session's own record,
+``./.kopicode/sessions/<session>/events.jsonl`` (what the stuck-agent detector reads);
 ``{"eof": [<msg>...]}`` blocks until stdin closes, then writes the messages (shutdown's
 ``session_ended``).
 """
@@ -107,6 +109,12 @@ for step in scenario:
                 "result": {"session": ctx["session"], "closed": True},
             }
         )
+    elif "record" in step:
+        record = Path.cwd() / ".kopicode" / "sessions" / ctx["session"] / "events.jsonl"
+        record.parent.mkdir(parents=True, exist_ok=True)
+        with record.open("a") as handle:
+            for entry in step["record"]:
+                handle.write(json.dumps(entry) + "\n")
     elif "exit" in step:
         os._exit(0)
     elif "eof" in step:
