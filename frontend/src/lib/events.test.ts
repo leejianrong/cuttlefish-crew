@@ -5,7 +5,9 @@ import type { EpisodicEventView } from "./api";
 import {
   commandText,
   eventLabel,
+  eventLabelFor,
   failureText,
+  installOutput,
   formatWhen,
   isRefusedCommand,
   latestRound,
@@ -243,8 +245,10 @@ describe("installing dependencies in the activity log", () => {
       tail: "no matching distribution\n",
     });
     expect(summarize(failed)).toBe(
-      "Couldn't install the python dependencies: the install command failed. no matching distribution",
+      "Couldn't install the python dependencies: the install command failed.",
     );
+    expect(installOutput(failed)).toBe("no matching distribution");
+    expect(installOutput(event("TaskFailed", { error: "x" }))).toBe("");
     expect(
       summarize(
         event("EnvironmentPrepared", {
@@ -256,5 +260,13 @@ describe("installing dependencies in the activity log", () => {
         }),
       ),
     ).toContain("the tool it needs is not installed");
+  });
+});
+
+describe("eventLabelFor", () => {
+  it("does not call a failed install done", () => {
+    expect(eventLabelFor(event("EnvironmentPrepared", { ok: true }))).toBe("Install done");
+    expect(eventLabelFor(event("EnvironmentPrepared", { ok: false }))).toBe("Install failed");
+    expect(eventLabelFor(event("TaskFailed", { error: "x" }))).toBe("Task failed");
   });
 });

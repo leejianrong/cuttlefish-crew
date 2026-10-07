@@ -203,7 +203,9 @@ def _python_commands(env: EcosystemEnv) -> tuple[tuple[tuple[str, ...], ...], st
         install: list[str] = ["uv", "pip", "install"]
         for name in wanted:
             install += ["-r", name]
-        return (("uv", "venv"), tuple(install)), None
+        # --allow-existing: a retry after a failed install finds the half-made .venv, and a bare
+        # `uv venv` refuses to touch it. The packages are installed over it.
+        return (("uv", "venv", "--allow-existing"), tuple(install)), None
     return (), f"{env.tool} projects are not prepared yet"
 
 

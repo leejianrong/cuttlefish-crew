@@ -323,3 +323,16 @@ folder (no dependencies) is remembered as such (`produced: false`) so it is not 
 with quiet, non-interactive settings (no update banners or progress bars, no corepack prompt), and a failed role's error
 names the command and exit code, the last line of the output and `prepare=skip`.
 
+V5-E3b: **the dashboard asks before it installs.** `start()` in `ProjectDetail` reads `GET .../environment` first: with the
+setting "ask" and steps to run it shows `PrepareConfirm` (the commands, the folder, four choices) instead of calling start;
+"automatically" saves the setting then starts with `prepare: "yes"`. The Environment card carries the setting (a radiogroup
+over `PREPARE_SETTINGS`), `installProgress(events)` drives a status line while an install runs, and install rows show their
+output under a collapsed "Output". The server's `409` stays the fallback for a client that raced a setting change.
+Found by driving the install UI in a browser, fixed before merge: a retry after a failed `uv venv` + install stopped on "a virtual
+environment already exists" (the retry now runs `uv venv --allow-existing`); the Environment card said `.venv is there` for a
+half-made venv (a plan step for an installed ecosystem now shows its reason, "the last install did not finish", as a stale
+row) and went stale after an install (it reads again when an install event or the setting changes); a disabled button dropped
+keyboard focus (the setting uses `aria-disabled`); the confirm card now takes focus and Cancel returns it; a role-less log row
+shifted its text into the narrow role column (the cell is always there); a failed install was labelled "Install done"; and the
+failed role's text no longer quotes the last line of the output, which is often half a sentence.
+

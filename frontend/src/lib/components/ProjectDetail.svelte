@@ -1,11 +1,20 @@
 <script lang="ts">
-  import type { EpisodicEventView, FleetClient, NeedsYouRequest, ProjectSummary } from "../api";
+  import { tick } from "svelte";
+  import type {
+    EpisodicEventView,
+    FleetClient,
+    NeedsYouRequest,
+    PrepareInfo,
+    ProjectSummary,
+  } from "../api";
+  import { installProgress } from "../environment";
   import { latestRound } from "../events";
   import { modeLabel, startFailure } from "../team";
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
+  import PrepareConfirm from "./PrepareConfirm.svelte";
   import OfficeScene from "./OfficeScene.svelte";
   import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
@@ -30,6 +39,20 @@
   let startError = $state<string | null>(null);
   let taskTexts = $state<Record<string, string>>({});
   let requireApproval = $state(false);
+  // V5-E3: asked before installing dependencies, when the project's setting is "ask".
+  let confirmingInstall = $state<PrepareInfo | null>(null);
+  const installing = $derived(installProgress(events));
+  let startButton = $state<HTMLButtonElement | null>(null);
+  // The Environment card reads again when an install may have changed what it shows.
+  const environmentKey = $derived(
+    `${project?.env_prepare}|${project?.running}|${events.filter((e) => e.event_type.startsWith("Environment")).length}`,
+  );
+
+  async function cancelInstall() {
+    confirmingInstall = null;
+    await tick();
+    startButton?.focus();
+  }
   let confirmingStop = $state(false);
   let stopping = $state(false);
   let permissionsDirty = $state(false);
@@ -100,7 +123,7 @@
     return () => window.removeEventListener("beforeunload", guard);
   });
 
-  async function start() {
+  async function start(prepare?: "yes" | "skip") {
     if (!project) return;
     const roles = project.roles
       .map((role) => ({ name: role.name, text: (taskTexts[role.name] ?? "").trim() }))
@@ -112,7 +135,21 @@
     starting = true;
     startError = null;
     try {
-      await client.startProject(projectId, roles, requireApproval);
+      if (prepare === undefined) {
+        // Ask before installing: the project's install scripts run project code, so unless the
+        // person already said "automatically" (or "never"), say what will run and let them choose.
+        const environment = await client.getEnvironment(projectId).catch(() => null);
+        if (
+          environment !== null &&
+          environment.prepare.setting === "ask" &&
+          environment.prepare.steps.length > 0
+        ) {
+          confirmingInstall = environment.prepare;
+          return;
+        }
+      }
+      confirmingInstall = null;
+      await client.startProject(projectId, roles, requireApproval, prepare);
       taskTexts = {};
       await refresh();
     } catch (error) {
@@ -120,6 +157,18 @@
     } finally {
       starting = false;
     }
+  }
+
+  async function chooseInstall(choice: "once" | "always" | "skip") {
+    if (choice === "always") {
+      try {
+        await client.updateEnvironmentPrepare(projectId, "auto");
+      } catch (error) {
+        startError = startFailure(error);
+        return;
+      }
+    }
+    await start(choice === "skip" ? "skip" : "yes");
   }
 
   async function stop() {
@@ -162,6 +211,14 @@
           &#8635; This project's team was resumed after a restart{resumedEvents.length > 1
             ? ` (${resumedEvents.length} times)`
             : ""}. Recent activity below shows where each pickup happened.
+        </p>
+      {/if}
+
+      {#if project.running && installing}
+        <p class="banner" role="status">
+          Installing the {installing.name} dependencies ({installing.reason}):
+          <code class="mono">{installing.commands}</code>. The team starts when it is done; Stop team
+          cancels it.
         </p>
       {/if}
 
@@ -262,17 +319,38 @@
                 </span>
               </span>
             </div>
+            {#if confirmingInstall}
+              <PrepareConfirm
+                prepare={confirmingInstall}
+                root={project.root}
+                busy={starting}
+                onChoose={chooseInstall}
+                onCancel={cancelInstall}
+              />
+            {/if}
             {#if startError}
               <p class="error" role="alert">{startError}</p>
             {/if}
-            <button class="btn btn-filled start" onclick={start} disabled={starting}>
-              {starting ? "Starting…" : "Start team"}
-            </button>
+            {#if !confirmingInstall}
+              <button
+                class="btn btn-filled start"
+                bind:this={startButton}
+                onclick={() => start()}
+                disabled={starting}
+              >
+                {starting ? "Starting…" : "Start team"}
+              </button>
+            {/if}
           {/if}
         </section>
       {/if}
 
-      <EnvironmentCard {client} {projectId} />
+      <EnvironmentCard
+        {client}
+        {projectId}
+        refreshKey={environmentKey}
+        onSettingChanged={refresh}
+      />
 
       <section class="card filled events" aria-labelledby="activity-heading">
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>

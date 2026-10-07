@@ -857,7 +857,7 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    tail; a failed install fails every role with why; a stop kills it. The confirmation is the project's
    `env_prepare` setting (`ask`/`auto`/`off`) and the start call's `prepare` (`yes`/`skip`), not a Needs-you
    request (see the ADR's update). API, MCP `start_project`, and the activity-log wording.
-   **E3b:** the dashboard side: a confirm card on Start ("Install and start", "Always install", "Start
+   **E3b (shipped):** the dashboard side: a confirm card on Start ("Install and start", "Always install", "Start
    without"), the setting, and the install as a visible step.
 5. **V5-E4: activation.** The allowlisted base environment (one constant, never per backend),
    the project overlay (`VIRTUAL_ENV`, `.venv/bin`, `node_modules/.bin` first on `PATH`), the

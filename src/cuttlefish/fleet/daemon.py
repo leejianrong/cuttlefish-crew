@@ -93,17 +93,17 @@ class EnvironmentConfirmationError(FleetError):
 
 def _install_failure_text(ecosystem: str, result: envprep.StepResult) -> str:
     """Why a role is recorded failed when its project's dependencies would not install: the
-    cause in words, the last line of the output, and the way out."""
+    cause in words, and the way out. The output itself is in the install row, not here (the
+    last line of a tool's output is often a fragment of a longer sentence)."""
+    command = " ".join(result.command)
     cause = {
-        "exit": f"{' '.join(result.command)} exited with code {result.exit_code}",
-        "timeout": f"{' '.join(result.command)} ran too long and was stopped",
+        "exit": f"{command} exited with code {result.exit_code}",
+        "timeout": f"{command} ran too long and was stopped",
         "tool_missing": f"{result.command[0] if result.command else 'the tool'} is not installed",
     }.get(str(result.failure), str(result.failure))
-    last = next((ln.strip() for ln in reversed(result.tail.splitlines()) if ln.strip()), "")
-    detail = f": {last[:200]}" if last else ""
     return (
-        f"couldn't install the {ecosystem} dependencies ({cause}){detail}. "
-        "The full output is in the install row above; start with prepare=skip to go without."
+        f"couldn't install the {ecosystem} dependencies ({cause}). "
+        "The install row above has the output; start with prepare=skip to go without."
     )
 
 

@@ -63,7 +63,7 @@ def test_a_requirements_project_gets_a_venv_then_the_requirements(tmp_path: Path
     (step,) = _plan(tmp_path).steps
 
     assert step.commands == (
-        ("uv", "venv"),
+        ("uv", "venv", "--allow-existing"),
         ("uv", "pip", "install", "-r", "requirements.txt", "-r", "requirements-dev.txt"),
     )
 

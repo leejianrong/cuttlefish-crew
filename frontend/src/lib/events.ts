@@ -28,6 +28,14 @@ export function eventLabel(type: string): string {
   return LABELS[type] ?? type;
 }
 
+/** The label for one event: an install that failed must not read "done". */
+export function eventLabelFor(event: EpisodicEventView): string {
+  if (event.event_type === "EnvironmentPrepared" && event.payload.ok === false) {
+    return "Install failed";
+  }
+  return eventLabel(event.event_type);
+}
+
 /** Why a command was refused, from the rule id the daemon journals. */
 export function refusalReason(rule: string): string {
   if (rule.startsWith("never_allowed:")) {
@@ -65,8 +73,7 @@ function preparedText(p: Record<string, unknown>): string {
   const seconds = Number(p.duration_s).toFixed(1);
   if (p.ok) return `Installed the ${p.ecosystem} dependencies in ${seconds}s.`;
   const why = PREPARE_FAILURES[String(p.failure)] ?? String(p.failure);
-  const tail = String(p.tail ?? "").trim();
-  return `Couldn't install the ${p.ecosystem} dependencies: ${why}.${tail ? ` ${tail}` : ""}`;
+  return `Couldn't install the ${p.ecosystem} dependencies: ${why}.`;
 }
 
 const STOP_REASON = /^stop=\w+/;
@@ -128,6 +135,11 @@ const SHELL_PREFIX = "/bin/sh -c ";
 /** A shell command as the model typed it, without the `/bin/sh -c` wrapper kopicode adds. */
 export function commandText(detail: string): string {
   return detail.startsWith(SHELL_PREFIX) ? detail.slice(SHELL_PREFIX.length) : detail;
+}
+
+/** The end of an install's output, when it has any: shown under the row, not in the sentence. */
+export function installOutput(event: EpisodicEventView): string {
+  return event.event_type === "EnvironmentPrepared" ? String(event.payload.tail ?? "").trim() : "";
 }
 
 export function isRefusedCommand(event: EpisodicEventView): boolean {

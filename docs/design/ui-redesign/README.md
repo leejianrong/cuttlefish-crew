@@ -129,6 +129,17 @@ and this folder disagree after a slice lands, update this folder.
   adds one line saying cuttlefish does not install dependencies yet. An empty result says subfolders are not
   scanned. Not in the mockups; no coral (nothing here needs a decision). Fetched once per visit.
 
+- **V5-E3b (installing dependencies) shipped.** Start asks before it installs, when the project's setting is
+  "Ask me" and something is missing or stale: a **Install dependencies first?** card in the start form lists
+  each ecosystem, why, and the exact commands, says it runs the project's own install scripts in the project
+  folder, and offers Install and start, Install and do this automatically (sets the project to Automatically),
+  Start without installing, and Cancel. The Environment card gains a three-way **Install dependencies before a team
+  starts** control (Ask me, Automatically, Never) with a sentence per choice, and its missing-install note follows
+  the setting. While cuttlefish installs, the Overview shows a status line with the command and the reason, and Stop
+  team cancels the install. Install rows in Recent activity read "Installing" and "Install done", with the end of the
+  output under a collapsed **Output**. Neutral surfaces throughout: nothing here needs a decision from you in the
+  coral sense once you have chosen, so coral stays for Needs you.
+
 ## Known gaps in the mockup
 
 - Static: no working interactions, no empty or error states, no dark theme, no phone
