@@ -46,6 +46,5 @@ Include the setup rules above verbatim.
 ## After the report
 
 Triage: fix what the change caused on the branch it belongs to, give UI work its own small PR,
-and note anything that was already there. Check an agent's claim against the code before
-acting on it (one said the venv leak was in a spawn that does go through `merge_env`; read the
-line first).
+and note anything that was already there. An agent's report is evidence, not a verdict: read
+the code it points at before acting on a claim.
