@@ -13,6 +13,7 @@ way it already fails a CLI-launched one.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,25 @@ async def test_start_surfaces_a_config_error_as_fleeterror_not_a_hang(tmp_path: 
 
     # The failure was reported synchronously to the caller -- nothing left running.
     assert daemon.running(project.id) is None
+
+
+async def test_a_failed_start_is_logged_with_its_cause(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The dashboard only says "check the daemon's log" -- so the log must name why."""
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    Path(project.root).mkdir()
+
+    with (
+        caplog.at_level(logging.ERROR, logger="cuttlefish.fleet.daemon"),
+        pytest.raises(FleetError),
+    ):
+        await daemon.start(project.id, [{"name": "builder", "text": "do it"}])
+
+    record = next(r for r in caplog.records if "failed to start" in r.getMessage())
+    assert record.exc_info is not None
+    assert "cuttlefish-test-missing-kopicode-binary" in str(record.exc_info[1])
 
 
 async def test_two_projects_fail_to_start_independently_without_blocking_each_other(

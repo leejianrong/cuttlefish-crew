@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import logging
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -59,6 +60,8 @@ from cuttlefish.steering import (
     send_steering_message,
 )
 from cuttlefish.team import RoleInput, TeamInput, run_team
+
+logger = logging.getLogger(__name__)
 
 
 class FleetError(Exception):
@@ -381,6 +384,9 @@ class FleetDaemon:
                         await handle.result()
             except Exception as exc:
                 if not ready.done():
+                    logger.error(
+                        "project %r: team %s failed to start", project.id, team_id, exc_info=True
+                    )
                     # Nothing started -- report the failure through `ready` instead
                     # of leaving it an unretrieved task exception (a second,
                     # redundant warning for the identical failure).

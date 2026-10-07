@@ -94,7 +94,9 @@ This builds the dashboard once, then runs `cuttlefish serve`: one process
 serving the API and the UI. It prints a URL and a token. Open the URL, check
 that the address box on the Connect screen matches it (it starts as
 `http://127.0.0.1:8420`), and paste the token. No daemon yet? The Connect
-screen also links to a sprite gallery that needs no connection.
+screen also links to a sprite gallery that needs no connection. The daemon's
+log prints in this terminal; `make demo LOG=1` also copies it to
+`/tmp/cuttlefish.log`. Ctrl-C stops it cleanly.
 
 **3. Add both projects.** On Projects choose **Add project**, pick
 `~/crew-demo/todo-api` in the folder picker, keep the Builder + reviewer team,

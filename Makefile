@@ -17,7 +17,7 @@ dev: ## Sync the dev environment (uv sync)
 # command a newcomer needs, not a second step after `cd frontend && npm
 # install` first. Developing the frontend itself (hot reload) still means
 # running `cd frontend && npm run dev` and `cuttlefish serve` separately.
-demo: ## Build the dashboard + run cuttlefish serve, print the URL to open
+demo: ## Build the dashboard + run cuttlefish serve (LOG=1 also writes /tmp/cuttlefish.log)
 	./scripts/demo.sh
 
 lint: ## Ruff lint + format check
