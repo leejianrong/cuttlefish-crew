@@ -65,12 +65,21 @@ class EcosystemEnv:
 class EnvironmentSpec:
     root: str
     ecosystems: tuple[EcosystemEnv, ...]
+    #: False when the project's folder is not there at all (moved or deleted), which is not the
+    #: same answer as "nothing recognised in it".
+    root_exists: bool = True
 
     def to_json(self) -> dict[str, Any]:
-        return {"root": self.root, "ecosystems": [e.to_json() for e in self.ecosystems]}
+        return {
+            "root": self.root,
+            "root_exists": self.root_exists,
+            "ecosystems": [e.to_json() for e in self.ecosystems],
+        }
 
     def summary(self) -> str:
         """One line for `cuttlefish doctor`: ``Python (uv, .venv present); Node (pnpm, ...)``."""
+        if not self.root_exists:
+            return "the project folder does not exist"
         if not self.ecosystems:
             return "no recognised project files at the root"
         return "; ".join(_describe(e) for e in self.ecosystems)
@@ -120,25 +129,32 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
-def _toml(path: Path) -> Mapping[str, Any]:
+def _toml(path: Path) -> Mapping[str, Any] | None:
+    """The parsed file; ``{}`` when there is no such file, None when it exists but cannot be
+    read (malformed, too large), so a caller can say so instead of guessing."""
+    if not path.is_file():
+        return {}
     text = _read_text(path)
     if text is None:
-        return {}
+        return None
     try:
         return tomllib.loads(text)
     except tomllib.TOMLDecodeError:
+        return None
+
+
+def _json(path: Path) -> Mapping[str, Any] | None:
+    """As :func:`_toml`, for JSON (a top-level value that is not an object is unreadable)."""
+    if not path.is_file():
         return {}
-
-
-def _json(path: Path) -> Mapping[str, Any]:
     text = _read_text(path)
     if text is None:
-        return {}
+        return None
     try:
         data = json.loads(text)
     except ValueError:
-        return {}
-    return data if isinstance(data, dict) else {}
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _first_line(path: Path) -> str | None:
@@ -165,7 +181,7 @@ def _tool_versions(root: Path) -> dict[str, str]:
 
 def _mise_tool(root: Path, name: str) -> str | None:
     for filename in ("mise.toml", ".mise.toml"):
-        tools = _toml(root / filename).get("tools")
+        tools = (_toml(root / filename) or {}).get("tools")
         if isinstance(tools, dict):
             value = tools.get(name)
             if isinstance(value, str):
@@ -187,7 +203,8 @@ def _python(root: Path) -> EcosystemEnv | None:
     manifests = _present(root, "pyproject.toml", "setup.py", "setup.cfg", "Pipfile") + requirements
     if not manifests:
         return None
-    pyproject = _toml(root / "pyproject.toml")
+    parsed = _toml(root / "pyproject.toml")
+    pyproject: Mapping[str, Any] = parsed or {}
     raw_tools = pyproject.get("tool")
     tool_table: Mapping[str, Any] = raw_tools if isinstance(raw_tools, dict) else {}
     lockfile = next(
@@ -212,8 +229,10 @@ def _python(root: Path) -> EcosystemEnv | None:
         (name for name in (".venv", "venv") if (root / name / "pyvenv.cfg").is_file()), None
     )
     notes: tuple[str, ...] = ()
+    if parsed is None:
+        notes += ("pyproject.toml could not be read",)
     if lockfile is None and tool == "pip" and not requirements and "pyproject.toml" in manifests:
-        notes = ("no lockfile",)
+        notes += ("no lockfile",)
     return EcosystemEnv(
         ecosystem="python",
         tool=tool,
@@ -245,7 +264,8 @@ _NODE_LOCKFILES = (
 def _node(root: Path) -> EcosystemEnv | None:
     if not (root / "package.json").is_file():
         return None
-    package = _json(root / "package.json")
+    parsed = _json(root / "package.json")
+    package: Mapping[str, Any] = parsed or {}
     lockfile, tool = next(
         ((name, tool) for name, tool in _NODE_LOCKFILES if (root / name).is_file()), (None, None)
     )
@@ -253,8 +273,11 @@ def _node(root: Path) -> EcosystemEnv | None:
     if isinstance(manager, str) and manager:
         tool = manager.split("@", 1)[0] or tool
     notes: tuple[str, ...] = ()
+    if parsed is None:
+        notes += ("package.json could not be read",)
     if tool is None:
-        tool, notes = "npm", ("no lockfile",)
+        tool = "npm"
+        notes += ("no lockfile",)
     engines = package.get("engines")
     engine_node = engines.get("node") if isinstance(engines, dict) else None
     version = (
@@ -301,7 +324,7 @@ def _go(root: Path) -> EcosystemEnv | None:
 def _rust(root: Path) -> EcosystemEnv | None:
     if not (root / "Cargo.toml").is_file():
         return None
-    toolchain = _toml(root / "rust-toolchain.toml").get("toolchain")
+    toolchain = (_toml(root / "rust-toolchain.toml") or {}).get("toolchain")
     channel = toolchain.get("channel") if isinstance(toolchain, dict) else None
     version = channel if isinstance(channel, str) else _first_line(root / "rust-toolchain")
     return EcosystemEnv(
@@ -364,4 +387,4 @@ def detect(root: str | Path) -> EnvironmentSpec:
     """The ecosystems the project root's files point to. A missing root is an empty spec."""
     path = Path(root)
     found = tuple(env for detector in _DETECTORS if (env := detector(path)) is not None)
-    return EnvironmentSpec(root=str(path), ecosystems=found)
+    return EnvironmentSpec(root=str(path), ecosystems=found, root_exists=path.is_dir())

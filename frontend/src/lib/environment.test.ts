@@ -53,10 +53,12 @@ describe("environmentRows and hasMissingInstall", () => {
   it("warns only when some install is missing", () => {
     const ok = environmentRows({
       root: "/r",
+      root_exists: true,
       ecosystems: [env({ installed: true, env_dir: ".venv" })],
     });
     const missing = environmentRows({
       root: "/r",
+      root_exists: true,
       ecosystems: [
         env({ installed: true, env_dir: ".venv" }),
         env({ ecosystem: "node", installed: false }),

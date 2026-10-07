@@ -114,6 +114,8 @@ export interface EcosystemEnv {
 
 export interface EnvironmentSpec {
   root: string;
+  /** False when the project's folder is not there at all, which is not "nothing recognised". */
+  root_exists: boolean;
   ecosystems: EcosystemEnv[];
 }
 

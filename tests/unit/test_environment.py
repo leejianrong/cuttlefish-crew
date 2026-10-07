@@ -22,10 +22,19 @@ def _only(root: Path, ecosystem: str) -> environment.EcosystemEnv:
     return next(e for e in spec.ecosystems if e.ecosystem == ecosystem)
 
 
-def test_an_empty_or_missing_root_has_no_ecosystems(tmp_path: Path) -> None:
-    assert environment.detect(tmp_path).ecosystems == ()
-    assert environment.detect(tmp_path / "gone").ecosystems == ()
-    assert "no recognised" in environment.detect(tmp_path).summary()
+def test_an_empty_root_has_no_ecosystems(tmp_path: Path) -> None:
+    spec = environment.detect(tmp_path)
+
+    assert (spec.ecosystems, spec.root_exists) == ((), True)
+    assert "no recognised" in spec.summary()
+
+
+def test_a_missing_root_is_not_the_same_answer_as_an_empty_one(tmp_path: Path) -> None:
+    spec = environment.detect(tmp_path / "gone")
+
+    assert (spec.ecosystems, spec.root_exists) == ((), False)
+    assert spec.summary() == "the project folder does not exist"
+    assert spec.to_json()["root_exists"] is False
 
 
 def test_a_uv_project_with_a_venv(tmp_path: Path) -> None:
@@ -130,6 +139,9 @@ def test_a_broken_manifest_is_read_as_empty_not_an_error(tmp_path: Path) -> None
     spec = environment.detect(tmp_path)
 
     assert {e.ecosystem for e in spec.ecosystems} == {"node", "python"}
+    by = {e.ecosystem: e for e in spec.ecosystems}
+    assert "package.json could not be read" in by["node"].notes
+    assert "pyproject.toml could not be read" in by["python"].notes
 
 
 def test_go_rust_java_and_ruby_are_detected_with_what_they_say(tmp_path: Path) -> None:
@@ -172,6 +184,7 @@ def test_a_huge_marker_file_is_not_read(tmp_path: Path) -> None:
     node = _only(tmp_path, "node")
 
     assert node.tool == "npm"  # the oversize file was treated as unreadable, not parsed
+    assert "package.json could not be read" in node.notes
 
 
 def test_detection_never_runs_anything(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

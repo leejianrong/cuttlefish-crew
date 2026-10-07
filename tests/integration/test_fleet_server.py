@@ -653,6 +653,7 @@ def test_environment_route_reads_the_projects_files(client: TestClient, tmp_path
     body = client.get(f"/api/projects/{project['id']}/environment").json()
 
     assert body["root"] == str(root)
+    assert body["root_exists"] is True
     assert [(e["ecosystem"], e["tool"], e["installed"]) for e in body["ecosystems"]] == [
         ("python", "uv", False)
     ]
@@ -660,3 +661,16 @@ def test_environment_route_reads_the_projects_files(client: TestClient, tmp_path
 
 def test_environment_route_for_an_unknown_project_is_404(client: TestClient) -> None:
     assert client.get("/api/projects/nope/environment").status_code == 404
+
+
+def test_environment_route_says_when_the_project_folder_is_gone(
+    client: TestClient, tmp_path: Path
+) -> None:
+    root = tmp_path / "demo"
+    root.mkdir()
+    project = client.post("/api/projects", json={"name": "demo", "root": str(root)}).json()
+    root.rmdir()
+
+    body = client.get(f"/api/projects/{project['id']}/environment").json()
+
+    assert (body["root_exists"], body["ecosystems"]) == (False, [])

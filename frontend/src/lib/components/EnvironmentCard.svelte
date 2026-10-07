@@ -6,16 +6,20 @@
 
   // Read once when the card shows: a project's files change rarely, and a fresh start re-reads.
   let rows = $state<EnvironmentRow[] | null>(null);
+  let missingRoot = $state<string | null>(null);
   let failed = $state(false);
 
   $effect(() => {
     const id = projectId;
     rows = null;
+    missingRoot = null;
     failed = false;
     client
       .getEnvironment(id)
       .then((spec) => {
-        if (id === projectId) rows = environmentRows(spec);
+        if (id !== projectId) return;
+        missingRoot = spec.root_exists ? null : spec.root;
+        rows = environmentRows(spec);
       })
       .catch(() => {
         if (id === projectId) failed = true;
@@ -23,13 +27,18 @@
   });
 </script>
 
-<section class="card env" aria-labelledby="env-heading">
+<section class="card filled env" aria-labelledby="env-heading">
   <h2 id="env-heading" class="title-medium">Environment</h2>
   <p class="body-small muted lede">What this project's files say it needs. Nothing is run to find out.</p>
   {#if failed}
     <p class="body-medium muted">Couldn't read the project's files.</p>
   {:else if rows === null}
     <p class="body-medium muted">Reading…</p>
+  {:else if missingRoot}
+    <p class="body-medium muted">
+      This project's folder isn't there any more: <span class="mono">{missingRoot}</span>. It was
+      moved or deleted; remove the project and add it again from its new place.
+    </p>
   {:else if rows.length === 0}
     <p class="body-medium muted">
       No recognised project files at the top of this folder (Python, Node, Go, Rust, Java or
@@ -60,8 +69,9 @@
 
 <style>
   .env {
-    padding: 1rem 1.25rem;
-    margin-top: 1rem;
+    padding: 1.1rem 1.25rem;
+    margin: 1rem 0;
+    max-width: 56rem;
   }
 
   .lede {
