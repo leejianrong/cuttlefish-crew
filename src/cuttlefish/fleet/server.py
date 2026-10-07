@@ -114,6 +114,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "last_team_id": project.last_team_id,
         "allow": [list(command) for command in project.allow],
         "running": daemon.is_running(project.id),
+        "stopping": daemon.is_stopping(project.id),
         "status": daemon.status(project.id),
         "budget": {"max_tokens": project.max_tokens, "max_cost_usd": project.max_cost_usd},
         "usage": {

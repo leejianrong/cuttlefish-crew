@@ -319,6 +319,18 @@ class RequestResolved:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class TeamStopped:
+    """The operator stopped this team and it has now ended (KAN-1896). Written straight to the
+    store by the daemon, like ``TeamResumed``, because satay's cancel journals nothing of its
+    own: without it a role cut off between rounds reads as ``blocked``, which means "needs a
+    human". Roles that had already finished keep their own terminal state."""
+
+    EVENT_TYPE: ClassVar[str] = "TeamStopped"
+
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamResumed:
     """A daemon restart found this run still non-terminal and re-drove it via
     satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
@@ -376,6 +388,7 @@ EventPayload = (
     | RequestRaised
     | RequestResolved
     | TeamResumed
+    | TeamStopped
     | UnknownPayload
 )
 
@@ -400,6 +413,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         RequestRaised,
         RequestResolved,
         TeamResumed,
+        TeamStopped,
     )
 }
 

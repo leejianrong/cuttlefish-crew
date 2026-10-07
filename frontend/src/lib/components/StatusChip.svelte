@@ -9,6 +9,7 @@
     blocked: "blocked",
     done: "done",
     failed: "failed",
+    stopped: "stopped",
   };
 </script>
 
@@ -56,6 +57,10 @@
   .chip-done {
     background: var(--status-done-bg);
     color: var(--status-done-fg);
+  }
+  .chip-stopped {
+    background: var(--status-queued-bg);
+    color: var(--status-queued-fg);
   }
   .chip-failed {
     background: var(--status-failed-bg);

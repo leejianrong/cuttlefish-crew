@@ -2,7 +2,7 @@
 // `cuttlefish.fleet.server`). Hand-written types mirroring the Python dataclasses
 // that slice adds -- no OpenAPI-codegen machinery for five routes.
 
-export type RoleStatus = "queued" | "working" | "blocked" | "done" | "failed";
+export type RoleStatus = "queued" | "working" | "blocked" | "done" | "failed" | "stopped";
 
 /** A project's permission mode (ADR-0025). */
 export type PermissionMode = "ask-first" | "standard" | "auto";
@@ -112,6 +112,8 @@ export interface ProjectSummary {
   last_team_id: string | null;
   allow: string[][];
   running: boolean;
+  /** The operator asked the team to stop and its round has not ended yet. */
+  stopping: boolean;
   status: Record<string, RoleStatus>;
   budget: ProjectBudget;
   usage: Record<string, RoleUsage>;

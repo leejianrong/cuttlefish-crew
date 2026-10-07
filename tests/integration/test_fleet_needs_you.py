@@ -22,6 +22,7 @@ from cuttlefish.episodic.events import (
     DelegationCompleted,
     RequestRaised,
     RequestResolved,
+    TeamStopped,
 )
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon
@@ -142,6 +143,9 @@ async def test_stopping_the_team_while_asked_cancels_the_request(
     resolved = [p for p in _journal(project.root, team_id) if isinstance(p, RequestResolved)]
     assert [r.resolution for r in resolved] == ["cancelled"]
     assert '"result": {"answer": "deny"}' in (tmp_path / "sent.jsonl").read_text()
+    stopped = [p for p in _journal(project.root, team_id) if isinstance(p, TeamStopped)]
+    assert len(stopped) == 1  # so the roles read "stopped", not "blocked"
+    assert not daemon.is_stopping(project.id)
 
 
 def test_a_restart_abandons_what_a_dead_daemon_left_pending(tmp_path: Path) -> None:

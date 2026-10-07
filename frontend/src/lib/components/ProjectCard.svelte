@@ -50,7 +50,9 @@
       <button class="btn btn-danger sm" onclick={onRemove}>Remove</button>
       <button class="btn btn-text sm" onclick={() => (confirming = null)}>Keep it</button>
     {:else}
-      {#if project.running}
+      {#if project.stopping}
+        <button class="btn btn-danger sm" disabled>Stopping…</button>
+      {:else if project.running}
         <button class="btn btn-danger sm" onclick={() => (confirming = "stop")}>Stop</button>
       {:else}
         <button class="btn btn-filled sm" onclick={onOpen}>Open</button>

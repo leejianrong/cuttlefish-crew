@@ -35,7 +35,7 @@ from cuttlefish import runtime
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
-from cuttlefish.episodic.events import EventPayload, RequestResolved, TeamResumed
+from cuttlefish.episodic.events import EventPayload, RequestResolved, TeamResumed, TeamStopped
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
@@ -187,6 +187,8 @@ class FleetDaemon:
     ) -> None:
         self._projects = project_store
         self._running: dict[str, RunningTeam] = {}
+        # Teams whose operator asked them to stop; the round in flight still has to end.
+        self._stopping: set[str] = set()
         #: How long a person has to answer a request (ADR-0028); the kopicode binary may allow less.
         self._request_window_s = request_window_s
         #: team id -> the episodic store its requests are journaled to, while it runs.
@@ -279,6 +281,11 @@ class FleetDaemon:
 
     def is_running(self, project_id: str) -> bool:
         return self.running(project_id) is not None
+
+    def is_stopping(self, project_id: str) -> bool:
+        """The operator asked this project's team to stop and its round has not ended yet."""
+        running = self.running(project_id)
+        return running is not None and running.team_id in self._stopping
 
     async def start(
         self, project_id: str, roles: list[RoleStart], *, require_approval: bool = False
@@ -385,6 +392,9 @@ class FleetDaemon:
                     # Whatever a person was still being asked ends with the team, journaled
                     # while its store is open.
                     self.requests.end_team(team_id, "abandoned")
+                    if team_id in self._stopping:
+                        prepared.episodic_store.append(team_id, TeamStopped())
+                    self._stopping.discard(team_id)
                     self._team_stores.pop(team_id, None)
                     prepared.close()
 
@@ -494,7 +504,9 @@ class FleetDaemon:
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc
         # satay's cancel only lands when the round ends, and a round held open for a person
-        # would not end: tell the waiting agent no, so it can (ADR-0028).
+        # would not end. Tell the waiting agent no, and every later request no too, so it can
+        # (ADR-0028); `is_stopping` lets the dashboard say "stopping" at once, not "working".
+        self._stopping.add(running.team_id)
         self.requests.end_team(running.team_id, "cancelled")
 
     async def steer(self, project_id: str, role: str, text: str) -> None:

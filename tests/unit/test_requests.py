@@ -14,6 +14,7 @@ from cuttlefish.requests import (
     AlreadyResolvedError,
     InvalidAnswerError,
     RequestBroker,
+    RequestContext,
     UnknownRequestError,
 )
 
@@ -205,3 +206,19 @@ async def test_the_served_record_is_what_the_store_returned() -> None:
     broker = RequestBroker(redacting)
     request = _raise(broker, "echo sk-secret")
     assert request.record.detail == "echo [REDACTED]"
+
+
+async def test_a_team_that_was_stopped_raises_no_further_request() -> None:
+    """The operator's Stop ends the pending ones, and an agent that carries on until its round
+    ends must not raise a fresh card nobody can answer in time (KAN-1896)."""
+    journal = Journal()
+    broker = RequestBroker(journal.append)
+    asker = RequestContext(broker, "p1", "t1", 60).asker(role="builder", backend="kopicode")
+    broker.end_team("t1", "cancelled")
+
+    outcome = await asker("docker compose up", "not on the command list", window_s=60)
+
+    assert (outcome.resolution, outcome.by) == ("cancelled", "system")
+    assert journal.kinds() == [] and broker.pending() == []
+    other = RequestContext(broker, "p1", "t2", 60).asker(role="builder", backend="kopicode")
+    assert not broker.is_closed("t2") and other.context.team_id == "t2"
