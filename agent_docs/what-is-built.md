@@ -275,3 +275,20 @@ round ends and a round held open for a person does not end. The window is
 `serve --help` lists it (v0.3.0 and later), else 45 seconds under kopicode's fixed 60. Claude Code
 and Codex cannot pause, so they still refuse; `ask` questions are not live (no released kopicode
 wire). Real-kopicode checks are in `tests/integration/delegate/`; the live-model ones need a key.
+
+V5-E0 and E1 (ADR-0029, #89 to #91, plus the failed-round UI): **what the daemon says when something
+goes wrong.** A real team failed with `stop=max_turns` in 90 seconds and nothing said why: the agents
+ran cuttlefish's own venv Python (`uv run` puts it first on `PATH`), and no log recorded the failure.
+Now `cuttlefish serve` always writes `~/.cuttlefish/logs/cuttlefish.log` (rotating, level from
+`CUTTLEFISH_LOG_LEVEL`) with the project, team and role on every line (`cuttlefish.logsetup`, a
+`contextvars` context). Lifecycle lines are a projection made inside `EpisodicStore.append` from the
+already-redacted event, so there is still one transcript (ADR-0004); HTTP errors, team start and stop,
+and the resolved backend are logged directly. `DelegationFailed` carries `failure_kind` and the backend's
+own `record` directory. `merge_env` always returns an environment without cuttlefish's own venv, and every
+spawn goes through it. `cuttlefish doctor` checks binaries, credential *names* (a placeholder
+`CUTTLEFISH_SECRETS_KEY` is a failure), `PATH` leaks and each project. MCP tool errors are `ToolError`s, so a
+client sees the daemon's reason. The dashboard shows a failed start's reason and, for a failed round,
+words for the failure kind; a blocked role shows Approve and Reject only when something waits for a decision
+(a review gate or a usage limit), otherwise a note that the task ends unless you steer. Found by driving the
+dashboard, CLI and MCP with sub-agents (`agent_docs/exploratory-testing.md`). Not built yet: the rest of
+V5 (environment detection, preparation, the allowlisted base environment, the stuck-agent detector).
