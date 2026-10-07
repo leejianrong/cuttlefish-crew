@@ -369,3 +369,15 @@ Found by the MCP pass, fixed before merge: the steering grace (5 s) ended the te
 "abandoned" before anyone could steer; a stuck role in a steerable team now waits for a steer with no timeout (`team.py`). The
 request-resolved log line also lacked the project id (the broker binds it), and `answer_request` now says blocked requests
 take `steer_project`.
+
+V5-E6a (ADR-0029): **more installs.** `envprep` plans poetry (`poetry install`, `POETRY_VIRTUALENVS_IN_PROJECT`), pipenv (`sync` or
+`install`, `PIPENV_VENV_IN_PROJECT`), Go (`go mod download`), Rust (`cargo fetch [--locked]`), Ruby (`bundle install`, `BUNDLE_FROZEN`
+with a lock) and Java (`mvn`/`./mvnw dependency:resolve`, `gradle`/`./gradlew dependencies`). `PrepareStep` gained `env` (settings for
+its commands only); `_ALLOWED_PROGRAMS` grew and `./mvnw`/`./gradlew` resolve against the project root. Go, Rust, Java and Ruby have
+no folder to look for (`_NO_FOLDER`), so they are due when `env.json` has no record, a changed fingerprint or a failed one.
+`merge_env(tools=True)` passes their package settings (`POETRY_`, `PIPENV_`, `CARGO_`, `BUNDLE_`, `GEM_`, `MAVEN_`, `GRADLE_`, `GOPROXY`...)
+to an install, never an agent. `environment.brief` says how to run things for each. Found by running the real `go`, `cargo` and
+`poetry` on empty projects: an install can write its own lockfile (`cargo fetch`, `poetry install`, and `uv sync` with no `uv.lock`
+already), which made the very next start see a "change" and install again. The daemon now records `fingerprint_now` (the files after
+the install). Java was not run (no Maven or Gradle here).
+

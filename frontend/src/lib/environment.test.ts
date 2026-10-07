@@ -192,3 +192,34 @@ describe("an install that is there but due", () => {
     expect(rows[0].state).toBe("installed");
   });
 });
+
+describe("an ecosystem that keeps nothing in the project folder", () => {
+  const go = env({ ecosystem: "go", tool: "go", installed: null, env_dir: null });
+  const spec = (steps: { reason: string }[]) => ({
+    root: "/r",
+    root_exists: true,
+    ecosystems: [go],
+    prepare: {
+      setting: "ask" as const,
+      unsupported: [],
+      steps: steps.map((s) => ({
+        ecosystem: "go" as const,
+        name: "Go",
+        commands: [["go", "mod", "download"]],
+        ...s,
+      })),
+    },
+  });
+
+  it("says when its dependencies have not been fetched", () => {
+    const rows = environmentRows(spec([{ reason: "its dependencies have not been fetched yet" }]));
+    expect(rows[0]).toMatchObject({
+      state: "stale",
+      stateLabel: "its dependencies have not been fetched yet",
+    });
+    expect(hasMissingInstall(rows)).toBe(true);
+  });
+  it("says nothing about a fetch when nothing is due", () => {
+    expect(environmentRows(spec([]))[0].state).toBeNull();
+  });
+});

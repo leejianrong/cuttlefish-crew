@@ -874,9 +874,11 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    **E5b (shipped):** the `blocked` Needs-you request after such a round: raised by the delegation task, no answers
    and no deadline, "Takes effect next round", a "Stuck" card with the last failing command, ended (new resolution
    `superseded`) when the role is steered or decided on, or with the team. Same API and MCP `list_requests`.
-7. **V5-E6: more ecosystems and isolation.** Prepare Go, Rust, Java and Ruby; node version
-   managers; and a design note for a hermetic per-project container through the sandbox seam
-   (ADR-0002). No product code for the container here.
+7. **V5-E6: more ecosystems and isolation**, in three PRs. Node version managers are not part of it.
+   **E6a (shipped):** prepare poetry, pipenv, Go, Rust, Ruby and Java (see the ADR's update).
+   **E6b:** monorepo subfolders (detection reads only the root today).
+   **E6c:** a design note for a hermetic per-project container through the sandbox seam
+   (ADR-0002). No product code for the container.
 
 **Demo:** register a folder with its own `.venv`; the Environment card says what it found;
 Start prepares it if stale; the builder runs the project's tests with the right interpreter;

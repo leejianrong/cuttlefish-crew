@@ -62,6 +62,8 @@ _BASE_PREFIXES = ("LC_", "XDG_")
 #: registry's token lives. Not given to an agent: an install is the person's own `npm ci`.
 _TOOL_PREFIXES = (
     "NPM_", "npm_config_", "NODE_", "YARN_", "PNPM_", "BUN_", "COREPACK_", "UV_", "PIP_",
+    "POETRY_", "PIPENV_", "CARGO_", "BUNDLE_", "GEM_", "MAVEN_", "M2_", "GRADLE_",
+    "GOPROXY", "GOPRIVATE", "GONOPROXY", "GONOSUMDB", "GONOSUMCHECK", "GOSUMDB", "GOINSECURE",
 )  # fmt: skip
 
 

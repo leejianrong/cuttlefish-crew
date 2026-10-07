@@ -207,9 +207,16 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   tools would run its code before anyone agreed to. The Environment card says "subfolders are not
   scanned" instead of implying a complete answer. `cuttlefish.fleet.fs`'s folder-picker language list
   is a separate, coarser set of markers.
-- **cuttlefish installs only what `uv` and the JS package managers can** (V5-E3a, ADR-0029). poetry,
-  pipenv, Go, Rust, Java and Ruby projects are reported "not prepared yet", never silently skipped; a
-  pip project with only a `pyproject.toml` (no `requirements.txt`) is not prepared either. An install
+- **What cuttlefish installs is a fixed list** (V5-E3a, V5-E6a, ADR-0029): `uv`, poetry, pipenv, the JS package
+  managers, `go mod download`, `cargo fetch`, `bundle install`, Maven and Gradle. A pip project with only a
+  `pyproject.toml` (no `requirements.txt`) is reported "not prepared", never silently skipped. Go, Rust, Java and
+  Ruby keep their downloads outside the project, so "fetched" is only what `.cuttlefish/env.json` remembers: a
+  project fetched by hand is fetched once more, and a cache someone clears is not noticed. poetry and pipenv are
+  told to keep their environment in `.venv`; one a person made elsewhere is not seen, and a second is made. Gems
+  go to the user's gem home, not the project, and `bundle exec` is the agent's way in. Java's Maven goal and
+  Gradle task run the project's own build plugins, so they are covered by the same confirmation as `npm ci`;
+  they were written against the tools' documentation and not run here (no Maven or Gradle on the machine
+  that built this). An install
   runs the project's own scripts, so `ask` is the default and a person (or a client) must say `yes`;
   there is no sandbox around it, only a timeout, a scrubbed environment and a fixed program list. A failed
   install fails the team rather than starting agents without dependencies. Not covered: installs in

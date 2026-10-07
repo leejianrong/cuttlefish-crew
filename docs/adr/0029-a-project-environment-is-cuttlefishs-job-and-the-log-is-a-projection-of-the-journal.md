@@ -206,3 +206,19 @@ session, that is not possible: the stream's `tool_result` event carries only the
   outcome: title naming the role, `detail` the evidence, `answers` empty (nothing a card button can answer),
   `lands="next_round"`. It is not held: nobody is waiting on a future, so the card must not imply a live prompt. It
   ends when the role is steered or approved or rejected (a new resolution, `superseded`) or when the team ends.
+
+## Update (V5-E6a, 2026-10-07): more installs
+
+The fixed program list grew: poetry and pipenv (told to keep the environment in the project, so it lands in `.venv` where the
+agent's `PATH` already looks), `go mod download`, `cargo fetch`, `bundle install`, and Maven or Gradle (the project's own wrapper
+when it has one). A step can carry settings for its own commands (`PrepareStep.env`).
+
+- **No folder to look at.** Go, Rust, Java and Ruby keep downloads outside the project, so "is it installed" has no answer from the
+  files. They are due when cuttlefish has no record of fetching, when the files changed since, or when the last try failed. The
+  first start of such a project therefore asks once (under `ask`) even if the person fetched by hand. The commands are idempotent
+  and fast when cached.
+- **Remember the files after the install, not before.** `cargo fetch`, `poetry install` and `uv sync` with no lock write their own
+  lockfile. Recording the planned fingerprint made the next start see a change and install again; the daemon records the
+  fingerprint of what is on disk when the install ends (`envprep.fingerprint_now`).
+- **Still true:** an install runs project code, so the same confirmation applies; detection runs nothing.
+
