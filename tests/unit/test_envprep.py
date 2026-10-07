@@ -316,3 +316,71 @@ def test_the_timeout_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch)
     assert envprep.prepare_timeout() == envprep.DEFAULT_PREPARE_TIMEOUT_S
     monkeypatch.setenv("CUTTLEFISH_PREPARE_TIMEOUT", "-1")
     assert envprep.prepare_timeout() == envprep.DEFAULT_PREPARE_TIMEOUT_S
+
+
+# --- failed installs and dependency-free projects (found by the real-tool run) ----------------
+
+
+def test_a_failed_install_makes_a_half_made_venv_stale_again(tmp_path: Path) -> None:
+    _uv_project(tmp_path, venv=True)  # `uv venv` made .venv, then the install failed
+    current = envprep.fingerprint(tmp_path, detect(tmp_path).ecosystems[0])
+    envprep.write_state(tmp_path, "python", fingerprint=current, how="failed")
+
+    (step,) = _plan(tmp_path).steps
+
+    assert step.reason == "the last install did not finish"
+
+
+def test_a_failure_recorded_for_older_files_does_not_block_a_changed_project(
+    tmp_path: Path,
+) -> None:
+    _uv_project(tmp_path, venv=True)
+    envprep.write_state(tmp_path, "python", fingerprint="older", how="failed")
+
+    (step,) = _plan(tmp_path).steps
+
+    assert step.reason == "uv.lock changed since the last install"
+
+
+def test_a_successful_install_that_made_no_folder_is_not_stale(tmp_path: Path) -> None:
+    _write(tmp_path, "package.json", "{}")
+    _write(tmp_path, "package-lock.json", "{}")
+    current = envprep.fingerprint(tmp_path, detect(tmp_path).ecosystems[0])
+    envprep.write_state(tmp_path, "node", fingerprint=current, how="prepared", produced=False)
+
+    assert _plan(tmp_path).steps == ()
+
+
+def test_a_folder_the_install_made_and_a_person_deleted_is_stale(tmp_path: Path) -> None:
+    _write(tmp_path, "package.json", "{}")
+    _write(tmp_path, "package-lock.json", "{}")
+    current = envprep.fingerprint(tmp_path, detect(tmp_path).ecosystems[0])
+    envprep.write_state(tmp_path, "node", fingerprint=current, how="prepared", produced=True)
+
+    (step,) = _plan(tmp_path).steps
+
+    assert step.reason == "node_modules is missing"
+
+
+def test_produced_env_looks_for_the_ecosystems_own_folder(tmp_path: Path) -> None:
+    assert not envprep.produced_env(tmp_path, "python")
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / "node_modules").mkdir()
+    assert envprep.produced_env(tmp_path, "python") and envprep.produced_env(tmp_path, "node")
+
+
+async def test_the_install_environment_is_quiet_and_non_interactive(
+    tmp_path: Path, shims: Path
+) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    _shim(
+        shims,
+        "npm",
+        'echo "$NO_UPDATE_NOTIFIER|$COREPACK_ENABLE_DOWNLOAD_PROMPT|$NO_COLOR" > seen.txt',
+    )
+
+    result = await envprep.run_step(_step(("npm", "ci")), root)
+
+    assert result.ok
+    assert (root / "seen.txt").read_text().strip() == "1|0|1"

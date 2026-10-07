@@ -151,16 +151,28 @@ def read_state(root: str | Path) -> dict[str, dict[str, Any]]:
     return {k: v for k, v in found.items() if isinstance(k, str) and isinstance(v, dict)}
 
 
-def write_state(root: str | Path, ecosystem: Ecosystem, *, fingerprint: str, how: str) -> None:
-    """Remember that `ecosystem`'s install matched `fingerprint` (``how``: ``prepared`` by us,
-    or ``adopted`` as the person's own). Best effort: a read-only folder just means we cannot
-    remember, and the next start decides again."""
+def write_state(
+    root: str | Path,
+    ecosystem: Ecosystem,
+    *,
+    fingerprint: str,
+    how: str,
+    produced: bool | None = None,
+) -> None:
+    """Remember what happened to `ecosystem`'s install at `fingerprint`: ``how`` is ``prepared``
+    (we installed it), ``adopted`` (the person's own) or ``failed`` (an install of ours that did
+    not finish, so whatever is on disk cannot be trusted). ``produced`` says whether a successful
+    install left its folder behind: a project with no dependencies installs nothing, and that
+    absence is then expected. Best effort: a read-only folder just means we cannot remember, and
+    the next start decides again."""
     ecosystems = read_state(root)
     ecosystems[ecosystem] = {
         "fingerprint": fingerprint,
         "how": how,
         "at": datetime.now(UTC).isoformat(),
     }
+    if produced is not None:
+        ecosystems[ecosystem]["produced"] = produced
     path = state_path(root)
     with contextlib.suppress(OSError):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,9 +252,17 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
             unsupported.append((env.ecosystem, why_not))
             continue
         current = fingerprint(path, env)
-        recorded = state.get(env.ecosystem, {}).get("fingerprint")
+        record = state.get(env.ecosystem, {})
+        recorded = record.get("fingerprint")
+        how = record.get("how")
         folder = env.env_dir or (".venv" if env.ecosystem == "python" else "node_modules")
-        if not env.installed:
+        if how == "failed" and recorded == current:
+            # Whatever is on disk came from an install that did not finish: a half-made .venv
+            # looks installed, and must not hide that.
+            reason = "the last install did not finish"
+        elif not env.installed:
+            if how == "prepared" and recorded == current and record.get("produced") is False:
+                continue  # a project with no dependencies installs nothing: absence is expected
             reason = f"{folder} is missing"
         elif recorded is not None and recorded != current:
             changed = env.lockfile or (env.manifests[0] if env.manifests else "its files")
@@ -270,6 +290,23 @@ def record_adopted(root: str | Path, found: PreparePlan) -> None:
 #: Only these programs are ever started, and only by this module's own argv lists: the plan is
 #: not a way to run an arbitrary command.
 _ALLOWED_PROGRAMS = frozenset({"uv", "npm", "pnpm", "yarn", "bun"})
+
+
+#: Keeps an install's output short and non-interactive: no progress bars, no "update
+#: available" boxes, no corepack prompt (stdin is closed, so a prompt could only fail).
+_QUIET_ENV = {
+    "NO_COLOR": "1",
+    "NO_UPDATE_NOTIFIER": "1",
+    "npm_config_update_notifier": "false",
+    "UV_NO_PROGRESS": "1",
+    "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0",
+}
+
+
+def produced_env(root: str | Path, ecosystem: Ecosystem) -> bool:
+    """Whether the ecosystem's own install folder exists now (after an install)."""
+    folder = ".venv" if ecosystem == "python" else "node_modules"
+    return (Path(root) / folder).exists()
 
 
 def prepare_timeout() -> float:
@@ -307,7 +344,7 @@ async def run_step(
     """Run `step`'s commands in order from `root`. Stops at the first failure, a timeout, or
     when `cancel` is set; the child's whole process group is killed in the last two cases."""
     limit = timeout if timeout is not None else prepare_timeout()
-    child_env = merge_env(None)
+    child_env = {**merge_env(None), **_QUIET_ENV}
     if which is None:
         # Looked up on the PATH the child will get, which has cuttlefish's own venv removed.
         def which(program: str) -> str | None:
@@ -409,6 +446,7 @@ __all__ = [
     "fingerprint",
     "plan",
     "prepare_timeout",
+    "produced_env",
     "read_state",
     "record_adopted",
     "run_step",

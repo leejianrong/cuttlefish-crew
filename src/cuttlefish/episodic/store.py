@@ -116,9 +116,10 @@ def _describe(payload: EventPayload) -> tuple[int, str]:
         case EnvironmentPrepared(
             ecosystem=ecosystem, exit_code=code, failure=failure, duration_s=seconds, tail=tail
         ):
+            how = f"exit code {code}" if failure == "exit" else str(failure)
             return (
                 logging.WARNING,
-                f"{ecosystem}: {failure} exit={code} after {seconds:.1f}s: {_clip(tail)}",
+                f"{ecosystem}: failed ({how}) after {seconds:.1f}s: {_clip(tail)}".rstrip(": "),
             )
         case TeamStopped() | TeamResumed():
             return logging.INFO, ""

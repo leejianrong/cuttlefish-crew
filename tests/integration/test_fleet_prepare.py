@@ -238,9 +238,47 @@ async def test_a_failed_install_fails_every_role_with_why_and_starts_no_round(
     failed = [e for e in events if isinstance(e, TaskFailed)]
     assert sorted(e.role for e in failed if e.role) == ["builder", "reviewer"]
     assert "couldn't install the python dependencies" in failed[0].error
+    assert "uv sync --frozen exited with code 2" in failed[0].error
+    assert "no matching distribution" in failed[0].error  # the last line of the output
+    assert "prepare=skip" in failed[0].error
     assert not any(isinstance(e, DelegationStarted) for e in events)
     assert daemon.status(project.id) == {"builder": "failed", "reviewer": "failed"}
     assert envprep.read_state(project.root).get("python", {}).get("how") != "prepared"
+
+
+async def test_after_a_failed_install_the_next_start_asks_again_not_goes_ahead(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The real-tool run found it: `uv venv` made a .venv, the install failed, and the half-made
+    .venv then passed as installed, so the next start ran agents with nothing installed."""
+    _fake_kopicode(tmp_path, monkeypatch)
+    # Makes the .venv, then fails, like `uv venv` followed by a failing `uv pip install`.
+    _uv_shim(tmp_path, monkeypatch, "mkdir -p .venv; touch .venv/pyvenv.cfg; exit 1")
+    daemon = _daemon(tmp_path)
+    project = _project(tmp_path, daemon, setting="auto")
+    await daemon.start(project.id, [{"name": "builder", "text": "go"}])
+    await _until(lambda: not daemon.is_running(project.id))
+    assert (Path(project.root) / ".venv" / "pyvenv.cfg").exists()
+    daemon.projects.update_env_prepare(project.id, "ask")
+
+    with pytest.raises(EnvironmentConfirmationError, match="the last install did not finish"):
+        await daemon.start(project.id, [{"name": "builder", "text": "again"}])
+
+
+async def test_a_dependency_free_project_is_installed_once_not_on_every_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_kopicode(tmp_path, monkeypatch)
+    calls = _uv_shim(tmp_path, monkeypatch, "echo ok")  # succeeds and makes no .venv
+    daemon = _daemon(tmp_path)
+    project = _project(tmp_path, daemon)
+    await daemon.start(project.id, [{"name": "builder", "text": "go"}], prepare="yes")
+    await _until(lambda: not daemon.is_running(project.id))
+
+    await daemon.start(project.id, [{"name": "builder", "text": "again"}])  # ask: must not ask
+    await _until(lambda: not daemon.is_running(project.id))
+
+    assert len(calls.read_text().splitlines()) == 1
 
 
 async def test_stopping_while_installing_kills_the_install_and_ends_the_team(

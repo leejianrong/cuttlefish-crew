@@ -91,6 +91,22 @@ class EnvironmentConfirmationError(FleetError):
         self.plan = plan
 
 
+def _install_failure_text(ecosystem: str, result: envprep.StepResult) -> str:
+    """Why a role is recorded failed when its project's dependencies would not install: the
+    cause in words, the last line of the output, and the way out."""
+    cause = {
+        "exit": f"{' '.join(result.command)} exited with code {result.exit_code}",
+        "timeout": f"{' '.join(result.command)} ran too long and was stopped",
+        "tool_missing": f"{result.command[0] if result.command else 'the tool'} is not installed",
+    }.get(str(result.failure), str(result.failure))
+    last = next((ln.strip() for ln in reversed(result.tail.splitlines()) if ln.strip()), "")
+    detail = f": {last[:200]}" if last else ""
+    return (
+        f"couldn't install the {ecosystem} dependencies ({cause}){detail}. "
+        "The full output is in the install row above; start with prepare=skip to go without."
+    )
+
+
 class RoleStart(TypedDict):
     """One role to start a team with: a name and its own fresh task text.
 
@@ -410,10 +426,21 @@ class FleetDaemon:
                         failure=result.failure,
                     ),
                 )
+                # Whatever a failed or interrupted install left behind is not to be trusted (a
+                # half-made .venv looks installed): remember, so the next start installs again.
+                # A missing tool installed nothing, so there is nothing to distrust.
+                if not result.ok and result.failure != "tool_missing":
+                    await asyncio.to_thread(
+                        envprep.write_state,
+                        project.root,
+                        step.ecosystem,
+                        fingerprint=step.fingerprint,
+                        how="failed",
+                    )
                 if result.cancelled:
                     return False
                 if not result.ok:
-                    why = f"couldn't install the {step.ecosystem} dependencies ({result.failure})"
+                    why = _install_failure_text(step.ecosystem, result)
                     for name in role_names:
                         store.append(team_id, TaskFailed(error=why, role=name))
                     return False
@@ -423,6 +450,7 @@ class FleetDaemon:
                     step.ecosystem,
                     fingerprint=step.fingerprint,
                     how="prepared",
+                    produced=envprep.produced_env(project.root, step.ecosystem),
                 )
             return True
         finally:

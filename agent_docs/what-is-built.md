@@ -315,4 +315,11 @@ and `EnvironmentPrepared`. The confirmation is the project's `env_prepare` (`ask
 environment and no `prepare` is `EnvironmentConfirmationError`, a 409. A failed install records every role
 failed; a stop sets a cancel flag that kills the install (a team still installing has no satay run to cancel).
 The dashboard side (confirm card, setting) is V5-E3b.
+Found by driving real `uv`, `npm` and `pnpm` against dependency-free projects, and fixed before merge: an install that
+failed after `uv venv` left a `.venv` that passed as installed, so the next start ran agents with nothing installed. A
+failed or interrupted install is now recorded (`how: failed`) and reads as stale ("the last install did not finish") until
+files change or it succeeds; a missing tool installed nothing, so it is not recorded. A successful install that made no
+folder (no dependencies) is remembered as such (`produced: false`) so it is not reinstalled on every start. The install runs
+with quiet, non-interactive settings (no update banners or progress bars, no corepack prompt), and a failed role's error
+names the command and exit code, the last line of the output and `prepare=skip`.
 
