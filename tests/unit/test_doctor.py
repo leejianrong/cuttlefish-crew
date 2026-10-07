@@ -115,10 +115,15 @@ def test_an_empty_secrets_db_in_a_project_is_flagged(tmp_path: Path) -> None:
     assert "secrets.db is empty" in check.detail
 
 
-def test_a_healthy_project_is_ok(tmp_path: Path) -> None:
+def test_a_healthy_project_is_ok_and_says_what_its_files_need(tmp_path: Path) -> None:
     (tmp_path / ".git").mkdir()
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    (tmp_path / "uv.lock").write_text("")
 
-    assert doctor.check_projects([_project(tmp_path)])[0].status == "ok"
+    check = doctor.check_projects([_project(tmp_path)])[0]
+
+    assert check.status == "ok"
+    assert "Python (uv, .venv missing)" in check.detail
 
 
 def test_exit_code_is_nonzero_only_for_a_failure() -> None:

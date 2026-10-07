@@ -35,6 +35,7 @@ async def test_list_tools_exposes_exactly_the_expected_surface(server: Any) -> N
         "steer_project",
         "approve_project",
         "get_events",
+        "get_project_environment",
         "get_permissions",
         "list_builtin_roles",
         "list_templates",
@@ -290,3 +291,15 @@ async def test_a_409_from_answering_a_request_is_not_hidden(
         await server.call_tool(
             "answer_request", {"project_id": "p", "request_id": "r", "answer": "allow_once"}
         )
+
+
+async def test_get_project_environment_reads_the_environment_route(
+    server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _stub_request(monkeypatch, {"root": "/r", "ecosystems": []})
+
+    await server.call_tool("get_project_environment", {"project_id": "abc"})
+
+    assert calls == [
+        ("http://127.0.0.1:9999", "test-token", "GET", "/api/projects/abc/environment", None)
+    ]

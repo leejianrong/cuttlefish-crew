@@ -18,6 +18,7 @@ from typing import Literal
 
 from cryptography.fernet import Fernet
 
+from cuttlefish import environment
 from cuttlefish.config import (
     CLAUDE_CODE_BIN_ENV,
     CODEX_BIN_ENV,
@@ -187,8 +188,11 @@ def check_projects(projects: Iterable[Project]) -> list[Check]:
                 f"{secrets_db} is empty: a start failed while opening the secrets store "
                 f"(check {SECRETS_KEY_ENV}), safe to delete"
             )
+        summary = f"{root} ({environment.detect(root).summary()})"
         checks.append(
-            Check("warn", label, "; ".join(problems)) if problems else Check("ok", label, f"{root}")
+            Check("warn", label, "; ".join(problems) + f" [{summary}]")
+            if problems
+            else Check("ok", label, summary)
         )
     return checks
 
