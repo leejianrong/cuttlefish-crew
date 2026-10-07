@@ -111,6 +111,20 @@
   .text {
     color: var(--text);
     overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  /* The three fixed columns are wider than a phone: keep the time, role and label on one line
+     and give the text the full row underneath, so nothing is clipped off the card. */
+  @media (max-width: 640px) {
+    .row {
+      grid-template-columns: auto auto 1fr;
+      row-gap: 0.1rem;
+    }
+
+    .row .text {
+      grid-column: 1 / -1;
+    }
   }
 
   /* A checkpoint's own row reads like the rest of the log (still one role's own
