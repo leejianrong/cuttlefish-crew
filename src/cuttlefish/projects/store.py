@@ -20,6 +20,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from cuttlefish.environment import DEFAULT_PREPARE_MODE
 from cuttlefish.permissions import DEFAULT_MODE
 
 
@@ -51,7 +52,8 @@ CREATE TABLE IF NOT EXISTS projects (
     max_cost_usd REAL,
     backend TEXT,
     mode TEXT,
-    presets_json TEXT
+    presets_json TEXT,
+    env_prepare TEXT
 )
 """
 
@@ -104,6 +106,11 @@ _ADD_MODE_COLUMN = "ALTER TABLE projects ADD COLUMN mode TEXT"
 #: `presets_json` was added for V4-F -- the command groups a project has switched on (a JSON
 #: list of preset names). `NULL` means the defaults, so an existing row is unchanged.
 _ADD_PRESETS_COLUMN = "ALTER TABLE projects ADD COLUMN presets_json TEXT"
+
+#: `env_prepare` was added for V5-E3/ADR-0029 -- whether cuttlefish installs a project's
+#: dependencies before a team starts: `ask` (the default), `auto`, or `off`. `NULL` reads as `ask`,
+#: so an existing row keeps asking rather than installing on its own.
+_ADD_ENV_PREPARE_COLUMN = "ALTER TABLE projects ADD COLUMN env_prepare TEXT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,6 +180,8 @@ class Project:
     #: The command groups switched on (names from `delegate.presets.PRESETS`), or `None` for
     #: the defaults. `allow` is what is declared on top of them.
     presets: tuple[str, ...] | None = None
+    #: Whether cuttlefish installs dependencies before a team starts: `ask`, `auto` or `off`.
+    env_prepare: str = DEFAULT_PREPARE_MODE
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -272,6 +281,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         backend=row["backend"],
         mode=row["mode"] or DEFAULT_MODE,
         presets=_decode_presets(row["presets_json"]),
+        env_prepare=row["env_prepare"] or DEFAULT_PREPARE_MODE,
     )
 
 
@@ -299,6 +309,8 @@ class ProjectStore:
             self._conn.execute(_ADD_MODE_COLUMN)
         if "presets_json" not in columns:
             self._conn.execute(_ADD_PRESETS_COLUMN)
+        if "env_prepare" not in columns:
+            self._conn.execute(_ADD_ENV_PREPARE_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -414,6 +426,16 @@ class ProjectStore:
         (the daemon composes each role's settings once, at start)."""
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute("UPDATE projects SET mode = ? WHERE id = ?", (mode, project_id))
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_env_prepare(self, project_id: str, setting: str) -> Project:
+        """Set whether cuttlefish installs this project's dependencies before a team starts
+        (V5-E3/ADR-0029): `ask`, `auto` or `off`. The caller validates `setting`."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET env_prepare = ? WHERE id = ?", (setting, project_id)
+        )
         self._conn.commit()
         return self.get(project_id)
 

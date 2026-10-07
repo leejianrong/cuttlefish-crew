@@ -131,3 +131,26 @@ not the generic message.
 ## Decided questions
 
 Q56 to Q61 in `docs/QUESTIONS.md`.
+
+## Update (V5-E3a, 2026-10-07): how the confirmation works
+
+Decision 2.3 said a project's first install needs "one confirmation from a person" and the slice
+text said this would go through Needs you (ADR-0028). It does not: a Needs-you request belongs to a
+team, and at the moment of the question the team does not exist yet. The confirmation is an explicit
+input to the start call instead:
+
+- A project has an `env_prepare` setting: `ask` (the default; a missing column reads as `ask`),
+  `auto`, or `off`. `PATCH /api/projects/{id}/environment` sets it.
+- `POST /api/projects/{id}/start` takes `prepare`: `yes` installs first, `skip` starts without.
+  Left out, `auto` installs, `off` never does, and `ask` answers 409 naming what is stale and the two
+  values, so a dashboard, an MCP client or a script must say which. Nothing is ever installed on a
+  guess.
+- The install runs inside the team's own lifecycle, after the satay control server is up and before the
+  first round, so the start call returns at once. It is journaled (`EnvironmentPrepareStarted`,
+  `EnvironmentPrepared` with the exit code, duration and the redacted tail of the output). A failed
+  install records every role as failed with why, and no round starts; a stop during the install kills it
+  (its whole process group) and ends the team.
+- Staleness is the fingerprint in `.cuttlefish/env.json`, written only after success. An install a
+  person made themselves is trusted until its files change, then reinstalled.
+- `uv sync` runs `--frozen` when there is a `uv.lock`, so cuttlefish never rewrites a person's lockfile.
+

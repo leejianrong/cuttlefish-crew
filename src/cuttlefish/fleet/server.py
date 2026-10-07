@@ -43,7 +43,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from cuttlefish import environment
+from cuttlefish import environment, envprep
 from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.delegate.consent import ConsentPolicyError, validate_allow_entry
 from cuttlefish.delegate.never_allowed import NEVER_ALLOWED_SUMMARY
@@ -106,6 +106,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
         "mode": project.mode,
+        "env_prepare": project.env_prepare,
         "presets": list(project.presets if project.presets is not None else DEFAULT_PRESETS),
         "roles": [
             {
@@ -534,7 +535,25 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         spec = await asyncio.to_thread(environment.detect, project.root)
-        return spec.to_json()
+        found = await asyncio.to_thread(envprep.plan, project.root, spec)
+        return {
+            **spec.to_json(),
+            "prepare": {"setting": project.env_prepare, **found.to_json()},
+        }
+
+    @app.patch("/api/projects/{project_id}/environment")
+    async def update_environment(project_id: str, request: Request) -> dict[str, Any]:
+        """Whether cuttlefish installs this project's dependencies before a team starts:
+        `ask` (the default), `auto` or `off` (ADR-0029, V5-E3)."""
+        body = await _json_body(request)
+        setting = body.get("prepare")
+        if setting not in envprep.PREPARE_MODES:
+            raise HTTPException(400, f"'prepare' must be one of {', '.join(envprep.PREPARE_MODES)}")
+        try:
+            daemon.projects.update_env_prepare(project_id, setting)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.get("/api/projects/{project_id}/events")
     async def get_events(project_id: str) -> dict[str, Any]:
@@ -613,8 +632,13 @@ def create_app(
         if not roles:
             raise HTTPException(400, "'roles' must have at least one {name, text}")
         require_approval = bool(body.get("require_approval", False))
+        prepare = body.get("prepare")
+        if prepare not in (None, "yes", "skip"):
+            raise HTTPException(400, '\'prepare\', if given, must be "yes" or "skip"')
         try:
-            team_id = await daemon.start(project_id, roles, require_approval=require_approval)
+            team_id = await daemon.start(
+                project_id, roles, require_approval=require_approval, prepare=prepare
+            )
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except FleetError as exc:

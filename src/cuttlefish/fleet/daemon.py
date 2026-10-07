@@ -24,7 +24,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 import satay
 import satay.control
@@ -32,11 +32,19 @@ from satay.config import db_path as satay_db_path
 from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
-from cuttlefish import logsetup, runtime
+from cuttlefish import envprep, logsetup, runtime
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
-from cuttlefish.episodic.events import EventPayload, RequestResolved, TeamResumed, TeamStopped
+from cuttlefish.episodic.events import (
+    EnvironmentPrepared,
+    EnvironmentPrepareStarted,
+    EventPayload,
+    RequestResolved,
+    TaskFailed,
+    TeamResumed,
+    TeamStopped,
+)
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
@@ -67,6 +75,36 @@ logger = logging.getLogger(__name__)
 class FleetError(Exception):
     """A fleet-daemon-level operation failed, distinctly from a workflow's own
     failure (e.g. starting a project that already has a team running)."""
+
+
+class EnvironmentConfirmationError(FleetError):
+    """Dependencies need installing and nobody has said whether to (ADR-0029, V5-E3): the
+    project's `env_prepare` is `ask` and the start call named no `prepare`."""
+
+    def __init__(self, project_id: str, plan: envprep.PreparePlan) -> None:
+        names = ", ".join(f"{s.ecosystem} ({s.reason})" for s in plan.steps)
+        super().__init__(
+            f"project {project_id!r}: its dependencies need installing first: {names}. "
+            "Start again with prepare=yes to install them now, prepare=skip to start without "
+            "them, or set the project's environment setting to auto."
+        )
+        self.plan = plan
+
+
+def _install_failure_text(ecosystem: str, result: envprep.StepResult) -> str:
+    """Why a role is recorded failed when its project's dependencies would not install: the
+    cause in words, the last line of the output, and the way out."""
+    cause = {
+        "exit": f"{' '.join(result.command)} exited with code {result.exit_code}",
+        "timeout": f"{' '.join(result.command)} ran too long and was stopped",
+        "tool_missing": f"{result.command[0] if result.command else 'the tool'} is not installed",
+    }.get(str(result.failure), str(result.failure))
+    last = next((ln.strip() for ln in reversed(result.tail.splitlines()) if ln.strip()), "")
+    detail = f": {last[:200]}" if last else ""
+    return (
+        f"couldn't install the {ecosystem} dependencies ({cause}){detail}. "
+        "The full output is in the install row above; start with prepare=skip to go without."
+    )
 
 
 class RoleStart(TypedDict):
@@ -192,6 +230,9 @@ class FleetDaemon:
         self._running: dict[str, RunningTeam] = {}
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
+        #: team id -> its cancel flag, while cuttlefish is installing its dependencies (V5-E3):
+        #: such a team has no satay run yet, so a stop cannot go through satay's control API.
+        self._preparing: dict[str, asyncio.Event] = {}
         #: How long a person has to answer a request (ADR-0028); the kopicode binary may allow less.
         self._request_window_s = request_window_s
         #: team id -> the episodic store its requests are journaled to, while it runs.
@@ -291,7 +332,12 @@ class FleetDaemon:
         return running is not None and running.team_id in self._stopping
 
     async def start(
-        self, project_id: str, roles: list[RoleStart], *, require_approval: bool = False
+        self,
+        project_id: str,
+        roles: list[RoleStart],
+        *,
+        require_approval: bool = False,
+        prepare: Literal["yes", "skip"] | None = None,
     ) -> str:
         """Start `project_id`'s team with `roles`. Returns the new team id.
 
@@ -306,14 +352,23 @@ class FleetDaemon:
         `steerable`, which every daemon-started team already gets unconditionally)
         -- an operator choosing whether *this* run needs a formal review gate, not
         a project-wide default.
+
+        `prepare` (V5-E3, ADR-0029) decides what happens when the project's dependencies need
+        installing: `yes` installs them first (inside the team's own lifecycle, journaled, outside
+        any agent turn), `skip` starts without. Left out, the project's `env_prepare` decides:
+        `auto` installs, `off` never does, and `ask` refuses with `EnvironmentConfirmationError`
+        so the caller (a person, an MCP client) says which.
         """
         project = self._projects.get(project_id)
         if self.is_running(project_id):
             raise FleetError(f"project {project_id!r} already has a running team")
 
+        steps = await self._environment_steps(project, prepare)
         team_id = uuid.uuid4().hex
         role_inputs = _build_role_inputs(project, roles)
-        await self._launch_team(project, team_id, role_inputs, require_approval=require_approval)
+        await self._launch_team(
+            project, team_id, role_inputs, require_approval=require_approval, prepare_steps=steps
+        )
         self._projects.record_team_started(
             project_id,
             team_id,
@@ -322,6 +377,85 @@ class FleetDaemon:
         )
         return team_id
 
+    async def _environment_steps(
+        self, project: Project, prepare: Literal["yes", "skip"] | None
+    ) -> tuple[envprep.PrepareStep, ...]:
+        """The install steps this start should run first, or none. Reads files only (off the
+        event loop: the root may be on a slow mount); also remembers installs a person made
+        themselves, so a later change to their files is noticed."""
+        found = await asyncio.to_thread(envprep.plan, project.root)
+        await asyncio.to_thread(envprep.record_adopted, project.root, found)
+        if not found.steps or prepare == "skip" or project.env_prepare == "off":
+            return ()
+        if prepare == "yes" or project.env_prepare == "auto":
+            return found.steps
+        raise EnvironmentConfirmationError(project.id, found)
+
+    async def _prepare_environment(
+        self,
+        store: EpisodicStore,
+        team_id: str,
+        project: Project,
+        role_names: Sequence[str],
+        steps: Sequence[envprep.PrepareStep],
+    ) -> bool:
+        """Run `steps` before the team's first round, journaling each. False when the team
+        must not go on: a step failed (every role is then recorded failed, with why, so the
+        dashboard says so) or a stop was asked for (the caller records `TeamStopped`)."""
+        cancel = asyncio.Event()
+        self._preparing[team_id] = cancel
+        try:
+            for step in steps:
+                store.append(
+                    team_id,
+                    EnvironmentPrepareStarted(
+                        ecosystem=step.ecosystem,
+                        commands=[list(c) for c in step.commands],
+                        reason=step.reason,
+                    ),
+                )
+                result = await envprep.run_step(step, project.root, cancel=cancel)
+                store.append(
+                    team_id,
+                    EnvironmentPrepared(
+                        ecosystem=step.ecosystem,
+                        ok=result.ok,
+                        exit_code=result.exit_code,
+                        duration_s=round(result.duration_s, 2),
+                        tail=result.tail,
+                        failure=result.failure,
+                    ),
+                )
+                # Whatever a failed or interrupted install left behind is not to be trusted (a
+                # half-made .venv looks installed): remember, so the next start installs again.
+                # A missing tool installed nothing, so there is nothing to distrust.
+                if not result.ok and result.failure != "tool_missing":
+                    await asyncio.to_thread(
+                        envprep.write_state,
+                        project.root,
+                        step.ecosystem,
+                        fingerprint=step.fingerprint,
+                        how="failed",
+                    )
+                if result.cancelled:
+                    return False
+                if not result.ok:
+                    why = _install_failure_text(step.ecosystem, result)
+                    for name in role_names:
+                        store.append(team_id, TaskFailed(error=why, role=name))
+                    return False
+                await asyncio.to_thread(
+                    envprep.write_state,
+                    project.root,
+                    step.ecosystem,
+                    fingerprint=step.fingerprint,
+                    how="prepared",
+                    produced=envprep.produced_env(project.root, step.ecosystem),
+                )
+            return True
+        finally:
+            self._preparing.pop(team_id, None)
+
     async def _launch_team(
         self,
         project: Project,
@@ -329,6 +463,7 @@ class FleetDaemon:
         role_inputs: list[RoleInput],
         *,
         require_approval: bool = False,
+        prepare_steps: Sequence[envprep.PrepareStep] = (),
     ) -> None:
         """Drive `run_team` for `project` under `team_id`/`role_inputs`, shared by
         `start` (a fresh `team_id`, never seen by satay before) and `resume_pending`
@@ -380,6 +515,14 @@ class FleetDaemon:
                 async with satay.control.run_app(data_dir=Path(project.root) / ".satay") as app:
                     if not ready.done():
                         ready.set_result((app.base_url, app.token))
+                    if prepare_steps and not await self._prepare_environment(
+                        prepared.episodic_store,
+                        team_id,
+                        project,
+                        [r["name"] for r in role_inputs],
+                        prepare_steps,
+                    ):
+                        return
                     handle = satay.start(run_team, workflow_input, run_id=team_id, store=app.store)
                     # The episodic journal already recorded why (Q16's posture) --
                     # nothing further for the daemon to do with a failed team.
@@ -514,6 +657,15 @@ class FleetDaemon:
         running = self.running(project_id)
         if running is None:
             raise FleetError(f"project {project_id!r} has no running team")
+        preparing = self._preparing.get(running.team_id)
+        if preparing is not None:
+            # Still installing dependencies: there is no satay run to cancel yet, so stop the
+            # install itself. `_drive` then ends the team and journals `TeamStopped`.
+            self._stopping.add(running.team_id)
+            preparing.set()
+            with logsetup.bind(project=project_id, team=running.team_id):
+                logger.info("stop requested while preparing the environment")
+            return
         try:
             await asyncio.to_thread(
                 cancel_run, base_url=running.base_url, token=running.token, run_id=running.team_id

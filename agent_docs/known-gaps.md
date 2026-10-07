@@ -207,4 +207,12 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   tools would run its code before anyone agreed to. The Environment card says "subfolders are not
   scanned" instead of implying a complete answer. `cuttlefish.fleet.fs`'s folder-picker language list
   is a separate, coarser set of markers.
+- **cuttlefish installs only what `uv` and the JS package managers can** (V5-E3a, ADR-0029). poetry,
+  pipenv, Go, Rust, Java and Ruby projects are reported "not prepared yet", never silently skipped; a
+  pip project with only a `pyproject.toml` (no `requirements.txt`) is not prepared either. An install
+  runs the project's own scripts, so `ask` is the default and a person (or a client) must say `yes`;
+  there is no sandbox around it, only a timeout, a scrubbed environment and a fixed program list. A failed
+  install fails the team rather than starting agents without dependencies. Not covered: installs in
+  subfolders (detection reads only the root), and a stop during an install of a team that was
+  resumed after a daemon restart (resume never installs).
 

@@ -211,12 +211,21 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
 
     @server.tool()
     async def start_project(
-        project_id: str, roles: list[dict[str, str]], require_approval: bool = False
+        project_id: str,
+        roles: list[dict[str, str]],
+        require_approval: bool = False,
+        prepare: str | None = None,
     ) -> dict[str, Any]:
         """Start project_id's team. `roles` is a list of {"name", "text"}
         (which registered role, and what to do). `require_approval` blocks each
-        role's round from finalizing until approve_project decides it."""
-        body = {"roles": roles, "require_approval": require_approval}
+        role's round from finalizing until approve_project decides it. `prepare`
+        answers "may cuttlefish install the project's dependencies first?" when
+        get_project_environment shows some are missing or stale: "yes" installs them
+        (it runs the project's own install scripts), "skip" starts without. Left out, the
+        project's own setting decides, and a project set to ask refuses until you say."""
+        body: dict[str, Any] = {"roles": roles, "require_approval": require_approval}
+        if prepare is not None:
+            body["prepare"] = prepare
         return await asyncio.to_thread(
             _request, base_url, token, "POST", f"/api/projects/{project_id}/start", body
         )

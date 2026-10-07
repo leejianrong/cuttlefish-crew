@@ -303,3 +303,23 @@ no file over 1 MB and treats a malformed manifest as empty. Surfaces: `GET /api/
 `get_project_environment` tool. Installing is V5-E3; until then the card says agents start without
 dependencies.
 
+V5-E3a (ADR-0029): **cuttlefish installs dependencies before the team starts.** `cuttlefish.envprep` turns
+the detected environment into steps (`uv sync [--frozen]`, `uv venv` + `uv pip install -r`, `npm ci`,
+pnpm/yarn/bun frozen installs), decides what is stale from a fingerprint kept in `.cuttlefish/env.json`
+(written only after a success; a person's own install is adopted and trusted until its files change), and
+runs a step without a shell, from the project root, in `merge_env`'s environment, in its own process group,
+under `CUTTLEFISH_PREPARE_TIMEOUT`. The daemon runs the steps inside `_drive`, after the satay control server
+is up and before `satay.start`, so `start` returns at once; they are journaled as `EnvironmentPrepareStarted`
+and `EnvironmentPrepared`. The confirmation is the project's `env_prepare` (`ask`/`auto`/`off`, a new
+`projects.db` column read as `ask` when null) plus the start call's `prepare` (`yes`/`skip`); `ask` with a stale
+environment and no `prepare` is `EnvironmentConfirmationError`, a 409. A failed install records every role
+failed; a stop sets a cancel flag that kills the install (a team still installing has no satay run to cancel).
+The dashboard side (confirm card, setting) is V5-E3b.
+Found by driving real `uv`, `npm` and `pnpm` against dependency-free projects, and fixed before merge: an install that
+failed after `uv venv` left a `.venv` that passed as installed, so the next start ran agents with nothing installed. A
+failed or interrupted install is now recorded (`how: failed`) and reads as stale ("the last install did not finish") until
+files change or it succeeds; a missing tool installed nothing, so it is not recorded. A successful install that made no
+folder (no dependencies) is remembered as such (`produced: false`) so it is not reinstalled on every start. The install runs
+with quiet, non-interactive settings (no update banners or progress bars, no corepack prompt), and a failed role's error
+names the command and exit code, the last line of the output and `prepare=skip`.
+

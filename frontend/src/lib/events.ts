@@ -16,6 +16,8 @@ const LABELS: Record<string, string> = {
   TaskFailed: "Task failed",
   TeamResumed: "Resumed",
   TeamStopped: "Stopped",
+  EnvironmentPrepareStarted: "Installing",
+  EnvironmentPrepared: "Install done",
   ToolCallRecorded: "Tool",
   ConsentDecided: "Command",
   RequestRaised: "Needs you",
@@ -50,6 +52,21 @@ export function refusalReason(rule: string): string {
     unknown_kind: "it asked for something this daemon does not allow",
   };
   return reasons[rule] ?? rule;
+}
+
+const PREPARE_FAILURES: Record<string, string> = {
+  exit: "the install command failed",
+  timeout: "it took too long and was stopped",
+  tool_missing: "the tool it needs is not installed",
+  cancelled: "you stopped the team while it was installing",
+};
+
+function preparedText(p: Record<string, unknown>): string {
+  const seconds = Number(p.duration_s).toFixed(1);
+  if (p.ok) return `Installed the ${p.ecosystem} dependencies in ${seconds}s.`;
+  const why = PREPARE_FAILURES[String(p.failure)] ?? String(p.failure);
+  const tail = String(p.tail ?? "").trim();
+  return `Couldn't install the ${p.ecosystem} dependencies: ${why}.${tail ? ` ${tail}` : ""}`;
 }
 
 const STOP_REASON = /^stop=\w+/;
@@ -142,6 +159,10 @@ export function summarize(event: EpisodicEventView): string {
       return STOP_REASON.test(String(p.error))
         ? "The task ended because its last round failed."
         : String(p.error);
+    case "EnvironmentPrepareStarted":
+      return `${p.ecosystem}: ${(p.commands as string[][]).map((c) => c.join(" ")).join(" && ")} (${p.reason})`;
+    case "EnvironmentPrepared":
+      return preparedText(p);
     case "TeamStopped":
       return "You stopped the team. Roles that had not finished are stopped; starting again begins a new run.";
     case "TeamResumed":

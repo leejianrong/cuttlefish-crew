@@ -95,3 +95,35 @@ def test_a_failed_delegation_log_line_carries_its_kind_and_record(
     message = caplog.records[0].getMessage()
     assert "kind=max_turns" in message
     assert "record=/work/p/.kopicode/sessions/abc" in message
+
+
+def test_an_install_is_projected_with_its_command_and_its_failure_in_words(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from cuttlefish.episodic.events import EnvironmentPrepared, EnvironmentPrepareStarted
+
+    store = _store(tmp_path)
+    with caplog.at_level(logging.INFO, logger="cuttlefish.episodic.store"):
+        store.append(
+            "t1",
+            EnvironmentPrepareStarted(
+                ecosystem="python", commands=[["uv", "sync", "--frozen"]], reason=".venv is missing"
+            ),
+        )
+        store.append(
+            "t1",
+            EnvironmentPrepared(
+                ecosystem="python",
+                ok=False,
+                exit_code=2,
+                duration_s=1.5,
+                tail="no matching distribution",
+                failure="exit",
+            ),
+        )
+    store.close()
+
+    started, failed = caplog.records
+    assert started.getMessage().endswith("python: uv sync --frozen (.venv is missing)")
+    assert failed.levelno == logging.WARNING
+    assert "failed (exit code 2) after 1.5s: no matching distribution" in failed.getMessage()
