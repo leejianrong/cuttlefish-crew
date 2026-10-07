@@ -23,7 +23,12 @@
     else return;
     event.preventDefault();
     onSelect(tabs[next].id);
-    queueMicrotask(() => document.getElementById(`tab-${tabs[next].id}`)?.focus());
+    queueMicrotask(() => {
+      const tab = document.getElementById(`tab-${tabs[next].id}`);
+      tab?.focus();
+      // A tab past the edge of a narrow bar must scroll into view, not just take the focus ring.
+      tab?.scrollIntoView({ inline: "nearest", block: "nearest" });
+    });
   }
 </script>
 
@@ -68,6 +73,18 @@
     border-bottom: 3px solid transparent;
     margin-bottom: -1px;
     transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  }
+
+  /* Four tabs and a badge are wider than a phone: tighten them so Team is not cut off, and
+     keep the bar scrollable (above) for the case the badge still tips it over. */
+  @media (max-width: 480px) {
+    .tabs {
+      gap: 2px;
+    }
+
+    .tab {
+      padding: 12px 10px;
+    }
   }
 
   .count {

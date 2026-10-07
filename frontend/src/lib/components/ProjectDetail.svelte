@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EpisodicEventView, FleetClient, NeedsYouRequest, ProjectSummary } from "../api";
+  import { latestRound } from "../events";
   import { modeLabel, startFailure } from "../team";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
@@ -177,6 +178,8 @@
               handovers={handoversByRole[role] ?? []}
               usage={project.usage[role]}
               budget={project.budget}
+              requireApproval={project.require_approval}
+              lastRound={latestRound(events, role)}
             />
           {/each}
         </section>

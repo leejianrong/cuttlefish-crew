@@ -115,6 +115,13 @@ and this folder disagree after a slice lands, update this folder.
   in Recent activity as "Asked a question nobody could answer". The project tab and Add project
   say Ask first and Standard ask **on kopicode only**.
 
+- **V5-E1c (failed rounds) shipped.** A failed Start shows the daemon's own reason. A failed round
+  reads "Round failed" with the failure in words and the raw `stop=...` in brackets, a mono "Full output"
+  line with the backend's record path, and the task's own row says "The task ended because its last round
+  failed" instead of repeating the reason. A blocked role shows Approve and Reject only when a review
+  gate or a usage limit is waiting on a person; otherwise it shows a note that the task ends unless
+  you send a message (never offer a decision nobody is waiting for).
+
 ## Known gaps in the mockup
 
 - Static: no working interactions, no empty or error states, no dark theme, no phone

@@ -110,6 +110,8 @@ export interface ProjectSummary {
   presets: string[];
   roles: RoleDefinition[];
   last_team_id: string | null;
+  /** The last team was started with a review gate: a blocked role is then waiting for you. */
+  require_approval: boolean;
   allow: string[][];
   running: boolean;
   /** The operator asked the team to stop and its round has not ended yet. */

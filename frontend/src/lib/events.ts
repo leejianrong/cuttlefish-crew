@@ -9,11 +9,11 @@ const LABELS: Record<string, string> = {
   DelegationStarted: "Round started",
   DelegationCompleted: "Round done",
   DelegationRefused: "Refused",
-  DelegationFailed: "Failed",
+  DelegationFailed: "Round failed",
   SteeringMessage: "You",
   HandoverWritten: "Checkpoint",
   TaskCompleted: "Finished",
-  TaskFailed: "Failed",
+  TaskFailed: "Task failed",
   TeamResumed: "Resumed",
   TeamStopped: "Stopped",
   ToolCallRecorded: "Tool",
@@ -52,6 +52,60 @@ export function refusalReason(rule: string): string {
   return reasons[rule] ?? rule;
 }
 
+const STOP_REASON = /^stop=\w+/;
+
+const FAILURE_KINDS: Record<string, string> = {
+  max_turns: "It used all its turns before finishing",
+  verification_failed: "Its own check of the work (the project's tests) failed",
+  budget_exhausted: "It reached the token or cost limit",
+  cancelled: "It was cancelled",
+  provider_auth: "The model provider rejected the API key",
+  provider_credits: "The model provider account is out of credit",
+  provider_rate_limit: "The model provider kept rate-limiting it",
+  provider_outage: "The model provider had an outage",
+  provider_other: "The model provider could not be reached or refused the request",
+  harness_error: "The agent program itself failed",
+  open_failed: "The agent could not start its session (a bad model or a missing credential)",
+  protocol_error: "The agent program and cuttlefish stopped understanding each other",
+};
+
+/** Why a round failed, in words. `kind` is the daemon's `failure_kind` (kopicode only today);
+ * an older event has none, so fall back to the `stop=` word in the reason. The raw reason
+ * follows in brackets so nothing is hidden. */
+export function failureText(kind: unknown, reason: string): string {
+  const stop = /^stop=(\w+)/.exec(reason)?.[1];
+  const known = FAILURE_KINDS[typeof kind === "string" ? kind : (stop ?? "")];
+  return known ? `${known}. (${reason})` : reason;
+}
+
+export type RoundOutcome = {
+  kind: "completed" | "refused" | "failed";
+  text: string;
+};
+
+const ROUND_TYPES: Record<string, RoundOutcome["kind"]> = {
+  DelegationCompleted: "completed",
+  DelegationRefused: "refused",
+  DelegationFailed: "failed",
+};
+
+/** How `role`'s latest round ended, or null while it is running or before it started. */
+export function latestRound(
+  events: readonly EpisodicEventView[],
+  role: string,
+): RoundOutcome | null {
+  let latest: EpisodicEventView | null = null;
+  for (const event of events) {
+    const type = event.event_type;
+    if (event.payload.role !== role) continue;
+    if (type in ROUND_TYPES || type === "DelegationStarted" || type === "TaskSubmitted") {
+      latest = event;
+    }
+  }
+  if (latest === null || !(latest.event_type in ROUND_TYPES)) return null;
+  return { kind: ROUND_TYPES[latest.event_type], text: summarize(latest) };
+}
+
 const SHELL_PREFIX = "/bin/sh -c ";
 
 /** A shell command as the model typed it, without the `/bin/sh -c` wrapper kopicode adds. */
@@ -75,7 +129,7 @@ export function summarize(event: EpisodicEventView): string {
     case "DelegationRefused":
       return String(p.reason);
     case "DelegationFailed":
-      return String(p.reason);
+      return failureText(p.failure_kind, String(p.reason));
     case "SteeringMessage":
       return String(p.text);
     case "HandoverWritten":
@@ -83,13 +137,19 @@ export function summarize(event: EpisodicEventView): string {
     case "TaskCompleted":
       return String(p.result);
     case "TaskFailed":
-      return String(p.error);
+      // A task ends when its last round failed; the round's own row already says why, so
+      // don't repeat the raw `stop=... exit_code=...` a second time.
+      return STOP_REASON.test(String(p.error))
+        ? "The task ended because its last round failed."
+        : String(p.error);
     case "TeamStopped":
       return "You stopped the team. Roles that had not finished are stopped; starting again begins a new run.";
     case "TeamResumed":
       return "A daemon restart found this run still in progress, and it picked up where it left off.";
     case "ToolCallRecorded":
-      return p.tool === "ask" ? askSummary(String(p.detail)) : `${p.tool} (${p.status}): ${p.detail}`;
+      return p.tool === "ask"
+        ? askSummary(String(p.detail))
+        : `${p.tool} (${p.status}): ${p.detail}`;
     case "RequestRaised":
       return `${p.title}: ${commandText(String(p.detail))}`;
     case "RequestResolved":
@@ -141,7 +201,10 @@ function capitalise(text: string): string {
 /** A time for a log row: just the time today, the date as well on any other day. */
 export function formatWhen(ts: string, now: Date = new Date()): string {
   const when = new Date(ts);
-  const time = when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const time = when.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
   const sameDay =
     when.getFullYear() === now.getFullYear() &&
     when.getMonth() === now.getMonth() &&

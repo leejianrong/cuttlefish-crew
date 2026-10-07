@@ -843,6 +843,7 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    and HTTP 4xx and 5xx logged with their detail.
    **E1b:** the dashboard shows the server's real failure reason; `cuttlefish doctor` (binaries
    and versions, credential names set, `PATH` leaks, the log file, each project).
+   **E1c:** the failed-round UI: words for the failure, no Approve/Reject when nothing waits.
    `DelegationFailed.detail` (a redacted tail of the failing command's output) moves to V5-E5,
    which is the first slice that reads tool output.
 3. **V5-E2: environment spec and detection.** A read-only `EnvironmentSpec` for Python, Node

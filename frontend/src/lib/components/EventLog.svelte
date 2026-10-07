@@ -39,6 +39,9 @@
           {#if onOpenPermissions && isRefusedCommand(event)}
             <button type="button" class="link" onclick={onOpenPermissions}>Change permissions</button>
           {/if}
+          {#if event.event_type === "DelegationFailed" && event.payload.record}
+            <span class="record mono">Full output: {event.payload.record}</span>
+          {/if}
         </span>
       </div>
     {/if}
@@ -66,6 +69,13 @@
   .link:focus-visible {
     outline: 2px solid var(--md-sys-color-primary);
     outline-offset: 2px;
+  }
+
+  .record {
+    display: block;
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    overflow-wrap: anywhere;
   }
 
   .empty {
@@ -101,6 +111,20 @@
   .text {
     color: var(--text);
     overflow-wrap: anywhere;
+    min-width: 0;
+  }
+
+  /* The three fixed columns are wider than a phone: keep the time, role and label on one line
+     and give the text the full row underneath, so nothing is clipped off the card. */
+  @media (max-width: 640px) {
+    .row {
+      grid-template-columns: auto auto 1fr;
+      row-gap: 0.1rem;
+    }
+
+    .row .text {
+      grid-column: 1 / -1;
+    }
   }
 
   /* A checkpoint's own row reads like the rest of the log (still one role's own
