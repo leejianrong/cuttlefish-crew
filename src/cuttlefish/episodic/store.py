@@ -26,6 +26,8 @@ from cuttlefish.episodic.events import (
     DelegationFailed,
     DelegationRefused,
     DelegationStarted,
+    EnvironmentPrepared,
+    EnvironmentPrepareStarted,
     EventPayload,
     HandoverWritten,
     LlmCallCompleted,
@@ -106,6 +108,18 @@ def _describe(payload: EventPayload) -> tuple[int, str]:
             return logging.INFO, f"{rid} kind={kind} {title}"
         case RequestResolved(request_id=rid, resolution=resolution, by=by):
             return logging.INFO, f"{rid} {resolution} by={by}"
+        case EnvironmentPrepareStarted(ecosystem=ecosystem, commands=commands, reason=reason):
+            lines = " && ".join(" ".join(c) for c in commands)
+            return logging.INFO, f"{ecosystem}: {lines} ({reason})"
+        case EnvironmentPrepared(ok=True, ecosystem=ecosystem, duration_s=seconds):
+            return logging.INFO, f"{ecosystem}: ok in {seconds:.1f}s"
+        case EnvironmentPrepared(
+            ecosystem=ecosystem, exit_code=code, failure=failure, duration_s=seconds, tail=tail
+        ):
+            return (
+                logging.WARNING,
+                f"{ecosystem}: {failure} exit={code} after {seconds:.1f}s: {_clip(tail)}",
+            )
         case TeamStopped() | TeamResumed():
             return logging.INFO, ""
         case ToolCallRecorded(tool=tool, status=status, detail=detail):

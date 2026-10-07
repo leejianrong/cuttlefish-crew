@@ -24,6 +24,12 @@ from typing import Any, Literal
 
 Ecosystem = Literal["python", "node", "go", "rust", "java", "ruby"]
 
+#: A project's ``env_prepare`` setting (V5-E3): ask before installing its dependencies (the
+#: default), install automatically when something is stale, or never. Kept here, with no
+#: imports of its own, so the project store can use it without a cycle.
+PREPARE_MODES = ("ask", "auto", "off")
+DEFAULT_PREPARE_MODE = "ask"
+
 #: A marker file is never read past this: a version hint is a few bytes, and a multi-megabyte
 #: lockfile or a data file named like a manifest must not make a page load slow.
 _MAX_READ = 1_000_000

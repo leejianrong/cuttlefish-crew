@@ -850,12 +850,15 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    and Go from marker files and version hints; never executes anything. The read-only
    Environment card on the project screen, and `doctor` reports it. Rust, Java and Ruby are
    detected as "not prepared yet".
-4. **V5-E3: preparation.** `uv sync` / `uv venv` and `npm ci` / pnpm / yarn / bun, run by
-   cuttlefish before a team starts, outside any agent's turns. Staleness by lockfile and
-   manifest hash in `.cuttlefish/env.json`. Journaled with command, exit code, duration and a
-   redacted tail. One confirmation per project on the first run (Needs you, ADR-0028), a
-   per-project switch to turn automatic prepare off. A visible step with its own log on the
-   dashboard.
+4. **V5-E3: preparation**, in two PRs.
+   **E3a (shipped):** `uv sync` / `uv venv` + `uv pip install`, and `npm ci` / pnpm / yarn / bun, run by
+   cuttlefish inside the team's own start, before the first round and outside any agent's turns. Staleness
+   by fingerprint in `.cuttlefish/env.json`; journaled with the command, exit code, duration and a redacted
+   tail; a failed install fails every role with why; a stop kills it. The confirmation is the project's
+   `env_prepare` setting (`ask`/`auto`/`off`) and the start call's `prepare` (`yes`/`skip`), not a Needs-you
+   request (see the ADR's update). API, MCP `start_project`, and the activity-log wording.
+   **E3b:** the dashboard side: a confirm card on Start ("Install and start", "Always install", "Start
+   without"), the setting, and the install as a visible step.
 5. **V5-E4: activation.** The allowlisted base environment (one constant, never per backend),
    the project overlay (`VIRTUAL_ENV`, `.venv/bin`, `node_modules/.bin` first on `PATH`), the
    short environment note in every role's brief, and `/mnt/c` entries dropped from the child

@@ -125,9 +125,7 @@ describe("Needs-you events", () => {
     expect(summarize(view("RequestResolved", { resolution: "expired" }))).toBe(
       "Denied: no answer in time",
     );
-    expect(summarize(view("RequestResolved", { resolution: "allowed_once" }))).toBe(
-      "Allowed once",
-    );
+    expect(summarize(view("RequestResolved", { resolution: "allowed_once" }))).toBe("Allowed once");
   });
 
   it("says a kopicode ask call could not be answered", () => {
@@ -215,5 +213,48 @@ describe("latestRound", () => {
     expect(latestRound(running, "builder")).toBeNull();
     expect(latestRound([], "builder")).toBeNull();
     expect(latestRound(running, "reviewer")).toBeNull();
+  });
+});
+
+describe("installing dependencies in the activity log", () => {
+  it("says what is being installed and why", () => {
+    const started = event("EnvironmentPrepareStarted", {
+      ecosystem: "python",
+      commands: [
+        ["uv", "venv"],
+        ["uv", "pip", "install", "-r", "requirements.txt"],
+      ],
+      reason: ".venv is missing",
+    });
+    expect(eventLabel("EnvironmentPrepareStarted")).toBe("Installing");
+    expect(summarize(started)).toBe(
+      "python: uv venv && uv pip install -r requirements.txt (.venv is missing)",
+    );
+  });
+  it("reports success with the time and failure with the cause and the output's end", () => {
+    expect(
+      summarize(event("EnvironmentPrepared", { ecosystem: "node", ok: true, duration_s: 4.126 })),
+    ).toBe("Installed the node dependencies in 4.1s.");
+    const failed = event("EnvironmentPrepared", {
+      ecosystem: "python",
+      ok: false,
+      failure: "exit",
+      duration_s: 1,
+      tail: "no matching distribution\n",
+    });
+    expect(summarize(failed)).toBe(
+      "Couldn't install the python dependencies: the install command failed. no matching distribution",
+    );
+    expect(
+      summarize(
+        event("EnvironmentPrepared", {
+          ecosystem: "node",
+          ok: false,
+          failure: "tool_missing",
+          duration_s: 0,
+          tail: "",
+        }),
+      ),
+    ).toContain("the tool it needs is not installed");
   });
 });

@@ -164,6 +164,7 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
+| `CUTTLEFISH_PREPARE_TIMEOUT` | `900` | Seconds one dependency-install step may run before it is killed (see Installing dependencies). |
 | `CUTTLEFISH_LOG_LEVEL` | `INFO` | Log level for `cuttlefish serve`: the terminal and `~/.cuttlefish/logs/cuttlefish.log` (rotating, 5 MB x 5). `DEBUG` adds every tool call and permission decision; an unrecognised value falls back to `INFO` and says so. |
 | `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. cuttlefish asks kopicode for `--consent-timeout` when `serve --help` lists it (kopicode v0.3.0 and later). An older kopicode denies after its own fixed 60 seconds, so there you get 45. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` are unavailable. |
@@ -176,6 +177,28 @@ kopicode and the reasoning provider, Claude Code's own login or
 `ANTHROPIC_API_KEY`, and `codex login` for Codex (`codex exec` ignores an
 ambient `OPENAI_API_KEY`, ADR-0018).
 
+
+## Installing dependencies before a team starts
+
+cuttlefish can install a project's dependencies itself, before the team's first round and outside any
+agent's turns, so an agent does not spend them discovering that `.venv` or `node_modules` is missing. It
+runs `uv sync` (`--frozen` when there is a `uv.lock`, so your lockfile is never rewritten; `uv venv` plus
+`uv pip install -r requirements.txt` for a requirements project) or `npm ci`, `pnpm install
+--frozen-lockfile`, `yarn install --frozen-lockfile` (`--immutable` for Yarn Berry), `bun install
+--frozen-lockfile`, from the project folder, with cuttlefish's own venv removed from the environment. Go,
+Rust, Java, Ruby, poetry and pipenv projects are shown as not prepared yet.
+
+A step runs when the project's own install is missing, or when its manifest, lockfile or version hint
+changed since cuttlefish last installed (it remembers in `.cuttlefish/env.json`, only after a success). An
+install you made yourself is trusted until those files change. Installing runs the project's own install
+scripts, so it is a setting, `ask` (the default), `auto` or `off`, and the start call can answer it:
+
+- `POST /api/projects/{id}/start` takes `"prepare": "yes"` (install first) or `"skip"` (start without).
+  Left out, `auto` installs, `off` never does, and `ask` answers **409** naming what is stale and the two
+  values. The MCP `start_project` tool takes the same `prepare` argument.
+- The install is journaled (`Installing`, `Install done` in Recent activity, with the exit code and the
+  end of the output). If it fails, every role shows failed with why and no round starts. Stopping the team
+  while it installs kills the install. `CUTTLEFISH_PREPARE_TIMEOUT` (seconds, default 900) bounds each step.
 
 ## Default permissions
 
@@ -235,7 +258,7 @@ The same settings over HTTP: `GET /api/permissions` (modes, presets, blocked lis
 from the catalogue), `PATCH /api/projects/{id}/allow` (your own commands; an entry with shell syntax, a
 never-allowed command, or a launcher on its own such as `sh` or `python` is refused with a 400
 naming the entry and the reason) and
-`PATCH /api/projects/{id}/roles` (replaces the whole list). `GET /api/projects/{id}/environment` is read-only: the ecosystems the project's files point to, each with its package tool, lockfile, the version it asks for and whether its own `.venv` or `node_modules` is there (the dashboard's Environment card). Only the project root is read, and nothing is run. **Every change applies the next time
+`PATCH /api/projects/{id}/roles` (replaces the whole list). `GET /api/projects/{id}/environment` is read-only: the ecosystems the project's files point to, each with its package tool, lockfile, the version it asks for and whether its own `.venv` or `node_modules` is there (the dashboard's Environment card), and under `prepare` the install steps a start would run now. Only the project root is read, and nothing is run. `PATCH /api/projects/{id}/environment` with `{"prepare": "ask" | "auto" | "off"}` sets whether cuttlefish installs dependencies before a team starts (below). **Every change applies the next time
 the team starts**, not to a team already running.
 
 ### Needs-you requests over HTTP

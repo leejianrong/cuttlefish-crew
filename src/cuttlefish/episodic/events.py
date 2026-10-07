@@ -360,6 +360,35 @@ class TeamResumed:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class EnvironmentPrepareStarted:
+    """cuttlefish began installing one ecosystem's dependencies before the team's first round
+    (ADR-0029, V5-E3). Journaled by the daemon straight to the store, ahead of any task."""
+
+    EVENT_TYPE: ClassVar[str] = "EnvironmentPrepareStarted"
+
+    ecosystem: str
+    commands: list[list[str]]
+    reason: str
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class EnvironmentPrepared:
+    """How that install ended. ``tail`` is the last lines of its output (redacted on write);
+    ``failure`` is ``exit``, ``timeout``, ``tool_missing`` or ``cancelled`` when ``ok`` is false."""
+
+    EVENT_TYPE: ClassVar[str] = "EnvironmentPrepared"
+
+    ecosystem: str
+    ok: bool
+    exit_code: int | None
+    duration_s: float
+    tail: str
+    failure: str | None = None
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class UnknownPayload:
     """A payload whose event type this build does not recognise, preserved verbatim.
 
@@ -394,6 +423,8 @@ EventPayload = (
     | RequestResolved
     | TeamResumed
     | TeamStopped
+    | EnvironmentPrepareStarted
+    | EnvironmentPrepared
     | UnknownPayload
 )
 
@@ -419,6 +450,8 @@ _REGISTRY: Mapping[str, type[Any]] = {
         RequestResolved,
         TeamResumed,
         TeamStopped,
+        EnvironmentPrepareStarted,
+        EnvironmentPrepared,
     )
 }
 
