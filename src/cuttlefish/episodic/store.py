@@ -13,14 +13,24 @@ Append-only: there is no update or delete path, only :meth:`EpisodicStore.append
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-from cuttlefish.episodic.events import EventPayload, decode_payload, encode_payload
+from cuttlefish.episodic.events import (
+    DelegationFailed,
+    DelegationRefused,
+    EventPayload,
+    TaskFailed,
+    decode_payload,
+    encode_payload,
+)
 from cuttlefish.episodic.redact import Redactor
+
+_LOG = logging.getLogger(__name__)
 
 #: Stamped on every event this build writes. Bump when the envelope shape changes;
 #: a new payload type does not require a bump, since an unrecognised one already
@@ -38,6 +48,17 @@ CREATE TABLE IF NOT EXISTS episodic_events (
     PRIMARY KEY (task_id, seq)
 )
 """
+
+
+def _log_failure(task_id: str, payload: EventPayload) -> None:
+    """Say a failed or refused delegation in the operational log, from the *redacted*
+    event (so the log is redacted at write time too). The general journal-to-log projection
+    is V5-E1 (ADR-0029); this is the one line whose absence hid a real failure."""
+    if isinstance(payload, DelegationFailed | DelegationRefused | TaskFailed):
+        reason = payload.error if isinstance(payload, TaskFailed) else payload.reason
+        _LOG.warning(
+            "%s task=%s role=%s: %s", payload.EVENT_TYPE, task_id, payload.role or "-", reason
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,12 +123,10 @@ class EpisodicStore:
             self._conn.execute("ROLLBACK")
             raise
         self._conn.execute("COMMIT")
+        recorded = decode_payload(event_type, json.loads(redacted))
+        _log_failure(task_id, recorded)
         return EpisodicEvent(
-            task_id=task_id,
-            seq=seq,
-            schema_version=SCHEMA_VERSION,
-            ts=ts,
-            payload=decode_payload(event_type, json.loads(redacted)),
+            task_id=task_id, seq=seq, schema_version=SCHEMA_VERSION, ts=ts, payload=recorded
         )
 
     def read(self, task_id: str) -> Iterator[EpisodicEvent]:
