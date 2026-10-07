@@ -97,6 +97,26 @@ export interface ProjectBudget {
   max_cost_usd: number | null;
 }
 
+/** One ecosystem found at a project's root (V5-E2): read from its files, nothing is run. */
+export interface EcosystemEnv {
+  ecosystem: "python" | "node" | "go" | "rust" | "java" | "ruby";
+  tool: string | null;
+  manifests: string[];
+  lockfile: string | null;
+  /** A version the project asks for, as it wrote it (`3.12`, `>=20`). */
+  version_hint: string | null;
+  env_dir: string | null;
+  /** True when its own install (`.venv`, `node_modules`) is there, false when it is missing,
+   * null when there is nothing in the project folder to look for. */
+  installed: boolean | null;
+  notes: string[];
+}
+
+export interface EnvironmentSpec {
+  root: string;
+  ecosystems: EcosystemEnv[];
+}
+
 export interface ProjectSummary {
   id: string;
   name: string;
@@ -308,6 +328,10 @@ export class FleetClient {
 
   getProject(id: string): Promise<ProjectSummary> {
     return this.request(`/api/projects/${id}`);
+  }
+
+  getEnvironment(id: string): Promise<EnvironmentSpec> {
+    return this.request(`/api/projects/${id}/environment`);
   }
 
   getEvents(id: string): Promise<{ events: EpisodicEventView[] }> {

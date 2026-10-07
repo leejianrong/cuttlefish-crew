@@ -292,3 +292,14 @@ words for the failure kind; a blocked role shows Approve and Reject only when so
 (a review gate or a usage limit), otherwise a note that the task ends unless you steer. Found by driving the
 dashboard, CLI and MCP with sub-agents (`agent_docs/exploratory-testing.md`). Not built yet: the rest of
 V5 (environment detection, preparation, the allowlisted base environment, the stuck-agent detector).
+
+V5-E2 (ADR-0029): **environment detection.** `cuttlefish.environment.detect(root)` reads marker files at the
+project root (never subfolders) and returns an `EnvironmentSpec`: Python (uv, poetry, pipenv, pip), Node
+(npm, pnpm, yarn, bun, from `packageManager` or the lockfile), Go, Rust, Java and Ruby, each with its
+manifests, lockfile, the version it asks for (`.python-version`, `.nvmrc`, `.tool-versions`, `mise.toml`,
+`engines`, `requires-python`, `go.mod`) and whether `.venv` or `node_modules` exists. It executes nothing, reads
+no file over 1 MB and treats a malformed manifest as empty. Surfaces: `GET /api/projects/{id}/environment`
+(read off the event loop), the dashboard's Environment card, `cuttlefish doctor`'s project lines and the MCP
+`get_project_environment` tool. Installing is V5-E3; until then the card says agents start without
+dependencies.
+

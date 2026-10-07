@@ -159,6 +159,16 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
         return await asyncio.to_thread(_request, base_url, token, "POST", "/api/projects", body)
 
     @server.tool()
+    async def get_project_environment(project_id: str) -> dict[str, Any]:
+        """What a project's own files say it needs to run its code: each ecosystem found at
+        the project root (Python, Node, Go, Rust, Java, Ruby), its package tool, lockfile,
+        the version it asks for, and whether its own install (``.venv``, ``node_modules``) is
+        present. Read from files only; nothing is run, and subdirectories are not scanned."""
+        return await asyncio.to_thread(
+            _request, base_url, token, "GET", f"/api/projects/{project_id}/environment"
+        )
+
+    @server.tool()
     async def get_permissions() -> dict[str, Any]:
         """The permission modes, the command groups a project can switch on, the
         never-allowed list and the per-backend notes (who can pause for a request,

@@ -846,7 +846,7 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    **E1c:** the failed-round UI: words for the failure, no Approve/Reject when nothing waits.
    `DelegationFailed.detail` (a redacted tail of the failing command's output) moves to V5-E5,
    which is the first slice that reads tool output.
-3. **V5-E2: environment spec and detection.** A read-only `EnvironmentSpec` for Python, Node
+3. **V5-E2: environment spec and detection (shipped).** A read-only `EnvironmentSpec` for Python, Node
    and Go from marker files and version hints; never executes anything. The read-only
    Environment card on the project screen, and `doctor` reports it. Rust, Java and Ruby are
    detected as "not prepared yet".

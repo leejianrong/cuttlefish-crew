@@ -641,3 +641,22 @@ def test_patching_presets_validates_and_404s(client: TestClient, tmp_path: Path)
     assert client.patch(url, json={"presets": ["nope"]}).status_code == 400
     assert client.patch("/api/projects/nope/presets", json={"presets": []}).status_code == 404
     assert client.patch(url, json={"presets": []}).json()["presets"] == []
+
+
+def test_environment_route_reads_the_projects_files(client: TestClient, tmp_path: Path) -> None:
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "pyproject.toml").write_text('[project]\nname = "demo"\n')
+    (root / "uv.lock").write_text("")
+    project = client.post("/api/projects", json={"name": "demo", "root": str(root)}).json()
+
+    body = client.get(f"/api/projects/{project['id']}/environment").json()
+
+    assert body["root"] == str(root)
+    assert [(e["ecosystem"], e["tool"], e["installed"]) for e in body["ecosystems"]] == [
+        ("python", "uv", False)
+    ]
+
+
+def test_environment_route_for_an_unknown_project_is_404(client: TestClient) -> None:
+    assert client.get("/api/projects/nope/environment").status_code == 404

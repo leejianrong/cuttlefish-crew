@@ -43,6 +43,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from cuttlefish import environment
 from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.delegate.consent import ConsentPolicyError, validate_allow_entry
 from cuttlefish.delegate.never_allowed import NEVER_ALLOWED_SUMMARY
@@ -523,6 +524,17 @@ def create_app(
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/environment")
+    async def get_environment(project_id: str) -> dict[str, Any]:
+        """What the project's files say it needs (ADR-0029, V5-E2): read-only, nothing is run.
+        Off the event loop: the root may sit on a slow mount (WSL's /mnt/c)."""
+        try:
+            project = daemon.projects.get(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        spec = await asyncio.to_thread(environment.detect, project.root)
+        return spec.to_json()
 
     @app.get("/api/projects/{project_id}/events")
     async def get_events(project_id: str) -> dict[str, Any]:

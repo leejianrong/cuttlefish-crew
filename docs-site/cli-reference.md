@@ -131,7 +131,7 @@ stops a start. It reports each backend's binary (location and version), each cre
 name only (set, not set, or still the `.env.example` placeholder; the secrets key is also
 checked for being a real Fernet key), `PATH` entries that mislead an agent (cuttlefish's own
 venv, Windows `/mnt/...` directories under WSL), the log file, and each registered project
-(root exists, an empty `.cuttlefish/secrets.db` left by a failed start). Values are never printed.
+(root exists, an empty `.cuttlefish/secrets.db` left by a failed start, and what its files say it needs: `Python (uv, wants 3.12, .venv present)`). Values are never printed.
 
 ## `cuttlefish mcp`
 
@@ -144,9 +144,10 @@ dashboard directly.
 uv run cuttlefish mcp --base-url http://127.0.0.1:8420 --token <token>
 ```
 
-Fifteen tools. Run and watch: `list_projects`, `get_project`, `register_project` (also takes
+Sixteen tools. Run and watch: `list_projects`, `get_project`, `register_project` (also takes
 `mode` and `template`), `start_project`, `stop_project`, `steer_project`, `approve_project`,
-`get_events`. Permissions: `get_permissions` (modes, command groups, the never-allowed list and the
+`get_events`. Environment: `get_project_environment` (what the project's files say it needs:
+ecosystem, package tool, version, whether its own install is present; nothing is run). Permissions: `get_permissions` (modes, command groups, the never-allowed list and the
 per-backend notes), `list_builtin_roles`, `list_templates`, `set_project_mode` and `update_roles`
 (which replaces the whole role list, including each role's `access`); both apply the next time the
 team starts. Needs you: `list_requests` (the fleet, or one project) and `answer_request`
@@ -234,7 +235,7 @@ The same settings over HTTP: `GET /api/permissions` (modes, presets, blocked lis
 from the catalogue), `PATCH /api/projects/{id}/allow` (your own commands; an entry with shell syntax, a
 never-allowed command, or a launcher on its own such as `sh` or `python` is refused with a 400
 naming the entry and the reason) and
-`PATCH /api/projects/{id}/roles` (replaces the whole list). **Every change applies the next time
+`PATCH /api/projects/{id}/roles` (replaces the whole list). `GET /api/projects/{id}/environment` is read-only: the ecosystems the project's files point to, each with its package tool, lockfile, the version it asks for and whether its own `.venv` or `node_modules` is there (the dashboard's Environment card). Only the project root is read, and nothing is run. **Every change applies the next time
 the team starts**, not to a team already running.
 
 ### Needs-you requests over HTTP

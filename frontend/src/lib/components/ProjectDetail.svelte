@@ -2,6 +2,7 @@
   import type { EpisodicEventView, FleetClient, NeedsYouRequest, ProjectSummary } from "../api";
   import { latestRound } from "../events";
   import { modeLabel, startFailure } from "../team";
+  import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
@@ -270,6 +271,8 @@
           {/if}
         </section>
       {/if}
+
+      <EnvironmentCard {client} {projectId} />
 
       <section class="card filled events" aria-labelledby="activity-heading">
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>

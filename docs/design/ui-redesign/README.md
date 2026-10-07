@@ -122,6 +122,13 @@ and this folder disagree after a slice lands, update this folder.
   gate or a usage limit is waiting on a person; otherwise it shows a note that the task ends unless
   you send a message (never offer a decision nobody is waiting for).
 
+- **V5-E2 (Environment card) shipped.** The project Overview has a read-only **Environment** card
+  above Recent activity: one row per ecosystem found at the project root (Python, Node, Go, Rust, Java,
+  Ruby) with its package tool, the version the files ask for and the lockfile, and where the project keeps
+  an install in its own folder, "`.venv` is there" (success role) or "`.venv` is missing". A missing install
+  adds one line saying cuttlefish does not install dependencies yet. An empty result says subfolders are not
+  scanned. Not in the mockups; no coral (nothing here needs a decision). Fetched once per visit.
+
 ## Known gaps in the mockup
 
 - Static: no working interactions, no empty or error states, no dark theme, no phone

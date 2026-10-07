@@ -200,3 +200,11 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   own loopback `Host` check (ADR-0014) rejects. None of ADR-0013 has been
   checked against a real, live tailnet in this environment (no `tailscale`
   binary/account available here) — named honestly, not glossed over.
+- **Environment detection reads only the project root, and runs nothing** (V5-E2, ADR-0029). A
+  monorepo's `frontend/package.json` or `services/api/pyproject.toml` is not found from the root, and
+  "is the install in sync with the lockfile?" is unknown until V5-E3 hashes them. Both are on purpose:
+  scanning subfolders needs a rule for which one an agent works in, and probing with the project's own
+  tools would run its code before anyone agreed to. The Environment card says "subfolders are not
+  scanned" instead of implying a complete answer. `cuttlefish.fleet.fs`'s folder-picker language list
+  is a separate, coarser set of markers.
+
