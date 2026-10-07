@@ -215,7 +215,16 @@ describe("latestRound", () => {
     expect(latestRound(events, "builder")).toEqual({
       kind: "failed",
       text: "It used all its turns before finishing. (stop=max_turns exit_code=4)",
+      failureKind: "max_turns",
     });
+  });
+  it("carries the failure kind so the card can say a stuck role waits", () => {
+    const events = [
+      at(1, "DelegationFailed", { role: "builder", reason: "x", failure_kind: "environment_stuck" }),
+    ];
+    expect(latestRound(events, "builder")?.failureKind).toBe("environment_stuck");
+    expect(latestRound([at(1, "DelegationFailed", { role: "builder", reason: "x" })], "builder"))
+      .not.toHaveProperty("failureKind");
   });
   it("is null while a round is running, before one started, or for another role", () => {
     const running = [
