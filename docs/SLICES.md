@@ -813,3 +813,64 @@ Needs you and the answer reaches the agent.
 **Rests on assumptions:** Claude Code's `canUseTool` carries `AskUserQuestion` answers
 back to the model (documented only in part; V4-J settles it); Codex `app-server`
 approvals are reliable enough to build on (V4-L settles it).
+
+
+## V5: A project's environment is cuttlefish's job, and the log tells the whole story
+
+**Why:** a real two-role team failed with `stop=max_turns` in 90 seconds and nothing said why
+(2026-10-07). The agents ran cuttlefish's own `.venv` Python instead of the project's, and the
+log held no failure. Decisions and evidence: [ADR-0029](adr/0029-a-project-environment-is-cuttlefishs-job-and-the-log-is-a-projection-of-the-journal.md),
+Q56 to Q61. "E" below is for *environment*; it is not V3's "Slices E, F".
+
+**Decisions made:** cuttlefish detects, prepares and activates the environment for every
+backend; kopicode inherits it and needs nothing new. The child environment is built from an
+allowlist. A project's first install needs one confirmation, then runs automatically when stale.
+The log is a projection of the episodic journal (ADR-0004) plus named operational events, kept
+in `~/.cuttlefish/logs/cuttlefish.log`.
+
+**Build plan** (each is its own PR)
+
+1. **V5-E0: stop the bleeding.** Log failed team starts with the cause; `make demo LOG=1`
+   writes a log file; Ctrl-C stops `cuttlefish serve` cleanly. Then: log a failed delegation
+   (reason, failure kind, role) and drop cuttlefish's own venv (`VIRTUAL_ENV`, `PATH` entries
+   under its `sys.prefix`) from the child environment, with a test that pins today's `.env`
+   inheritance until E4. Shipped as one PR.
+2. **V5-E1: observability**, in two PRs.
+   **E1a:** one logging setup (`CUTTLEFISH_LOG_LEVEL`, rotating
+   `~/.cuttlefish/logs/cuttlefish.log`, project, team and role on every line through a
+   `contextvars` object); the `EpisodicStore.append` projection with redaction;
+   `DelegationFailed` gains `failure_kind` and `record`; daemon lifecycle, backend resolution
+   and HTTP 4xx and 5xx logged with their detail.
+   **E1b:** the dashboard shows the server's real failure reason; `cuttlefish doctor` (binaries
+   and versions, credential names set, `PATH` leaks, the log file, each project).
+   `DelegationFailed.detail` (a redacted tail of the failing command's output) moves to V5-E5,
+   which is the first slice that reads tool output.
+3. **V5-E2: environment spec and detection.** A read-only `EnvironmentSpec` for Python, Node
+   and Go from marker files and version hints; never executes anything. The read-only
+   Environment card on the project screen, and `doctor` reports it. Rust, Java and Ruby are
+   detected as "not prepared yet".
+4. **V5-E3: preparation.** `uv sync` / `uv venv` and `npm ci` / pnpm / yarn / bun, run by
+   cuttlefish before a team starts, outside any agent's turns. Staleness by lockfile and
+   manifest hash in `.cuttlefish/env.json`. Journaled with command, exit code, duration and a
+   redacted tail. One confirmation per project on the first run (Needs you, ADR-0028), a
+   per-project switch to turn automatic prepare off. A visible step with its own log on the
+   dashboard.
+5. **V5-E4: activation.** The allowlisted base environment (one constant, never per backend),
+   the project overlay (`VIRTUAL_ENV`, `.venv/bin`, `node_modules/.bin` first on `PATH`), the
+   short environment note in every role's brief, and `/mnt/c` entries dropped from the child
+   `PATH` unless a project opts in. `ServePool` is already keyed by environment.
+6. **V5-E5: environment-stuck detector.** N consecutive environment-signature failures end the
+   round and raise a Needs you request of kind `blocked` with the evidence, instead of running
+   to `max_turns`. Signatures are data.
+7. **V5-E6: more ecosystems and isolation.** Prepare Go, Rust, Java and Ruby; node version
+   managers; and a design note for a hermetic per-project container through the sandbox seam
+   (ADR-0002). No product code for the container here.
+
+**Demo:** register a folder with its own `.venv`; the Environment card says what it found;
+Start prepares it if stale; the builder runs the project's tests with the right interpreter;
+a deliberately broken dependency ends the round under Needs you in seconds, and
+`~/.cuttlefish/logs/cuttlefish.log` shows every step.
+
+**Rests on assumptions:** `.env` values reach the agent's shell today (read from `merge_env`,
+not yet checked end to end; V5-E0 adds the test); an install step for a typical project fits
+inside a start the operator is willing to wait for.

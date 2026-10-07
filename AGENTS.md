@@ -101,6 +101,10 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   `cuttlefish serve` with `HOME` pointed at a scratch dir and a freshly generated
   `CUTTLEFISH_SECRETS_KEY` exported, never against your own `~/.cuttlefish`. Project roots hold
   their own `.cuttlefish/` and `.satay/`. Real kopicode runs spend model credit (cents).
+- **Exercise a change from the outside before merging a slice that changes what a person
+  sees.** Tests missed an MCP client getting no error text and log lines with no project id.
+  Have sub-agents drive the browser, the CLI and MCP against a scratch copy and report; setup
+  and the brief to give them are in `agent_docs/exploratory-testing.md`.
 - `make demo` (`scripts/demo.sh`) builds the dashboard and runs one
   `cuttlefish serve` process that serves both the API and the UI, printing
   the URL/token to paste in. Hot-reloading the frontend means running
