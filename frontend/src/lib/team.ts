@@ -161,3 +161,19 @@ export function saveFailure(error: unknown, applied: readonly string[]): string 
     ? `${saved}Check that the daemon is still running, then save again.`
     : "Couldn't save those changes. Check that the daemon is still running, then try again.";
 }
+
+/** What to tell a person whose Start failed. The daemon answers a start it could not carry out
+ * with a 409 whose detail is the real reason (a binary not on PATH, a bad key); that is the
+ * useful part, minus the project id it leads with, which a person never sees. A daemon that did
+ * not answer at all is a different message, and any other failure points at the daemon's log
+ * (`~/.cuttlefish/logs/cuttlefish.log`). */
+export function startFailure(error: unknown): string {
+  if (error instanceof FleetApiError && error.status === 409) {
+    const reason = error.message.replace(/^project '[^']*' (failed to start: )?/, "").trim();
+    if (reason) return `Couldn't start that team: ${reason.replace(/\.$/, "")}.`;
+  }
+  if (error instanceof FleetApiError) {
+    return "Couldn't start that team. The daemon's log (~/.cuttlefish/logs/cuttlefish.log) says why.";
+  }
+  return "Couldn't reach the daemon to start that team. Check that it is still running.";
+}

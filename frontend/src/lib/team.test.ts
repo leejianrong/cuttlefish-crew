@@ -21,6 +21,7 @@ import {
   roleNameProblem,
   sameSet,
   saveFailure,
+  startFailure,
   togglePreset,
 } from "./team";
 
@@ -184,5 +185,31 @@ describe("saveFailure", () => {
     expect(saveFailure(new FleetApiError(500, "boom"), ["the mode"])).toContain(
       "Saved the mode, but not the rest. Check that the daemon",
     );
+  });
+});
+
+describe("startFailure", () => {
+  it("shows the daemon's own reason without the project id it leads with", () => {
+    const refused = new FleetApiError(
+      409,
+      "project '381a4a0e7a92' failed to start: 'kopicode' is not on PATH. Install it, or set CUTTLEFISH_KOPICODE_BIN to its path.",
+    );
+    expect(startFailure(refused)).toBe(
+      "Couldn't start that team: 'kopicode' is not on PATH. Install it, or set CUTTLEFISH_KOPICODE_BIN to its path.",
+    );
+  });
+
+  it("keeps a 409 that already has no project prefix", () => {
+    expect(startFailure(new FleetApiError(409, "project 'x' already has a running team"))).toBe(
+      "Couldn't start that team: already has a running team.",
+    );
+  });
+
+  it("points at the log for any other answer from the daemon", () => {
+    expect(startFailure(new FleetApiError(500, "boom"))).toContain("cuttlefish.log");
+  });
+
+  it("says the daemon is away when it never answered", () => {
+    expect(startFailure(new TypeError("fetch failed"))).toContain("Couldn't reach the daemon");
   });
 });

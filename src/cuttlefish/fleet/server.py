@@ -342,7 +342,13 @@ def create_app(
             else logging.WARNING
         )
         _LOG.log(
-            level, "%s %s -> %s: %s", request.method, request.url.path, exc.status_code, exc.detail
+            level,
+            "%s %s -> %s: %s",
+            request.method,
+            request.url.path,
+            exc.status_code,
+            exc.detail,
+            extra={"project": request.path_params.get("project_id", "")},
         )
         return await http_exception_handler(request, exc)
 

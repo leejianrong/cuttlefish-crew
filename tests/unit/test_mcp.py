@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from mcp.server.mcpserver.exceptions import UnexpectedToolError
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 
 from cuttlefish import mcp as mcp_module
 from cuttlefish.mcp import FleetApiError, build_mcp_server
@@ -162,23 +162,47 @@ async def test_get_events_calls_the_right_route(
     ]
 
 
-async def test_a_fleet_api_error_is_never_silently_swallowed(
+async def test_a_fleet_api_error_reaches_the_client_with_the_daemons_reason(
     server: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`MCPServer.call_tool` (the low-level API used directly here) re-raises a
-    tool crash as `UnexpectedToolError` rather than returning a `CallToolResult`
-    -- the SDK's own real protocol dispatch (`_handle_call_tool`) is what turns
-    this into an `is_error=True` result a client actually sees, verified live
-    against a real MCP client/session before this shipped (docs/adr/0020). This
-    test only has to prove `cuttlefish.mcp` itself never catches and hides a
-    `FleetApiError`, letting the SDK's own documented contract handle it."""
+    """A `ToolError` is the one exception type whose message the SDK passes to the client;
+    anything else becomes a bare "Error executing tool <name>" (the V5-E1b finding: the
+    dashboard showed why a start failed and an MCP client did not)."""
 
     def raise_error(*args: Any, **kwargs: Any) -> dict[str, Any]:
-        raise FleetApiError("GET /api/projects -> 401: missing or invalid session token")
+        raise FleetApiError("POST /api/projects/p1/start -> 409: 'kopicode' is not on PATH")
 
     monkeypatch.setattr(mcp_module, "_request", raise_error)
-    with pytest.raises(UnexpectedToolError):
-        await server.call_tool("list_projects", {})
+    with pytest.raises(ToolError, match="'kopicode' is not on PATH") as caught:
+        await server.call_tool("start_project", {"project_id": "p1", "roles": []})
+
+    assert not isinstance(caught.value, UnexpectedToolError)
+
+
+def test_the_http_error_body_is_reduced_to_its_detail_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import io
+    import urllib.error
+
+    body = b"{\"detail\":\"project 'p1' failed to start: 'kopicode' is not on PATH\"}"
+
+    def refuse(*args: Any, **kwargs: Any) -> Any:
+        raise urllib.error.HTTPError("http://x", 409, "Conflict", {}, io.BytesIO(body))  # type: ignore[arg-type]
+
+    monkeypatch.setattr(mcp_module.urllib.request, "urlopen", refuse)
+    with pytest.raises(FleetApiError) as caught:
+        mcp_module._request("http://x", "t", "POST", "/api/projects/p1/start", {})
+
+    assert str(caught.value) == (
+        "POST /api/projects/p1/start -> 409: project 'p1' failed to start: "
+        "'kopicode' is not on PATH"
+    )
+
+
+def test_a_body_that_is_not_json_is_kept_as_it_is() -> None:
+    assert mcp_module._detail_text("plain text") == "plain text"
+    assert mcp_module._detail_text('{"other": 1}') == '{"other": 1}'
 
 
 async def test_register_project_forwards_mode_and_template(
@@ -262,7 +286,7 @@ async def test_a_409_from_answering_a_request_is_not_hidden(
         raise FleetApiError("POST /x -> 409: already denied")
 
     monkeypatch.setattr(mcp_module, "_request", refuse)
-    with pytest.raises(UnexpectedToolError):
+    with pytest.raises(ToolError, match="already denied"):
         await server.call_tool(
             "answer_request", {"project_id": "p", "request_id": "r", "answer": "allow_once"}
         )
