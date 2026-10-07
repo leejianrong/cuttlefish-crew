@@ -82,7 +82,7 @@ def _uv_shim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str) -> Path
     return calls
 
 
-_MAKE_VENV = "mkdir -p .venv; touch .venv/pyvenv.cfg; echo installed"
+_MAKE_VENV = "mkdir -p .venv/bin; touch .venv/pyvenv.cfg; echo installed"
 
 
 def _project(tmp_path: Path, daemon: FleetDaemon, *, setting: str | None = None) -> Any:
@@ -384,3 +384,86 @@ def test_an_existing_projects_database_without_the_column_opens_and_asks(tmp_pat
 
     assert store.get("p1").env_prepare == "ask"
     store.close()
+
+
+# --- what the agent is given (V5-E4) ----------------------------------------------------------
+
+
+def _fake_log(tmp_path: Path) -> list[dict[str, Any]]:
+    path = tmp_path / "sent.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def _child_envs(tmp_path: Path) -> list[dict[str, Any]]:
+    return [entry["child_env"] for entry in _fake_log(tmp_path) if "child_env" in entry]
+
+
+async def test_the_agent_runs_in_the_projects_own_environment_and_without_cuttlefishs_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_kopicode(tmp_path, monkeypatch)
+    _uv_shim(tmp_path, monkeypatch, _MAKE_VENV)
+    monkeypatch.setenv("E2B_API_KEY", "e2b_must_not_reach_the_agent")
+    monkeypatch.setenv("CUTTLEFISH_SERVE_PASSWORD", "must-not-reach-the-agent")
+    monkeypatch.setenv("SOME_AMBIENT_VAR", "ambient")
+    daemon = _daemon(tmp_path)
+    project = _project(tmp_path, daemon)
+
+    await daemon.start(project.id, [{"name": "builder", "text": "go"}], prepare="yes")
+    await _until(lambda: not daemon.is_running(project.id))
+
+    (seen,) = _child_envs(tmp_path)
+    venv = str(Path(project.root) / ".venv")
+    assert seen["cwd"] == project.root
+    assert seen["VIRTUAL_ENV"] == venv
+    assert seen["PATH"].split(os.pathsep)[0] == f"{venv}/bin"
+    assert "E2B_API_KEY" not in seen["names"] and "CUTTLEFISH_SERVE_PASSWORD" not in seen["names"]
+    assert "SOME_AMBIENT_VAR" not in seen["names"]
+    assert "HOME" in seen["names"] and "PATH" in seen["names"]
+    assert "FAKE_KOPICODE_SCENARIO" in seen["names"]  # the operator's passthrough (conftest)
+
+
+async def test_the_agents_brief_says_how_to_run_things_in_this_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _fake_kopicode(tmp_path, monkeypatch)
+    _uv_shim(tmp_path, monkeypatch, _MAKE_VENV)
+    daemon = _daemon(tmp_path)
+    project = _project(tmp_path, daemon)
+
+    await daemon.start(project.id, [{"name": "builder", "text": "fix the bug"}], prepare="yes")
+    await _until(lambda: not daemon.is_running(project.id))
+
+    prompts = [
+        entry["params"]["prompt"]
+        for entry in _fake_log(tmp_path)
+        if entry.get("method") == "session.start"
+    ]
+    (prompt,) = prompts
+    assert "Environment: Python: use the project's own environment" in prompt
+    assert prompt.rstrip().endswith("fix the bug")  # the task still comes last
+
+
+async def test_two_projects_get_their_own_agent_process_and_environment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The resident `kopicode serve` child reads its environment once, so it is keyed by the
+    project: one project's `.venv` must never be on another's agent's PATH."""
+    _fake_kopicode(tmp_path, monkeypatch)
+    _uv_shim(tmp_path, monkeypatch, _MAKE_VENV)
+    daemon = _daemon(tmp_path)
+    first = _project(tmp_path, daemon)
+    second_root = tmp_path / "beta"
+    second_root.mkdir()
+    (second_root / "pyproject.toml").write_text('[project]\nname = "y"\n')
+    (second_root / "uv.lock").write_text("lock")
+    second = daemon.projects.register(name="beta", root=str(second_root))
+
+    for project in (first, second):
+        await daemon.start(project.id, [{"name": "builder", "text": "go"}], prepare="yes")
+        await _until(lambda p=project: not daemon.is_running(p.id))
+
+    seen = {env["cwd"]: env for env in _child_envs(tmp_path)}
+    assert set(seen) == {first.root, second.root}
+    assert seen[first.root]["VIRTUAL_ENV"] == f"{first.root}/.venv"
+    assert seen[second.root]["VIRTUAL_ENV"] == f"{second.root}/.venv"

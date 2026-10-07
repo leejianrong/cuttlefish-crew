@@ -346,7 +346,7 @@ async def run_step(
     """Run `step`'s commands in order from `root`. Stops at the first failure, a timeout, or
     when `cancel` is set; the child's whole process group is killed in the last two cases."""
     limit = timeout if timeout is not None else prepare_timeout()
-    child_env = {**merge_env(None), **_QUIET_ENV}
+    child_env = {**merge_env(None, tools=True), **_QUIET_ENV}
     if which is None:
         # Looked up on the PATH the child will get, which has cuttlefish's own venv removed.
         def which(program: str) -> str | None:

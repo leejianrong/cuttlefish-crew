@@ -63,6 +63,11 @@ from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCa
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
 
+#: What Claude Code reads from its environment besides the credential a backend declares
+#: (V5-E4): its own settings and base URL. Cloud credentials (AWS_*, GOOGLE_*) are not on this
+#: list: name them in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` to use Bedrock or Vertex.
+ENV_PASSTHROUGH = ("CLAUDE_*", "ANTHROPIC_BASE_URL")
+
 #: stream-json's per-line `type` values this module reads.
 _TYPE_ASSISTANT = "assistant"
 _TYPE_USER = "user"
@@ -379,7 +384,7 @@ async def run_claude_code(
             cwd=root,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=merge_env(env),
+            env=merge_env(env, root=root, passthrough=ENV_PASSTHROUGH),
         )
     except FileNotFoundError as exc:
         raise DelegationError(f"Claude Code binary {binary!r} not found") from exc

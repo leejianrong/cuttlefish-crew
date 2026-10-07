@@ -51,6 +51,9 @@ from cuttlefish.agents.outcome import (
     DelegationOutcome,
 )
 from cuttlefish.delegate.consent import ConsentDecision, ConsentPolicy
+from cuttlefish.delegate.kopicode import (
+    ENV_PASSTHROUGH as KOPICODE_ENV_PASSTHROUGH,
+)
 from cuttlefish.delegate.kopicode import _redacted_stderr_tail, classify_stream
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.requests import CHILD_EXITED
@@ -226,7 +229,7 @@ class ServeChild:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=merge_env(env),
+                env=merge_env(env, root=cwd, passthrough=KOPICODE_ENV_PASSTHROUGH),
             )
         except FileNotFoundError as exc:
             raise DelegationError(f"kopicode binary {binary!r} not found") from exc
@@ -546,15 +549,18 @@ _RPC_FAILURE_KIND = {-32002: "open_failed", -32003: "protocol_error"}
 
 
 class ServePool:
-    """Resident ``kopicode serve`` children, one per (binary, credential set).
+    """Resident ``kopicode serve`` children, one per (binary, project root, credential set).
 
-    A child reads its credentials once from its environment, so delegations with different
-    secrets (different projects) cannot share one. A child is reused while it is alive and
-    belongs to the running event loop; otherwise it is replaced.
+    A child reads its credentials, and its shell's environment (the project's own ``.venv`` and
+    ``node_modules/.bin`` on ``PATH``, V5-E4), once from the environment it is started with, so
+    delegations for different projects, or with different secrets, cannot share one. A child is
+    reused while it is alive and belongs to the running event loop; otherwise it is replaced.
     """
 
     def __init__(self) -> None:
-        self._children: dict[tuple[str, tuple[tuple[str, str], ...], float | None], ServeChild] = {}
+        self._children: dict[
+            tuple[str, str | None, tuple[tuple[str, str], ...], float | None], ServeChild
+        ] = {}
         self._lock: asyncio.Lock | None = None
 
     async def child_for(
@@ -562,12 +568,13 @@ class ServePool:
         *,
         binary: str,
         env: Mapping[str, str] | None,
+        root: str | None = None,
         consent_deadline: float = DEFAULT_CONSENT_DEADLINE,
         on_consent: Callable[[ConsentRecord], None] | None = None,
         consent_timeout: float | None = None,
     ) -> ServeChild:
         loop = asyncio.get_running_loop()
-        key = (binary, tuple(sorted((env or {}).items())), consent_timeout)
+        key = (binary, root, tuple(sorted((env or {}).items())), consent_timeout)
         if self._lock is None:
             self._lock = asyncio.Lock()
         async with self._lock:
@@ -578,6 +585,7 @@ class ServePool:
                 child.kill()  # dead, or bound to a loop that is gone
             child = await ServeChild.spawn(
                 binary=binary,
+                cwd=root,
                 env=env,
                 consent_deadline=consent_deadline,
                 on_consent=on_consent,
@@ -647,6 +655,7 @@ async def run_kopicode_serve(
         child = await pool.child_for(
             binary=binary,
             env=env,
+            root=root,
             consent_deadline=consent_deadline,
             on_consent=on_consent,
             consent_timeout=consent_timeout,
@@ -654,6 +663,7 @@ async def run_kopicode_serve(
     else:
         child = await ServeChild.spawn(
             binary=binary,
+            cwd=root,
             env=env,
             consent_deadline=consent_deadline,
             on_consent=on_consent,

@@ -625,11 +625,13 @@ def _init(args: argparse.Namespace) -> int:
 
 def _doctor(args: argparse.Namespace) -> int:
     """Report what is set up and what is quietly wrong. Values are never printed."""
-    del args
     store = ProjectStore.open()
     try:
         checks = doctor.run_checks(
-            environ=os.environ, projects=store.list(), log_path=logsetup.default_log_path()
+            environ=os.environ,
+            projects=store.list(),
+            log_path=logsetup.default_log_path(),
+            show_all_env=args.all_env,
         )
     finally:
         store.close()
@@ -1064,9 +1066,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="A role to register (repeatable). Default: builder and reviewer.",
     )
 
-    subparsers.add_parser(
+    doctor_parser = subparsers.add_parser(
         "doctor",
         help="Check backends, credentials (by name only), PATH, the log file and each project",
+    )
+    doctor_parser.add_argument(
+        "--all-env",
+        action="store_true",
+        help="List every variable name an agent is not given, not just the first few",
     )
 
     projects_parser = subparsers.add_parser(

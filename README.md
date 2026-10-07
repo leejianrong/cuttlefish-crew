@@ -177,6 +177,8 @@ Tailscale access, the MCP server, every flag) is in the
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own summarising calls: `openrouter`, `claude`, or `replay` (no key, placeholder summaries). |
 | `CUTTLEFISH_SANDBOX` | `none` | `none`, `container` (local Docker), or `e2b`. |
 | `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request before it is denied, 10 to 86400. kopicode v0.3.0 or later honours it; an older kopicode denies after 60 seconds, so there you get 45. |
+| `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` | unset | Names (comma-separated, `*` ends a prefix) to pass to agents on top of the allowlist: agents get `HOME`, `LANG`, proxies, toolchain paths and their own credentials, not the daemon's whole environment. `cuttlefish doctor` lists what is withheld. |
+| `CUTTLEFISH_KEEP_WINDOWS_PATH` | unset | `1` keeps WSL's `/mnt/...` entries on an agent's `PATH` (dropped by default). |
 | `CUTTLEFISH_PREPARE_TIMEOUT` | `900` | Seconds one dependency-install step may run before it is killed. |
 | `CUTTLEFISH_LOG_LEVEL` | `INFO` | How much `cuttlefish serve` logs, to the terminal and to `~/.cuttlefish/logs/cuttlefish.log` (rotating): `DEBUG` adds every tool call and permission decision. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Turns on the encrypted, project-scoped secrets store. Must be a Fernet key. |

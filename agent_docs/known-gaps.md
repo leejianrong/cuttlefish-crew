@@ -215,4 +215,10 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   install fails the team rather than starting agents without dependencies. Not covered: installs in
   subfolders (detection reads only the root), and a stop during an install of a team that was
   resumed after a daemon restart (resume never installs).
+- **An agent's environment is an allowlist, and a variable it needs may not be on it** (V5-E4, ADR-0029, Q58). `SSH_AUTH_SOCK`
+  (so `git` over SSH), `AWS_*` or `GOOGLE_*` (Claude Code on Bedrock or Vertex), a private registry's token for an agent's own
+  `npm install` and anything custom are not passed; name them in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. That is deliberate:
+  the other direction leaked `CUTTLEFISH_SECRETS_KEY` and the daemon's `.env` to every agent. The allowlist applies to the
+  host spawns of kopicode, Claude Code and Codex; a command run inside a sandbox provider takes its environment from that
+  provider. WSL's `/mnt/...` is dropped for every project or none (`CUTTLEFISH_KEEP_WINDOWS_PATH`), not per project.
 

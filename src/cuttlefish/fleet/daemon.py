@@ -32,7 +32,7 @@ from satay.config import db_path as satay_db_path
 from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
-from cuttlefish import envprep, logsetup, runtime
+from cuttlefish import environment, envprep, logsetup, runtime
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
@@ -131,16 +131,20 @@ class RunningTeam:
     task: asyncio.Task[None]
 
 
-def _compose_role_text(role_def: RoleDefinition | None, text: str) -> str:
+def _compose_role_text(role_def: RoleDefinition | None, text: str, env_note: str = "") -> str:
     """A role's task text, with its registered persona prefixed (Q31) -- an
     unregistered role name runs with no persona prefix, a graceful default rather
-    than a rejected request (ADR-0009)."""
+    than a rejected request (ADR-0009) -- and the environment note (V5-E4, how to run
+    things in this project) between the persona and the task."""
+    body = f"{env_note}\n\n{text}" if env_note else text
     if role_def is None or not role_def.persona:
-        return text
-    return f"You are {role_def.name}. {role_def.persona}\n\n{text}"
+        return body
+    return f"You are {role_def.name}. {role_def.persona}\n\n{body}"
 
 
-def _build_role_inputs(project: Project, roles: list[RoleStart]) -> list[RoleInput]:
+def _build_role_inputs(
+    project: Project, roles: list[RoleStart], env_note: str = ""
+) -> list[RoleInput]:
     """`roles`, composed with `project`'s own persistent state -- its registered
     personas (`_compose_role_text`) and its declared `allow` (Q53), applied
     team-wide, the same "one flag, every role" posture the CLI's own
@@ -153,7 +157,7 @@ def _build_role_inputs(project: Project, roles: list[RoleStart]) -> list[RoleInp
         role_def = project.role(role["name"])
         role_input: RoleInput = {
             "name": role["name"],
-            "text": _compose_role_text(role_def, role["text"]),
+            "text": _compose_role_text(role_def, role["text"], env_note),
             "allow": allow,
         }
         if role_def is not None and role_def.backend:
@@ -363,9 +367,11 @@ class FleetDaemon:
         if self.is_running(project_id):
             raise FleetError(f"project {project_id!r} already has a running team")
 
-        steps = await self._environment_steps(project, prepare)
+        spec = await asyncio.to_thread(environment.detect, project.root)
+        steps = await self._environment_steps(project, prepare, spec)
+        env_note = environment.brief(spec, installing={step.ecosystem for step in steps})
         team_id = uuid.uuid4().hex
-        role_inputs = _build_role_inputs(project, roles)
+        role_inputs = _build_role_inputs(project, roles, env_note)
         await self._launch_team(
             project, team_id, role_inputs, require_approval=require_approval, prepare_steps=steps
         )
@@ -378,12 +384,15 @@ class FleetDaemon:
         return team_id
 
     async def _environment_steps(
-        self, project: Project, prepare: Literal["yes", "skip"] | None
+        self,
+        project: Project,
+        prepare: Literal["yes", "skip"] | None,
+        spec: environment.EnvironmentSpec,
     ) -> tuple[envprep.PrepareStep, ...]:
         """The install steps this start should run first, or none. Reads files only (off the
         event loop: the root may be on a slow mount); also remembers installs a person made
         themselves, so a later change to their files is noticed."""
-        found = await asyncio.to_thread(envprep.plan, project.root)
+        found = await asyncio.to_thread(envprep.plan, project.root, spec)
         await asyncio.to_thread(envprep.record_adopted, project.root, found)
         if not found.steps or prepare == "skip" or project.env_prepare == "off":
             return ()

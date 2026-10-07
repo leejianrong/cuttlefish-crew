@@ -336,3 +336,15 @@ keyboard focus (the setting uses `aria-disabled`); the confirm card now takes fo
 shifted its text into the narrow role column (the cell is always there); a failed install was labelled "Install done"; and the
 failed role's text no longer quotes the last line of the output, which is often half a sentence.
 
+V5-E4 (ADR-0029): **what an agent is given.** `merge_env(env, root=, passthrough=, tools=)` builds an allowlisted
+environment (module doc lists it) in place of a copy of the daemon's: no `CUTTLEFISH_*`, no `.env` values, nothing `uv run`
+set; `PATH` without cuttlefish's venv and WSL's `/mnt/...`; the project's `.venv` and `node_modules/.bin` first; credentials
+last. Per-backend names (`KOPICODE_*`, `CLAUDE_*`, `CODEX_*`) and the operator's `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` extend it;
+installs also get the package tools' settings. The resident `kopicode serve` child is keyed by project root (it reads its
+environment once). Each role's brief gets an `Environment:` note from `environment.brief`. `cuttlefish doctor` lists the
+withheld names. The scripted fake agent logs the environment it sees, so tests assert what an agent really received.
+Found by driving it with a daemon started by `uv run` and fake secrets, and fixed before merge: the DEBUG "withheld" line listed a
+credential the backend had declared (and so was passed); the doctor line showed the first twelve names alphabetically, hiding
+the ones a person wants (now credentials, SSH and cloud names come first, `doctor --all-env` lists everything, and it hints that
+git over SSH needs `SSH_AUTH_SOCK`).
+

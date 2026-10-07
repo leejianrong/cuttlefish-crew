@@ -76,8 +76,9 @@ def test_path_warns_about_cuttlefishs_own_venv_and_windows_entries(tmp_path: Pat
     checks = doctor.check_path({"PATH": path}, prefix=str(own))
 
     details = " ".join(c.detail for c in checks)
-    assert all(c.status == "warn" for c in checks)
+    assert all(c.status == "ok" for c in checks)  # both are handled for agents: information only
     assert "own venv" in details and "Windows entries" in details
+    assert "agents get PATH without" in details
 
 
 def test_a_clean_path_is_ok(tmp_path: Path) -> None:
@@ -145,3 +146,54 @@ def test_doctor_runs_end_to_end_from_the_cli(
     assert code != 0
     assert "[FAIL] CUTTLEFISH_SECRETS_KEY" in out
     assert "REPLACE_WITH_A_GENERATED_FERNET_KEY" not in out.replace("placeholder", "")
+
+
+def test_the_agent_environment_check_lists_withheld_names_and_never_values() -> None:
+    environ = {"LANG": "C", "SOME_SECRET": "hunter2", "CUTTLEFISH_SECRETS_KEY": "abc"}
+
+    (check,) = doctor.check_agent_environment(environ)
+
+    assert check.status == "ok"
+    assert "SOME_SECRET" in check.detail and "CUTTLEFISH_SECRETS_KEY" in check.detail
+    assert "hunter2" not in check.detail and "abc" not in check.detail.replace("abcdef", "")
+    assert "CUTTLEFISH_AGENT_ENV_PASSTHROUGH" in check.detail
+
+
+def test_a_long_list_of_withheld_names_is_shortened() -> None:
+    environ = {f"VAR_{i:02d}": "x" for i in range(20)}
+
+    (check,) = doctor.check_agent_environment(environ)
+
+    assert "20 variables in this shell are not passed" in check.detail
+    assert "and 8 more" in check.detail
+
+
+def test_the_names_a_person_most_likely_wants_come_first_and_all_env_lists_everything() -> None:
+    environ = {f"AAA_{i:02d}": "x" for i in range(20)} | {
+        "SSH_AUTH_SOCK": "/s",
+        "GH_TOKEN": "t",
+        "E2B_API_KEY": "k",
+    }
+
+    (short,) = doctor.check_agent_environment(environ)
+    (full,) = doctor.check_agent_environment(environ, show_all=True)
+
+    assert short.detail.index("E2B_API_KEY") < short.detail.index("AAA_00")
+    assert "SSH_AUTH_SOCK" in short.detail and "GH_TOKEN" in short.detail
+    assert "Git over SSH needs SSH_AUTH_SOCK" in short.detail
+    assert "--all-env" in short.detail and "AAA_19" not in short.detail
+    assert "AAA_19" in full.detail and "more" not in full.detail
+
+
+def test_doctor_all_env_flag_reaches_the_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from cuttlefish import cli
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for index in range(20):
+        monkeypatch.setenv(f"ZZZ_PLAIN_{index:02d}", "x")
+
+    cli.main(["doctor", "--all-env"])
+
+    assert "ZZZ_PLAIN_19" in capsys.readouterr().out

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import tomllib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -103,6 +103,46 @@ _NAMES: dict[Ecosystem, str] = {
 
 def ecosystem_name(ecosystem: Ecosystem) -> str:
     return _NAMES[ecosystem]
+
+
+def brief(spec: EnvironmentSpec, *, installing: Collection[str] = ()) -> str:
+    """A short note for an agent's brief on how to run things in this project (ADR-0029,
+    decision 2.4): which environment is its own, that it is already on ``PATH``, and not to
+    install globally. Says only what is true of what cuttlefish sets up: Python and Node are
+    covered; other ecosystems get no line rather than a guess. `installing` names ecosystems
+    cuttlefish is about to install, so their note describes the result."""
+    lines: list[str] = []
+    for env in spec.ecosystems:
+        ready = bool(env.installed) or env.ecosystem in installing
+        if env.ecosystem == "python":
+            if ready:
+                how = (
+                    "run tools with `uv run <command>`"
+                    if env.tool == "uv"
+                    else "`python` and `pip` are its own"
+                )
+                lines.append(
+                    "Python: use the project's own environment (`.venv`, already first on "
+                    f"PATH); {how}. Don't install packages globally."
+                )
+            else:
+                lines.append(
+                    "Python: its dependencies are not installed (no `.venv`). If you need them, "
+                    "say so; don't install packages globally."
+                )
+        elif env.ecosystem == "node":
+            tool = env.tool or "npm"
+            if ready:
+                lines.append(
+                    f"Node ({tool}): dependencies are in `node_modules` and its `.bin` is on "
+                    f"PATH; run scripts with `{tool} run <script>`. Don't install globally."
+                )
+            else:
+                lines.append(
+                    "Node: its dependencies are not installed (no `node_modules`). If you need "
+                    "them, say so; don't install globally."
+                )
+    return ("Environment: " + " ".join(lines)) if lines else ""
 
 
 def _describe(env: EcosystemEnv) -> str:

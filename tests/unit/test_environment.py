@@ -209,3 +209,52 @@ def test_to_json_round_trips_the_shape(tmp_path: Path) -> None:
     assert body["ecosystems"][0]["ecosystem"] == "node"
     assert body["ecosystems"][0]["manifests"] == ["package.json"]
     json.dumps(body)
+
+
+# --- the note in an agent's brief (V5-E4) -----------------------------------------------------
+
+
+def test_a_python_uv_project_with_a_venv_is_told_to_use_it_and_uv_run(tmp_path: Path) -> None:
+    _write(tmp_path, "pyproject.toml", "[project]\nname='x'\n")
+    _write(tmp_path, "uv.lock")
+    _write(tmp_path, ".venv/pyvenv.cfg")
+
+    note = environment.brief(environment.detect(tmp_path))
+
+    assert note.startswith("Environment: Python: use the project's own environment")
+    assert "`uv run <command>`" in note and "Don't install packages globally" in note
+
+
+def test_a_missing_install_is_described_as_missing_unless_it_is_about_to_be_made(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, "requirements.txt", "numpy\n")
+    spec = environment.detect(tmp_path)
+
+    assert "not installed (no `.venv`)" in environment.brief(spec)
+    assert "`python` and `pip` are its own" in environment.brief(spec, installing={"python"})
+
+
+def test_node_gets_its_own_tool_in_the_note(tmp_path: Path) -> None:
+    _write(tmp_path, "package.json", '{"packageManager": "pnpm@9.1.0"}')
+    (tmp_path / "node_modules").mkdir()
+
+    note = environment.brief(environment.detect(tmp_path))
+
+    assert "Node (pnpm)" in note and "`pnpm run <script>`" in note and "`.bin` is on PATH" in note
+
+
+def test_other_ecosystems_and_empty_projects_get_no_claims(tmp_path: Path) -> None:
+    assert environment.brief(environment.detect(tmp_path)) == ""
+    _write(tmp_path, "go.mod", "module x\n\ngo 1.22\n")
+
+    assert environment.brief(environment.detect(tmp_path)) == ""
+
+
+def test_a_polyglot_project_gets_one_line_per_ecosystem(tmp_path: Path) -> None:
+    _write(tmp_path, "requirements.txt", "x\n")
+    _write(tmp_path, "package.json", "{}")
+
+    note = environment.brief(environment.detect(tmp_path), installing={"python", "node"})
+
+    assert note.count("Python:") == 1 and note.count("Node (") == 1

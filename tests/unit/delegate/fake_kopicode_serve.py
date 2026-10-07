@@ -36,6 +36,22 @@ def _pump() -> None:
 
 
 log.write(json.dumps({"pid": os.getpid(), "argv": sys.argv[1:]}) + "\n")
+# What an agent's process is given (V5-E4): the names that matter to the tests, and no values
+# of anything secret. Not for the `serve --help` probe, which is not an agent.
+if "--help" not in sys.argv:
+    log.write(
+        json.dumps(
+            {
+                "child_env": {
+                    "cwd": str(Path.cwd()),
+                    "PATH": os.environ.get("PATH"),
+                    "VIRTUAL_ENV": os.environ.get("VIRTUAL_ENV"),
+                    "names": sorted(os.environ),
+                }
+            }
+        )
+        + "\n"
+    )
 threading.Thread(target=_pump, daemon=True).start()
 ctx: dict[str, Any] = {}
 
