@@ -153,6 +153,9 @@ class DelegationFailed:
     # failure points at its evidence instead of a person finding it by hand.
     failure_kind: str | None = None
     record: str | None = None
+    # A redacted tail of the output behind the failure (the failing command's, for an agent
+    # stuck on its environment); the store redacts it again at write time.
+    detail: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

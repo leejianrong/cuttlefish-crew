@@ -221,4 +221,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   the other direction leaked `CUTTLEFISH_SECRETS_KEY` and the daemon's `.env` to every agent. The allowlist applies to the
   host spawns of kopicode, Claude Code and Codex; a command run inside a sandbox provider takes its environment from that
   provider. WSL's `/mnt/...` is dropped for every project or none (`CUTTLEFISH_KEEP_WINDOWS_PATH`), not per project.
-
+- **The stuck-agent detector covers kopicode on the host only** (V5-E5, ADR-0029). Claude Code and Codex run one-shot and hand back
+  their output at the end, so there is nothing to stop early. A kopicode in a sandbox keeps its record inside the container, so
+  it is not watched. Detection needs the signature list to know the failure: a toolchain it does not name (add a regular
+  expression to `cuttlefish.stuck.SIGNATURES`) runs to `max_turns` as before. N is consecutive failures, so an agent that
+  alternates a failing install with a passing `ls` is never stopped.

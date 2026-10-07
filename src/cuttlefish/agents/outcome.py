@@ -104,6 +104,9 @@ class DelegationOutcome:
     # directory under the project's ``.kopicode/sessions/``), where its full output lives
     # (ADR-0029). ``None`` for a backend with no such thing.
     record: str | None = None
+    # A redacted tail of the output that explains a failure, when the backend read it (ADR-0029:
+    # the last failing command's output for a stuck agent). ``None`` otherwise.
+    detail: str | None = None
     # Every live consent decision this delegation's session triggered, in order
     # (KAN-1792, ADR-0021) -- empty for every transport with no live consent
     # (`run --print`, the other backends).

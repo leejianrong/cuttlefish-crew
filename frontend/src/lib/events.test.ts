@@ -181,6 +181,16 @@ describe("failed rounds in the activity log", () => {
     expect(summarize(round)).toContain("all its turns");
     expect(summarize(task)).toBe("The task ended because its last round failed.");
   });
+  it("says a stuck agent was stopped and shows its last failing command", () => {
+    const round = event("DelegationFailed", {
+      reason: "stopped after 5 shell commands in a row failed on the environment",
+      failure_kind: "environment_stuck",
+      detail: "No module named 'numpy'",
+      role: "builder",
+    });
+    expect(summarize(round)).toContain("kept failing on the project's environment");
+    expect(installOutput(round)).toBe("No module named 'numpy'");
+  });
   it("keeps a task failure that is not a backend stop", () => {
     expect(summarize(event("TaskFailed", { error: "the daemon restarted" }))).toBe(
       "the daemon restarted",

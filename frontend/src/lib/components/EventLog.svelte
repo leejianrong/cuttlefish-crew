@@ -40,7 +40,7 @@
           {/if}
           {#if installOutput(event)}
             <details class="output">
-              <summary>Output</summary>
+              <summary>{event.event_type === "DelegationFailed" ? "Last failing command" : "Output"}</summary>
               <pre class="mono">{installOutput(event)}</pre>
             </details>
           {/if}

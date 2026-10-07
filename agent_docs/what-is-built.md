@@ -348,3 +348,12 @@ credential the backend had declared (and so was passed); the doctor line showed 
 the ones a person wants (now credentials, SSH and cloud names come first, `doctor --all-env` lists everything, and it hints that
 git over SSH needs `SSH_AUTH_SOCK`).
 
+V5-E5a (ADR-0029): **an agent stuck on its environment is stopped.** The serve stream has no command output (only tool, exit
+code, size; read from kopicode's `print.go`), so `cuttlefish.stuck.SessionRecord` reads the session's own
+`<root>/.kopicode/sessions/<session>/events.jsonl` as it grows (cuttlefish picks the session id, so the path is known
+mid-round; a spilled output is the tail of `<root>/.kopicode/blobs/<hash>`, the name checked to be hex). `StuckDetector` counts
+consecutive `run_shell` failures whose output matches `SIGNATURES` (data); a success or a non-matching failure resets it, other
+tools are ignored. `ServeChild` checks on each shell `tool_result`, serialised, off the loop; at N it records a verdict and
+cancels the session, and `run_kopicode_serve` turns the result into a failed outcome with `failure_kind="environment_stuck"` and
+`detail`. It fails open: no file, a half line, an unreadable blob or a sandboxed child (`process_factory`) means no evidence.
+`DelegationFailed` and `DelegationOutcome` gained `detail`. The fake serve child has a `record` step to write that file.

@@ -863,9 +863,15 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    the project overlay (`VIRTUAL_ENV`, `.venv/bin`, `node_modules/.bin` first on `PATH`), the
    short environment note in every role's brief, and `/mnt/c` entries dropped from the child
    `PATH` unless a project opts in. `ServePool` is already keyed by environment.
-6. **V5-E5: environment-stuck detector.** N consecutive environment-signature failures end the
-   round and raise a Needs you request of kind `blocked` with the evidence, instead of running
-   to `max_turns`. Signatures are data.
+6. **V5-E5: environment-stuck detector**, in two PRs. N consecutive environment-signature failures
+   end the round and raise a Needs you request of kind `blocked` with the evidence, instead of running
+   to `max_turns`. Signatures are data. The stream carries no command output, so the detector reads the
+   session's own record (see the ADR's update).
+   **E5a (shipped):** `cuttlefish.stuck` (signatures, `StuckDetector`, `SessionRecord`), the serve child cancels
+   the session at N (`CUTTLEFISH_STUCK_THRESHOLD`, default 5, `0` off), the round fails with
+   `failure_kind="environment_stuck"` and `DelegationFailed.detail` (a redacted tail of the failing output),
+   words and a "Last failing command" block in the activity log. kopicode only.
+   **E5b:** the `blocked` Needs-you request after such a round, with its card, API and MCP.
 7. **V5-E6: more ecosystems and isolation.** Prepare Go, Rust, Java and Ruby; node version
    managers; and a design note for a hermetic per-project container through the sandbox seam
    (ADR-0002). No product code for the container here.

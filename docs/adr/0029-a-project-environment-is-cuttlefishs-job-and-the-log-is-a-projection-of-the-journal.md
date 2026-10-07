@@ -177,3 +177,32 @@ Every role's brief also gets a short `Environment:` note between its persona and
 project's own environment is first on `PATH`, how to run things (`uv run`, `pnpm run`), and not to install globally.
 It says only what cuttlefish sets up (Python and Node), and describes the install that is about to happen when one is.
 
+
+## Update (V5-E5, 2026-10-07): the stuck-agent detector
+
+Decision 3 said the detector reads "the journal's tool results". Checked against kopicode's source and a real
+session, that is not possible: the stream's `tool_result` event carries only the tool, `exit_code`, `size` and
+`reason` (`cmd/kopicode/print.go`, `internal/engine/event.go`), never the output, and cuttlefish journals only
+`ToolCallRecorded` (tool, detail, status). The output exists in one place, the session's own record. So:
+
+- **Where the evidence is.** `<root>/.kopicode/sessions/<session>/events.jsonl`. cuttlefish chooses the session
+  id (`cuttlefish-<hex>`), so the path is known while the round runs, not only after `session.start` returns its
+  `record`. A `ToolResult` line holds the output either inline (`output.inline`) or, when large, as a blob under
+  `<root>/.kopicode/blobs/<hash>`. Only the tail of a blob is read, bounded. Reading it is not a new protocol: it is the
+  file kopicode already writes, and `DelegationFailed.record` already points there.
+- **Detection runs live, on the serve transport.** Each `run_shell` `tool_result` with a non-zero exit code makes
+  the child read the session's new journal lines (off the event loop) and feed them to a pure `StuckDetector`
+  (`cuttlefish.stuck`). N consecutive `run_shell` failures that each match a signature trigger it. A shell call
+  that succeeds, or fails without matching, resets the count; other tools do not touch it. Signatures are a data
+  tuple of regular expressions in that module, N is `CUTTLEFISH_STUCK_THRESHOLD` (default 5, `0` turns it off).
+- **What triggering does.** The child cancels the session (the same `session.cancel` plus close an operator's stop
+  uses), the round ends as `failed` with `failure_kind="environment_stuck"`, and `DelegationFailed.detail` holds a
+  redacted tail of the last failing output (at most 2 KiB). The agent stops after about N calls instead of
+  running to `max_turns`. If the record cannot be read (a sandboxed child, a missing file) nothing triggers; the
+  detector fails open to today's behaviour.
+- **Only kopicode.** Claude Code and Codex run one-shot and return their output at the end, so there is nothing to
+  stop early; their output is not read. The dashboard says nothing about the detector for them.
+- **The request (E5b).** After the round ends, the team raises a `blocked` request (ADR-0028) from the failed
+  outcome: title naming the role, `detail` the evidence, `answers` empty (nothing a card button can answer),
+  `lands="next_round"`. It is not held: nobody is waiting on a future, so the card must not imply a live prompt. It
+  ends when the role is steered or approved or rejected (a new resolution, `superseded`) or when the team ends.

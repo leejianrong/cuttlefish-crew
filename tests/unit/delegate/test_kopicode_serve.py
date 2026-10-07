@@ -545,6 +545,119 @@ async def test_a_timeout_cancels_the_session_and_raises(
     assert any(m.get("method") == "session.cancel" for m in sent(tmp_path))
 
 
+# -- an agent stuck on its environment (ADR-0029, V5-E5) ---------------------------------
+
+
+def shell_result(output: str, code: int = 1) -> dict[str, Any]:
+    return {
+        "type": "ToolResult",
+        "payload": {
+            "call_id": "c",
+            "tool": "run_shell",
+            "exit_code": code,
+            "output": {"inline": output, "size": len(output)},
+        },
+    }
+
+
+def shell_done(code: int = 1) -> dict[str, Any]:
+    return event({"kind": "tool_result", "tool": "run_shell", "exit_code": code, "size": 9})
+
+
+def stuck_scenario(outputs: list[tuple[str, int]], *, then: list[Any]) -> list[Any]:
+    steps: list[Any] = [{"start": True}]
+    for text, code in outputs:
+        steps += [{"record": [shell_result(text, code)]}, {"emit": shell_done(code)}]
+    return steps + then
+
+
+MISSING = "run_shell `pytest`: exited 1\nModuleNotFoundError: No module named 'numpy'"
+
+
+async def test_n_environment_failures_in_a_row_cancel_the_session_with_the_evidence(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        stuck_scenario(
+            [(MISSING, 1)] * 3,
+            then=[
+                {"wait_for": "session.cancel"},
+                {"emit": respond("cancelled", 1)},
+                {"close": [ended("cancelled", 1)]},
+                {"eof": []},
+            ],
+        )
+    )
+    outcome = await run(binary, tmp_path, stuck_threshold=3)
+    assert outcome.kind == "failed"
+    assert outcome.failure_kind == "environment_stuck"
+    assert "3 shell commands in a row" in outcome.reason
+    assert "No module named 'numpy'" in outcome.detail
+    assert outcome.record == "/r"
+    assert any(m.get("method") == "session.cancel" for m in sent(tmp_path))
+
+
+async def test_the_evidence_is_redacted_before_it_leaves_the_transport(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        stuck_scenario(
+            [(f"command not found: tool --key {KEY}", 127)],
+            then=[
+                {"wait_for": "session.cancel"},
+                {"emit": respond("cancelled", 1)},
+                {"close": [ended("cancelled", 1)]},
+                {"eof": []},
+            ],
+        )
+    )
+    outcome = await run(binary, tmp_path, stuck_threshold=1, env={"OPENROUTER_API_KEY": KEY})
+    assert outcome.failure_kind == "environment_stuck"
+    assert KEY not in outcome.detail
+
+
+async def test_a_success_in_between_keeps_the_session_running(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        stuck_scenario(
+            [(MISSING, 1), (MISSING, 1), ("3 passed", 0), (MISSING, 1), (MISSING, 1)],
+            then=[{"emit": respond()}, {"close": [ended()]}, {"eof": []}],
+        )
+    )
+    outcome = await run(binary, tmp_path, stuck_threshold=3)
+    assert outcome.kind != "failed"
+    assert not any(m.get("method") == "session.cancel" for m in sent(tmp_path))
+
+
+async def test_a_threshold_of_zero_never_cancels(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        stuck_scenario(
+            [(MISSING, 1)] * 6, then=[{"emit": respond()}, {"close": [ended()]}, {"eof": []}]
+        )
+    )
+    await run(binary, tmp_path, stuck_threshold=0)
+    assert not any(m.get("method") == "session.cancel" for m in sent(tmp_path))
+
+
+async def test_with_no_readable_record_nothing_is_cancelled(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    steps: list[Any] = [
+        {"start": True},
+        *([{"emit": shell_done(1)}] * 6),
+        {"emit": respond()},
+        {"close": [ended()]},
+        {"eof": []},
+    ]
+    binary = fake(steps)
+    outcome = await run(binary, tmp_path, stuck_threshold=2)
+    assert outcome.kind != "failed"
+    assert not any(m.get("method") == "session.cancel" for m in sent(tmp_path))
+
+
 # -- the resident pool ------------------------------------------------------------------
 
 
