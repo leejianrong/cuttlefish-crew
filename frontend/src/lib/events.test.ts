@@ -5,6 +5,7 @@ import type { EpisodicEventView } from "./api";
 import {
   commandText,
   eventLabel,
+  eventLabelFor,
   failureText,
   installOutput,
   formatWhen,
@@ -259,5 +260,13 @@ describe("installing dependencies in the activity log", () => {
         }),
       ),
     ).toContain("the tool it needs is not installed");
+  });
+});
+
+describe("eventLabelFor", () => {
+  it("does not call a failed install done", () => {
+    expect(eventLabelFor(event("EnvironmentPrepared", { ok: true }))).toBe("Install done");
+    expect(eventLabelFor(event("EnvironmentPrepared", { ok: false }))).toBe("Install failed");
+    expect(eventLabelFor(event("TaskFailed", { error: "x" }))).toBe("Task failed");
   });
 });

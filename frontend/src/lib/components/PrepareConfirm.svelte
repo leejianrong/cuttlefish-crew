@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import type { PrepareInfo } from "../api";
   import { stepLines } from "../environment";
 
@@ -17,10 +18,17 @@
   } = $props();
 
   const lines = $derived(stepLines(prepare));
+
+  // The card replaces the Start button the person just pressed, so focus would fall to the page:
+  // put it on the card's heading, where a screen reader reads the question first.
+  let heading: HTMLHeadingElement;
+  onMount(() => heading.focus());
 </script>
 
 <div class="confirm card" role="group" aria-labelledby="prepare-heading">
-  <h3 id="prepare-heading" class="title-medium">Install dependencies first?</h3>
+  <h3 id="prepare-heading" class="title-medium" tabindex="-1" bind:this={heading}>
+    Install dependencies first?
+  </h3>
   <p class="body-medium">
     Some of this project's dependencies are missing or out of date. cuttlefish can install them
     before the team starts, so the agents don't spend their turns finding out.
@@ -62,6 +70,11 @@
     gap: 0.75rem;
     background: var(--md-sys-color-surface-container-high);
     border-color: var(--md-sys-color-outline-variant);
+  }
+
+  .confirm h3:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 4px;
   }
 
   .confirm :global(h3),

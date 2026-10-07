@@ -28,6 +28,14 @@ export function eventLabel(type: string): string {
   return LABELS[type] ?? type;
 }
 
+/** The label for one event: an install that failed must not read "done". */
+export function eventLabelFor(event: EpisodicEventView): string {
+  if (event.event_type === "EnvironmentPrepared" && event.payload.ok === false) {
+    return "Install failed";
+  }
+  return eventLabel(event.event_type);
+}
+
 /** Why a command was refused, from the rule id the daemon journals. */
 export function refusalReason(rule: string): string {
   if (rule.startsWith("never_allowed:")) {

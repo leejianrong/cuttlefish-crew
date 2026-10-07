@@ -152,3 +152,43 @@ describe("installProgress", () => {
     expect(installProgress([python, pythonDone, node])?.name).toBe("Node");
   });
 });
+
+describe("an install that is there but due", () => {
+  const python = env({ tool: "uv", installed: true, env_dir: ".venv" });
+
+  it("says why instead of claiming it is fine", () => {
+    const rows = environmentRows({
+      root: "/r",
+      root_exists: true,
+      ecosystems: [python],
+      prepare: {
+        setting: "ask",
+        unsupported: [],
+        steps: [
+          {
+            ecosystem: "python",
+            name: "Python",
+            commands: [["uv", "sync"]],
+            reason: "the last install did not finish",
+          },
+        ],
+      },
+    });
+
+    expect(rows[0]).toMatchObject({
+      state: "stale",
+      stateLabel: "the last install did not finish",
+    });
+    expect(hasMissingInstall(rows)).toBe(true);
+  });
+  it("leaves an install that needs nothing alone", () => {
+    const rows = environmentRows({
+      root: "/r",
+      root_exists: true,
+      ecosystems: [python],
+      prepare: { setting: "ask", unsupported: [], steps: [] },
+    });
+
+    expect(rows[0].state).toBe("installed");
+  });
+});

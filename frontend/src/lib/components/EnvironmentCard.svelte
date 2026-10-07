@@ -12,8 +12,16 @@
   let {
     client,
     projectId,
+    refreshKey = "",
     onSettingChanged,
-  }: { client: FleetClient; projectId: string; onSettingChanged?: () => void } = $props();
+  }: {
+    client: FleetClient;
+    projectId: string;
+    /** Changes when the project's files may have changed under the card (an install ran, the
+     * setting moved): the card reads again. */
+    refreshKey?: string;
+    onSettingChanged?: () => void;
+  } = $props();
 
   // Read once when the card shows: a project's files change rarely, and a fresh start re-reads.
   let rows = $state<EnvironmentRow[] | null>(null);
@@ -24,10 +32,18 @@
   let saveError = $state<string | null>(null);
   let failed = $state(false);
 
+  // A re-read of the same project keeps what is on screen until the answer arrives; another
+  // project starts from "Reading…" so one project's files are never shown under another's name.
+  let shownFor = "";
+
   $effect(() => {
     const id = projectId;
-    rows = null;
-    missingRoot = null;
+    void refreshKey;
+    if (shownFor !== id) {
+      rows = null;
+      missingRoot = null;
+      shownFor = id;
+    }
     failed = false;
     client
       .getEnvironment(id)
@@ -114,7 +130,7 @@
             aria-checked={entry.id === setting}
             tabindex={entry.id === setting ? 0 : -1}
             class:selected={entry.id === setting}
-            disabled={saving}
+            aria-disabled={saving}
             onclick={() => choose(entry.id)}
           >
             {entry.label}

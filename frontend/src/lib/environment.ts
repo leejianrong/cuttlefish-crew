@@ -22,9 +22,10 @@ export interface EnvironmentRow {
   name: string;
   /** Tool, version and lockfile, as short phrases for one line. */
   details: string[];
-  /** What a person can act on: the project's own install is there or missing. Absent when
-   * there is nothing in the project folder to look for. */
-  state: "installed" | "missing" | null;
+  /** What a person can act on: the project's own install is there, missing, or there but due
+   * for an install (its files changed, or the last install did not finish). Absent when there
+   * is nothing in the project folder to look for. */
+  state: "installed" | "missing" | "stale" | null;
   stateLabel: string | null;
 }
 
@@ -50,13 +51,21 @@ export function environmentRow(env: EcosystemEnv): EnvironmentRow {
 }
 
 export function environmentRows(spec: EnvironmentSpec): EnvironmentRow[] {
-  return spec.ecosystems.map(environmentRow);
+  return spec.ecosystems.map((env) => {
+    const row = environmentRow(env);
+    // An install that is there can still be due: say why, in the plan's own words, rather than
+    // claiming it is fine (a half-made .venv from a failed install looks installed).
+    const step = spec.prepare.steps.find((entry) => entry.ecosystem === env.ecosystem);
+    return step && row.state === "installed"
+      ? { ...row, state: "stale", stateLabel: step.reason }
+      : row;
+  });
 }
 
 /** Whether to warn that agents will run without the project's dependencies. cuttlefish does not
  * install them yet (V5-E3), so a missing install means tests that need it will fail. */
 export function hasMissingInstall(rows: readonly EnvironmentRow[]): boolean {
-  return rows.some((row) => row.state === "missing");
+  return rows.some((row) => row.state === "missing" || row.state === "stale");
 }
 
 export const PREPARE_SETTINGS: { id: PrepareSetting; label: string; text: string }[] = [

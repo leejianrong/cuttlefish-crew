@@ -239,7 +239,7 @@ async def test_a_failed_install_fails_every_role_with_why_and_starts_no_round(
     assert sorted(e.role for e in failed if e.role) == ["builder", "reviewer"]
     assert "couldn't install the python dependencies" in failed[0].error
     assert "uv sync --frozen exited with code 2" in failed[0].error
-    assert "no matching distribution" in failed[0].error  # the last line of the output
+    assert "no matching distribution" not in failed[0].error  # the output lives in the install row
     assert "prepare=skip" in failed[0].error
     assert not any(isinstance(e, DelegationStarted) for e in events)
     assert daemon.status(project.id) == {"builder": "failed", "reviewer": "failed"}

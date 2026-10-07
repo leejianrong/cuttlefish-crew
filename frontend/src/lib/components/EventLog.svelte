@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { EpisodicEventView } from "../api";
-  import { eventLabel, formatWhen, installOutput, isRefusedCommand, summarize } from "../events";
+  import { eventLabelFor, formatWhen, installOutput, isRefusedCommand, summarize } from "../events";
 
   let {
     events,
@@ -30,10 +30,9 @@
           event.payload.status === "error"}
       >
         <span class="ts mono" title={event.ts}>{formatWhen(event.ts)}</span>
-        {#if event.payload.role}
-          <span class="role mono">{event.payload.role}</span>
-        {/if}
-        <span class="type" title="{event.event_type}, #{event.seq}">{eventLabel(event.event_type)}</span>
+        <!-- Always a cell, so a row with no role keeps the label and text in their own columns. -->
+        <span class="role mono">{event.payload.role ?? ""}</span>
+        <span class="type" title="{event.event_type}, #{event.seq}">{eventLabelFor(event)}</span>
         <span class="text">
           {summarize(event)}
           {#if onOpenPermissions && isRefusedCommand(event)}

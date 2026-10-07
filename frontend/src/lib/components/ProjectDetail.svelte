@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type {
     EpisodicEventView,
     FleetClient,
@@ -41,6 +42,17 @@
   // V5-E3: asked before installing dependencies, when the project's setting is "ask".
   let confirmingInstall = $state<PrepareInfo | null>(null);
   const installing = $derived(installProgress(events));
+  let startButton = $state<HTMLButtonElement | null>(null);
+  // The Environment card reads again when an install may have changed what it shows.
+  const environmentKey = $derived(
+    `${project?.env_prepare}|${project?.running}|${events.filter((e) => e.event_type.startsWith("Environment")).length}`,
+  );
+
+  async function cancelInstall() {
+    confirmingInstall = null;
+    await tick();
+    startButton?.focus();
+  }
   let confirmingStop = $state(false);
   let stopping = $state(false);
   let permissionsDirty = $state(false);
@@ -313,14 +325,19 @@
                 root={project.root}
                 busy={starting}
                 onChoose={chooseInstall}
-                onCancel={() => (confirmingInstall = null)}
+                onCancel={cancelInstall}
               />
             {/if}
             {#if startError}
               <p class="error" role="alert">{startError}</p>
             {/if}
             {#if !confirmingInstall}
-              <button class="btn btn-filled start" onclick={() => start()} disabled={starting}>
+              <button
+                class="btn btn-filled start"
+                bind:this={startButton}
+                onclick={() => start()}
+                disabled={starting}
+              >
                 {starting ? "Starting…" : "Start team"}
               </button>
             {/if}
@@ -328,7 +345,12 @@
         </section>
       {/if}
 
-      <EnvironmentCard {client} {projectId} onSettingChanged={refresh} />
+      <EnvironmentCard
+        {client}
+        {projectId}
+        refreshKey={environmentKey}
+        onSettingChanged={refresh}
+      />
 
       <section class="card filled events" aria-labelledby="activity-heading">
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>
