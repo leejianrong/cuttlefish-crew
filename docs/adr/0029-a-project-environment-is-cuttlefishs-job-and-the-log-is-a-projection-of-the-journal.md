@@ -98,9 +98,11 @@ project id, team id and role carried in a `contextvars` object (the way `cuttlef
 is): daemon start and stop, backend resolution with the binary path and version, resolved
 environment spec, every HTTP 4xx and 5xx with its detail, and failed starts.
 
-`DelegationFailed` gains `detail` (a redacted tail of the failing command's output, or of
-kopicode's stderr) and `record` (the backend's own session directory, from `session.start`'s
-`record` field), so a failure points at its evidence and nobody has to find it by hand.
+`DelegationFailed` gains `failure_kind` and `record` (the backend's own session directory,
+from `session.start`'s `record` field), so a failure points at its evidence and nobody has to
+find it by hand. A redacted tail of the failing command's output (`detail`) needs the tool
+output, which cuttlefish does not read today; it arrives with the stuck-agent detector
+(decision 3), which has to read it anyway.
 
 The file is `~/.cuttlefish/logs/cuttlefish.log`, rotating, always on, level from
 `CUTTLEFISH_LOG_LEVEL` (default INFO), every line carrying the project id. `make demo LOG=`

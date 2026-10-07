@@ -833,13 +833,18 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
 1. **V5-E0: stop the bleeding.** Log failed team starts with the cause; `make demo LOG=1`
    writes a log file; Ctrl-C stops `cuttlefish serve` cleanly. Then: log a failed delegation
    (reason, failure kind, role) and drop cuttlefish's own venv (`VIRTUAL_ENV`, `PATH` entries
-   under its `sys.prefix`) from the child environment. First part is on `feat/demo-logs-graceful-stop`.
-2. **V5-E1: observability.** One logging setup (`CUTTLEFISH_LOG_LEVEL`, rotating
+   under its `sys.prefix`) from the child environment, with a test that pins today's `.env`
+   inheritance until E4. Shipped as one PR.
+2. **V5-E1: observability**, in two PRs.
+   **E1a:** one logging setup (`CUTTLEFISH_LOG_LEVEL`, rotating
    `~/.cuttlefish/logs/cuttlefish.log`, project, team and role on every line through a
-   `contextvars` object). The `EpisodicStore.append` projection with redaction. `DelegationFailed`
-   gains `detail` and `record`. HTTP 4xx and 5xx logged with their detail. The dashboard shows
-   the server's real failure reason. `cuttlefish doctor` (binaries, versions, credential names
-   set, `PATH` leaks).
+   `contextvars` object); the `EpisodicStore.append` projection with redaction;
+   `DelegationFailed` gains `failure_kind` and `record`; daemon lifecycle, backend resolution
+   and HTTP 4xx and 5xx logged with their detail.
+   **E1b:** the dashboard shows the server's real failure reason; `cuttlefish doctor` (binaries
+   and versions, credential names set, `PATH` leaks, the log file, each project).
+   `DelegationFailed.detail` (a redacted tail of the failing command's output) moves to V5-E5,
+   which is the first slice that reads tool output.
 3. **V5-E2: environment spec and detection.** A read-only `EnvironmentSpec` for Python, Node
    and Go from marker files and version hints; never executes anything. The read-only
    Environment card on the project screen, and `doctor` reports it. Rust, Java and Ruby are
