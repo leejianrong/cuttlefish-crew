@@ -859,7 +859,7 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    request (see the ADR's update). API, MCP `start_project`, and the activity-log wording.
    **E3b (shipped):** the dashboard side: a confirm card on Start ("Install and start", "Always install", "Start
    without"), the setting, and the install as a visible step.
-5. **V5-E4: activation.** The allowlisted base environment (one constant, never per backend),
+5. **V5-E4: activation (shipped).** The allowlisted base environment (one constant, never per backend),
    the project overlay (`VIRTUAL_ENV`, `.venv/bin`, `node_modules/.bin` first on `PATH`), the
    short environment note in every role's brief, and `/mnt/c` entries dropped from the child
    `PATH` unless a project opts in. `ServePool` is already keyed by environment.

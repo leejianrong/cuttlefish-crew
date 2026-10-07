@@ -64,6 +64,15 @@ load_dotenv()
 
 
 @pytest.fixture(autouse=True)
+def _let_the_fake_agent_see_its_scenario(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An agent is given an allowlisted environment (V5-E4), so the scripted fake `kopicode
+    serve` would not see the `FAKE_KOPICODE_*` variables that tell it what to do. Name them in
+    the operator's passthrough, as a person with a custom setting would; a test of the
+    allowlist itself sets its own value."""
+    monkeypatch.setenv("CUTTLEFISH_AGENT_ENV_PASSTHROUGH", "FAKE_KOPICODE_*")
+
+
+@pytest.fixture(autouse=True)
 async def _end_resident_kopicode_children() -> AsyncIterator[None]:
     """A test that drives `cli._run` directly bypasses `cli.main`'s cleanup of the shared
     `kopicode serve` pool; end whatever it left so no child outlives its event loop."""

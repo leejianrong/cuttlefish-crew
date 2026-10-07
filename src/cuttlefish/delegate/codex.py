@@ -85,6 +85,9 @@ from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCa
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
 
+#: What Codex reads from its environment besides the credential a backend declares (V5-E4).
+ENV_PASSTHROUGH = ("CODEX_*", "OPENAI_BASE_URL", "OPENAI_ORG_ID", "OPENAI_PROJECT_ID")
+
 #: `--json`'s per-line `type` values this module reads.
 _TYPE_ITEM_COMPLETED = "item.completed"
 _TYPE_TURN_COMPLETED = "turn.completed"
@@ -310,7 +313,7 @@ async def run_codex(
             cwd=root,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=merge_env(env),
+            env=merge_env(env, root=root, passthrough=ENV_PASSTHROUGH),
         )
     except FileNotFoundError as exc:
         raise DelegationError(f"Codex binary {binary!r} not found") from exc

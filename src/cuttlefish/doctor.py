@@ -27,7 +27,7 @@ from cuttlefish.config import (
     resolve_codex_binary,
     resolve_kopicode_binary,
 )
-from cuttlefish.delegate.subprocess_env import merge_env
+from cuttlefish.delegate.subprocess_env import merge_env, withheld_names
 from cuttlefish.projects.store import Project
 from cuttlefish.secrets.store import SECRETS_KEY_ENV
 
@@ -127,8 +127,9 @@ def check_credentials(environ: Mapping[str, str]) -> list[Check]:
 
 
 def check_path(environ: Mapping[str, str], *, prefix: str | None = None) -> list[Check]:
-    """PATH entries that mislead an agent: cuttlefish's own venv (scrubbed from the agent's
-    environment, ADR-0029) and Windows directories under WSL."""
+    """PATH entries that would mislead an agent: cuttlefish's own venv and Windows directories
+    under WSL. Both are removed from the agent's PATH (ADR-0029, V5-E4), so this is information
+    for the person, not a problem to fix."""
     entries = [e for e in environ.get("PATH", "").split(os.pathsep) if e]
     own = Path(prefix if prefix is not None else sys.prefix).resolve()
     checks = []
@@ -137,7 +138,7 @@ def check_path(environ: Mapping[str, str], *, prefix: str | None = None) -> list
         if inside:
             checks.append(
                 Check(
-                    "warn",
+                    "ok",
                     "PATH",
                     f"cuttlefish's own venv ({inside[0]}) leads it; agents get PATH without it",
                 )
@@ -146,13 +147,30 @@ def check_path(environ: Mapping[str, str], *, prefix: str | None = None) -> list
     if windows:
         checks.append(
             Check(
-                "warn",
+                "ok",
                 "PATH",
-                f"{len(windows)} Windows entries (/mnt/...), e.g. {windows[0]}: an agent could "
-                "run Windows python/npm by accident",
+                f"{len(windows)} Windows entries (/mnt/...), e.g. {windows[0]}: agents get PATH "
+                "without them (CUTTLEFISH_KEEP_WINDOWS_PATH=1 keeps them)",
             )
         )
     return checks or [Check("ok", "PATH", "no misleading entries")]
+
+
+def check_agent_environment(environ: Mapping[str, str]) -> list[Check]:
+    """What an agent is *not* given from the daemon's environment, by name (never value): an
+    allowlist, so a variable an agent needs and does not get is easy to explain (V5-E4)."""
+    names = withheld_names(environ)
+    if not names:
+        return [Check("ok", "agent environment", "every variable in the daemon's is passed")]
+    shown = ", ".join(names[:12]) + (f", and {len(names) - 12} more" if len(names) > 12 else "")
+    return [
+        Check(
+            "ok",
+            "agent environment",
+            f"{len(names)} variables are not passed to agents: {shown}. Name one an agent needs "
+            "in CUTTLEFISH_AGENT_ENV_PASSTHROUGH (comma-separated, `*` ends a prefix)",
+        )
+    ]
 
 
 def check_log(path: Path) -> list[Check]:
@@ -204,6 +222,7 @@ def run_checks(
         *check_backends(environ),
         *check_credentials(environ),
         *check_path(environ),
+        *check_agent_environment(environ),
         *check_log(log_path),
         *check_projects(projects),
     ]

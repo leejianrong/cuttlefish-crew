@@ -131,7 +131,7 @@ stops a start. It reports each backend's binary (location and version), each cre
 name only (set, not set, or still the `.env.example` placeholder; the secrets key is also
 checked for being a real Fernet key), `PATH` entries that mislead an agent (cuttlefish's own
 venv, Windows `/mnt/...` directories under WSL), the log file, and each registered project
-(root exists, an empty `.cuttlefish/secrets.db` left by a failed start, and what its files say it needs: `Python (uv, wants 3.12, .venv present)`). Values are never printed.
+(root exists, an empty `.cuttlefish/secrets.db` left by a failed start, which daemon variables an agent is not given, and what its files say it needs: `Python (uv, wants 3.12, .venv present)`). Values are never printed.
 
 ## `cuttlefish mcp`
 
@@ -164,6 +164,8 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
+| `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` | unset | Names (comma-separated, `*` ends a prefix) to pass to agents on top of the allowlist (see What an agent's environment is). |
+| `CUTTLEFISH_KEEP_WINDOWS_PATH` | unset | `1` keeps WSL's `/mnt/...` entries on an agent's `PATH`; they are dropped by default. |
 | `CUTTLEFISH_PREPARE_TIMEOUT` | `900` | Seconds one dependency-install step may run before it is killed (see Installing dependencies). |
 | `CUTTLEFISH_LOG_LEVEL` | `INFO` | Log level for `cuttlefish serve`: the terminal and `~/.cuttlefish/logs/cuttlefish.log` (rotating, 5 MB x 5). `DEBUG` adds every tool call and permission decision; an unrecognised value falls back to `INFO` and says so. |
 | `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. cuttlefish asks kopicode for `--consent-timeout` when `serve --help` lists it (kopicode v0.3.0 and later). An older kopicode denies after its own fixed 60 seconds, so there you get 45. |
@@ -204,6 +206,21 @@ In the dashboard: with **Ask me**, Start shows what would run (each command, in 
 *Install and start*, *Install, and do this automatically*, *Start without installing* or *Cancel*. The
 project's Environment card has the three-way setting, and while an install runs the Overview says so and
 *Stop team* cancels it.
+
+## What an agent's environment is
+
+An agent's shell does not inherit the daemon's environment. It gets an allowlist: `HOME`, `USER`, `SHELL`, `TMPDIR`,
+`LANG` and `LC_*`, `TERM`, `XDG_*`, proxies and CA bundles (`HTTPS_PROXY`, `SSL_CERT_FILE`, ...), and toolchain
+locations (`GOPATH`, `CARGO_HOME`, `JAVA_HOME`, ...), plus what its own backend reads (`KOPICODE_*`, `CLAUDE_*`,
+`CODEX_*` and their base URLs) and the credentials it declares. The daemon's own settings (`CUTTLEFISH_*`), everything
+loaded from `.env` and everything `uv run` added are not passed. `PATH` has cuttlefish's own venv and, on WSL, the
+`/mnt/...` Windows directories removed (`CUTTLEFISH_KEEP_WINDOWS_PATH=1` keeps them), and the project's own `.venv`
+(with `VIRTUAL_ENV`) and `node_modules/.bin` come first when they exist. Each role's brief opens with a short
+`Environment:` note saying so.
+
+A variable an agent needs and does not get (for example `SSH_AUTH_SOCK` for `git` over SSH, or `AWS_*` for Claude
+Code on Bedrock) goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. `cuttlefish doctor` lists the names that are withheld, never
+the values.
 
 ## Default permissions
 

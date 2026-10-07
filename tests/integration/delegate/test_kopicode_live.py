@@ -19,6 +19,7 @@ real-parser round trip.
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -54,6 +55,9 @@ async def test_a_real_write_lands_and_is_classified_as_completed(tmp_path: Path)
         ),
         root=str(root),
         policy_file=str(policy_path),
+        # The credential is passed the way a real delegation passes it: declared, not inherited
+        # (an agent's environment is an allowlist, V5-E4).
+        env={"OPENROUTER_API_KEY": os.environ["OPENROUTER_API_KEY"]},
         timeout=120,
     )
 

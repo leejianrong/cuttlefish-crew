@@ -154,3 +154,26 @@ input to the start call instead:
   person made themselves is trusted until its files change, then reinstalled.
 - `uv sync` runs `--frozen` when there is a `uv.lock`, so cuttlefish never rewrites a person's lockfile.
 
+## Update (V5-E4, 2026-10-07): the environment an agent gets
+
+`merge_env` (`delegate/subprocess_env.py`) no longer copies the daemon's environment. A child gets:
+the allowlisted names (`HOME`, `USER`, `LANG`, `LC_*`, `XDG_*`, `TERM`, proxies, CA bundles, toolchain locations such
+as `GOPATH` and `JAVA_HOME`); the operator's `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` (comma-separated names, `*` ends a
+prefix) and what its backend asks for (`KOPICODE_*`, `CLAUDE_*`, `CODEX_*` and their base URLs); for installs only, the
+package tools' own settings (`NPM_*`, `npm_config_*`, `UV_*`, `PIP_*`, ... where a private registry's token lives);
+`PATH` without cuttlefish's own venv and without WSL's `/mnt/...`; the project's `.venv` (with `VIRTUAL_ENV`) and
+`node_modules/.bin` first on `PATH` when they exist; and last, the credentials the backend declared. `CUTTLEFISH_*`,
+`E2B_API_KEY`, `.env` and everything `uv run` set are simply not there.
+
+Two choices the decision text did not spell out:
+
+- **`/mnt/...` is dropped process-wide**, `CUTTLEFISH_KEEP_WINDOWS_PATH=1` keeps it. Q61 assumed a per-project opt-in;
+  that needs a column and a UI, and nobody has asked for it. Revisit if someone needs Windows tools in one project only.
+- **The resident `kopicode serve` child is keyed by project root.** It reads its environment once at start, so a child
+  shared between projects would carry the first project's `.venv` on `PATH` for the second. The pool key is now
+  (binary, root, credentials, consent timeout) and the child starts in the project's folder.
+
+Every role's brief also gets a short `Environment:` note between its persona and its task (`environment.brief`): the
+project's own environment is first on `PATH`, how to run things (`uv run`, `pnpm run`), and not to install globally.
+It says only what cuttlefish sets up (Python and Node), and describes the install that is about to happen when one is.
+

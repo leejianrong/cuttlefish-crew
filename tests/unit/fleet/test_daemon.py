@@ -271,3 +271,16 @@ def test_default_presets_pass_nothing_and_a_custom_set_is_passed_to_every_role(
     assert "presets" not in _build_role_inputs(plain, roles)[0]
     assert "presets" not in _build_role_inputs(same, roles)[0]
     assert _build_role_inputs(custom, roles)[0]["presets"] == ["inspect", "containers"]
+
+
+def test_the_environment_note_sits_between_the_persona_and_the_task(tmp_path: Path) -> None:
+    from cuttlefish.fleet.daemon import _compose_role_text
+    from cuttlefish.projects.store import RoleDefinition
+
+    role = RoleDefinition(name="builder", persona="Build things.")
+
+    assert _compose_role_text(role, "do it", "Environment: x") == (
+        "You are builder. Build things.\n\nEnvironment: x\n\ndo it"
+    )
+    assert _compose_role_text(None, "do it", "Environment: x") == "Environment: x\n\ndo it"
+    assert _compose_role_text(role, "do it") == "You are builder. Build things.\n\ndo it"

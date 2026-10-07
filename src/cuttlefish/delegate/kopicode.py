@@ -22,6 +22,9 @@ from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.episodic.redact import DEFAULT_SECRET_ENV_VARS, Redactor
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
 
+#: What kopicode reads from its environment besides the credentials a backend declares (V5-E4).
+ENV_PASSTHROUGH = ("KOPICODE_*",)
+
 #: kopicode run --print's per-line `kind` values this module reads. Every other kind
 #: (provider_request, ...) is part of the real record but doesn't change the outcome
 #: this module decides.
@@ -226,7 +229,7 @@ async def run_kopicode(
             cwd=root,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=merge_env(env),
+            env=merge_env(env, root=root, passthrough=ENV_PASSTHROUGH),
         )
     except FileNotFoundError as exc:
         raise DelegationError(f"kopicode binary {binary!r} not found") from exc
