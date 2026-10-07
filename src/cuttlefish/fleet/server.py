@@ -117,6 +117,9 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
             for r in project.roles
         ],
         "last_team_id": project.last_team_id,
+        # Whether the last team was started with a review gate: only then does a role that
+        # is blocked after a round mean "waiting for your review" (the dashboard words it so).
+        "require_approval": project.last_team_require_approval,
         "allow": [list(command) for command in project.allow],
         "running": daemon.is_running(project.id),
         "stopping": daemon.is_stopping(project.id),

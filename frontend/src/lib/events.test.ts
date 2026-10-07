@@ -5,8 +5,10 @@ import type { EpisodicEventView } from "./api";
 import {
   commandText,
   eventLabel,
+  failureText,
   formatWhen,
   isRefusedCommand,
+  latestRound,
   refusalReason,
   summarize,
 } from "./events";
@@ -147,5 +149,71 @@ describe("Needs-you events", () => {
     expect(summarize(cut)).toBe(
       "Asked a question nobody could answer: Which of the two retry settings should win when they disagree, the …",
     );
+  });
+});
+
+describe("failureText", () => {
+  it("says why in words and keeps the raw reason", () => {
+    expect(failureText("max_turns", "stop=max_turns exit_code=4")).toBe(
+      "It used all its turns before finishing. (stop=max_turns exit_code=4)",
+    );
+  });
+  it("reads the stop word when an older event has no failure kind", () => {
+    expect(failureText(undefined, "stop=max_turns exit_code=4")).toContain("all its turns");
+    expect(failureText(null, "stop=verification_failed exit_code=5")).toContain("tests");
+  });
+  it("shows an unknown reason exactly as it is", () => {
+    expect(failureText(null, "rpc error -32000: boom")).toBe("rpc error -32000: boom");
+    expect(failureText("something_new", "stop=x")).toBe("stop=x");
+  });
+});
+
+describe("failed rounds in the activity log", () => {
+  it("labels the round and the task apart and does not repeat the raw stop reason", () => {
+    expect(eventLabel("DelegationFailed")).toBe("Round failed");
+    expect(eventLabel("TaskFailed")).toBe("Task failed");
+    const round = event("DelegationFailed", {
+      reason: "stop=max_turns exit_code=4",
+      failure_kind: "max_turns",
+      role: "builder",
+    });
+    const task = event("TaskFailed", { error: "stop=max_turns exit_code=4", role: "builder" });
+    expect(summarize(round)).toContain("all its turns");
+    expect(summarize(task)).toBe("The task ended because its last round failed.");
+  });
+  it("keeps a task failure that is not a backend stop", () => {
+    expect(summarize(event("TaskFailed", { error: "the daemon restarted" }))).toBe(
+      "the daemon restarted",
+    );
+  });
+});
+
+describe("latestRound", () => {
+  const at = (seq: number, type: string, payload: Record<string, unknown>) =>
+    ({ seq, ts: "2026-10-06T10:00:00Z", event_type: type, payload }) as EpisodicEventView;
+
+  it("describes how the role's latest round ended", () => {
+    const events = [
+      at(1, "TaskSubmitted", { role: "builder", text: "do it" }),
+      at(2, "DelegationStarted", { role: "builder", task_text: "do it" }),
+      at(3, "DelegationFailed", {
+        role: "builder",
+        reason: "stop=max_turns exit_code=4",
+        failure_kind: "max_turns",
+      }),
+    ];
+    expect(latestRound(events, "builder")).toEqual({
+      kind: "failed",
+      text: "It used all its turns before finishing. (stop=max_turns exit_code=4)",
+    });
+  });
+  it("is null while a round is running, before one started, or for another role", () => {
+    const running = [
+      at(1, "DelegationFailed", { role: "builder", reason: "x" }),
+      at(2, "DelegationStarted", { role: "builder", task_text: "again" }),
+    ];
+    expect(latestRound(running, "builder")).toBeNull();
+    expect(latestRound([], "builder")).toBeNull();
+    expect(latestRound(running, "reviewer")).toBeNull();
   });
 });

@@ -66,6 +66,7 @@ def test_register_then_list_round_trips(client: TestClient, tmp_path: Path) -> N
         }
     ]
     assert body["running"] is False
+    assert body["require_approval"] is False
 
     listing = client.get("/api/projects").json()
     assert [p["id"] for p in listing["projects"]] == [body["id"]]

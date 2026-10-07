@@ -39,6 +39,9 @@
           {#if onOpenPermissions && isRefusedCommand(event)}
             <button type="button" class="link" onclick={onOpenPermissions}>Change permissions</button>
           {/if}
+          {#if event.event_type === "DelegationFailed" && event.payload.record}
+            <span class="record mono">Full output: {event.payload.record}</span>
+          {/if}
         </span>
       </div>
     {/if}
@@ -66,6 +69,13 @@
   .link:focus-visible {
     outline: 2px solid var(--md-sys-color-primary);
     outline-offset: 2px;
+  }
+
+  .record {
+    display: block;
+    color: var(--text-faint);
+    font-size: 0.72rem;
+    overflow-wrap: anywhere;
   }
 
   .empty {

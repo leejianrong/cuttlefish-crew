@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { EpisodicEventView, FleetClient, ProjectBudget, RoleStatus, RoleUsage } from "../api";
+  import type { RoundOutcome } from "../events";
   import StatusChip from "./StatusChip.svelte";
 
   let {
@@ -10,6 +11,8 @@
     handovers = [],
     usage = { tokens: 0, cost_usd: null },
     budget = { max_tokens: null, max_cost_usd: null },
+    requireApproval = false,
+    lastRound = null,
   }: {
     client: FleetClient;
     projectId: string;
@@ -23,6 +26,10 @@
     /** The project's own configured ceiling, if any (KAN-1712/ADR-0017) -- checked
      * independently per role, so every role card compares against the same one. */
     budget?: ProjectBudget;
+    /** The team was started with a review gate, so a blocked role is waiting for a decision. */
+    requireApproval?: boolean;
+    /** How this role's latest round ended, in words, so "blocked" can say why. */
+    lastRound?: RoundOutcome | null;
   } = $props();
 
   const tokensOverBudget = $derived(
@@ -33,6 +40,11 @@
       usage.cost_usd !== null &&
       usage.cost_usd >= budget.max_cost_usd,
   );
+
+  // A blocked role is waiting for a decision only with a review gate or a usage limit (ADR-0016,
+  // ADR-0017). Otherwise the round just ended and the task finishes after a short wait for a steer
+  // message (ADR-0008): showing Approve and Reject then offers a decision nobody is waiting for.
+  const awaitingDecision = $derived(requireApproval || tokensOverBudget || costOverBudget);
 
   let message = $state("");
   let sending = $state(false);
@@ -109,12 +121,16 @@
     </button>
   </div>
 
-  {#if status === "blocked"}
+  {#if status === "blocked" && awaitingDecision}
     <div class="approval">
       <p class="hint">
-        {role} is blocked. That can mean it is waiting for your review, it reached its token or
-        cost limit, or an action was refused. If it is waiting on you, approve or reject here;
-        rejecting needs a comment saying what to change.
+        {#if lastRound?.kind === "failed"}{role}'s last round failed: {lastRound.text}
+        {:else if lastRound?.kind === "refused"}{role}'s last round was refused: {lastRound.text}
+        {:else}{role} has finished a round and is waiting.{/if}
+        {#if tokensOverBudget || costOverBudget}
+          It reached its token or cost limit.
+        {/if}
+        Approve to carry on, or reject with a comment saying what to change.
       </p>
       <textarea
         bind:value={approvalComment}
@@ -134,6 +150,17 @@
         </button>
       </div>
     </div>
+  {:else if status === "blocked"}
+    <p class="round-note" role="status">
+      {#if lastRound?.kind === "failed"}
+        {role}'s last round failed: {lastRound.text}
+      {:else if lastRound?.kind === "refused"}
+        {role}'s last round was refused: {lastRound.text}
+      {:else}
+        {role} finished a round.
+      {/if}
+      The task ends in a few seconds unless you send {role} a message above.
+    </p>
   {/if}
 
   {#if handovers.length > 0}
@@ -217,6 +244,15 @@
   .approval textarea {
     width: 100%;
     margin-bottom: 0.5rem;
+  }
+
+  .round-note {
+    margin: 0.75rem 0 0;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--border);
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    overflow-wrap: anywhere;
   }
 
   .approval-actions {
