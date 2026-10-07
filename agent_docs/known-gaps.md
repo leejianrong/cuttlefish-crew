@@ -1,6 +1,6 @@
 # Known, accepted gaps
 
-Moved out of `CLAUDE.md` so the root brief stays short. Each of these was
+Moved out of `AGENTS.md` so the root brief stays short. Each of these was
 named on purpose; don't re-litigate one without new evidence. Read this
 before proposing to "fix" a limitation, and add a bullet (with the ADR or
 `docs/QUESTIONS.md` entry that explains it) when a new one is accepted.

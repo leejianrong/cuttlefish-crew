@@ -1,6 +1,6 @@
 # What's built
 
-Moved out of `CLAUDE.md` so the root brief stays short. This is a history of
+Moved out of `AGENTS.md` so the root brief stays short. This is a history of
 shipped slices, kept for the *why* behind each; `git log --oneline`,
 `docs/adr/` (0001-0021 and counting) and each module's own doc comment are
 the authority, and anything here that disagrees with the code is stale.
