@@ -381,10 +381,14 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 if not decision.approved:
                     redirect_text = decision.comment or "(rejected, no comment given)"
             elif steerable:
+                # A role cuttlefish stopped for failing on its environment (ADR-0029) waits for
+                # a person with no timeout: its Needs-you card says "fix it, then steer", and a
+                # five-second grace would end the team before anyone could.
+                stuck = outcome.kind == "failed" and outcome.failure_kind == "environment_stuck"
                 steer_event = await satay.wait_for_event(
                     SteeringMessage,
                     key=steering_key(team_id, name),
-                    timeout=steering_grace,
+                    timeout=None if stuck else steering_grace,
                 )
                 if steer_event is not None:
                     await journal(team_id, steer_event)

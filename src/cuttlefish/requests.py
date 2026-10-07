@@ -22,6 +22,7 @@ from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+from cuttlefish import logsetup
 from cuttlefish.delegate.consent import (
     ConsentDecision,
     ConsentPolicy,
@@ -338,15 +339,19 @@ class RequestBroker:
         return team_id in self._closed
 
     def _finish(self, pending: PendingRequest, outcome: Outcome) -> Outcome:
-        self._append(
-            pending.team_id,
-            RequestResolved(
-                request_id=outcome.request_id,
-                resolution=outcome.resolution,
-                by=outcome.by,
-                rule=list(outcome.rule) if outcome.rule else None,
-            ),
-        )
+        fields = {"project": pending.project_id, "team": pending.team_id}
+        if pending.record.role:
+            fields["role"] = pending.record.role
+        with logsetup.bind(**fields):  # so the journal's log line names its project
+            self._append(
+                pending.team_id,
+                RequestResolved(
+                    request_id=outcome.request_id,
+                    resolution=outcome.resolution,
+                    by=outcome.by,
+                    rule=list(outcome.rule) if outcome.rule else None,
+                ),
+            )
         del self._pending[pending.id]
         self._finished[pending.id] = (pending.project_id, outcome)
         while len(self._finished) > _REMEMBERED:

@@ -282,7 +282,8 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
     async def answer_request(
         project_id: str, request_id: str, answer: str, rule: list[str] | None = None
     ) -> dict[str, Any]:
-        """Answer a waiting request: allow_once, allow_always or deny. Answering
+        """Answer a waiting request: allow_once, allow_always or deny. A request of kind
+        `blocked` takes no answer (it is refused with 422): use steer_project instead. Answering
         allow_once or allow_always lets the agent run a shell command, so it is as
         weighty as start_project; only do it for a command the operator would approve.
         `rule` is for allow_always only: the words a command must start with, which must

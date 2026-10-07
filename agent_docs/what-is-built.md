@@ -365,4 +365,7 @@ expires and `_pending_json` sends `expires_in_s: null`. `FleetDaemon.steer` and 
 (new resolution `superseded`, `by="person"`) after the message is delivered; `end_team` still ends it `cancelled`/`abandoned`.
 The card is a "Stuck" card with no buttons ("Fix the environment, then steer the role"), and a resolved blocked request is
 labelled "Ended: ...", never "Denied".
-
+Found by the MCP pass, fixed before merge: the steering grace (5 s) ended the team right after the round, so the card was
+"abandoned" before anyone could steer; a stuck role in a steerable team now waits for a steer with no timeout (`team.py`). The
+request-resolved log line also lacked the project id (the broker binds it), and `answer_request` now says blocked requests
+take `steer_project`.
