@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { EpisodicEventView, FleetClient, NeedsYouRequest, ProjectSummary } from "../api";
-  import { modeLabel } from "../team";
+  import { modeLabel, startFailure } from "../team";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
@@ -113,8 +113,8 @@
       await client.startProject(projectId, roles, requireApproval);
       taskTexts = {};
       await refresh();
-    } catch {
-      startError = "Couldn't start that team. Check the daemon's own log for why.";
+    } catch (error) {
+      startError = startFailure(error);
     } finally {
       starting = false;
     }

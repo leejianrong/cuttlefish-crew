@@ -40,7 +40,7 @@ import satay.control
 from dotenv import load_dotenv
 from satay.journal.events import TERMINAL_STATUSES
 
-from cuttlefish import logsetup, onboarding, resume, runtime
+from cuttlefish import doctor, logsetup, onboarding, resume, runtime
 from cuttlefish.config import (
     AGENT_BACKEND_ENV,
     ConfigError,
@@ -623,6 +623,23 @@ def _init(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _doctor(args: argparse.Namespace) -> int:
+    """Report what is set up and what is quietly wrong. Values are never printed."""
+    del args
+    store = ProjectStore.open()
+    try:
+        checks = doctor.run_checks(
+            environ=os.environ, projects=store.list(), log_path=logsetup.default_log_path()
+        )
+    finally:
+        store.close()
+    for check in checks:
+        print(check.render())
+    failed = doctor.exit_code(checks)
+    print("\ncuttlefish doctor:", "problems found" if failed else "no problems that stop a start")
+    return EXIT_TASK_FAILED if failed else EXIT_OK
+
+
 def _projects(args: argparse.Namespace) -> int:
     store = ProjectStore.open()
     try:
@@ -1043,6 +1060,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="A role to register (repeatable). Default: builder and reviewer.",
     )
 
+    subparsers.add_parser(
+        "doctor",
+        help="Check backends, credentials (by name only), PATH, the log file and each project",
+    )
+
     projects_parser = subparsers.add_parser(
         "projects", help="Manage the Project registry (ADR-0009)"
     )
@@ -1282,6 +1304,8 @@ def main(argv: list[str] | None = None) -> int:
         return _init(args)
     if args.command == "projects":
         return _projects(args)
+    if args.command == "doctor":
+        return _doctor(args)
     if args.command == "serve":
         return _run_serve(args)
     if args.command == "mcp":

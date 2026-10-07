@@ -124,6 +124,15 @@ concurrently, in one process.
 | `--browse-root PATH` | A folder the dashboard's folder picker may browse: its subfolders only, with hidden folders and links out of the tree excluded. Repeatable. Default: your home directory. Registering a project is not limited to these. In non-loopback mode, set it to a workspaces folder rather than your home. |
 | `--dashboard-dir PATH` | Serve the dashboard's own production build from this directory, same-origin with the JSON API. Default: auto-detect `./frontend/dist`. |
 
+## `cuttlefish doctor`
+
+Checks what is set up and what is quietly wrong, and exits non-zero only for a problem that
+stops a start. It reports each backend's binary (location and version), each credential by
+name only (set, not set, or still the `.env.example` placeholder; the secrets key is also
+checked for being a real Fernet key), `PATH` entries that mislead an agent (cuttlefish's own
+venv, Windows `/mnt/...` directories under WSL), the log file, and each registered project
+(root exists, an empty `.cuttlefish/secrets.db` left by a failed start). Values are never printed.
+
 ## `cuttlefish mcp`
 
 Run an MCP server (stdio transport) wrapping an already-running
