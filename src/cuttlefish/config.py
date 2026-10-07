@@ -16,6 +16,7 @@ asking.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 from collections.abc import Sequence
@@ -28,6 +29,8 @@ from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.provider import LlmProvider
 from cuttlefish.sandbox.provider import SandboxProvider
 from cuttlefish.secrets.store import SECRETS_KEY_ENV, InvalidSecretsKeyError, SecretsStore
+
+_LOG = logging.getLogger(__name__)
 
 KOPICODE_BIN_ENV = "CUTTLEFISH_KOPICODE_BIN"
 DEFAULT_KOPICODE_BIN = "kopicode"
@@ -288,6 +291,13 @@ def prepare_run(
                 check_binary_on_path(claude_code_binary, env_hint=CLAUDE_CODE_BIN_ENV)
             else:
                 check_binary_on_path(codex_binary, env_hint=CODEX_BIN_ENV)
+        _LOG.info(
+            "backend=%s binaries: kopicode=%s claude=%s codex=%s",
+            agent_backend,
+            shutil.which(kopicode_binary) or "-",
+            shutil.which(claude_code_binary) or "-",
+            shutil.which(codex_binary) or "-",
+        )
         backend = resolve_backend(
             agent_backend,
             kopicode_binary=kopicode_binary,

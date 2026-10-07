@@ -148,6 +148,11 @@ class DelegationFailed:
     # failed round still burned real usage getting there.
     tokens: int | None = None
     cost_usd: float | None = None
+    # Why it failed, when the backend can tell (`DelegationOutcome.failure_kind`), and the
+    # backend's own record of the session -- where its full output lives (ADR-0029): a
+    # failure points at its evidence instead of a person finding it by hand.
+    failure_kind: str | None = None
+    record: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

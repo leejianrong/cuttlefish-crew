@@ -32,7 +32,7 @@ from satay.config import db_path as satay_db_path
 from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
-from cuttlefish import runtime
+from cuttlefish import logsetup, runtime
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
@@ -342,6 +342,9 @@ class FleetDaemon:
 
         async def _drive() -> None:
             prepared: PreparedRun | None = None
+            # This task's whole life: every log line it and its children write names this
+            # project and team (a `contextvars` copy, so a concurrent team's own never mixes in).
+            logsetup.set_context(project=project.id, team=team_id)
             try:
                 prepared = prepare_run(
                     project=project.secrets_scope,
@@ -394,6 +397,9 @@ class FleetDaemon:
                     return
                 raise
             finally:
+                logger.info(
+                    "team %s ended%s", team_id, " (stopped)" if team_id in self._stopping else ""
+                )
                 if prepared is not None:
                     # Whatever a person was still being asked ends with the team, journaled
                     # while its store is open.
@@ -412,6 +418,14 @@ class FleetDaemon:
 
         self._running[project.id] = RunningTeam(
             team_id=team_id, base_url=base_url, token=token, task=task
+        )
+        logger.info(
+            "project %r (%s): team %s started, roles=%s, root=%s",
+            project.name,
+            project.id,
+            team_id,
+            ",".join(r["name"] for r in role_inputs),
+            project.root,
         )
 
     async def _is_resumable(self, project: Project, team_id: str) -> bool:
@@ -514,6 +528,7 @@ class FleetDaemon:
         # (ADR-0028); `is_stopping` lets the dashboard say "stopping" at once, not "working".
         self._stopping.add(running.team_id)
         self.requests.end_team(running.team_id, "cancelled")
+        logger.info("project %s: stop requested for team %s", project_id, running.team_id)
 
     async def steer(self, project_id: str, role: str, text: str) -> None:
         """See `stop`'s own docstring -- `asyncio.to_thread` for the identical

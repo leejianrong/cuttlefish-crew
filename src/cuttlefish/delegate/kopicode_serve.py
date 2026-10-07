@@ -718,4 +718,9 @@ async def run_kopicode_serve(
     if not isinstance(result, dict):
         raise DelegationError("kopicode serve replied with neither result nor error")
     outcome = classify_turn(events, result, env=env)
-    return dataclasses.replace(outcome, consent_decisions=consents)
+    record = result.get("record")
+    return dataclasses.replace(
+        outcome,
+        consent_decisions=consents,
+        record=record if isinstance(record, str) and record else None,
+    )

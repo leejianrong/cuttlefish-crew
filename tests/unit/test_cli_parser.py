@@ -239,6 +239,7 @@ def test_serve_ctrl_c_stops_cleanly_instead_of_a_traceback(
             close()
         raise KeyboardInterrupt
 
+    monkeypatch.setattr(cli.logsetup, "configure", lambda **_: None)
     monkeypatch.setattr(cli, "_serve", lambda args: None)
     monkeypatch.setattr(cli.asyncio, "run", _interrupted)
     assert cli.main(["serve"]) == cli.EXIT_OK
