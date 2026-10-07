@@ -26,6 +26,7 @@ from cuttlefish.config import (
     resolve_codex_binary,
     resolve_kopicode_binary,
 )
+from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.projects.store import Project
 from cuttlefish.secrets.store import SECRETS_KEY_ENV
 
@@ -52,7 +53,12 @@ def _version(binary: str) -> str:
     already found on PATH, with a short timeout."""
     try:
         done = subprocess.run(
-            [binary, "--version"], capture_output=True, text=True, timeout=5, check=False
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+            env=merge_env(None),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         return f"version unknown ({type(exc).__name__})"

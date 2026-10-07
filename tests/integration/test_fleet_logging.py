@@ -80,3 +80,39 @@ def test_an_unknown_project_is_routine_and_stays_below_warning(
 
     assert response.status_code == 404
     assert caplog.records == []
+
+
+def test_the_log_header_names_the_project_and_team_on_the_daemons_and_the_http_lines(
+    tmp_path: Path,
+) -> None:
+    """The V5-E1b browser run found `project=- team=-` on the daemon's own lines (ADR-0029)."""
+    from cuttlefish import logsetup
+
+    log = tmp_path / "cuttlefish.log"
+    root = logging.getLogger()
+    before, level = list(root.handlers), root.level
+    logsetup.configure(log_path=log, stream=False)
+    try:
+        client = _client(tmp_path)
+        project_root = tmp_path / "alpha"
+        project_root.mkdir()
+        project = client.post("/api/projects", json={"name": "alpha", "root": str(project_root)})
+        project_id = project.json()["id"]
+        client.post(
+            f"/api/projects/{project_id}/start",
+            json={"roles": [{"name": "builder", "text": "do it"}]},
+        )
+        for handler in root.handlers:
+            handler.flush()
+    finally:
+        for handler in [h for h in root.handlers if h not in before]:
+            root.removeHandler(handler)
+            handler.close()
+        root.setLevel(level)
+
+    lines = log.read_text().splitlines()
+    failed = next(line for line in lines if "team failed to start" in line)
+    rejected = next(line for line in lines if "-> 409" in line)
+    assert f"project={project_id} team=" in failed and "team=-" not in failed
+    assert f"[project={project_id} team=- role=-]" in rejected
+    assert "'cuttlefish-test-missing-kopicode-binary' is not on PATH" in failed

@@ -244,3 +244,21 @@ def test_serve_ctrl_c_stops_cleanly_instead_of_a_traceback(
     monkeypatch.setattr(cli.asyncio, "run", _interrupted)
     assert cli.main(["serve"]) == cli.EXIT_OK
     assert "stopped" in capsys.readouterr().out
+
+
+def test_serve_with_an_unusable_home_says_so_instead_of_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The registry opens under ~/.cuttlefish; a file there used to crash serve (V5-E1b QA)."""
+    from cuttlefish import cli
+
+    (tmp_path / ".cuttlefish").write_text("not a directory")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(cli.logsetup, "configure", lambda **_: None)
+
+    code = cli.main(["serve"])
+
+    err = capsys.readouterr().err
+    assert code == cli.EXIT_TASK_FAILED
+    assert "cannot open the project registry" in err
+    assert "Traceback" not in err

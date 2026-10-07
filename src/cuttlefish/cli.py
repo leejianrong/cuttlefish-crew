@@ -695,7 +695,11 @@ async def _serve(args: argparse.Namespace) -> int:
     except ConfigError as exc:
         print(f"cuttlefish serve: {exc}", file=sys.stderr)
         return EXIT_TASK_FAILED
-    store = ProjectStore.open()
+    try:
+        store = ProjectStore.open()
+    except OSError as exc:
+        print(f"cuttlefish serve: cannot open the project registry: {exc}", file=sys.stderr)
+        return EXIT_TASK_FAILED
     daemon = FleetDaemon(store, request_window_s=request_window)
     try:
         # ADR-0010/KAN-1703: resume every project whose last team was still
@@ -1282,6 +1286,7 @@ def _run_serve(args: argparse.Namespace) -> int:
     try:
         return asyncio.run(_closing_serve_children(_serve(args)))
     except KeyboardInterrupt:
+        logging.getLogger(__name__).info("cuttlefish serve stopped (Ctrl-C)")
         print("\ncuttlefish serve: stopped", flush=True)
         return EXIT_OK
 

@@ -387,9 +387,7 @@ class FleetDaemon:
                         await handle.result()
             except Exception as exc:
                 if not ready.done():
-                    logger.error(
-                        "project %r: team %s failed to start", project.id, team_id, exc_info=True
-                    )
+                    logger.error("team failed to start: %s", exc, exc_info=True)
                     # Nothing started -- report the failure through `ready` instead
                     # of leaving it an unretrieved task exception (a second,
                     # redundant warning for the identical failure).
@@ -419,14 +417,13 @@ class FleetDaemon:
         self._running[project.id] = RunningTeam(
             team_id=team_id, base_url=base_url, token=token, task=task
         )
-        logger.info(
-            "project %r (%s): team %s started, roles=%s, root=%s",
-            project.name,
-            project.id,
-            team_id,
-            ",".join(r["name"] for r in role_inputs),
-            project.root,
-        )
+        with logsetup.bind(project=project.id, team=team_id):
+            logger.info(
+                "project %r: team started, roles=%s, root=%s",
+                project.name,
+                ",".join(r["name"] for r in role_inputs),
+                project.root,
+            )
 
     async def _is_resumable(self, project: Project, team_id: str) -> bool:
         """Whether `team_id`'s satay run is still non-terminal -- a plain, read-only
@@ -528,7 +525,8 @@ class FleetDaemon:
         # (ADR-0028); `is_stopping` lets the dashboard say "stopping" at once, not "working".
         self._stopping.add(running.team_id)
         self.requests.end_team(running.team_id, "cancelled")
-        logger.info("project %s: stop requested for team %s", project_id, running.team_id)
+        with logsetup.bind(project=project_id, team=running.team_id):
+            logger.info("stop requested")
 
     async def steer(self, project_id: str, role: str, text: str) -> None:
         """See `stop`'s own docstring -- `asyncio.to_thread` for the identical

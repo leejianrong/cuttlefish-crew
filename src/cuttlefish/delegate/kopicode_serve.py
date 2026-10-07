@@ -131,6 +131,7 @@ async def serve_supports_consent_timeout(binary: str) -> bool:
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            env=merge_env(None),
         )
         try:
             output, _ = await asyncio.wait_for(process.communicate(), 5.0)

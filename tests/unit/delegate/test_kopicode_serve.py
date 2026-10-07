@@ -851,3 +851,28 @@ async def test_the_sessions_own_record_directory_is_carried_on_the_outcome(
     assert outcome.kind == "failed"
     assert outcome.failure_kind == "max_turns"
     assert outcome.record == "/r"
+
+
+async def test_the_help_probe_does_not_inherit_cuttlefishs_own_venv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Found by the V5-E1b CLI run: the `serve --help` probe skipped `merge_env` (ADR-0029)."""
+    from cuttlefish.delegate import kopicode_serve
+
+    own = tmp_path / ".venv"
+    (own / "bin").mkdir(parents=True)
+    seen = tmp_path / "seen.txt"
+    script = tmp_path / "kopicode-probe"
+    script.write_text(f'#!/bin/sh\necho "$VIRTUAL_ENV|$PATH" > {seen}\necho "usage: serve"\n')
+    script.chmod(0o755)
+    monkeypatch.setattr("sys.prefix", str(own))
+    monkeypatch.setattr("sys.base_prefix", "/usr")
+    monkeypatch.setenv("VIRTUAL_ENV", str(own))
+    monkeypatch.setenv("PATH", f"{own / 'bin'}:/usr/bin:/bin")
+    monkeypatch.setattr(kopicode_serve, "_TIMEOUT_FLAG_SUPPORT", {})
+
+    await kopicode_serve.serve_supports_consent_timeout(str(script))
+
+    virtual_env, path = seen.read_text().strip().split("|", 1)
+    assert virtual_env == ""
+    assert str(own) not in path

@@ -47,14 +47,29 @@ import urllib.request
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 
 
-class FleetApiError(Exception):
-    """The fleet daemon was reached but rejected the request (a non-2xx response)."""
+class FleetApiError(ToolError):
+    """The fleet daemon was reached but rejected the request (a non-2xx response).
+
+    A `ToolError`, not a plain `Exception`: the SDK reports a `ToolError`'s message to the
+    client, but hides the message of anything else behind a bare "Error executing tool
+    <name>" (and logs a long traceback). The daemon's reason is the useful part (ADR-0029).
+    """
 
 
-class FleetUnreachableError(Exception):
+class FleetUnreachableError(ToolError):
     """Couldn't reach the fleet daemon at all."""
+
+
+def _detail_text(raw: str) -> str:
+    """The `detail` string out of a FastAPI error body (`{"detail": "..."}`), else the body."""
+    try:
+        detail = json.loads(raw).get("detail")
+    except (ValueError, AttributeError):
+        return raw
+    return detail if isinstance(detail, str) else raw
 
 
 def _request(
@@ -79,7 +94,7 @@ def _request(
             raw = response.read()
             return json.loads(raw) if raw else {}
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
+        detail = _detail_text(exc.read().decode("utf-8", errors="replace"))
         raise FleetApiError(f"{method} {path} -> {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
         raise FleetUnreachableError(f"couldn't reach {base_url}: {exc}") from exc
@@ -88,9 +103,9 @@ def _request(
 def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
     """An `MCPServer` whose tools are thin, authenticated wrappers over
     `base_url`'s own fleet daemon HTTP API. A tool that raises
-    (`FleetApiError`/`FleetUnreachableError`) is turned into a normal MCP
-    tool-call error by the SDK itself (`MCPServer.call_tool`'s own generic
-    exception handling) -- nothing here needs to catch and reformat either."""
+    (`FleetApiError`/`FleetUnreachableError`, both `ToolError`s) is turned into an MCP
+    tool-call error whose text is the daemon's own reason; nothing here needs to catch and
+    reformat either."""
     server = MCPServer(
         name="cuttlefish-fleet",
         instructions=(
