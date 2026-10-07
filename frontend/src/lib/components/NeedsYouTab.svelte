@@ -37,6 +37,8 @@
   <h2 id="needs-heading" class="title-large">Waiting on you</h2>
   <p class="body-medium muted">
     A kopicode agent that wants to run a command it isn't allowed to pauses here until you answer.
+    An agent that kept failing on the project's environment shows as Stuck: it was stopped, so there is nothing to
+    answer.
     {#if otherBackends.length > 0}
       {otherBackends.map(backendLabel).join(" and ")} can't pause mid-run, so a command they need is refused; you'll
       find that in Recent activity.

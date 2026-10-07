@@ -871,7 +871,9 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    the session at N (`CUTTLEFISH_STUCK_THRESHOLD`, default 5, `0` off), the round fails with
    `failure_kind="environment_stuck"` and `DelegationFailed.detail` (a redacted tail of the failing output),
    words and a "Last failing command" block in the activity log. kopicode only.
-   **E5b:** the `blocked` Needs-you request after such a round, with its card, API and MCP.
+   **E5b (shipped):** the `blocked` Needs-you request after such a round: raised by the delegation task, no answers
+   and no deadline, "Takes effect next round", a "Stuck" card with the last failing command, ended (new resolution
+   `superseded`) when the role is steered or decided on, or with the team. Same API and MCP `list_requests`.
 7. **V5-E6: more ecosystems and isolation.** Prepare Go, Rust, Java and Ruby; node version
    managers; and a design note for a hermetic per-project container through the sandbox seam
    (ADR-0002). No product code for the container here.

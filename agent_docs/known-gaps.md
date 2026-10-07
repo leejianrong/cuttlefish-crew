@@ -226,3 +226,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   it is not watched. Detection needs the signature list to know the failure: a toolchain it does not name (add a regular
   expression to `cuttlefish.stuck.SIGNATURES`) runs to `max_turns` as before. N is consecutive failures, so an agent that
   alternates a failing install with a passing `ls` is never stopped.
+- **A stuck-agent card has no button** (V5-E5b). Nothing could be answered: the round is over. The person fixes the
+  environment and steers the role from the project page; the card ends when they do. A stuck role in a steerable team (the daemon's always are) waits for a steer with no timeout instead of
+  the usual five-second grace, so a role nobody steers keeps the team running until it is stopped.
+

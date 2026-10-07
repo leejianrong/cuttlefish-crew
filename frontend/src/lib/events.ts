@@ -107,6 +107,8 @@ export function failureText(kind: unknown, reason: string): string {
 export type RoundOutcome = {
   kind: "completed" | "refused" | "failed";
   text: string;
+  /** The daemon's `failure_kind` for a failed round, when it gave one. */
+  failureKind?: string;
 };
 
 const ROUND_TYPES: Record<string, RoundOutcome["kind"]> = {
@@ -129,7 +131,12 @@ export function latestRound(
     }
   }
   if (latest === null || !(latest.event_type in ROUND_TYPES)) return null;
-  return { kind: ROUND_TYPES[latest.event_type], text: summarize(latest) };
+  const failureKind = latest.payload.failure_kind;
+  return {
+    kind: ROUND_TYPES[latest.event_type],
+    text: summarize(latest),
+    ...(typeof failureKind === "string" ? { failureKind } : {}),
+  };
 }
 
 const SHELL_PREFIX = "/bin/sh -c ";

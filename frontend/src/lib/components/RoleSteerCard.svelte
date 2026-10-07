@@ -159,7 +159,11 @@
       {:else}
         {role} finished a round.
       {/if}
-      The task ends in a few seconds unless you send {role} a message above.
+      {#if lastRound?.failureKind === "environment_stuck"}
+        {role} waits for you: fix the environment, then send a message above to give it another round.
+      {:else}
+        The task ends in a few seconds unless you send {role} a message above.
+      {/if}
     </p>
   {/if}
 

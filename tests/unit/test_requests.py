@@ -222,3 +222,52 @@ async def test_a_team_that_was_stopped_raises_no_further_request() -> None:
     assert journal.kinds() == [] and broker.pending() == []
     other = RequestContext(broker, "p1", "t2", 60).asker(role="builder", backend="kopicode")
     assert not broker.is_closed("t2") and other.context.team_id == "t2"
+
+
+def _blocked(broker: RequestBroker, role: str = "builder"):  # type: ignore[no-untyped-def]
+    return broker.raise_blocked(
+        project_id="p1",
+        team_id="t1",
+        role=role,
+        backend="kopicode",
+        title="{who} is stuck on the project's environment",
+        detail="No module named 'numpy'",
+        why="its commands kept failing",
+    )
+
+
+async def test_a_blocked_request_has_no_answers_no_deadline_and_lands_next_round() -> None:
+    broker = RequestBroker(Journal().append)
+    pending = _blocked(broker)
+    record = pending.record
+    assert (record.kind, record.answers, record.expires_at, record.lands) == (
+        "blocked",
+        [],
+        "",
+        "next_round",
+    )
+    assert record.title == "builder is stuck on the project's environment"
+    assert broker.pending("p1") == [pending]
+    with pytest.raises(InvalidAnswerError):
+        broker.answer(pending.id, "allow_once")
+
+
+async def test_steering_a_role_supersedes_only_its_blocked_requests() -> None:
+    store = Journal()
+    broker = RequestBroker(store.append)
+    mine, other = _blocked(broker), _blocked(broker, role="reviewer")
+    asked = _raise(broker)
+    assert [o.resolution for o in broker.supersede("t1", "builder")] == ["superseded"]
+    assert {p.id for p in broker.pending()} == {other.id, asked.id}
+    assert broker.supersede("t1", "builder") == []
+    resolved = [p for _, p in store.events if isinstance(p, RequestResolved)]
+    assert [(r.request_id, r.resolution, r.by) for r in resolved] == [
+        (mine.id, "superseded", "person")
+    ]
+
+
+async def test_a_team_ending_ends_its_blocked_request() -> None:
+    broker = RequestBroker(Journal().append)
+    pending = _blocked(broker)
+    assert [o.resolution for o in broker.end_team("t1", "abandoned")] == ["abandoned"]
+    assert broker.pending() == [] and pending.id

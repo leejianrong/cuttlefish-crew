@@ -100,6 +100,12 @@ Only kopicode can pause. Claude Code and Codex refuse the command and say so in 
 and a team started with `cuttlefish run` or `run-team` has no inbox, so it refuses too. The same
 requests are available over HTTP (see the [CLI reference](cli-reference.md)).
 
+A **Stuck** card is different: it has no buttons. A kopicode agent whose shell commands fail five
+times in a row because a tool or package is missing (`No module named`, `command not found`, ...)
+is stopped, and the card shows its last failing command. Nothing is waiting for an answer. Fix the
+environment, then steer that role from the project page; the card ends when you do.
+`CUTTLEFISH_STUCK_THRESHOLD` changes the five, and `0` turns the check off.
+
 ## 6. Reach it from another device
 
 ```bash

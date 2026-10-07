@@ -86,6 +86,14 @@ describe("labels", () => {
     );
   });
 
+  it("never says a blocked request was denied, since nothing was asked", () => {
+    const blocked = (state: NeedsYouRequest["state"]) => request({ kind: "blocked", state });
+    expect(outcomeLabel(blocked("pending"))).toBe("Needs a fix");
+    expect(outcomeLabel(blocked("superseded"))).toBe("Ended: you steered it");
+    expect(outcomeLabel(blocked("cancelled"))).toBe("Ended: the team was stopped");
+    expect(outcomeLabel(blocked("abandoned"))).toBe("Ended: the team ended");
+  });
+
   it("explains an answer that did not go through", () => {
     expect(answerProblem(409, "x")).toContain("already ended");
     expect(answerProblem(404, "x")).toContain("gone");

@@ -320,7 +320,13 @@ class RequestResolved:
 
     request_id: str
     resolution: Literal[
-        "allowed_once", "allowed_always", "denied", "expired", "cancelled", "abandoned"
+        "allowed_once",
+        "allowed_always",
+        "denied",
+        "expired",
+        "cancelled",
+        "abandoned",
+        "superseded",
     ]
     by: Literal["person", "timeout", "system"]
     rule: list[str] | None = None

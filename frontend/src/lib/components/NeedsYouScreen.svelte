@@ -34,7 +34,7 @@
     <h1 class="headline-small">Needs you</h1>
     <p class="body-medium muted">
       Every agent that is paused waiting for an answer, across all your projects. A request that
-      isn't answered in time is denied and the agent carries on.
+      isn't answered in time is denied and the agent carries on. A Stuck card has nothing to answer: fix the environment and steer that role.
     </p>
   </header>
 
