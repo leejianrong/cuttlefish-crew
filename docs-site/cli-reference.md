@@ -200,6 +200,11 @@ scripts, so it is a setting, `ask` (the default), `auto` or `off`, and the start
   end of the output). If it fails, every role shows failed with why and no round starts. Stopping the team
   while it installs kills the install. `CUTTLEFISH_PREPARE_TIMEOUT` (seconds, default 900) bounds each step.
 
+In the dashboard: with **Ask me**, Start shows what would run (each command, in the project folder) and offers
+*Install and start*, *Install, and do this automatically*, *Start without installing* or *Cancel*. The
+project's Environment card has the three-way setting, and while an install runs the Overview says so and
+*Stop team* cancels it.
+
 ## Default permissions
 
 A delegation with nothing declared is not shell-less: it gets the built-in presets, and

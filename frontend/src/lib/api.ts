@@ -112,11 +112,30 @@ export interface EcosystemEnv {
   notes: string[];
 }
 
+/** Whether cuttlefish installs dependencies before a team starts (V5-E3). */
+export type PrepareSetting = "ask" | "auto" | "off";
+
+/** One install cuttlefish would run now: the commands are exactly what it runs. */
+export interface PrepareStepView {
+  ecosystem: EcosystemEnv["ecosystem"];
+  name: string;
+  commands: string[][];
+  reason: string;
+}
+
+export interface PrepareInfo {
+  setting: PrepareSetting;
+  steps: PrepareStepView[];
+  /** Ecosystems cuttlefish cannot install yet, with why: shown, never hidden. */
+  unsupported: { ecosystem: EcosystemEnv["ecosystem"]; name: string; reason: string }[];
+}
+
 export interface EnvironmentSpec {
   root: string;
   /** False when the project's folder is not there at all, which is not "nothing recognised". */
   root_exists: boolean;
   ecosystems: EcosystemEnv[];
+  prepare: PrepareInfo;
 }
 
 export interface ProjectSummary {
@@ -132,6 +151,8 @@ export interface ProjectSummary {
   presets: string[];
   roles: RoleDefinition[];
   last_team_id: string | null;
+  /** V5-E3: whether cuttlefish installs dependencies before a team starts. */
+  env_prepare: PrepareSetting;
   /** The last team was started with a review gate: a blocked role is then waiting for you. */
   require_approval: boolean;
   allow: string[][];
@@ -159,12 +180,7 @@ export interface EpisodicEventView {
 export type RequestAnswer = "allow_once" | "allow_always" | "deny";
 
 export type RequestResolution =
-  | "allowed_once"
-  | "allowed_always"
-  | "denied"
-  | "expired"
-  | "cancelled"
-  | "abandoned";
+  "allowed_once" | "allowed_always" | "denied" | "expired" | "cancelled" | "abandoned";
 
 /** Something that needs a person: today a kopicode agent paused on a command (kind `permission`). */
 export interface NeedsYouRequest {
@@ -400,10 +416,18 @@ export class FleetClient {
     id: string,
     roles: RoleStart[],
     requireApproval = false,
+    prepare?: "yes" | "skip",
   ): Promise<{ team_id: string }> {
     return this.request(`/api/projects/${id}/start`, {
       method: "POST",
-      body: JSON.stringify({ roles, require_approval: requireApproval }),
+      body: JSON.stringify({ roles, require_approval: requireApproval, prepare }),
+    });
+  }
+
+  updateEnvironmentPrepare(id: string, prepare: PrepareSetting): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/environment`, {
+      method: "PATCH",
+      body: JSON.stringify({ prepare }),
     });
   }
 

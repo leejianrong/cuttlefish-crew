@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { EpisodicEventView } from "../api";
-  import { eventLabel, formatWhen, isRefusedCommand, summarize } from "../events";
+  import { eventLabel, formatWhen, installOutput, isRefusedCommand, summarize } from "../events";
 
   let {
     events,
@@ -39,6 +39,12 @@
           {#if onOpenPermissions && isRefusedCommand(event)}
             <button type="button" class="link" onclick={onOpenPermissions}>Change permissions</button>
           {/if}
+          {#if installOutput(event)}
+            <details class="output">
+              <summary>Output</summary>
+              <pre class="mono">{installOutput(event)}</pre>
+            </details>
+          {/if}
           {#if event.event_type === "DelegationFailed" && event.payload.record}
             <span class="record mono">Full output: {event.payload.record}</span>
           {/if}
@@ -69,6 +75,24 @@
   .link:focus-visible {
     outline: 2px solid var(--md-sys-color-primary);
     outline-offset: 2px;
+  }
+
+  .output summary {
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+  }
+
+  .output pre {
+    margin: 0.25rem 0 0;
+    padding: 0.5rem 0.6rem;
+    max-height: 12rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: var(--md-sys-color-surface-container-highest);
+    border-radius: var(--md-sys-shape-corner-small);
+    font-size: 0.72rem;
   }
 
   .record {

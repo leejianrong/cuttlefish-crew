@@ -6,6 +6,7 @@ import {
   commandText,
   eventLabel,
   failureText,
+  installOutput,
   formatWhen,
   isRefusedCommand,
   latestRound,
@@ -243,8 +244,10 @@ describe("installing dependencies in the activity log", () => {
       tail: "no matching distribution\n",
     });
     expect(summarize(failed)).toBe(
-      "Couldn't install the python dependencies: the install command failed. no matching distribution",
+      "Couldn't install the python dependencies: the install command failed.",
     );
+    expect(installOutput(failed)).toBe("no matching distribution");
+    expect(installOutput(event("TaskFailed", { error: "x" }))).toBe("");
     expect(
       summarize(
         event("EnvironmentPrepared", {
