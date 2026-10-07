@@ -133,17 +133,102 @@ def test_without_a_record_a_present_install_is_not_stale(tmp_path: Path) -> None
     assert len(found.adopt) == 1
 
 
-def test_ecosystems_cuttlefish_cannot_install_are_listed_not_hidden(tmp_path: Path) -> None:
-    _write(tmp_path, "go.mod", "module x\n\ngo 1.22\n")
+def test_poetry_and_pipenv_projects_install_into_the_project(tmp_path: Path) -> None:
     _write(tmp_path, "pyproject.toml", "[tool.poetry]\nname = 'x'\n")
+    _write(tmp_path, "poetry.lock", "lock")
+
+    (step,) = _plan(tmp_path).steps
+    assert step.commands == (("poetry", "install", "--no-interaction"),)
+    assert dict(step.env) == {"POETRY_VIRTUALENVS_IN_PROJECT": "true"}
+
+    pipenv = tmp_path / "pipenv"
+    _write(pipenv, "Pipfile", "[packages]\n")
+    (locked,) = _plan(pipenv).steps
+    assert locked.commands == (("pipenv", "install"),)
+    _write(pipenv, "Pipfile.lock", "{}")
+    (synced,) = _plan(pipenv).steps
+    assert synced.commands == (("pipenv", "sync"),)
+    assert dict(synced.env)["PIPENV_VENV_IN_PROJECT"] == "1"
+
+
+@pytest.mark.parametrize(
+    ("files", "ecosystem", "commands", "settings"),
+    [
+        ({"go.mod": "module x\n\ngo 1.22\n"}, "go", (("go", "mod", "download"),), {}),
+        ({"Cargo.toml": "[package]\n"}, "rust", (("cargo", "fetch"),), {}),
+        (
+            {"Cargo.toml": "[package]\n", "Cargo.lock": "x"},
+            "rust",
+            (("cargo", "fetch", "--locked"),),
+            {},
+        ),
+        ({"Gemfile": "source 'x'\n"}, "ruby", (("bundle", "install"),), {}),
+        (
+            {"Gemfile": "source 'x'\n", "Gemfile.lock": "x"},
+            "ruby",
+            (("bundle", "install"),),
+            {"BUNDLE_FROZEN": "true"},
+        ),
+        ({"pom.xml": "<project/>"}, "java", (("mvn", "-B", "-q", "dependency:resolve"),), {}),
+        (
+            {"pom.xml": "<project/>", "mvnw": "#!/bin/sh\n"},
+            "java",
+            (("./mvnw", "-B", "-q", "dependency:resolve"),),
+            {},
+        ),
+        (
+            {"build.gradle": "x", "gradlew": "#!/bin/sh\n"},
+            "java",
+            (("./gradlew", "--no-daemon", "--console=plain", "-q", "dependencies"),),
+            {},
+        ),
+    ],
+)
+def test_go_rust_ruby_and_java_are_fetched_when_cuttlefish_has_not_yet(
+    tmp_path: Path,
+    files: dict[str, str],
+    ecosystem: str,
+    commands: tuple[tuple[str, ...], ...],
+    settings: dict[str, str],
+) -> None:
+    for name, text in files.items():
+        _write(tmp_path, name, text)
+
+    found = _plan(tmp_path)
+
+    (step,) = found.steps
+    assert (step.ecosystem, step.commands, dict(step.env)) == (ecosystem, commands, settings)
+    assert step.reason == "its dependencies have not been fetched yet"
+    assert found.unsupported == ()
+
+
+def test_a_fetched_project_is_current_until_its_files_change_or_a_fetch_failed(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, "go.mod", "module x\n\ngo 1.22\n")
+    _write(tmp_path, "go.sum", "a")
+    (step,) = _plan(tmp_path).steps
+
+    envprep.write_state(tmp_path, "go", fingerprint=step.fingerprint, how="prepared", produced=True)
+    assert _plan(tmp_path).steps == ()
+
+    _write(tmp_path, "go.sum", "b")
+    (changed,) = _plan(tmp_path).steps
+    assert changed.reason == "go.sum changed since the last install"
+
+    envprep.write_state(tmp_path, "go", fingerprint=changed.fingerprint, how="failed")
+    (failed,) = _plan(tmp_path).steps
+    assert failed.reason == "the last install did not finish"
+
+
+def test_a_project_with_nothing_to_install_from_is_listed_with_the_reason(tmp_path: Path) -> None:
+    _write(tmp_path, "pyproject.toml", '[project]\nname = "x"\n')
     _write(tmp_path, ".venv/pyvenv.cfg")
 
     found = _plan(tmp_path)
 
     assert found.steps == ()
-    reasons = dict(found.unsupported)
-    assert "does not install this one yet" in reasons["go"]
-    assert reasons["python"] == "poetry projects are not prepared yet"
+    assert dict(found.unsupported)["python"] == "no requirements.txt to install from"
 
 
 def test_a_pip_project_with_only_pyproject_says_why_it_is_not_prepared(tmp_path: Path) -> None:
@@ -384,3 +469,58 @@ async def test_the_install_environment_is_quiet_and_non_interactive(
 
     assert result.ok
     assert (root / "seen.txt").read_text().strip() == "1|0|1"
+
+
+async def test_a_step_gets_its_own_settings_and_a_projects_wrapper_runs_from_its_root(
+    tmp_path: Path, shims: Path
+) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    wrapper = root / "mvnw"
+    wrapper.write_text('#!/bin/sh\necho "wrapper $1 $POETRY_VIRTUALENVS_IN_PROJECT"\n')
+    wrapper.chmod(wrapper.stat().st_mode | stat.S_IXUSR)
+    step = envprep.PrepareStep(
+        ecosystem="java",
+        commands=(("./mvnw", "-B"),),
+        reason="t",
+        fingerprint="f",
+        env=(("POETRY_VIRTUALENVS_IN_PROJECT", "true"),),
+    )
+
+    result = await envprep.run_step(step, root)
+
+    assert result.ok
+    assert "wrapper -B true" in result.tail
+
+
+async def test_a_missing_wrapper_is_a_missing_tool(tmp_path: Path, shims: Path) -> None:
+    step = envprep.PrepareStep(
+        ecosystem="java", commands=(("./gradlew", "x"),), reason="t", fingerprint="f"
+    )
+
+    result = await envprep.run_step(step, tmp_path)
+
+    assert not result.ok and result.failure == "tool_missing"
+    assert "'./gradlew' is not on PATH" in result.tail
+
+
+async def test_only_known_programs_are_ever_started(tmp_path: Path, shims: Path) -> None:
+    step = envprep.PrepareStep(
+        ecosystem="go", commands=(("rm", "-rf", "x"),), reason="t", fingerprint="f"
+    )
+
+    with pytest.raises(ValueError, match="not a program"):
+        await envprep.run_step(step, tmp_path)
+
+
+def test_what_is_remembered_after_an_install_includes_the_lockfile_it_wrote(tmp_path: Path) -> None:
+    _write(tmp_path, "Cargo.toml", "[package]\n")
+    (step,) = _plan(tmp_path).steps
+
+    _write(tmp_path, "Cargo.lock", "written by cargo fetch")  # what the install did
+    now = envprep.fingerprint_now(tmp_path, "rust", default=step.fingerprint)
+    envprep.write_state(tmp_path, "rust", fingerprint=now, how="prepared", produced=True)
+
+    assert now != step.fingerprint
+    assert _plan(tmp_path).steps == ()
+    assert envprep.fingerprint_now(tmp_path, "go", default="d") == "d"

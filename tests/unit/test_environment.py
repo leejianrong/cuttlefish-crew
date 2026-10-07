@@ -244,11 +244,26 @@ def test_node_gets_its_own_tool_in_the_note(tmp_path: Path) -> None:
     assert "Node (pnpm)" in note and "`pnpm run <script>`" in note and "`.bin` is on PATH" in note
 
 
-def test_other_ecosystems_and_empty_projects_get_no_claims(tmp_path: Path) -> None:
+def test_an_empty_project_gets_no_claims(tmp_path: Path) -> None:
     assert environment.brief(environment.detect(tmp_path)) == ""
-    _write(tmp_path, "go.mod", "module x\n\ngo 1.22\n")
 
-    assert environment.brief(environment.detect(tmp_path)) == ""
+
+def test_go_rust_ruby_and_java_get_how_to_run_things_and_no_claim_about_a_fetch(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, "go.mod", "module x\n\ngo 1.22\n")
+    _write(tmp_path, "Cargo.toml", "[package]\n")
+    _write(tmp_path, "Gemfile", "source 'x'\n")
+    _write(tmp_path, "pom.xml", "<project/>")
+    _write(tmp_path, "mvnw", "#!/bin/sh\n")
+
+    note = environment.brief(environment.detect(tmp_path))
+
+    assert "`go test ./...`" in note
+    assert "`cargo test`" in note
+    assert "`bundle exec <command>`" in note
+    assert "Java (maven)" in note and "`./mvnw`" in note
+    assert "not fetched" not in note and "not installed" not in note
 
 
 def test_a_polyglot_project_gets_one_line_per_ecosystem(tmp_path: Path) -> None:

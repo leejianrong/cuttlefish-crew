@@ -140,6 +140,25 @@ def test_package_tool_settings_reach_an_install_but_not_an_agent(
     assert {"NPM_TOKEN", "npm_config_registry", "UV_INDEX_URL", "PIP_INDEX_URL"} <= set(install)
 
 
+def test_the_other_ecosystems_install_settings_reach_an_install_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    names = [
+        "POETRY_HTTP_BASIC_PRIVATE_PASSWORD",
+        "GOPROXY",
+        "GOPRIVATE",
+        "CARGO_REGISTRIES_X_TOKEN",
+    ]
+    names += ["BUNDLE_GEMS__EXAMPLE__COM", "GRADLE_USER_HOME", "MAVEN_OPTS", "PIPENV_PYPI_MIRROR"]
+    for name in names:
+        monkeypatch.setenv(name, "v")
+
+    agent, install = merge_env(None), merge_env(None, tools=True)
+
+    assert not set(names) & set(agent)
+    assert set(names) <= set(install)
+
+
 def test_withheld_names_lists_names_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SOME_SECRET", "hunter2")
     monkeypatch.setenv("LANG", "C")

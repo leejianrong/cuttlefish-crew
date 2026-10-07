@@ -108,8 +108,8 @@ def ecosystem_name(ecosystem: Ecosystem) -> str:
 def brief(spec: EnvironmentSpec, *, installing: Collection[str] = ()) -> str:
     """A short note for an agent's brief on how to run things in this project (ADR-0029,
     decision 2.4): which environment is its own, that it is already on ``PATH``, and not to
-    install globally. Says only what is true of what cuttlefish sets up: Python and Node are
-    covered; other ecosystems get no line rather than a guess. `installing` names ecosystems
+    install globally. Says only what is true of what cuttlefish sets up; an ecosystem it does not
+    describe gets no line rather than a guess. `installing` names ecosystems
     cuttlefish is about to install, so their note describes the result."""
     lines: list[str] = []
     for env in spec.ecosystems:
@@ -142,7 +142,37 @@ def brief(spec: EnvironmentSpec, *, installing: Collection[str] = ()) -> str:
                     "Node: its dependencies are not installed (no `node_modules`). If you need "
                     "them, say so; don't install globally."
                 )
+        elif env.ecosystem in _OTHER_BRIEF:
+            lines.append(_OTHER_BRIEF[env.ecosystem](env))
     return ("Environment: " + " ".join(lines)) if lines else ""
+
+
+# Go, Rust, Java and Ruby keep their downloads outside the project, so cuttlefish cannot tell from
+# the folder whether they are fetched; these say how to run things and claim nothing about that.
+def _go_brief(env: EcosystemEnv) -> str:
+    return "Go: modules are cached outside the project; use `go test ./...` and `go build ./...`."
+
+
+def _rust_brief(env: EcosystemEnv) -> str:
+    return "Rust: use `cargo test` and `cargo build`; builds go into `target/`."
+
+
+def _ruby_brief(env: EcosystemEnv) -> str:
+    return "Ruby: run tools with `bundle exec <command>`; gems are installed outside the project."
+
+
+def _java_brief(env: EcosystemEnv) -> str:
+    wrapper = any("wrapper" in note for note in env.notes)
+    tool = "the project's wrapper script (`./mvnw` or `./gradlew`)" if wrapper else str(env.tool)
+    return f"Java ({env.tool}): build and test with {tool}."
+
+
+_OTHER_BRIEF: dict[Ecosystem, Callable[[EcosystemEnv], str]] = {
+    "go": _go_brief,
+    "rust": _rust_brief,
+    "ruby": _ruby_brief,
+    "java": _java_brief,
+}
 
 
 def _describe(env: EcosystemEnv) -> str:

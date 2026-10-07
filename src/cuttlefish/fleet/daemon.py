@@ -457,7 +457,10 @@ class FleetDaemon:
                     envprep.write_state,
                     project.root,
                     step.ecosystem,
-                    fingerprint=step.fingerprint,
+                    # What is on disk now: an install may have written its own lockfile.
+                    fingerprint=envprep.fingerprint_now(
+                        project.root, step.ecosystem, default=step.fingerprint
+                    ),
                     how="prepared",
                     produced=envprep.produced_env(project.root, step.ecosystem),
                 )

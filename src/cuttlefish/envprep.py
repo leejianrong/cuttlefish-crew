@@ -12,8 +12,14 @@ What is installed, and when:
 - Node: ``npm ci`` (``npm install`` with no lockfile), ``pnpm install --frozen-lockfile``,
   ``yarn install --frozen-lockfile`` (``--immutable`` for Yarn Berry), ``bun install
   --frozen-lockfile``.
-- Anything else (Go, Rust, Java, Ruby, poetry, pipenv) is reported as not prepared, with the
-  reason, never silently skipped (V5-E6).
+- poetry and pipenv (V5-E6): ``poetry install`` and ``pipenv sync`` / ``pipenv install``, told to
+  keep the environment in the project (``.venv``), where the agents' ``PATH`` already looks.
+- Go ``go mod download``, Rust ``cargo fetch`` (``--locked`` with a ``Cargo.lock``), Ruby ``bundle
+  install`` (frozen with a ``Gemfile.lock``), Java ``mvn dependency:resolve`` or Gradle's
+  ``dependencies`` (the project's own wrapper when it has one). These keep their downloads outside
+  the project, so there is no folder to look for: a project is prepared when cuttlefish has not
+  fetched it yet or its files changed since it did.
+- Anything cuttlefish cannot prepare is reported as such, with the reason, never silently skipped.
 
 A step is needed when the project's own install is missing, or when the files that decide it
 (manifest, lockfile, version hint) changed since cuttlefish last installed: the fingerprint is
@@ -76,6 +82,8 @@ class PrepareStep:
     reason: str
     #: Written to ``env.json`` when every command succeeded.
     fingerprint: str
+    #: Extra settings for these commands only (``POETRY_VIRTUALENVS_IN_PROJECT``...).
+    env: tuple[tuple[str, str], ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -140,6 +148,18 @@ def fingerprint(root: Path, env: EcosystemEnv) -> str:
     return digest.hexdigest()
 
 
+def fingerprint_now(root: str | Path, ecosystem: Ecosystem, *, default: str) -> str:
+    """The fingerprint of `ecosystem`'s files as they are now. An install can write its own
+    lockfile (``cargo fetch``, ``poetry install`` and ``uv sync`` without one do), so what to
+    remember after it is what is on disk then, not what was planned: otherwise the next start
+    would see a "change" nobody made and install again. `default` when it cannot be read."""
+    path = Path(root)
+    for env in detect(path).ecosystems:
+        if env.ecosystem == ecosystem:
+            return fingerprint(path, env)
+    return default
+
+
 def read_state(root: str | Path) -> dict[str, dict[str, Any]]:
     try:
         data = json.loads(state_path(root).read_text(encoding="utf-8"))
@@ -189,27 +209,43 @@ def write_state(
 Which = Callable[[str], str | None]
 
 
-def _python_commands(env: EcosystemEnv) -> tuple[tuple[tuple[str, ...], ...], str | None]:
-    """(commands, why-not). uv is the one tool cuttlefish drives for Python."""
+Commands = tuple[tuple[str, ...], ...]
+Settings = tuple[tuple[str, str], ...]
+
+
+def _python_commands(env: EcosystemEnv) -> tuple[Commands, Settings, str | None]:
+    """(commands, settings, why-not). uv, poetry and pipenv are driven as themselves; a plain
+    requirements project goes through uv."""
     if env.tool == "uv":
         if env.lockfile == "uv.lock":
-            return (("uv", "sync", "--frozen"),), None
-        return (("uv", "sync"),), None
+            return (("uv", "sync", "--frozen"),), (), None
+        return (("uv", "sync"),), (), None
+    if env.tool == "poetry":
+        # In the project, so `.venv` is where the agent's PATH looks; a lockfile that is out of
+        # date makes poetry stop rather than rewrite it.
+        return (
+            (("poetry", "install", "--no-interaction"),),
+            (("POETRY_VIRTUALENVS_IN_PROJECT", "true"),),
+            None,
+        )
+    if env.tool == "pipenv":
+        command = ("pipenv", "sync") if env.lockfile == "Pipfile.lock" else ("pipenv", "install")
+        return (command,), (("PIPENV_VENV_IN_PROJECT", "1"), ("PIPENV_NOSPIN", "1")), None
     if env.tool == "pip":
         requirements = [m for m in env.manifests if m.startswith("requirements")]
         wanted = [r for r in ("requirements.txt", "requirements-dev.txt") if r in requirements]
         if not wanted:
-            return (), "no requirements.txt to install from"
+            return (), (), "no requirements.txt to install from"
         install: list[str] = ["uv", "pip", "install"]
         for name in wanted:
             install += ["-r", name]
         # --allow-existing: a retry after a failed install finds the half-made .venv, and a bare
         # `uv venv` refuses to touch it. The packages are installed over it.
-        return (("uv", "venv", "--allow-existing"), tuple(install)), None
-    return (), f"{env.tool} projects are not prepared yet"
+        return (("uv", "venv", "--allow-existing"), tuple(install)), (), None
+    return (), (), f"{env.tool} projects are not prepared yet"
 
 
-def _node_commands(root: Path, env: EcosystemEnv) -> tuple[tuple[tuple[str, ...], ...], str | None]:
+def _node_commands(root: Path, env: EcosystemEnv) -> tuple[Commands, str | None]:
     locked = env.lockfile is not None
     if env.tool == "npm":
         return (
@@ -232,6 +268,34 @@ def _node_commands(root: Path, env: EcosystemEnv) -> tuple[tuple[tuple[str, ...]
     return (), f"{env.tool} projects are not prepared yet"
 
 
+#: Ecosystems whose downloads live outside the project (a module cache, ``~/.m2``, the gem
+#: home), so there is no folder in it to look for.
+_NO_FOLDER: frozenset[Ecosystem] = frozenset({"go", "rust", "java", "ruby"})
+
+
+def _other_commands(root: Path, env: EcosystemEnv) -> tuple[Commands, Settings, str | None]:
+    """(commands, settings, why-not) for Go, Rust, Ruby and Java."""
+    if env.ecosystem == "go":
+        return (("go", "mod", "download"),), (), None
+    if env.ecosystem == "rust":
+        fetch = ("cargo", "fetch", "--locked") if env.lockfile else ("cargo", "fetch")
+        return (fetch,), (), None
+    if env.ecosystem == "ruby":
+        # With a Gemfile.lock, frozen: bundler stops if it is out of date instead of rewriting it.
+        return (
+            (("bundle", "install"),),
+            ((("BUNDLE_FROZEN", "true"),) if env.lockfile else ()),
+            None,
+        )
+    if env.ecosystem == "java":
+        if env.tool == "maven":
+            program = "./mvnw" if (root / "mvnw").is_file() else "mvn"
+            return ((program, "-B", "-q", "dependency:resolve"),), (), None
+        program = "./gradlew" if (root / "gradlew").is_file() else "gradle"
+        return ((program, "--no-daemon", "--console=plain", "-q", "dependencies"),), (), None
+    return (), (), f"{env.ecosystem} is not prepared yet"
+
+
 def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
     """The steps `root` needs now. Reads files and ``env.json`` only; runs nothing."""
     path = Path(root)
@@ -241,14 +305,15 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
     unsupported: list[tuple[Ecosystem, str]] = []
     adopt: list[tuple[Ecosystem, str]] = []
     for env in found.ecosystems:
-        if env.installed is None:
-            unsupported.append((env.ecosystem, "cuttlefish does not install this one yet"))
-            continue
+        settings: Settings = ()
         if env.ecosystem == "python":
-            commands, why_not = _python_commands(env)
+            commands, settings, why_not = _python_commands(env)
         elif env.ecosystem == "node":
             commands, why_not = _node_commands(path, env)
-        else:  # pragma: no cover - installed is only set for python and node
+        elif env.ecosystem in _NO_FOLDER:
+            commands, settings, why_not = _other_commands(path, env)
+        else:  # pragma: no cover - every detected ecosystem is handled above
+            unsupported.append((env.ecosystem, "cuttlefish does not install this one yet"))
             continue
         if why_not is not None:
             unsupported.append((env.ecosystem, why_not))
@@ -258,7 +323,18 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
         recorded = record.get("fingerprint")
         how = record.get("how")
         folder = env.env_dir or (".venv" if env.ecosystem == "python" else "node_modules")
-        if how == "failed" and recorded == current:
+        if env.ecosystem in _NO_FOLDER:
+            # Nothing in the project to look at: what cuttlefish last fetched is all there is.
+            if how == "failed" and recorded == current:
+                reason = "the last install did not finish"
+            elif recorded is None:
+                reason = "its dependencies have not been fetched yet"
+            elif recorded != current:
+                changed = env.lockfile or (env.manifests[0] if env.manifests else "its files")
+                reason = f"{changed} changed since the last install"
+            else:
+                continue
+        elif how == "failed" and recorded == current:
             # Whatever is on disk came from an install that did not finish: a half-made .venv
             # looks installed, and must not hide that.
             reason = "the last install did not finish"
@@ -275,7 +351,11 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
             continue
         steps.append(
             PrepareStep(
-                ecosystem=env.ecosystem, commands=commands, reason=reason, fingerprint=current
+                ecosystem=env.ecosystem,
+                commands=commands,
+                reason=reason,
+                fingerprint=current,
+                env=settings,
             )
         )
     return PreparePlan(steps=tuple(steps), unsupported=tuple(unsupported), adopt=tuple(adopt))
@@ -291,7 +371,13 @@ def record_adopted(root: str | Path, found: PreparePlan) -> None:
 
 #: Only these programs are ever started, and only by this module's own argv lists: the plan is
 #: not a way to run an arbitrary command.
-_ALLOWED_PROGRAMS = frozenset({"uv", "npm", "pnpm", "yarn", "bun"})
+_ALLOWED_PROGRAMS = frozenset(
+    {
+        "uv", "npm", "pnpm", "yarn", "bun",
+        "poetry", "pipenv", "go", "cargo", "bundle", "mvn", "gradle",
+        "./mvnw", "./gradlew",  # the project's own wrappers, run from its root
+    }
+)  # fmt: skip
 
 
 #: Keeps an install's output short and non-interactive: no progress bars, no "update
@@ -306,7 +392,10 @@ _QUIET_ENV = {
 
 
 def produced_env(root: str | Path, ecosystem: Ecosystem) -> bool:
-    """Whether the ecosystem's own install folder exists now (after an install)."""
+    """Whether the ecosystem's own install folder exists now (after an install). An ecosystem
+    that keeps nothing in the project has no folder to be missing."""
+    if ecosystem in _NO_FOLDER:
+        return True
     folder = ".venv" if ecosystem == "python" else "node_modules"
     return (Path(root) / folder).exists()
 
@@ -346,10 +435,13 @@ async def run_step(
     """Run `step`'s commands in order from `root`. Stops at the first failure, a timeout, or
     when `cancel` is set; the child's whole process group is killed in the last two cases."""
     limit = timeout if timeout is not None else prepare_timeout()
-    child_env = {**merge_env(None, tools=True), **_QUIET_ENV}
+    child_env = {**merge_env(None, tools=True), **_QUIET_ENV, **dict(step.env)}
     if which is None:
         # Looked up on the PATH the child will get, which has cuttlefish's own venv removed.
         def which(program: str) -> str | None:
+            if program.startswith("./"):  # the project's own wrapper
+                wrapper = Path(root) / program
+                return str(wrapper) if wrapper.is_file() and os.access(wrapper, os.X_OK) else None
             return shutil.which(program, path=child_env.get("PATH"))
 
     started = time.monotonic()
@@ -446,6 +538,7 @@ __all__ = [
     "StepResult",
     "describe_command",
     "fingerprint",
+    "fingerprint_now",
     "plan",
     "prepare_timeout",
     "produced_env",

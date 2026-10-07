@@ -56,7 +56,9 @@ export function environmentRows(spec: EnvironmentSpec): EnvironmentRow[] {
     // An install that is there can still be due: say why, in the plan's own words, rather than
     // claiming it is fine (a half-made .venv from a failed install looks installed).
     const step = spec.prepare.steps.find((entry) => entry.ecosystem === env.ecosystem);
-    return step && row.state === "installed"
+    // Go, Rust, Java and Ruby keep nothing in the project folder (state null): a step for them
+    // means their dependencies are not fetched, or are out of date.
+    return step && (row.state === "installed" || row.state === null)
       ? { ...row, state: "stale", stateLabel: step.reason }
       : row;
   });

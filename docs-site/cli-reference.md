@@ -188,8 +188,14 @@ agent's turns, so an agent does not spend them discovering that `.venv` or `node
 runs `uv sync` (`--frozen` when there is a `uv.lock`, so your lockfile is never rewritten; `uv venv` plus
 `uv pip install -r requirements.txt` for a requirements project) or `npm ci`, `pnpm install
 --frozen-lockfile`, `yarn install --frozen-lockfile` (`--immutable` for Yarn Berry), `bun install
---frozen-lockfile`, from the project folder, with cuttlefish's own venv removed from the environment. Go,
-Rust, Java, Ruby, poetry and pipenv projects are shown as not prepared yet.
+--frozen-lockfile`, from the project folder, with cuttlefish's own venv removed from the environment. It also
+runs `poetry install` and `pipenv sync` (or `pipenv install` with no `Pipfile.lock`), both told to keep the
+environment in the project's `.venv`; `go mod download`; `cargo fetch` (`--locked` with a `Cargo.lock`);
+`bundle install` (frozen with a `Gemfile.lock`); and for Java `mvn -B dependency:resolve` or Gradle's
+`dependencies` task, using the project's `./mvnw` or `./gradlew` when it has one. Go, Rust, Java and Ruby keep
+their downloads outside the project, so there is no folder to look at: they are fetched once, and again when
+their files change. A project cuttlefish cannot install (a `pyproject.toml` with no requirements file and no
+lock, say) is listed with the reason.
 
 A step runs when the project's own install is missing, or when its manifest, lockfile or version hint
 changed since cuttlefish last installed (it remembers in `.cuttlefish/env.json`, only after a success). An
