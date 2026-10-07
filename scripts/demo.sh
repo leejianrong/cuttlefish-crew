@@ -3,7 +3,9 @@
 # Builds the dashboard once (if missing or stale), then runs `cuttlefish serve`
 # alone -- ADR-0012 (KAN-1707): the daemon serves that build itself, same
 # origin as the JSON API, so this is one process now, not two babysat ones.
-# Ctrl-C stops it. `cuttlefish serve` itself already auto-picks a free port if
+# Ctrl-C stops it. `make demo LOG=1` also copies the output to
+# /tmp/cuttlefish.log (LOG=<path> picks another file), so it can be read back.
+# `cuttlefish serve` itself already auto-picks a free port if
 # its default is taken (find_free_port, cuttlefish.fleet.server).
 set -euo pipefail
 
@@ -37,4 +39,14 @@ echo "token into the connect screen, and you're in."
 echo
 
 cd "$repo_root"
-exec uv run cuttlefish serve
+log="${LOG:-}"
+if [ -z "$log" ] || [ "$log" = "0" ]; then
+	exec uv run cuttlefish serve
+fi
+[ "$log" = "1" ] && log=/tmp/cuttlefish.log
+echo "Copying output to $log"
+echo
+# Unbuffered so a line is in the file as it happens. tee ignores SIGINT so Ctrl-C
+# (sent to the whole foreground group) reaches the daemon first and its shutdown
+# output is still captured; tee ends on its own when the daemon closes the pipe.
+PYTHONUNBUFFERED=1 uv run cuttlefish serve 2>&1 | ( trap '' INT; exec tee "$log" )

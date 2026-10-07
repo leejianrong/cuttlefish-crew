@@ -225,3 +225,21 @@ def test_mode_rejects_a_value_that_is_not_a_project_mode() -> None:
     for bad in ("read-only", "yolo"):
         with pytest.raises(SystemExit):
             build_parser().parse_args(["run", "t", "--mode", bad])
+
+
+def test_serve_ctrl_c_stops_cleanly_instead_of_a_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """uvicorn drains on SIGINT, then asyncio.run re-raises it as KeyboardInterrupt."""
+    from cuttlefish import cli
+
+    def _interrupted(coro: object) -> int:
+        close = getattr(coro, "close", None)
+        if close is not None:
+            close()
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "_serve", lambda args: None)
+    monkeypatch.setattr(cli.asyncio, "run", _interrupted)
+    assert cli.main(["serve"]) == cli.EXIT_OK
+    assert "stopped" in capsys.readouterr().out

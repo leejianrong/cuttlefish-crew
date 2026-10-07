@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import os
 import shlex
 import shutil
@@ -1245,6 +1246,23 @@ async def _closing_serve_children(coro: Coroutine[Any, Any, int]) -> int:
         await close_shared_pool()
 
 
+def _run_serve(args: argparse.Namespace) -> int:
+    """Run the fleet daemon until Ctrl-C, which is a normal way to stop it, not a crash.
+
+    uvicorn already drains on the first SIGINT, then asyncio.run re-raises it as a
+    `KeyboardInterrupt`; unhandled, that prints a traceback. Teams still running are
+    resumed by the next `cuttlefish serve` (`resume_pending`), as after any stop.
+    """
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+    )
+    try:
+        return asyncio.run(_closing_serve_children(_serve(args)))
+    except KeyboardInterrupt:
+        print("\ncuttlefish serve: stopped", flush=True)
+        return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -1264,7 +1282,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "projects":
         return _projects(args)
     if args.command == "serve":
-        return asyncio.run(_closing_serve_children(_serve(args)))
+        return _run_serve(args)
     if args.command == "mcp":
         return _mcp(args)
     return _show(args)
