@@ -117,6 +117,19 @@ def test_update_allow_refuses_an_entry_the_consent_policy_would_refuse(
     assert client.get(f"/api/projects/{created['id']}").json()["allow"] == []
 
 
+def test_update_allow_names_the_entry_and_the_reason_it_was_refused(
+    client: TestClient, tmp_path: Path
+) -> None:
+    created = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")}
+    ).json()
+    for entry, reason in ((["sh"], "too broad"), (["sudo", "apt", "x"], "sudo")):
+        response = client.patch(f"/api/projects/{created['id']}/allow", json={"allow": [entry]})
+        assert response.status_code == 400
+        detail = response.json()["detail"]
+        assert detail.startswith(repr(" ".join(entry))) and reason in detail
+
+
 def test_register_refuses_a_bad_allow_entry(client: TestClient, tmp_path: Path) -> None:
     response = client.post(
         "/api/projects",

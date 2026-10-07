@@ -129,7 +129,13 @@ def validate_allow_entry(entry: Sequence[str]) -> tuple[str, ...]:
     The one check every route into a project's commands shares: a hand-typed entry and an
     "Always allow" answer (ADR-0028). Plain words only, and nothing never-allowed.
     """
-    return _pattern_from_entry(entry)
+    pattern = _pattern_from_entry(entry)
+    if _too_broad(pattern):
+        raise ConsentPolicyError(
+            f"{' '.join(pattern)!r} is too broad: it would allow any script to run. "
+            "Name what it may run, for example 'python -m pytest'"
+        )
+    return pattern
 
 
 #: Programs that run whatever they are handed. A rule naming only one of these would approve
@@ -189,10 +195,6 @@ def validate_always_rule(line: str, rule: Sequence[str]) -> tuple[str, ...]:
     pattern = validate_allow_entry(rule)
     if tuple(words[: len(pattern)]) != pattern:
         raise ConsentPolicyError("the rule must be the start of the command the agent asked to run")
-    if _too_broad(pattern):
-        raise ConsentPolicyError(
-            f"{' '.join(pattern)!r} is too broad: it would allow any script to run"
-        )
     return pattern
 
 

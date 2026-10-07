@@ -326,3 +326,7 @@ checked against kopicode's source rather than a live run.
   `denied`); the model carried on to the second command after the first answer
   (`test_kopicode_serve_needs_you_live.py`, both tests passed). Still not checked: what a model
   does after an expiry or an Always, and the `ask` event shape, which is read from source only.
+- **One check for every route into the command list** (found by the first-time-operator test,
+  KAN-1897): the "too broad" launcher check (`sh`, `python` alone) moved from the Always allow
+  path into `validate_allow_entry`, so `PATCH /allow` and registration refuse it too. Decision 3
+  item 3 therefore holds on both routes. Entries already stored are not re-checked.
