@@ -706,6 +706,7 @@ class FleetDaemon:
             )
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc
+        self.requests.supersede(running.team_id, role)
 
     async def approve(
         self, project_id: str, role: str, *, approved: bool, comment: str | None = None
@@ -728,6 +729,7 @@ class FleetDaemon:
             )
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc
+        self.requests.supersede(running.team_id, role)
 
     def _last_team_events(self, project: Project) -> list[EpisodicEvent]:
         """Every event of `project.last_team_id`, or `[]` if there isn't one yet or

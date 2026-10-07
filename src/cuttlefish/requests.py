@@ -35,7 +35,7 @@ from cuttlefish.episodic.store import EpisodicEvent
 
 Answer = Literal["allow_once", "allow_always", "deny"]
 Resolution = Literal[
-    "allowed_once", "allowed_always", "denied", "expired", "cancelled", "abandoned"
+    "allowed_once", "allowed_always", "denied", "expired", "cancelled", "abandoned", "superseded"
 ]
 
 #: The cancel message a serve child's reader gives the waits it abandons when the process
@@ -48,6 +48,9 @@ WHY = {
     "no_matching_allow_entry": "It is not on this project's command list.",
     "not_a_plain_word_list": "It chains or quotes commands, so it cannot be matched to the list.",
 }
+
+#: A request nobody holds open (``blocked``) has no deadline; this only fills the field.
+NO_DEADLINE_S = 365 * 24 * 3600.0
 
 #: How many finished requests the broker remembers, to answer a repeat idempotently.
 _REMEMBERED = 200
@@ -181,6 +184,49 @@ class RequestBroker:
             window_s=window_s,
         )
 
+    def raise_blocked(
+        self,
+        *,
+        project_id: str,
+        team_id: str,
+        role: str | None,
+        backend: str | None,
+        title: str,
+        detail: str,
+        why: str,
+    ) -> PendingRequest:
+        """An agent that cannot go on without a person changing something (ADR-0029). Nothing
+        waits on it: the round has already ended, there is no answer a button could give and no
+        deadline, so it says it lands next round. It ends when the role is steered or decided
+        on (:meth:`supersede`), or with the team."""
+        who = role or "An agent"
+        return self._raise(
+            project_id,
+            team_id,
+            line=None,
+            record=RequestRaised(
+                request_id=uuid.uuid4().hex,
+                kind="blocked",
+                title=title.format(who=who),
+                detail=detail,
+                why=why,
+                answers=[],
+                expires_at="",
+                lands="next_round",
+                role=role,
+                backend=backend,
+            ),
+            window_s=NO_DEADLINE_S,
+        )
+
+    def supersede(self, team_id: str, role: str) -> list[Outcome]:
+        """End a role's ``blocked`` requests because a person steered it or decided its round."""
+        return [
+            self.resolve_system(p.id, "superseded", by="person")
+            for p in list(self._pending.values())
+            if p.team_id == team_id and p.record.kind == "blocked" and p.record.role == role
+        ]
+
     def _raise(
         self,
         project_id: str,
@@ -256,9 +302,14 @@ class RequestBroker:
         )
 
     def resolve_system(
-        self, request_id: str, resolution: Resolution, *, by: Literal["timeout", "system"]
+        self,
+        request_id: str,
+        resolution: Resolution,
+        *,
+        by: Literal["person", "timeout", "system"],
     ) -> Outcome:
-        """End a request without a person: ``expired``, ``cancelled`` or ``abandoned``. A
+        """End a request without an answer to it: ``expired``, ``cancelled``, ``abandoned`` or
+        ``superseded`` (a person acted on the role instead). A
         request that already ended keeps its first outcome."""
         pending = self._pending.get(request_id)
         if pending is None:

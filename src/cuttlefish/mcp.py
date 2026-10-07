@@ -271,8 +271,10 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
         across the fleet. With one: that project's `pending` requests, then its last 50
         `resolved`. Each pending request has request_id, role, detail (the command), why
         it stopped, the answers allowed, a suggested_rule and expires_in_s: it denies on
-        its own when that runs out. Only kopicode agents in ask-first or standard raise
-        requests."""
+        its own when that runs out. A request of kind `blocked` has no answers and no
+        expires_in_s: the agent was stopped because it kept failing on the project's
+        environment (detail is its last failing output); fix that, then steer the role
+        (`steer_project`) and the request ends. Only kopicode agents raise requests."""
         path = "/api/requests" if project_id is None else f"/api/projects/{project_id}/requests"
         return await asyncio.to_thread(_request, base_url, token, "GET", path)
 

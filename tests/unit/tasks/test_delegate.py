@@ -10,10 +10,11 @@ from pathlib import Path
 import pytest
 
 from cuttlefish import runtime
-from cuttlefish.agents.outcome import DelegationError
+from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.agents.registry import UnknownBackendError
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.replay import ReplayLlmProvider
+from cuttlefish.requests import RequestBroker, RequestContext
 from cuttlefish.secrets.store import SecretsStore, generate_key
 from cuttlefish.tasks.delegate import delegate_to_agent_backend
 
@@ -226,3 +227,68 @@ async def test_chosen_presets_reach_the_backend_in_place_of_the_defaults(
     assert ["ls"] in backend.allow and ["docker", "compose", "up"] in backend.allow
     assert ["go", "test"] in backend.allow
     assert ["uv", "run", "pytest"] not in backend.allow
+
+
+class _StuckBackend(_RecordingBackend):
+    NAME = "kopicode"
+
+    def __init__(self, failure_kind: str | None) -> None:
+        super().__init__()
+        self._kind = failure_kind
+
+    async def delegate(self, **_: object) -> DelegationOutcome:
+        return DelegationOutcome(
+            kind="failed",
+            summary="s",
+            reason="stopped after 5 shell commands in a row failed",
+            failure_kind=self._kind,
+            detail="No module named 'numpy'",
+        )
+
+
+async def _stuck_round(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str | None, *, closed: bool = False
+) -> RequestBroker:
+    backend = _StuckBackend(kind)
+    monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    broker = RequestBroker(lambda team, payload: store.append(team, payload))
+    context = RequestContext(broker, "p1", "t1", 60.0)
+    context.note_role("builder", "do it")
+    if closed:
+        broker.end_team("t1", "cancelled")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary="kopicode",
+            requests=context,
+        )
+    )
+    await delegate_to_agent_backend("do it", str(tmp_path))
+    store.close()
+    return broker
+
+
+async def test_an_agent_stuck_on_its_environment_raises_a_blocked_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    broker = await _stuck_round(tmp_path, monkeypatch, "environment_stuck")
+    (pending,) = broker.pending("p1")
+    assert pending.record.kind == "blocked"
+    assert pending.record.role == "builder"
+    assert pending.record.detail == "No module named 'numpy'"
+    assert pending.record.answers == []
+
+
+async def test_any_other_failure_raises_no_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert (await _stuck_round(tmp_path, monkeypatch, "max_turns")).pending() == []
+
+
+async def test_a_stopped_team_raises_no_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    broker = await _stuck_round(tmp_path, monkeypatch, "environment_stuck", closed=True)
+    assert broker.pending() == []

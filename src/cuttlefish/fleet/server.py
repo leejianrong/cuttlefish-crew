@@ -149,7 +149,12 @@ def _pending_json(daemon: FleetDaemon, pending: PendingRequest) -> dict[str, Any
         "project_id": pending.project_id,
         "project_name": project_name,
         "team_id": pending.team_id,
-        "expires_in_s": max(0, round((pending.deadline - datetime.now(UTC)).total_seconds())),
+        # A `blocked` request has no deadline: nothing is waiting to be denied.
+        "expires_in_s": (
+            None
+            if record.kind == "blocked"
+            else max(0, round((pending.deadline - datetime.now(UTC)).total_seconds()))
+        ),
     }
 
 

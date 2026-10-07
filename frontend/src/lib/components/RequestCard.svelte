@@ -46,6 +46,7 @@
   const ruleWords = $derived(parseRule(rule));
   const ruleOk = $derived(isStartOfCommand(ruleWords, request.detail));
   const live = $derived(request.lands === "now");
+  const blocked = $derived(request.kind === "blocked");
 
   async function answer(choice: RequestAnswer) {
     busy = choice;
@@ -75,7 +76,7 @@
 
 <article class="card filled request" aria-labelledby="req-{request.id}">
   <div class="meta">
-    <span class="tag attn">Permission</span>
+    <span class="tag attn">{blocked ? "Stuck" : "Permission"}</span>
     {#if request.role}<span class="label-large who">{request.role}</span>{/if}
     {#if request.backend}<span class="tag">{request.backend}</span>{/if}
     {#if showProject}<span class="label-medium muted">{request.project_name}</span>{/if}
@@ -84,8 +85,14 @@
 
   <h3 id="req-{request.id}" class="title-medium">{request.title}</h3>
   <p class="body-medium muted why">{request.why}</p>
-  <pre class="command mono" aria-label="Command">{request.detail}</pre>
+  <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
 
+  {#if blocked}
+    <p class="body-small muted">
+      Nothing is waiting for an answer: this agent was stopped. Fix the environment, then steer
+      {request.role ?? "it"} from the project page to give it another round.
+    </p>
+  {:else}
   <div class="actions">
     <button class="btn btn-filled" disabled={busy !== null || expired} onclick={() => answer("allow_once")}>
       {busy === "allow_once" ? "Allowing…" : "Allow once"}
@@ -121,6 +128,8 @@
     <p class="body-small muted">
       This command chains or quotes other commands, so it can only be allowed once.
     </p>
+  {/if}
+
   {/if}
 
   {#if problem}<p class="error" role="alert">{problem}</p>{/if}

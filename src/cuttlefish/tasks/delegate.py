@@ -91,7 +91,7 @@ async def delegate_to_agent_backend(
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
-    return await backend.delegate(
+    outcome = await backend.delegate(
         task_text=task_text,
         root=root,
         allow=effective_allow,
@@ -99,3 +99,24 @@ async def delegate_to_agent_backend(
         sandbox_provider=runtime_.sandbox_provider,
         **mode_kwargs,
     )
+    if (
+        requests is not None
+        and outcome.kind == "failed"
+        and outcome.failure_kind == "environment_stuck"
+        and not requests.broker.is_closed(requests.team_id)
+    ):
+        # ADR-0029: say what is wrong where a person looks. No answer is held for; the round
+        # is over, and the card ends when the role is steered or the team ends.
+        requests.broker.raise_blocked(
+            project_id=requests.project_id,
+            team_id=requests.team_id,
+            role=requests.role_for(task_text),
+            backend=backend.NAME,
+            title="{who} is stuck on the project's environment",
+            detail=outcome.detail or outcome.reason or "",
+            why=(
+                "Its shell commands kept failing because a tool or package is missing, so it "
+                "was stopped before it used all its turns. Fix the environment, then steer it."
+            ),
+        )
+    return outcome

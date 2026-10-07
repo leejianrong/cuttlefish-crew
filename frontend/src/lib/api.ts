@@ -180,7 +180,13 @@ export interface EpisodicEventView {
 export type RequestAnswer = "allow_once" | "allow_always" | "deny";
 
 export type RequestResolution =
-  "allowed_once" | "allowed_always" | "denied" | "expired" | "cancelled" | "abandoned";
+  | "allowed_once"
+  | "allowed_always"
+  | "denied"
+  | "expired"
+  | "cancelled"
+  | "abandoned"
+  | "superseded";
 
 /** Something that needs a person: today a kopicode agent paused on a command (kind `permission`). */
 export interface NeedsYouRequest {
@@ -202,7 +208,7 @@ export interface NeedsYouRequest {
   project_id: string;
   project_name: string;
   /** Pending only: seconds left when the daemon answered. */
-  expires_in_s?: number;
+  expires_in_s?: number | null;
   /** Resolved only. */
   by?: "person" | "timeout" | "system";
   rule?: string[] | null;

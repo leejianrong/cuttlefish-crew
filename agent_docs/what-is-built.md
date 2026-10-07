@@ -357,3 +357,12 @@ tools are ignored. `ServeChild` checks on each shell `tool_result`, serialised, 
 cancels the session, and `run_kopicode_serve` turns the result into a failed outcome with `failure_kind="environment_stuck"` and
 `detail`. It fails open: no file, a half line, an unreadable blob or a sandboxed child (`process_factory`) means no evidence.
 `DelegationFailed` and `DelegationOutcome` gained `detail`. The fake serve child has a `record` step to write that file.
+
+V5-E5b (ADR-0029, ADR-0028): **the request.** `tasks/delegate.py` raises `RequestBroker.raise_blocked` after a round whose
+outcome is `environment_stuck` (only when the runtime carries a broker and the team is not closed): kind `blocked`, `answers=[]`,
+`expires_at=""`, `lands="next_round"`, `detail` the redacted last failing output. Nothing is held (no `hold`), so it never
+expires and `_pending_json` sends `expires_in_s: null`. `FleetDaemon.steer` and `.approve` call `RequestBroker.supersede`
+(new resolution `superseded`, `by="person"`) after the message is delivered; `end_team` still ends it `cancelled`/`abandoned`.
+The card is a "Stuck" card with no buttons ("Fix the environment, then steer the role"), and a resolved blocked request is
+labelled "Ended: ...", never "Denied".
+
