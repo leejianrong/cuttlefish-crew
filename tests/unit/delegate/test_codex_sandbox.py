@@ -111,3 +111,26 @@ def test_a_read_only_role_gets_the_read_only_sandbox_even_with_commands() -> Non
 def test_auto_mode_gets_workspace_write() -> None:
     argv = build_codex_argv("codex", "t", allow=[["ls"]], mode="auto")
     assert argv[argv.index("--sandbox") + 1] == "workspace-write"
+
+
+def test_codex_model_and_effort_come_from_the_environment_and_precede_the_task() -> None:
+    from cuttlefish.delegate.codex import codex_model_args
+
+    assert codex_model_args({}) == []  # unset leaves Codex's own configuration alone
+    assert codex_model_args(
+        {"CUTTLEFISH_CODEX_MODEL": " gpt-5.6-luna ", "CUTTLEFISH_CODEX_EFFORT": "LOW"}
+    ) == ["--model", "gpt-5.6-luna", "-c", 'model_reasoning_effort="low"']
+    assert codex_model_args({"CUTTLEFISH_CODEX_EFFORT": "extreme"}) == []  # not passed on to fail
+    assert codex_model_args({"CUTTLEFISH_CODEX_EFFORT": "high"}) == [
+        "-c",
+        'model_reasoning_effort="high"',
+    ]
+
+
+def test_the_argv_carries_them_before_the_task_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CUTTLEFISH_CODEX_MODEL", "gpt-5.6-luna")
+    monkeypatch.setenv("CUTTLEFISH_CODEX_EFFORT", "low")
+    argv = build_codex_argv("codex", "do it", allow=[["ls"]])
+    assert argv[-1] == "do it"
+    assert argv[argv.index("--model") + 1] == "gpt-5.6-luna"
+    assert 'model_reasoning_effort="low"' in argv

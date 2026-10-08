@@ -77,6 +77,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, Literal
@@ -131,8 +132,31 @@ def build_codex_argv(
         "--skip-git-repo-check",
         "--sandbox",
         sandbox_mode,
+        *codex_model_args(),
         task_text,
     ]
+
+
+MODEL_ENV = "CUTTLEFISH_CODEX_MODEL"
+EFFORT_ENV = "CUTTLEFISH_CODEX_EFFORT"
+EFFORTS = ("minimal", "low", "medium", "high")
+
+
+def codex_model_args(environ: Mapping[str, str] | None = None) -> list[str]:
+    """``--model`` and the reasoning effort from ``CUTTLEFISH_CODEX_MODEL`` and
+    ``CUTTLEFISH_CODEX_EFFORT``, so a team can use a small, cheap model on a subscription without
+    editing the operator's own ``~/.codex/config.toml``. Unset leaves Codex's own configuration
+    alone. An effort that is not one of ``minimal``, ``low``, ``medium``, ``high`` is ignored
+    rather than passed on to fail a round."""
+    env = environ if environ is not None else os.environ
+    args: list[str] = []
+    model = env.get(MODEL_ENV, "").strip()
+    if model:
+        args += ["--model", model]
+    effort = env.get(EFFORT_ENV, "").strip().lower()
+    if effort in EFFORTS:
+        args += ["-c", f'model_reasoning_effort="{effort}"']
+    return args
 
 
 def classify_stream(
