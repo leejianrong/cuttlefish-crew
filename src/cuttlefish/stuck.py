@@ -48,6 +48,9 @@ EVIDENCE_CHARS = 2000
 #: The tool whose failures count. Another tool's failure neither counts nor resets.
 SHELL_TOOL = "run_shell"
 
+#: The tools that write or delete a whole file, whose path the record keeps in full.
+_WRITE_TOOLS = frozenset({"write_file", "delete_file"})
+
 #: The most of a spilled output read back; what matters (the error) is at the end.
 _BLOB_TAIL_BYTES = 16 * 1024
 
@@ -138,6 +141,40 @@ class SessionRecord:
             if result is not None:
                 results.append(result)
         return results
+
+    def written_paths(self) -> list[str]:
+        """Files the session wrote or deleted whole (``write_file``, ``delete_file``) and the
+        tool did not fail on, in order, read from the whole record.
+
+        The serve stream's ``tool_call_parsed`` carries the call's arguments cut at 120
+        characters, so a write with real content loses its ``path`` there; the record holds the
+        parsed call in full. Fails soft: any trouble reading is "none found" (ADR-0030)."""
+        try:
+            data = self._path.read_bytes()
+        except OSError:
+            return []
+        calls: dict[str, str] = {}
+        paths: list[str] = []
+        for raw in data.splitlines():
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                continue
+            payload = event.get("payload") if isinstance(event, dict) else None
+            if not isinstance(payload, dict):
+                continue
+            call_id = payload.get("call_id")
+            if event.get("type") == "ToolCallParsed" and payload.get("tool") in _WRITE_TOOLS:
+                args = payload.get("args")
+                path = args.get("path") if isinstance(args, dict) else None
+                if isinstance(call_id, str) and isinstance(path, str) and path:
+                    calls[call_id] = path
+            elif event.get("type") == "ToolResult" and isinstance(call_id, str):
+                path = calls.pop(call_id, None)
+                failed = payload.get("error_kind") or payload.get("error") or payload.get("reason")
+                if path is not None and not failed and path not in paths:
+                    paths.append(path)
+        return paths
 
     def _shell_result(self, raw: bytes) -> ShellResult | None:
         try:

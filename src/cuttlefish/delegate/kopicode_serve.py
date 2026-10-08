@@ -926,6 +926,15 @@ async def run_kopicode_serve(
         if pool is None:
             await asyncio.shield(child.close())
 
+    if process_factory is None:
+        # The stream cuts each call's arguments, so a write with real content has no path in it;
+        # the session's own record has it in full. Told to the classifier as the edits they are.
+        known = {e.get("path") for e in events if e.get("kind") == "edit_applied"}
+        written = await asyncio.to_thread(SessionRecord(root, session).written_paths)
+        events = [
+            *events,
+            *({"kind": "edit_applied", "path": p} for p in written if p not in known),
+        ]
     if timed_out:
         return _timeout_outcome(events, timeout, consents)
     error = response.get("error")
