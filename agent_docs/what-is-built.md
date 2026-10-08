@@ -472,3 +472,6 @@ resume banner and row use the secondary container, not the blocked amber; the Ch
 a Stuck card says "Waits for your message, no time limit"; `DelegationFailed` for a checkpoint kind logs at INFO, not WARNING;
 an example chip wraps on a phone; an invalid limit box keeps Save off.
 
+V5-finishing-sprite: `lib/roles.ts` (`awaitingDecision`, `isFinishing`) is the one place that says a blocked role whose last round
+completed is only finishing; the role card chip, its note and the office sprite (which shows done, no attention mark) all use it.
+

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { EpisodicEventView, FleetClient, ProjectBudget, RoleStatus, RoleUsage } from "../api";
   import type { RoundOutcome } from "../events";
+  import { awaitingDecision, isFinishing } from "../roles";
   import StatusChip from "./StatusChip.svelte";
 
   let {
@@ -45,16 +46,10 @@
       usage.cost_usd >= budget.max_cost_usd,
   );
 
-  // A blocked role is waiting for a decision only with a review gate or a usage limit (ADR-0016,
-  // ADR-0017). Otherwise the round just ended and the task finishes after a short wait for a steer
-  // message (ADR-0008): showing Approve and Reject then offers a decision nobody is waiting for.
-  const awaitingDecision = $derived(requireApproval || tokensOverBudget || costOverBudget);
+  const awaiting = $derived(awaitingDecision(requireApproval, usage, budget));
 
-  // A round that finished well leaves the role "blocked" for a few seconds, in case you want to add
-  // to it (ADR-0008). That is the task ending, not something needing you: say so, calmly.
-  const finishing = $derived(
-    status === "blocked" && !awaitingDecision && !held && lastRound?.kind === "completed",
-  );
+  // The few seconds a finished role stays "blocked" are the task ending, not something needing you.
+  const finishing = $derived(isFinishing(status, lastRound, held, awaiting));
 
   let message = $state("");
   let sending = $state(false);
@@ -135,7 +130,7 @@
     </button>
   </div>
 
-  {#if status === "blocked" && awaitingDecision}
+  {#if status === "blocked" && awaiting}
     <div class="approval">
       <p class="hint">
         {#if lastRound?.kind === "failed"}{role}'s last round failed: {lastRound.text}

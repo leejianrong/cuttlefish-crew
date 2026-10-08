@@ -15,6 +15,7 @@
   import Icon from "./Icon.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
   import PrepareConfirm from "./PrepareConfirm.svelte";
+  import { awaitingDecision, isFinishing } from "../roles";
   import OfficeScene from "./OfficeScene.svelte";
   import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
@@ -57,6 +58,27 @@
   let stopping = $state(false);
   let permissionsDirty = $state(false);
   let tab = $state<TabId>("overview");
+  // The scene's roles. A role finishing well is not asking for anything: no attention mark on its sprite.
+  const sceneRoles = $derived.by(() => {
+    const current = project;
+    if (!current) return [];
+    return Object.entries(current.status).map(([name, status]) => ({
+          name,
+          status: isFinishing(
+            status,
+            latestRound(events, name),
+            pending.some((r) => r.kind === "blocked" && r.role === name),
+            awaitingDecision(
+              current.require_approval,
+              current.usage[name] ?? { tokens: 0, cost_usd: null },
+              current.budget,
+            ),
+          )
+            ? ("done" as const)
+            : status,
+        }));
+  });
+
   const TABS = $derived([
     { id: "overview", label: "Overview" },
     { id: "needs-you", label: "Needs you", badge: pending.length },
@@ -224,7 +246,7 @@
 
       {#if project.running}
         <OfficeScene
-          roles={Object.entries(project.status).map(([name, status]) => ({ name, status }))}
+          roles={sceneRoles}
         />
         <section class="roles">
           {#each Object.entries(project.status) as [role, status] (role)}
