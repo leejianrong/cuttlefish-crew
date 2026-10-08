@@ -258,13 +258,16 @@ class FleetDaemon:
         answer: str,
         *,
         rule: Sequence[str] | None = None,
+        text: str | None = None,
     ) -> Outcome:
         """Answer a pending request of `project_id` (ADR-0028). Raises the broker's
         `RequestError`s. An "Always allow" is applied to the running team by the broker and
         saved to the project's own commands here, for the starts after this one."""
         project = self._projects.get(project_id)
         try:
-            outcome = self.requests.answer(request_id, answer, rule=rule, project_id=project_id)
+            outcome = self.requests.answer(
+                request_id, answer, rule=rule, text=text, project_id=project_id
+            )
         except UnknownRequestError:
             # Not in memory: a request from before a restart, or from a finished team. The
             # journal still says how it ended.
@@ -284,6 +287,7 @@ class FleetDaemon:
                         entry.resolved.resolution,
                         entry.resolved.by,
                         tuple(entry.resolved.rule) if entry.resolved.rule else None,
+                        entry.resolved.text,
                     )
                 )
         return UnknownRequestError(f"no request {request_id!r}")

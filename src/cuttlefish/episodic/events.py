@@ -314,7 +314,7 @@ class RequestRaised:
 @dataclasses.dataclass(frozen=True, slots=True)
 class RequestResolved:
     """How a :class:`RequestRaised` ended -- exactly one per request (ADR-0028). ``rule`` is the
-    command words an Always allow added."""
+    command words an Always allow added, and ``text`` is a question's answer."""
 
     EVENT_TYPE: ClassVar[str] = "RequestResolved"
 
@@ -327,9 +327,13 @@ class RequestResolved:
         "cancelled",
         "abandoned",
         "superseded",
+        "answered",
+        "declined",
     ]
     by: Literal["person", "timeout", "system"]
     rule: list[str] | None = None
+    #: What a person typed to answer a ``question`` (the store redacts it at write time).
+    text: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

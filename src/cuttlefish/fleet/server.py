@@ -167,6 +167,7 @@ def _resolved_json(project: Project, entry: HistoryEntry) -> dict[str, Any]:
         "state": resolved.resolution,
         "by": resolved.by,
         "rule": resolved.rule,
+        "text": resolved.text,
         "project_id": project.id,
         "project_name": project.name,
         "raised_at": entry.raised_at.isoformat(),
@@ -178,6 +179,8 @@ _ANSWER_RESOLUTION = {
     "allow_once": "allowed_once",
     "allow_always": "allowed_always",
     "deny": "denied",
+    "answer": "answered",
+    "decline": "declined",
 }
 
 
@@ -711,21 +714,27 @@ def create_app(
     @app.post("/api/projects/{project_id}/requests/{request_id}/answer")
     async def answer_request(project_id: str, request_id: str, request: Request) -> Response:
         body = await _json_body(request)
-        answer, rule = body.get("answer"), body.get("rule")
+        answer, rule, text = body.get("answer"), body.get("rule"), body.get("text")
         if not isinstance(answer, str):
             raise HTTPException(400, "'answer' (str) is required")
         if rule is not None and not (
             isinstance(rule, list) and all(isinstance(w, str) for w in rule)
         ):
             raise HTTPException(400, "'rule', if given, must be a list of words")
+        if text is not None and not isinstance(text, str):
+            raise HTTPException(400, "'text', if given, must be a string")
         try:
-            outcome = daemon.answer_request(project_id, request_id, answer, rule=rule)
+            outcome = daemon.answer_request(project_id, request_id, answer, rule=rule, text=text)
             already = False
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except AlreadyResolvedError as exc:
             outcome = exc.outcome
-            if outcome.by != "person" or outcome.resolution != _ANSWER_RESOLUTION.get(answer):
+            if (
+                outcome.by != "person"
+                or outcome.resolution != _ANSWER_RESOLUTION.get(answer)
+                or (answer == "answer" and (text or "").strip() != outcome.text)
+            ):
                 return JSONResponse(
                     status_code=409,
                     content={

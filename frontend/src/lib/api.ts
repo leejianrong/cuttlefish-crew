@@ -180,7 +180,7 @@ export interface EpisodicEventView {
 }
 
 /** What a person may answer a request with (ADR-0028). */
-export type RequestAnswer = "allow_once" | "allow_always" | "deny";
+export type RequestAnswer = "allow_once" | "allow_always" | "deny" | "answer" | "decline";
 
 export type RequestResolution =
   | "allowed_once"
@@ -189,9 +189,12 @@ export type RequestResolution =
   | "expired"
   | "cancelled"
   | "abandoned"
-  | "superseded";
+  | "superseded"
+  | "answered"
+  | "declined";
 
-/** Something that needs a person: today a kopicode agent paused on a command (kind `permission`). */
+/** Something that needs a person: a kopicode agent paused on a command (kind `permission`) or
+ * asking a question (kind `question`), or one stuck on its environment (kind `blocked`). */
 export interface NeedsYouRequest {
   id: string;
   kind: "permission" | "question" | "blocked";
@@ -215,6 +218,8 @@ export interface NeedsYouRequest {
   /** Resolved only. */
   by?: "person" | "timeout" | "system";
   rule?: string[] | null;
+  /** A question's answer, as the person typed it (already redacted). */
+  text?: string | null;
   raised_at?: string;
   resolved_at?: string | null;
 }
@@ -477,17 +482,19 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/requests`);
   }
 
-  /** `rule` is only for `allow_always`: the start of the command, which the daemon checks. A 409
+  /** `rule` is only for `allow_always`: the start of the command, which the daemon checks. `text`
+   * is only for `answer`, a question's reply. A 409
    * means the request already ended another way; a 422's message says why a rule was refused. */
   answerRequest(
     projectId: string,
     requestId: string,
     answer: RequestAnswer,
     rule?: string[],
+    text?: string,
   ): Promise<AnswerResult> {
     return this.request(`/api/projects/${projectId}/requests/${requestId}/answer`, {
       method: "POST",
-      body: JSON.stringify(rule ? { answer, rule } : { answer }),
+      body: JSON.stringify({ answer, ...(rule ? { rule } : {}), ...(text !== undefined ? { text } : {}) }),
     });
   }
 }

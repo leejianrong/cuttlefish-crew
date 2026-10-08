@@ -52,6 +52,14 @@ export const OUTCOMES: Record<RequestResolution, string> = {
   cancelled: "Denied: the team was stopped",
   abandoned: "Dropped: the agent process ended",
   superseded: "Ended: you steered it",
+  answered: "Answered",
+  declined: "Left unanswered: you declined",
+};
+
+/** How a `question` ended without an answer: nothing was denied, it simply went unanswered. */
+const QUESTION_OUTCOMES: Partial<Record<RequestResolution, string>> = {
+  expired: "Left unanswered: no answer in time",
+  cancelled: "Left unanswered: the team was stopped",
 };
 
 /** How a `blocked` request ended: nothing was denied, there was nothing to answer. */
@@ -62,12 +70,14 @@ const BLOCKED_OUTCOMES: Partial<Record<RequestResolution, string>> = {
 
 export function outcomeLabel(request: NeedsYouRequest): string {
   const blocked = request.kind === "blocked";
+  const specific = blocked ? BLOCKED_OUTCOMES : request.kind === "question" ? QUESTION_OUTCOMES : {};
   const base =
     request.state === "pending"
       ? blocked
         ? "Needs a fix"
         : "Waiting"
-      : ((blocked ? BLOCKED_OUTCOMES[request.state] : undefined) ?? OUTCOMES[request.state]);
+      : (specific[request.state] ?? OUTCOMES[request.state]);
+  if (request.state === "answered" && request.text) return `${base}: ${request.text}`;
   return request.state === "allowed_always" && request.rule?.length
     ? `${base}: ${ruleText(request.rule)}`
     : base;

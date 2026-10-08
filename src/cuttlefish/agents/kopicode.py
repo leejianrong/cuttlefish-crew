@@ -23,9 +23,11 @@ from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
 from cuttlefish.delegate.kopicode import run_kopicode, run_kopicode_in_sandbox
 from cuttlefish.delegate.kopicode_serve import (
     UNCONFIGURABLE_WINDOW,
+    AskHandler,
     Decider,
     ServePool,
     run_kopicode_serve,
+    serve_supports_ask,
     serve_supports_consent_timeout,
 )
 from cuttlefish.delegate.policy import write_policy_file
@@ -131,6 +133,7 @@ class KopicodeBackend:
                 env=_credential_envs(secrets),
                 pool=self._pool,
                 consent_timeout=consent_timeout,
+                ask=await self._ask_handler(asker, consent_timeout),
             )
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
             policy, consent_timeout = await self._consent(allow, mode, asker)
@@ -141,6 +144,7 @@ class KopicodeBackend:
                 policy=policy,
                 secrets=secrets,
                 consent_timeout=consent_timeout,
+                ask=await self._ask_handler(asker, consent_timeout),
             )
         if mode == "auto":
             raise DelegationError(
@@ -170,6 +174,21 @@ class KopicodeBackend:
         finally:
             policy_path.unlink(missing_ok=True)
 
+    async def _ask_handler(
+        self, asker: ShellAsker | None, consent_timeout: float | None
+    ) -> AskHandler | None:
+        """A live answer for the model's own questions, when a person can be asked and this
+        kopicode has the wire (``ask.request``, v0.4.0). The wait is the request window, and
+        needs the same ``--consent-timeout`` a permission request does."""
+        if asker is None or consent_timeout is None or not await serve_supports_ask(self._binary):
+            return None
+        window = asker.window_s
+
+        async def ask(question: str, context: str) -> str | None:
+            return await asker.ask_person(question, context, window_s=window)
+
+        return ask
+
     async def _consent(
         self, allow: Sequence[Sequence[str]] | None, mode: str, asker: ShellAsker | None
     ) -> tuple[ConsentPolicy | Decider, float | None]:
@@ -195,6 +214,7 @@ class KopicodeBackend:
         policy: ConsentPolicy | Decider,
         secrets: Mapping[str, str],
         consent_timeout: float | None = None,
+        ask: AskHandler | None = None,
     ) -> DelegationOutcome:
         """One sandbox, one ``serve`` child, one session; the sandbox is destroyed after.
 
@@ -221,6 +241,7 @@ class KopicodeBackend:
                 process_factory=functools.partial(
                     self._spawn_serve, provider, handle, cwd=root, consent_timeout=consent_timeout
                 ),
+                ask=ask,
             )
         finally:
             await asyncio.shield(provider.destroy(handle))

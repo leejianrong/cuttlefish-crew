@@ -215,10 +215,11 @@ export function summarize(event: EpisodicEventView): string {
   }
 }
 
-/** kopicode's `ask` tool: the model put a question to a person, but kopicode has no way to hand
- * it to us mid-run (kopicode#173), so it got the fixed "nobody is here" reply. Say that plainly. */
+/** kopicode's `ask` tool. The row cannot say whether anyone answered (its status is "ok" either
+ * way): with a kopicode that has the live wire (v0.4.0) the question card beside it says how it
+ * ended, and an older kopicode always gave the model the fixed "nobody is here" reply. */
 function askSummary(detail: string): string {
-  return `Asked a question nobody could answer: ${questionOf(detail)}`;
+  return `Asked a question: ${questionOf(detail)}`;
 }
 
 /** kopicode's `detail` is the call's raw arguments, whitespace-collapsed and cut at 120

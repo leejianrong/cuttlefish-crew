@@ -151,7 +151,8 @@ ecosystem, package tool, version, whether its own install is present; nothing is
 per-backend notes), `list_builtin_roles`, `list_templates`, `set_project_mode` and `update_roles`
 (which replaces the whole role list, including each role's `access`); both apply the next time the
 team starts. Needs you: `list_requests` (the fleet, or one project) and `answer_request`
-(`allow_once`, `allow_always` with a `rule`, or `deny`), which wrap the
+(`allow_once`, `allow_always` with a `rule`, or `deny`; `answer` with `text`, or `decline`, for a
+question), which wrap the
 [request routes](#needs-you-requests-over-http) and keep their behaviour: the same answer twice is
 fine, a different or late one is a 409, an unknown request a 404 and a refused rule a 422. Answering
 lets an agent run a shell command, so it is as weighty as `start_project`.
@@ -303,8 +304,15 @@ The dashboard shows these under **Needs you**. When a kopicode agent asks to run
   the project's own commands for later starts. The same answer sent twice returns `already: true`;
   a different one, or one after the window closed, is a 409 naming how the request ended; an
   unknown request is a 404; a refused rule is a 422 with the reason and the request stays pending.
+- A request of kind `question` is a kopicode agent asking a person something (its `ask` tool).
+  It takes `{"answer": "answer", "text": "..."}` (non-empty, at most 4000 characters, passed to
+  the agent as the reply) or `{"answer": "decline"}`. It is raised only for a kopicode that
+  advertises `ask.request` (v0.4.0 and later) and only where permission requests are, so the
+  agent is paused on it exactly as on a command. An older kopicode, `auto`, a read-only role and
+  `cuttlefish run` give the agent the fixed "no human is present" reply as before.
 
-An unanswered request denies when its window closes, and a restart abandons it.
+An unanswered request denies when its window closes (a question goes unanswered and the agent
+carries on), and a restart abandons it.
 
 ## Permission modes
 

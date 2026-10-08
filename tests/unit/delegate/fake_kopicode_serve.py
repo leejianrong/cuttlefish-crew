@@ -7,6 +7,7 @@ file named by ``FAKE_KOPICODE_LOG`` (one JSON object per line, or ``{"eof": true
 Steps: ``{"start": true}`` reads the client's session.start; ``{"emit": <msg>}`` writes a
 line (``"$session"``/``"$start_id"`` are substituted); ``{"consent": {...}, "wait": secs}``
 sends a consent.request and records the reply (or ``"timeout"`` after ``wait`` seconds);
+``{"ask": {"id", "question", "context"}, "wait": secs}`` does the same for an ``ask.request``;
 ``{"wait_for": "session.cancel"}`` blocks until that method arrives; ``{"close": [<msg>...]}``
 waits for session.close, writes the messages (``session_ended``), then acknowledges it;
 ``{"record": [<line>...]}`` appends those JSON lines to the session's own record,
@@ -93,6 +94,24 @@ for step in scenario:
         except queue.Empty:
             reply = "timeout"
         log.write(json.dumps({"reply_seen": reply}) + "\n")
+    elif "ask" in step:
+        out(
+            {
+                "jsonrpc": "2.0",
+                "id": step["ask"]["id"],
+                "method": "ask.request",
+                "params": {
+                    "session": "$session",
+                    **{k: v for k, v in step["ask"].items() if k != "id"},
+                },
+            }
+        )
+        ask_reply: dict[str, Any] | str | None
+        try:
+            ask_reply = lines.get(timeout=step.get("wait", 5))
+        except queue.Empty:
+            ask_reply = "timeout"
+        log.write(json.dumps({"reply_seen": ask_reply}) + "\n")
     elif "wait_for" in step:
         while (msg := lines.get()) is not None and msg.get("method") != step["wait_for"]:
             pass

@@ -334,9 +334,19 @@ checked against kopicode's source rather than a live run.
 ### Update: kopicode v0.4.0 is released and CI is pinned to it
 
 - `ask.request` (ADR-0020 in kopicode) and `ask_mode: "remote"` shipped in v0.4.0, so the wire the
-  `ask` gap waited for now exists in a released kopicode. cuttlefish does not use it yet.
+  `ask` gap waited for now exists in a released kopicode; the last bullet here says how cuttlefish uses it.
 - The `tool_result` events in the serve stream still carry only the tool, exit code and size, so the
   stuck-agent detector (ADR-0029) keeps reading the session record.
 - The session record and the stop reasons are unchanged apart from additive fields.
 - `ci.yml` no longer clones kopicode `main`; it builds the `v0.4.0` tag, so a kopicode change cannot
   break CI unannounced. Bump the tag on purpose when a slice needs a newer kopicode.
+- **`ask` is live on v0.4.0.** `ask.request` is released, so the question is now a Needs-you request
+  of kind `question` (`RequestBroker.raise_question`), asked with `ask_mode: "remote"` on
+  `session.start` when `kopicode version --json` lists `ask.request` and the session has a person to
+  ask (the same conditions as a permission request, including `--consent-timeout`). Answers are
+  `answer` with `text` (non-empty, at most 4000 characters) or `decline`. `RequestResolved` gained the
+  resolutions `answered` and `declined` and a `text` field, redacted at write time with the rest of the
+  line. Only an answer sends `{text}`; a decline, an expiry, a stop or the child exiting replies an error,
+  which kopicode relays to the model as "no human is present", so expiry is not a denial. The question and
+  its context are model output: capped at 2000 characters and shown as text. Not yet seen against a real
+  kopicode, only the scripted fake.

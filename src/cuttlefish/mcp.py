@@ -280,9 +280,16 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
 
     @server.tool()
     async def answer_request(
-        project_id: str, request_id: str, answer: str, rule: list[str] | None = None
+        project_id: str,
+        request_id: str,
+        answer: str,
+        rule: list[str] | None = None,
+        text: str | None = None,
     ) -> dict[str, Any]:
         """Answer a waiting request: allow_once, allow_always or deny. A request of kind
+        `question` (an agent asking a person something) takes `answer` or `decline`; `answer`
+        needs `text`, which is passed back to the agent as the person's reply, so only send
+        what the operator said. A request of kind
         `blocked` takes no answer (it is refused with 422): use steer_project instead. Answering
         allow_once or allow_always lets the agent run a shell command, so it is as
         weighty as start_project; only do it for a command the operator would approve.
@@ -297,6 +304,8 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
         body: dict[str, Any] = {"answer": answer}
         if rule is not None:
             body["rule"] = rule
+        if text is not None:
+            body["text"] = text
         return await asyncio.to_thread(
             _request,
             base_url,

@@ -47,6 +47,9 @@
   const ruleOk = $derived(isStartOfCommand(ruleWords, request.detail));
   const live = $derived(request.lands === "now");
   const blocked = $derived(request.kind === "blocked");
+  const question = $derived(request.kind === "question");
+  let reply = $state("");
+  const replyOk = $derived(reply.trim().length > 0);
 
   async function answer(choice: RequestAnswer) {
     busy = choice;
@@ -57,6 +60,7 @@
         request.id,
         choice,
         choice === "allow_always" ? ruleWords : undefined,
+        choice === "answer" ? reply : undefined,
       );
       onAnswered();
     } catch (error) {
@@ -76,7 +80,7 @@
 
 <article class="card filled request" aria-labelledby="req-{request.id}">
   <div class="meta">
-    <span class="tag attn">{blocked ? "Stuck" : "Permission"}</span>
+    <span class="tag attn">{blocked ? "Stuck" : question ? "Question" : "Permission"}</span>
     {#if request.role}<span class="label-large who">{request.role}</span>{/if}
     {#if request.backend}<span class="tag">{request.backend}</span>{/if}
     {#if showProject}<span class="label-medium muted">{request.project_name}</span>{/if}
@@ -85,9 +89,43 @@
 
   <h3 id="req-{request.id}" class="title-medium">{request.title}</h3>
   <p class="body-medium muted why">{request.why}</p>
-  <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
+  {#if question}
+    <p class="asked body-large" aria-label="The question">{request.detail}</p>
+  {:else}
+    <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
+  {/if}
 
-  {#if blocked}
+  {#if question}
+    <label class="field">
+      <span class="field-label">Your answer</span>
+      <textarea
+        bind:value={reply}
+        rows="3"
+        maxlength="4000"
+        disabled={busy !== null || expired}
+      ></textarea>
+    </label>
+    <div class="actions">
+      <button
+        class="btn btn-filled"
+        disabled={busy !== null || expired || !replyOk}
+        onclick={() => answer("answer")}
+      >
+        {busy === "answer" ? "Sending…" : "Send answer"}
+      </button>
+      <button class="btn btn-outlined" disabled={busy !== null || expired} onclick={() => answer("decline")}>
+        {busy === "decline" ? "Declining…" : "Decline"}
+      </button>
+      <span class="timer label-medium" class:urgent aria-hidden="true">
+        <Icon name="clock" size={16} />
+        {expired ? "Moving on…" : `Goes unanswered in ${formatRemaining(left)}`}
+      </span>
+    </div>
+    <p class="body-small muted">
+      The agent is paused on this question. Declining, or no answer in time, tells it nobody is
+      here and it carries on.
+    </p>
+  {:else if blocked}
     <p class="body-small muted">
       Nothing is waiting for an answer: this agent was stopped. Fix the environment, then steer
       {request.role ?? "it"} from the project page to give it another round.
@@ -178,6 +216,12 @@
     color: var(--md-sys-color-on-surface);
     font-size: 0.8125rem;
     line-height: 1.25rem;
+  }
+
+  .asked {
+    margin: 4px 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   .actions {

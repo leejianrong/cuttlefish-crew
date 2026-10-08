@@ -874,7 +874,10 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    **E5b (shipped):** the `blocked` Needs-you request after such a round: raised by the delegation task, no answers
    and no deadline, "Takes effect next round", a "Stuck" card with the last failing command, ended (new resolution
    `superseded`) when the role is steered or decided on, or with the team. Same API and MCP `list_requests`.
-7. **V5-E6: more ecosystems and isolation**, in three PRs. Node version managers are not part of it.
+7. **V5-ask (shipped, after E5): a live answer to a kopicode `ask` question.** kopicode v0.4.0 released
+   `ask.request`; a `question` Needs-you card with a text box, `answer` (with `text`) and `decline`.
+   See ADR-0028's update.
+8. **V5-E6: more ecosystems and isolation**, in three PRs. Node version managers are not part of it.
    **E6a (shipped):** prepare poetry, pipenv, Go, Rust, Ruby and Java (see the ADR's update).
    **E6b (shipped):** monorepo subfolders: the root and the folders directly under it; each nested project has its
    own `path`, install, `env.json` key (`node:frontend`) and journal events.

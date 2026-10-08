@@ -122,7 +122,8 @@ locks a working tree per session.
 **5. Answer what needs you.** The bell in the rail and the **Needs you** tab show
 a count. A command that is not on the project's list pauses that agent until you
 choose **Allow once**, **Always allow** (the start of the command, saved to the
-project's commands), or **Deny**. Left alone, it denies itself after ten minutes.
+project's commands), or **Deny**. Left alone, it denies itself after ten minutes. With
+kopicode v0.4.0 or later, a question the agent asks you shows up here too, with a box for your answer.
 
 **6. Steer, review, stop.** While a role is running you can send it a
 redirect; it lands at the next round boundary, not mid-flight. Turn on **Approve

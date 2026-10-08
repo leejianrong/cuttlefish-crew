@@ -130,24 +130,24 @@ describe("Needs-you events", () => {
     expect(summarize(view("RequestResolved", { resolution: "allowed_once" }))).toBe("Allowed once");
   });
 
-  it("says a kopicode ask call could not be answered", () => {
+  it("words a kopicode ask call without claiming it went unanswered", () => {
     const ask = view("ToolCallRecorded", {
       tool: "ask",
       status: "ok",
       detail: '{"question":"Per request or per session?"}',
     });
     expect(summarize(ask)).toBe(
-      "Asked a question nobody could answer: Per request or per session?",
+      "Asked a question: Per request or per session?",
     );
     const plain = view("ToolCallRecorded", { tool: "ask", status: "ok", detail: "which limit?" });
-    expect(summarize(plain)).toBe("Asked a question nobody could answer: which limit?");
+    expect(summarize(plain)).toBe("Asked a question: which limit?");
     const cut = view("ToolCallRecorded", {
       tool: "ask",
       status: "ok",
       detail: '{"question":"Which of the two retry settings should win when they disagree, the …',
     });
     expect(summarize(cut)).toBe(
-      "Asked a question nobody could answer: Which of the two retry settings should win when they disagree, the …",
+      "Asked a question: Which of the two retry settings should win when they disagree, the …",
     );
   });
 });

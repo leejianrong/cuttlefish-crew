@@ -53,12 +53,12 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   blocked-action card, V4-J to V4-M the live prompts). On Codex Ask first also cannot edit,
   since the only sandbox without commands is read-only. `cuttlefish run` and `run-team` have no
   inbox and refuse as before.
-- **A kopicode `ask` question cannot be answered**: no released kopicode has a wire for it
-  (v0.3.0 has none; `ask.request`, kopicode#173, is on its `main`, unreleased). The model gets
-  its fixed "no human is present" reply, and the dashboard shows the call in Recent activity as a
-  question nobody could answer. A live question card waits for that release.
+- **A kopicode `ask` question is live only on kopicode v0.4.0 or later**, and only where a person can
+  be asked (not Auto, not a read-only role, not `cuttlefish run`/`run-team`, and only when the
+  binary has `--consent-timeout`). Everywhere else the model gets its fixed "no human is present"
+  reply. The live path has only run against the scripted fake `serve`, never real kopicode.
 - **V4-H live checks that remain**: what a real model does after a request expires or an
-  Always allow, and the `ask` event shape (read from kopicode's source, never seen live). The
+  Always allow, and the `ask` event shape and the live `ask.request` answer (read from kopicode's source, never seen live). The
   hold past kopicode's default 60 seconds and the answers reaching kopicode were checked live
   (`test_kopicode_serve_needs_you_live.py`, kopicode v0.3.0).
 - **Stop lands when the round ends, not at once.** satay's cancel is delivered between

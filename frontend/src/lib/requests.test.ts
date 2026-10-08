@@ -94,6 +94,16 @@ describe("labels", () => {
     expect(outcomeLabel(blocked("abandoned"))).toBe("Ended: the team ended");
   });
 
+  it("never says a question was denied, and shows what was answered", () => {
+    const asked = (state: NeedsYouRequest["state"], text?: string) =>
+      request({ kind: "question", state, text });
+    expect(outcomeLabel(asked("pending"))).toBe("Waiting");
+    expect(outcomeLabel(asked("answered", "tabs"))).toBe("Answered: tabs");
+    expect(outcomeLabel(asked("declined"))).toBe("Left unanswered: you declined");
+    expect(outcomeLabel(asked("expired"))).toBe("Left unanswered: no answer in time");
+    expect(outcomeLabel(asked("cancelled"))).toBe("Left unanswered: the team was stopped");
+  });
+
   it("explains an answer that did not go through", () => {
     expect(answerProblem(409, "x")).toContain("already ended");
     expect(answerProblem(404, "x")).toContain("gone");
