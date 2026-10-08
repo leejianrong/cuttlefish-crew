@@ -6,6 +6,7 @@ import pytest
 
 from cuttlefish.limits import (
     CHECKPOINT_STOPS,
+    context_limit_from_env,
     max_continuations_from_env,
     max_idle_rounds_from_env,
     max_turns_from_env,
@@ -37,7 +38,12 @@ def test_max_continuations_zero_is_off(raw: str | None, count: int) -> None:
 
 
 def test_only_running_out_of_room_is_a_checkpoint() -> None:
-    assert {"max_turns", "budget_exhausted", "round_timeout"} == CHECKPOINT_STOPS
+    assert {
+        "max_turns",
+        "budget_exhausted",
+        "round_timeout",
+        "context_pressure",
+    } == CHECKPOINT_STOPS
 
 
 @pytest.mark.parametrize(
@@ -52,3 +58,13 @@ def test_round_timeout_zero_is_no_limit(raw: str | None, seconds: float | None) 
 def test_max_idle_rounds_zero_is_off(raw: str | None, count: int) -> None:
     env = {} if raw is None else {"CUTTLEFISH_MAX_IDLE_ROUNDS": raw}
     assert max_idle_rounds_from_env(env) == count
+
+
+@pytest.mark.parametrize(
+    ("raw", "fraction"), [(None, 0.75), ("0", None), ("60", 0.6), ("100", 0.95), ("x", 0.75)]
+)
+def test_context_limit_is_a_fraction_of_the_window_and_zero_is_off(
+    raw: str | None, fraction: float | None
+) -> None:
+    env = {} if raw is None else {"CUTTLEFISH_CONTEXT_LIMIT_PERCENT": raw}
+    assert context_limit_from_env(env) == fraction

@@ -30,9 +30,11 @@ from cuttlefish.delegate.kopicode_serve import (
     serve_supports_ask,
     serve_supports_consent_timeout,
     serve_supports_limits,
+    serve_supports_usage,
 )
 from cuttlefish.delegate.policy import write_policy_file
 from cuttlefish.limits import (
+    context_limit_from_env,
     max_turns_from_env,
     round_timeout_from_env,
     session_token_budget_from_env,
@@ -141,6 +143,7 @@ class KopicodeBackend:
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
                 session_limits=await self._session_limits(),
+                context_limit=await self._context_limit(),
                 timeout=round_timeout_from_env(),
             )
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
@@ -154,6 +157,7 @@ class KopicodeBackend:
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
                 session_limits=await self._session_limits(),
+                context_limit=await self._context_limit(),
                 timeout=round_timeout_from_env(),
             )
         if mode == "auto":
@@ -183,6 +187,11 @@ class KopicodeBackend:
             )
         finally:
             policy_path.unlink(missing_ok=True)
+
+    async def _context_limit(self) -> float | None:
+        """How much of the model's window a round may fill, when this kopicode reports it (v0.4.0);
+        an older one has nothing to read it from (ADR-0030)."""
+        return context_limit_from_env() if await serve_supports_usage(self._binary) else None
 
     async def _session_limits(self) -> dict[str, int]:
         """The turn cap and token budget for a session, when this kopicode takes them (v0.4.0).
@@ -236,6 +245,7 @@ class KopicodeBackend:
         consent_timeout: float | None = None,
         ask: AskHandler | None = None,
         session_limits: Mapping[str, int] | None = None,
+        context_limit: float | None = None,
         timeout: float | None = None,
     ) -> DelegationOutcome:
         """One sandbox, one ``serve`` child, one session; the sandbox is destroyed after.
@@ -265,6 +275,7 @@ class KopicodeBackend:
                 ),
                 ask=ask,
                 session_limits=session_limits,
+                context_limit=context_limit,
                 timeout=timeout,
             )
         finally:

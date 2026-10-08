@@ -114,6 +114,7 @@ const CONTINUED_WHY: Record<string, string> = {
   max_turns: "The round reached its turn limit",
   budget_exhausted: "The round used up its token budget",
   round_timeout: "The round ran past its time limit",
+  context_pressure: "The round's context was nearly full",
   refused: "A command was refused and the round ended",
 };
 
@@ -122,6 +123,7 @@ const FAILURE_KINDS: Record<string, string> = {
   verification_failed: "Its own check of the work (the project's tests) failed",
   budget_exhausted: "It reached the token or cost limit",
   cancelled: "It was cancelled",
+  context_pressure: "Its context was nearly full, so cuttlefish ended the round",
   round_timeout: "It ran past the time limit for one round, so cuttlefish stopped it",
   environment_stuck:
     "It kept failing on the project's environment (a missing tool or package), so cuttlefish stopped it",

@@ -132,6 +132,10 @@ CONTINUE_TEXT = {
         "your previous round used up its token budget, not because the task is finished. "
         + _CARRY_ON
     ),
+    "context_pressure": (
+        "your previous round was ended because its context was nearly full, not because the "
+        "task is finished. " + _CARRY_ON
+    ),
     "round_timeout": (
         "your previous round was stopped for running too long, not because the task is "
         "finished. " + _CARRY_ON

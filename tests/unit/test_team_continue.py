@@ -250,3 +250,38 @@ async def test_refusals_that_never_stop_hold_the_role_like_any_other_going_round
     assert result["status"] == "failed"
     assert "changed no file in 3 rounds in a row" in result["roles"]["builder"]["error"]
     assert len([p for p in payloads if isinstance(p, DelegationStarted)]) == 3
+
+
+USAGE_FEATURES = [*FEATURES, "session.usage", "usage.context", "usage.context_window"]
+
+
+def _full_context_round() -> list[Any]:
+    """A round whose context reaches 90% of a 100k window: cuttlefish cancels it."""
+    cancelled = _event({"kind": "session_ended", "reason": "cancelled", "exit_code": 1})
+    result = _round("cancelled", 1)[-2]
+    return [
+        {"start": True},
+        {"emit": _event({"kind": "edit_applied", "path": "a.py"})},
+        {"emit": _event({"kind": "provider_response", "size": 9})},
+        {"usage": {"context_tokens": 90_000, "context_window": 100_000}},
+        {"wait_for": "session.cancel"},
+        result,
+        {"close": [cancelled]},
+    ]
+
+
+async def test_a_round_that_fills_the_context_is_a_checkpoint_and_the_next_round_continues(
+    tmp_path: Path,
+) -> None:
+    binary = _script(tmp_path, [*_full_context_round(), *_round("completed", 0)], USAGE_FEATURES)
+    result, payloads = await _run(tmp_path, binary)
+    assert result["status"] == "completed"
+    assert [p.reason for p in payloads if isinstance(p, RoundContinued)] == ["context_pressure"]
+    assert "context was nearly full" in _sent(tmp_path)[1]["params"]["prompt"]
+
+
+async def test_a_kopicode_that_cannot_report_usage_is_never_asked(tmp_path: Path) -> None:
+    binary = _wrapper(tmp_path, stops=0)
+    await _run(tmp_path, binary)
+    lines = (tmp_path / "sent.jsonl").read_text()
+    assert "session.usage" not in lines
