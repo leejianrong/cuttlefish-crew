@@ -106,6 +106,10 @@ _STDERR_CAP = 64 * 1024
 
 Decider = Callable[[str, str], ConsentDecision | Awaitable[ConsentDecision]]
 
+#: Puts a model's question (and the context it gave) to a person: their answer, or ``None``
+#: when nobody answered, which kopicode relays to the model as "no human is present".
+AskHandler = Callable[[str, str], Awaitable[str | None]]
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ConsentRecord:
@@ -125,6 +129,40 @@ class ConsentRecord:
 UNCONFIGURABLE_WINDOW = 45.0
 
 _TIMEOUT_FLAG_SUPPORT: dict[str, bool] = {}
+
+
+_ASK_SUPPORT: dict[str, bool] = {}
+
+
+async def serve_supports_ask(binary: str) -> bool:
+    """Whether ``binary`` advertises ``ask.request`` (kopicode v0.4.0 and later) in its
+    ``version --json`` features. Probed once per binary; any failure is ``False``, which only
+    leaves the model's question unanswered as before."""
+    if binary in _ASK_SUPPORT:
+        return _ASK_SUPPORT[binary]
+    supported = False
+    try:
+        process = await asyncio.create_subprocess_exec(
+            binary,
+            "version",
+            "--json",
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+            env=merge_env(None),
+        )
+        try:
+            output, _ = await asyncio.wait_for(process.communicate(), 5.0)
+        except TimeoutError:
+            process.kill()
+            await process.wait()
+            output = b""
+        features = json.loads(output).get("features")
+        supported = isinstance(features, list) and "ask.request" in features
+    except (OSError, ValueError, AttributeError):
+        supported = False
+    _ASK_SUPPORT[binary] = supported
+    return supported
 
 
 async def serve_supports_consent_timeout(binary: str) -> bool:
@@ -198,6 +236,8 @@ class ServeChild:
         #: session id -> who answers its consent requests; a request for any other
         #: session is denied.
         self._deciders: dict[str, Decider] = {}
+        #: session id -> who answers its model's questions (``ask.request``).
+        self._askers: dict[str, AskHandler] = {}
         self.loop = asyncio.get_running_loop()
         self._deadline = consent_deadline
         self._on_consent = on_consent
@@ -271,8 +311,10 @@ class ServeChild:
     def alive(self) -> bool:
         return not self._killed and self._process.returncode is None and not self._reader.done()
 
-    def register(self, session: str, decide: Decider) -> None:
+    def register(self, session: str, decide: Decider, ask: AskHandler | None = None) -> None:
         self._deciders[session] = decide
+        if ask is not None:
+            self._askers[session] = ask
 
     def watch(self, session: str, record: SessionRecord, detector: StuckDetector) -> None:
         """Have the child cancel ``session`` if its agent is stuck on the environment."""
@@ -282,6 +324,7 @@ class ServeChild:
     def forget(self, session: str) -> list[Mapping[str, Any]]:
         """Drop a finished session's decider and hand back (and free) its events."""
         self._deciders.pop(session, None)
+        self._askers.pop(session, None)
         self._watches.pop(session, None)
         return self.events.pop(session, [])
 
@@ -369,6 +412,8 @@ class ServeChild:
                 self._record_event(message.get("params"))
         elif method == "consent.request":
             self._start_consent(request_id, message.get("params"))
+        elif method == "ask.request":
+            self._start_ask(request_id, message.get("params"))
         else:  # a server request this client does not implement
             refusal = asyncio.create_task(
                 self._send({"id": request_id, "error": {"code": -32601, "message": method}})
@@ -472,6 +517,40 @@ class ServeChild:
             self.consents.setdefault(session, []).append(record)
         self._on_consent(record)
         await self._reply_consent(str(request_id), answer)
+
+    def _start_ask(self, request_id: object, params: object) -> None:
+        if not isinstance(request_id, str | int) or isinstance(request_id, bool):
+            return
+        key = str(request_id)
+        task = asyncio.create_task(self._answer_ask(request_id, params))
+        self._pending_consent[key] = task
+        task.add_done_callback(functools.partial(self._consent_done, key))
+
+    async def _answer_ask(self, request_id: str | int, params: object) -> None:
+        """Relay the model's question to whoever registered for its session. Anything short of
+        an answer is replied as unanswered, so the model carries on with "no human is present"."""
+        fields = params if isinstance(params, dict) else {}
+        session, question, context = (fields.get(k) for k in ("session", "question", "context"))
+        text: str | None = None
+        ask = self._askers.get(session) if isinstance(session, str) else None
+        if ask is not None and isinstance(question, str):
+            try:
+                text = await ask(question, context if isinstance(context, str) else "")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _LOG.exception("ask handler raised; leaving the question unanswered")
+        _LOG.info("ask %s session=%s", "answered" if text is not None else "unanswered", session)
+        await self._reply_ask(str(request_id), text)
+
+    async def _reply_ask(self, request_id: str, text: str | None) -> None:
+        if request_id in self._replied:
+            return
+        self._replied.add(request_id)
+        if text is None:
+            await self._send({"id": request_id, "error": {"code": -32000, "message": "no answer"}})
+        else:
+            await self._send({"id": request_id, "result": {"text": text}})
 
     # -- lifecycle --------------------------------------------------------------------
 
@@ -700,6 +779,7 @@ async def run_kopicode_serve(
     pool: ServePool | None = None,
     process_factory: Callable[[], Awaitable[asyncio.subprocess.Process]] | None = None,
     stuck_threshold: int | None = None,
+    ask: AskHandler | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
 
@@ -710,6 +790,9 @@ async def run_kopicode_serve(
 
     ``consent_timeout`` (seconds) is passed to a child this call spawns as ``--consent-timeout``,
     so kopicode waits that long for an answer; a decider that asks a person needs it (ADR-0028).
+
+    ``ask`` answers the model's own questions live (``ask_mode: "remote"``); the caller passes
+    it only for a kopicode that advertises ``ask.request`` (:func:`serve_supports_ask`).
 
     ``stuck_threshold`` is how many shell commands in a row may fail on the environment before
     the session is cancelled (``None``: ``CUTTLEFISH_STUCK_THRESHOLD``, default 5; ``0``: never).
@@ -757,7 +840,7 @@ async def run_kopicode_serve(
             on_consent=on_consent,
             consent_timeout=consent_timeout,
         )
-    child.register(session, decide)
+    child.register(session, decide, ask)
     if process_factory is None:
         threshold = threshold_from_env() if stuck_threshold is None else stuck_threshold
         child.watch(session, SessionRecord(root, session), StuckDetector(threshold))
@@ -770,6 +853,7 @@ async def run_kopicode_serve(
                     "dir": root,
                     "prompt": task_text,
                     "consent_mode": "remote_interactive",
+                    **({"ask_mode": "remote"} if ask is not None else {}),
                 },
             )
             response = await asyncio.wait_for(pending, timeout)

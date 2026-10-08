@@ -232,3 +232,29 @@ async def test_after_a_restart_the_journal_says_how_a_request_ended(h: Harness) 
     dead = await h.answer("dead", answer="allow_once")
     assert dead.status_code == 409 and dead.json()["resolution"] == "abandoned"
     assert (await h.answer("never-existed", answer="deny")).status_code == 404
+
+
+async def test_a_question_is_answered_with_text_and_the_journal_keeps_it(h: Harness) -> None:
+    request = h.daemon.requests.raise_question(
+        project_id=h.project_id,
+        team_id=h.team_id,
+        role="builder",
+        backend="kopicode",
+        question="tabs or spaces?",
+        context="",
+        window_s=60,
+    )
+    row = (await h.http.get("/api/requests")).json()["requests"][0]
+    assert row["kind"] == "question" and row["answers"] == ["answer", "decline"]
+    assert (await h.answer(request.id, answer="answer")).status_code == 422  # no text
+    assert (await h.answer(request.id, answer="answer", text=5)).status_code == 400
+    ok = await h.answer(request.id, answer="answer", text="tabs")
+    assert ok.status_code == 200 and ok.json()["resolution"] == "answered"
+    again = await h.answer(request.id, answer="answer", text="tabs")
+    assert again.status_code == 200 and again.json()["already"] is True
+    other = await h.answer(request.id, answer="answer", text="spaces")
+    assert other.status_code == 409
+    resolved = h.journal()[-1]
+    assert isinstance(resolved, RequestResolved) and resolved.text == "tabs"
+    listed = (await h.http.get(f"/api/projects/{h.project_id}/requests")).json()["resolved"][0]
+    assert listed["state"] == "answered" and listed["text"] == "tabs"

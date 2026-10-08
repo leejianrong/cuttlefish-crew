@@ -273,8 +273,8 @@ project. Stop resolves the team's requests `cancelled`, because satay's cancel o
 round ends and a round held open for a person does not end. The window is
 `CUTTLEFISH_REQUEST_WINDOW` (default 10 minutes), passed to kopicode as `--consent-timeout` when
 `serve --help` lists it (v0.3.0 and later), else 45 seconds under kopicode's fixed 60. Claude Code
-and Codex cannot pause, so they still refuse; `ask` questions are not live (no released kopicode
-wire). Real-kopicode checks are in `tests/integration/delegate/`; the live-model ones need a key.
+and Codex cannot pause, so they still refuse; `ask` questions became live with kopicode v0.4.0
+(see V5-ask below). Real-kopicode checks are in `tests/integration/delegate/`; the live-model ones need a key.
 
 V5-E0 and E1 (ADR-0029, #89 to #91, plus the failed-round UI): **what the daemon says when something
 goes wrong.** A real team failed with `stop=max_turns` in 90 seconds and nothing said why: the agents
@@ -389,3 +389,16 @@ folder; `env.json` keys are `node:frontend` for a nested project and the bare ec
 `environment.brief` gives a nested project its own line (where it is, `cd` there, its `.venv` is not on `PATH`). The dashboard keys rows,
 steps and progress by ecosystem and folder and says "Node in web/".
 
+
+V5-ask (ADR-0028's update, after E5): **a kopicode `ask` question can be answered live.** kopicode v0.4.0
+released `ask.request`; `ask_mode: "remote"` on `session.start` makes kopicode send it instead of its fixed
+"no human is present" reply. `serve_supports_ask` reads `ask.request` from `kopicode version --json` (once per
+binary), and `KopicodeBackend._ask_handler` wires it only when a person can be asked and the child has
+`--consent-timeout`. `ServeChild._answer_ask` relays `{question, context}` to `ShellAsker.ask_person`, which
+raises a `question` request (`RequestBroker.raise_question`, answers `answer` and `decline`) and holds it; an
+answer replies `{text}`, and a decline, expiry, stop or child exit replies an error, which kopicode takes as
+unanswered. `RequestResolved` gained `answered`, `declined` and `text` (redacted like the rest of the line);
+the API and MCP `answer_request` take `text`. The card is a text box with Send answer and Decline. Recent
+activity now says "Asked a question: ..." because the tool-call row cannot say whether anyone answered.
+Sandboxed serve sessions get the handler too. Tests: `test_kopicode_ask.py` against the fake (which has an
+`ask` step), plus the HTTP round trip.
