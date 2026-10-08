@@ -154,3 +154,7 @@ and this folder disagree after a slice lands, update this folder.
   note when 0 means something ("0 means no limit"), and "Use the project's" / "Use the default" to clear. An invalid entry
   says why in words and is not saved. Neutral surfaces, no coral. Not in the mockups.
 
+- **V5-routing shipped.** The URL hash says where you are: `#/projects`, `#/projects/<id>` (and `/team`, `/permissions`, `/needs-you`
+  for a tab), `#/add`, `#/needs-you`, `#/roles`, `#/sprites`. Reload keeps the screen, Back and Forward walk through the screens
+  and tabs you visited, and a link can be pasted into a chat (it still needs the daemon's token, which is kept per browser).
+

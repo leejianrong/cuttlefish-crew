@@ -1,14 +1,16 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import type {
-    EpisodicEventView,
-    FleetClient,
-    NeedsYouRequest,
-    PrepareInfo,
-    ProjectSummary,
+  import {
+    FleetApiError,
+    type EpisodicEventView,
+    type FleetClient,
+    type NeedsYouRequest,
+    type PrepareInfo,
+    type ProjectSummary,
   } from "../api";
   import { installProgress } from "../environment";
   import { latestRound } from "../events";
+  import type { ProjectTab } from "../route";
   import { modeLabel, startFailure } from "../team";
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
@@ -25,10 +27,17 @@
   let {
     client,
     projectId,
+    tab,
+    onTabChange,
     onBack,
-  }: { client: FleetClient; projectId: string; onBack: () => void } = $props();
-
-  type TabId = "overview" | "needs-you" | "permissions" | "team";
+  }: {
+    client: FleetClient;
+    projectId: string;
+    /** Which tab is open: part of the URL, so a reload and Back keep it. */
+    tab: ProjectTab;
+    onTabChange: (tab: ProjectTab) => void;
+    onBack: () => void;
+  } = $props();
 
   let project = $state<ProjectSummary | null>(null);
   let events = $state<EpisodicEventView[]>([]);
@@ -36,6 +45,8 @@
   let resolved = $state<NeedsYouRequest[]>([]);
   let requestsFetchedAt = $state(Date.now());
   let unreachable = $state(false);
+  // The daemon answered 404: no project has this id (a stale link, or it was removed).
+  let missing = $state(false);
   let starting = $state(false);
   let startError = $state<string | null>(null);
   let taskTexts = $state<Record<string, string>>({});
@@ -57,7 +68,6 @@
   let confirmingStop = $state(false);
   let stopping = $state(false);
   let permissionsDirty = $state(false);
-  let tab = $state<TabId>("overview");
   // The scene's roles. A role finishing well is not asking for anything: no attention mark on its sprite.
   const sceneRoles = $derived.by(() => {
     const current = project;
@@ -126,14 +136,19 @@
       resolved = requests.resolved;
       requestsFetchedAt = Date.now();
       unreachable = false;
-    } catch {
-      unreachable = true;
+      missing = false;
+    } catch (error) {
+      if (error instanceof FleetApiError && error.status === 404) missing = true;
+      else unreachable = true;
     }
   }
 
   $effect(() => {
     refresh();
-    const interval = setInterval(refresh, 2500);
+    // A project that is not there is not worth asking about again every 2.5 seconds.
+    const interval = setInterval(() => {
+      if (!missing) refresh();
+    }, 2500);
     return () => clearInterval(interval);
   });
 
@@ -215,7 +230,12 @@
 <div class="page">
   <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Projects</button>
 
-  {#if unreachable}
+  {#if missing}
+    <p class="body-large" role="status">
+      There is no project with this address. It may have been removed, or the link is out of date.
+    </p>
+    <button class="btn btn-tonal" onclick={onBack}>Back to your projects</button>
+  {:else if unreachable}
     <p class="warning" role="status">Lost connection to the daemon. Retrying…</p>
   {/if}
 
@@ -225,7 +245,7 @@
       <p class="root mono">{project.root}</p>
     </header>
 
-    <Tabs tabs={TABS} active={tab} label="Project" onSelect={(id) => (tab = id as TabId)} />
+    <Tabs tabs={TABS} active={tab} label="Project" onSelect={(id) => onTabChange(id as ProjectTab)} />
 
     <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== "overview"}>
       {#if resumedEvents.length > 0}
@@ -377,7 +397,7 @@
 
       <section class="card filled events" aria-labelledby="activity-heading">
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>
-        <EventLog {events} onOpenPermissions={() => (tab = "permissions")} />
+        <EventLog {events} onOpenPermissions={() => onTabChange("permissions")} />
       </section>
     </div>
 
@@ -397,7 +417,7 @@
         {client}
         {project}
         onChanged={refresh}
-        onOpenTeam={() => (tab = "team")}
+        onOpenTeam={() => onTabChange("team")}
         onDirtyChange={(dirty) => (permissionsDirty = dirty)}
       />
     </div>
@@ -405,7 +425,7 @@
     <div id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden={tab !== "team"}>
       <TeamTab {client} {project} onChanged={refresh} />
     </div>
-  {:else if !unreachable}
+  {:else if !unreachable && !missing}
     <p class="muted" role="status">Loading…</p>
   {/if}
 </div>
