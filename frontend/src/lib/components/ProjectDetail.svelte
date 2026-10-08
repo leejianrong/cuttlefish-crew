@@ -1,11 +1,12 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import type {
-    EpisodicEventView,
-    FleetClient,
-    NeedsYouRequest,
-    PrepareInfo,
-    ProjectSummary,
+  import {
+    FleetApiError,
+    type EpisodicEventView,
+    type FleetClient,
+    type NeedsYouRequest,
+    type PrepareInfo,
+    type ProjectSummary,
   } from "../api";
   import { installProgress } from "../environment";
   import { latestRound } from "../events";
@@ -44,6 +45,8 @@
   let resolved = $state<NeedsYouRequest[]>([]);
   let requestsFetchedAt = $state(Date.now());
   let unreachable = $state(false);
+  // The daemon answered 404: no project has this id (a stale link, or it was removed).
+  let missing = $state(false);
   let starting = $state(false);
   let startError = $state<string | null>(null);
   let taskTexts = $state<Record<string, string>>({});
@@ -133,14 +136,19 @@
       resolved = requests.resolved;
       requestsFetchedAt = Date.now();
       unreachable = false;
-    } catch {
-      unreachable = true;
+      missing = false;
+    } catch (error) {
+      if (error instanceof FleetApiError && error.status === 404) missing = true;
+      else unreachable = true;
     }
   }
 
   $effect(() => {
     refresh();
-    const interval = setInterval(refresh, 2500);
+    // A project that is not there is not worth asking about again every 2.5 seconds.
+    const interval = setInterval(() => {
+      if (!missing) refresh();
+    }, 2500);
     return () => clearInterval(interval);
   });
 
@@ -222,7 +230,12 @@
 <div class="page">
   <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Projects</button>
 
-  {#if unreachable}
+  {#if missing}
+    <p class="body-large" role="status">
+      There is no project with this address. It may have been removed, or the link is out of date.
+    </p>
+    <button class="btn btn-tonal" onclick={onBack}>Back to your projects</button>
+  {:else if unreachable}
     <p class="warning" role="status">Lost connection to the daemon. Retrying…</p>
   {/if}
 
@@ -412,7 +425,7 @@
     <div id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden={tab !== "team"}>
       <TeamTab {client} {project} onChanged={refresh} />
     </div>
-  {:else if !unreachable}
+  {:else if !unreachable && !missing}
     <p class="muted" role="status">Loading…</p>
   {/if}
 </div>

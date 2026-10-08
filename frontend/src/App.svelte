@@ -32,11 +32,22 @@
     history.pushState(null, "", routeHash(next));
   }
 
+  // A hash we do not recognise (a typo, a stale link) is replaced by the one for the screen it
+  // landed on, so a reload or a copied link does not keep the junk.
+  function canonicalise() {
+    const wanted = routeHash(route);
+    if (window.location.hash !== "" && window.location.hash !== wanted) {
+      history.replaceState(null, "", wanted);
+    }
+  }
+  canonicalise();
+
   // Back, Forward and a hand-edited hash re-read the URL.
   $effect(() => {
     const reread = () => {
       const next = parseHash(window.location.hash);
       if (!sameRoute(next, route)) route = next;
+      canonicalise();
     };
     window.addEventListener("popstate", reread);
     window.addEventListener("hashchange", reread);
