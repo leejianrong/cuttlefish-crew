@@ -290,8 +290,8 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
         `question` (an agent asking a person something) takes `answer` or `decline`; `answer`
         needs `text`, which is passed back to the agent as the person's reply, so only send
         what the operator said. The journal scrubs only known secret values from it, not
-        anything that merely looks like a key, so never put a credential in an answer. A request of kind
-        `blocked` takes no answer (it is refused with 422): use steer_project instead. Answering
+        anything that merely looks like a key, so never put a credential in an answer.
+        A request of kind `blocked` takes no answer (it is refused with 422): use steer_project instead. Answering
         allow_once or allow_always lets the agent run a shell command, so it is as
         weighty as start_project; only do it for a command the operator would approve.
         `rule` is for allow_always only: the words a command must start with, which must
