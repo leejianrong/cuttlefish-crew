@@ -221,7 +221,8 @@ export function summarize(event: EpisodicEventView): string {
     case "LlmCallCompleted": {
       // The summariser's own call, kept for what it cost; its prompt and answer are in the journal.
       const tokens = (value: unknown) => (typeof value === "number" ? value.toLocaleString("en-GB") : "?");
-      return `Wrote the checkpoint with ${p.model} (${tokens(p.input_tokens)} tokens in, ${tokens(p.output_tokens)} out).`;
+      const cost = typeof p.cost_usd === "number" ? `, $${p.cost_usd.toFixed(4)}` : "";
+      return `Wrote the checkpoint with ${p.model} (${tokens(p.input_tokens)} tokens in, ${tokens(p.output_tokens)} out${cost}).`;
     }
     case "TaskCompleted":
       return String(p.result);

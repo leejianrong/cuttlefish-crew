@@ -334,8 +334,9 @@ describe("the summariser's call", () => {
       input_tokens: 12345,
       output_tokens: null,
       role: "builder",
+      cost_usd: 0.00314,
     });
     expect(eventLabel("LlmCallCompleted")).toBe("Summary");
-    expect(summarize(call)).toBe("Wrote the checkpoint with m (12,345 tokens in, ? out).");
+    expect(summarize(call)).toBe("Wrote the checkpoint with m (12,345 tokens in, ? out, $0.0031).");
   });
 });

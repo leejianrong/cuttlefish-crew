@@ -212,7 +212,7 @@ async def test_an_empty_answer_is_asked_for_again_and_both_calls_are_journaled(
     store = _configure(
         tmp_path,
         LlmResponse(model="replay", text="   ", input_tokens=10, output_tokens=0),
-        LlmResponse(model="replay", text=GOOD, input_tokens=300, output_tokens=40),
+        LlmResponse(model="replay", text=GOOD, input_tokens=300, output_tokens=40, cost_usd=0.0004),
     )
     store.append("task-1", TaskSubmitted(text="x" * 400))
     assert await maybe_handover("task-1", token_budget=50) is True
@@ -222,6 +222,7 @@ async def test_an_empty_answer_is_asked_for_again_and_both_calls_are_journaled(
     assert len(calls) == 2  # one retry only, and the cost of each call is in the journal
     assert calls[0].input_tokens == 10 and "third person" in calls[1].prompt
     assert calls[1].output_tokens == 40
+    assert calls[0].cost_usd is None and calls[1].cost_usd == 0.0004  # reported, never estimated
     store.close()
 
 

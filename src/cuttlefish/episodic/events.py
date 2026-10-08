@@ -48,6 +48,8 @@ class LlmCallCompleted:
     output_tokens: int | None = None
     #: Which role's handover this call wrote (a team's), so the log can say whose.
     role: str | None = None
+    #: What the provider reported the call cost, in US dollars (never estimated).
+    cost_usd: float | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

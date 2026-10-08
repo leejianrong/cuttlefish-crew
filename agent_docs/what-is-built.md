@@ -489,3 +489,7 @@ by `maybe_handover(root=...)`, `LlmCallCompleted` journaled per summariser call 
 continuation text in `team._CARRY_ON`, and `kopicode_serve._with_reported_cost` taking `usage.total`. Frontend: "Summary" rows.
 Tests: `test_maybe_handover.py`, `test_workflow.py`, `test_kopicode_serve.py`, `events.test.ts`.
 
+V5-summariser-model: `OpenRouterLlmProvider` defaults to a pinned small instruct model (`CUTTLEFISH_LLM_MODEL` overrides), asks
+OpenRouter for the call's cost, and `LlmResponse.cost_usd` flows through `call_llm` into `LlmCallCompleted.cost_usd` (shown on the
+Summary row). `agent_docs/model-costs.md` holds the model comparison. Tests: `test_openrouter_provider.py`, `test_maybe_handover.py`.
+

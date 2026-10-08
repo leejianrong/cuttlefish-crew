@@ -231,3 +231,12 @@ output cap, so the second handover was the first carried forward, and a `max_tur
 8192 tokens and asks for low reasoning effort (not yet seen live), and a round that ended for room is summarised as ending for room.
 Not seen: rounds 3 to 16, so whether the no-edit loop and the false-claim drift are gone is open until a full run.
 
+## Update: the summariser model
+
+`openrouter/auto` (the default summariser) resolved to a reasoning model that twice returned nothing after spending its whole output
+cap. The default is now a pinned small instruct model, `qwen/qwen3-30b-a3b-instruct-2507` (about $0.003 a summary), chosen from
+OpenRouter's public list (`agent_docs/model-costs.md`) and overridable with `CUTTLEFISH_LLM_MODEL`. OpenRouter is asked to include
+each call's cost (`usage.include`), which is journaled on `LlmCallCompleted.cost_usd` and shown on the Summary row; it is never
+estimated. Not yet seen against the live API (the key's weekly limit): the first real handover will show whether the slug and the
+`reasoning` and `usage` request fields are accepted. If a call fails the handover falls back to the previous summary.
+

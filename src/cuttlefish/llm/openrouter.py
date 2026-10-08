@@ -22,9 +22,12 @@ from cuttlefish.llm.provider import LlmResponse
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
-DEFAULT_MODEL = "openrouter/auto"
-#: Room for a model that thinks before it answers: with `openrouter/auto` a reasoning model
-#: spent all 4096 tokens on that and returned an empty summary (found by a live run).
+#: cuttlefish's own summaries (handovers) need no strong model. Pinned, not `openrouter/auto`: auto
+#: picks per request and once picked a reasoning model that spent its whole output cap thinking and
+#: answered nothing. A small instruct model, no reasoning, about $0.003 a summary. Override with
+#: ``CUTTLEFISH_LLM_MODEL`` (any OpenRouter model id).
+DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
+MODEL_ENV = "CUTTLEFISH_LLM_MODEL"
 DEFAULT_MAX_TOKENS = 8192
 
 
@@ -35,7 +38,7 @@ class MissingApiKeyError(RuntimeError):
 class OpenRouterLlmProvider:
     """One prompt in, one response out, over OpenRouter's OpenAI-compatible API."""
 
-    def __init__(self, *, model: str = DEFAULT_MODEL, max_tokens: int = DEFAULT_MAX_TOKENS) -> None:
+    def __init__(self, *, model: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> None:
         api_key = os.environ.get(OPENROUTER_API_KEY_ENV)
         if not api_key:
             raise MissingApiKeyError(
@@ -44,7 +47,7 @@ class OpenRouterLlmProvider:
                 "CUTTLEFISH_LLM_PROVIDER=replay for placeholder summaries."
             )
         self._client = openai.AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
-        self._model = model
+        self._model = model or os.environ.get(MODEL_ENV, "").strip() or DEFAULT_MODEL
         self._max_tokens = max_tokens
 
     async def complete(self, prompt: str) -> LlmResponse:
@@ -53,14 +56,17 @@ class OpenRouterLlmProvider:
             max_tokens=self._max_tokens,
             messages=[{"role": "user", "content": prompt}],
             # A short report needs little thinking; models that cannot be told so ignore it.
-            extra_body={"reasoning": {"effort": "low"}},
+            # `usage.include` makes OpenRouter report what the call cost.
+            extra_body={"reasoning": {"effort": "low"}, "usage": {"include": True}},
         )
         choice = response.choices[0]
         text = choice.message.content or ""
         usage = response.usage
+        reported = (usage.model_dump() if usage else {}).get("cost")
         return LlmResponse(
             model=response.model,
             text=text,
             input_tokens=usage.prompt_tokens if usage else None,
             output_tokens=usage.completion_tokens if usage else None,
+            cost_usd=float(reported) if isinstance(reported, int | float) else None,
         )
