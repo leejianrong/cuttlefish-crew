@@ -43,6 +43,9 @@ environment variable ``codex exec`` reads at invocation time (verified live,
 presence can't be inferred from env state either. Only
 ``CUTTLEFISH_TEST_CODEX_LIVE=1``, set deliberately, turns on the paid tests.
 
+Tests marked ``requires_live_credential`` (a real kopicode run against a real model) are opt-in too:
+only ``CUTTLEFISH_TEST_LIVE=1`` (``make test-live``) runs them, whatever ``.env`` holds.
+
 ``load_dotenv()`` runs once here, at collection time, for the same reason
 ``cli.py`` loads it once at import rather than per call: a test file that only
 imports ``cuttlefish.delegate`` never imports ``cli``, so nothing else in the test
@@ -88,10 +91,13 @@ def pytest_collection_modifyitems(items: Sequence[pytest.Item]) -> None:
     )
     has_kopicode = shutil.which("kopicode") is not None
 
+    # A real model costs real money, and a key in `.env` used to be enough to spend it on every
+    # `make test-all`. Like the Claude Code and Codex live tests, it is opt-in: `make test-live`.
     skip_credential = pytest.mark.skip(
-        reason="no live OPENROUTER_API_KEY or ANTHROPIC_API_KEY available"
+        reason="CUTTLEFISH_TEST_LIVE=1 not set -- a real model costs money, opt-in only "
+        "(make test-live; needs OPENROUTER_API_KEY or ANTHROPIC_API_KEY)"
     )
-    has_credential = bool(
+    has_credential = os.environ.get("CUTTLEFISH_TEST_LIVE") == "1" and bool(
         os.environ.get("OPENROUTER_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
     )
 

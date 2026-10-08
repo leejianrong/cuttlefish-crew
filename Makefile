@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help dev demo lint type check test test-all test-sandbox-live ci install-hooks \
+.PHONY: help dev demo lint type check test test-all test-sandbox-live test-live ci install-hooks \
 	install-systemd-service frontend-install frontend-check frontend-test frontend-build docs
 
 help: ## Show available targets
@@ -38,6 +38,13 @@ test: ## Unit tests only — the fast inner-loop target, no infra
 # posture satay-runtime's own studio-gated tests take for a missing extra.
 test-all: ## The FULL suite (unit + integration + e2e)
 	uv run pytest -q
+
+# Real kopicode against a real model (the `requires_live_credential` tests): cents per run, and
+# they were once spent on every `make test-all` whenever `.env` held a key.
+test-live: ## real kopicode + real model tests (OPENROUTER_API_KEY) — COSTS MONEY (cents), never in CI
+	@echo "This spends real model credit (cents). Ctrl-C to abort."
+	@read -r -p "continue? [y/N] " a; [ "$$a" = "y" ] || exit 1
+	CUTTLEFISH_TEST_LIVE=1 uv run pytest -m requires_live_credential -q
 
 # cuttlefish/sandbox's E2bSandboxProvider is tested against a real E2B account
 # (docs/SLICES.md V2 test plan), the same cost-bearing posture kopicode's own
