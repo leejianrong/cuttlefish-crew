@@ -330,3 +330,13 @@ checked against kopicode's source rather than a live run.
   KAN-1897): the "too broad" launcher check (`sh`, `python` alone) moved from the Always allow
   path into `validate_allow_entry`, so `PATCH /allow` and registration refuse it too. Decision 3
   item 3 therefore holds on both routes. Entries already stored are not re-checked.
+
+### Update: kopicode v0.4.0 is released and CI is pinned to it
+
+- `ask.request` (ADR-0020 in kopicode) and `ask_mode: "remote"` shipped in v0.4.0, so the wire the
+  `ask` gap waited for now exists in a released kopicode. cuttlefish does not use it yet.
+- The `tool_result` events in the serve stream still carry only the tool, exit code and size, so the
+  stuck-agent detector (ADR-0029) keeps reading the session record.
+- The session record and the stop reasons are unchanged apart from additive fields.
+- `ci.yml` no longer clones kopicode `main`; it builds the `v0.4.0` tag, so a kopicode change cannot
+  break CI unannounced. Bump the tag on purpose when a slice needs a newer kopicode.
