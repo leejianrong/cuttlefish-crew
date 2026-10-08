@@ -68,8 +68,9 @@ jobs:
       - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
-      - name: Check out kopicode (main)
-        run: git clone --depth 1 https://github.com/leejianrong/kopicode.git /tmp/kopicode
+      # A released tag, not main: bump it on purpose when a slice needs a newer kopicode.
+      - name: Check out kopicode (v0.4.0)
+        run: git clone --depth 1 --branch v0.4.0 https://github.com/leejianrong/kopicode.git /tmp/kopicode
       - uses: actions/setup-go@v6
         with:
           go-version-file: /tmp/kopicode/go.mod
