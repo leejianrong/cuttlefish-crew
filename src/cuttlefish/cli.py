@@ -52,6 +52,7 @@ from cuttlefish.config import (
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
+from cuttlefish.limits import LIMIT_SPECS, validate_limits
 from cuttlefish.permissions import DEFAULT_MODE, MODES
 from cuttlefish.projects.store import Project, ProjectStore, RoleDefinition
 from cuttlefish.roles import BUILTIN_ROLES, UnknownTemplateError, role_definition, template_roles
@@ -288,6 +289,7 @@ async def _run_team(args: argparse.Namespace) -> int:
     try:
         roles = _parse_roles(args.role)
         role_backends = _parse_role_backends(args.role_backend, {r["name"] for r in roles})
+        role_limits = _parse_limits(args.limit, args.role_limit, {r["name"] for r in roles})
         prepared = prepare_run(
             project=project,
             secret_names=secret_names,
@@ -310,6 +312,8 @@ async def _run_team(args: argparse.Namespace) -> int:
             role_input["backend"] = role_backends[role_input["name"]]
         if args.mode != DEFAULT_MODE:
             role_input["access"] = args.mode
+        if role_input["name"] in role_limits:
+            role_input["limits"] = role_limits[role_input["name"]]
     workflow_input = {
         "team_id": team_id,
         "root": root,
@@ -505,6 +509,40 @@ def _secrets(args: argparse.Namespace) -> int:
         return EXIT_OK
     finally:
         store.close()
+
+
+def _parse_limit(value: str, flag: str) -> tuple[str, int]:
+    """``KEY=N`` as a limit setting (ADR-0030); a bad key or a value out of range is a config error
+    saying which flag and why."""
+    key, sep, number = value.partition("=")
+    if not sep:
+        raise ConfigError(f"{flag} {value!r} must be KEY=NUMBER")
+    try:
+        found = validate_limits({key.strip(): int(number)})
+    except ValueError as exc:  # a non-number, or LimitsError (a ValueError) with the reason
+        raise ConfigError(f"{flag} {value!r}: {exc}") from exc
+    return key.strip(), found[key.strip()]
+
+
+def _parse_limits(
+    values: list[str] | None, role_values: list[str] | None, known_roles: set[str]
+) -> dict[str, dict[str, int]]:
+    """Each role's own limits: ``--limit KEY=N`` for every role, ``--role-limit NAME:KEY=N`` laid
+    over it for one (the dashboard's project and role settings, ADR-0030). Roles with none are
+    absent, so a team that sets nothing has the identical input it always had."""
+    shared = dict(_parse_limit(v, "--limit") for v in values or [])
+    per_role: dict[str, dict[str, int]] = {}
+    for value in role_values or []:
+        name, sep, rest = value.partition(":")
+        if not sep:
+            raise ConfigError(f"--role-limit {value!r} must be NAME:KEY=NUMBER")
+        if name not in known_roles:
+            raise ConfigError(f"--role-limit names {name!r}, which is not a declared role")
+        key, number = _parse_limit(rest, "--role-limit")
+        per_role.setdefault(name, {})[key] = number
+    return {
+        name: limits for name in known_roles if (limits := {**shared, **per_role.get(name, {})})
+    }
 
 
 def _parse_role_backends(values: list[str] | None, known_roles: set[str]) -> dict[str, str]:
@@ -899,6 +937,24 @@ def build_parser() -> argparse.ArgumentParser:
             "Run that --role through BACKEND (kopicode, claude-code, codex) instead "
             f"of ${AGENT_BACKEND_ENV} (KAN-1809). Repeatable."
         ),
+    )
+    run_team_parser.add_argument(
+        "--limit",
+        action="append",
+        metavar="KEY=N",
+        help=(
+            "A limit for every role (ADR-0030): "
+            + ", ".join(spec.key for spec in LIMIT_SPECS)
+            + ". What it unsets is read from the CUTTLEFISH_* environment (see the CLI reference). "
+            "Repeatable. Only kopicode takes the turn, token, context and time limits."
+        ),
+    )
+    run_team_parser.add_argument(
+        "--role-limit",
+        dest="role_limit",
+        action="append",
+        metavar="NAME:KEY=N",
+        help="A limit for one --role, over --limit (ADR-0030). Repeatable.",
     )
     run_team_parser.add_argument(
         "--resume",

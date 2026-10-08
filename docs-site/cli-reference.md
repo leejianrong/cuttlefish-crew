@@ -43,6 +43,13 @@ uv run cuttlefish run-team \
 one team can mix agents. Every named backend's CLI must be on `PATH` before
 the team starts.
 
+`--limit KEY=N` (repeatable) sets a limit for every role and `--role-limit NAME:KEY=N` one role's,
+over it: `max_turns`, `session_token_budget`, `context_limit_percent`, `round_timeout_minutes`,
+`max_continuations` and `max_idle_rounds`. These are the dashboard's project and role limits (Team
+tab); what a team does not set is read from the `CUTTLEFISH_*` variables below. A bad key or a value
+out of range stops the command before anything starts. Only kopicode takes the turn, token, context
+and time limits. On a resume, repeat the same flags.
+
 `--role NAME:TASK_TEXT` is repeatable and required at least once. Every
 other flag from `run` applies team-wide (one `--root`, one `--allow` list
 shared by every role, one steerable/approval/budget setting applying to
