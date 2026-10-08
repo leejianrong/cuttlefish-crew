@@ -40,8 +40,8 @@ def _pump() -> None:
 
 log.write(json.dumps({"pid": os.getpid(), "argv": sys.argv[1:]}) + "\n")
 # What an agent's process is given (V5-E4): the names that matter to the tests, and no values
-# of anything secret. Not for the `serve --help` probe, which is not an agent.
-if "--help" not in sys.argv:
+# of anything secret. Not for the `serve --help` or `version --json` probes, which are not agents.
+if "--help" not in sys.argv and "version" not in sys.argv:
     log.write(
         json.dumps(
             {
