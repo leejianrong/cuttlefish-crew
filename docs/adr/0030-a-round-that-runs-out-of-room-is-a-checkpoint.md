@@ -178,3 +178,24 @@ It found:
   a run whose commands were all denied still ended as a completed task with a failing test. That is the model's
   verification, not something cuttlefish can see.
 
+## Update: per-project and per-role settings
+
+The limits are no longer only environment variables. `cuttlefish.limits.LIMIT_SPECS` lists six: turns per round, tokens per
+round, context limit (percent of the window), time per round (minutes), continuations and rounds with no change. A
+project holds its own (`projects.limits_json`), a role definition holds its own (`RoleDefinition.limits`), and an absent
+key inherits: **role over project over the daemon's environment over the built-in default**.
+
+- The daemon composes them once, at team start (`_build_role_inputs`): the project's with the role's laid over, into
+  `RoleInput.limits`, which is persisted with the rest of the role (`PersistedRole.limits`) so a resume replays the same
+  input. A team already running keeps the values it started with; a change applies at the next start, as mode and
+  presets do.
+- `delegate_to_agent_backend(limits=...)` is passed only when a role sets any (so recorded arguments for an unchanged
+  role are the same as before) and only to kopicode, whose `delegate` turns them into `max_turns`, `token_budget`, the
+  round timeout and the context limit. `run_team` reads the other two per role: a role's `max_continuations` and
+  `max_idle_rounds`, else the team input's, else the environment's.
+- Surfaces: `GET /api/limits` (the catalogue, with what each reads now), `PATCH /api/projects/{id}/limits`, `limits` on a
+  project and on its roles (a 400 for an unknown key or a value out of range), and the dashboard's Team tab: a "Limits for
+  this project" section and a "Limits for {role}" block in each role's editor, each box showing what it inherits.
+- Not done: a CLI flag for `run-team`, which still reads the environment (and the team input's two counters); Claude Code
+  and Codex have no such controls, so for them the settings are inert, and the dashboard says so.
+

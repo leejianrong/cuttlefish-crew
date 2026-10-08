@@ -251,4 +251,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **A continuation's handover needs the summariser.** Each auto-continued round writes one (ADR-0030's fourth update), so a
   long team now needs `OPENROUTER_API_KEY` (or `CUTTLEFISH_LLM_PROVIDER=replay`, placeholder text); without one the write
   fails, is logged, and the next round gets the list of changed files only.
+- **Limits are set for kopicode teams started by the daemon.** `cuttlefish run-team` and `run` read the environment only; Claude Code
+  and Codex ignore turns, tokens, context and time (they have no such controls), so a role on them only honours its
+  continuation and no-change counters. A change to a project's or role's limits applies at the next start (ADR-0030).
 

@@ -10,6 +10,24 @@ export type PermissionMode = "ask-first" | "standard" | "auto";
 /** A role's access: a mode, or read-only (roles only). */
 export type AccessLevel = PermissionMode | "read-only";
 
+/** A project's or role's own limits, by key (`LimitInfo.key`); a key that is absent inherits. */
+export type LimitValues = Record<string, number>;
+
+/** One setting a project or role may override, with what it reads when nothing is set. */
+export interface LimitInfo {
+  key: string;
+  title: string;
+  summary: string;
+  unit: string;
+  minimum: number;
+  maximum: number | null;
+  /** The value in force when neither the role nor the project sets one (the daemon's
+   * environment variable, else the built-in default). */
+  default: number;
+  /** What `0` means when it is more than just a number, e.g. "no limit". */
+  zero_means: string | null;
+}
+
 export interface RoleDefinition {
   name: string;
   persona: string;
@@ -18,6 +36,8 @@ export interface RoleDefinition {
   /** V4-B/V4-C: null inherits the project's mode; otherwise this role's own level. Read-only
    * blocks edits on Claude Code and Codex but not kopicode (ADR-0025). */
   access?: AccessLevel | null;
+  /** V5-limit-settings: this role's own limits, laid over the project's. Absent keys inherit. */
+  limits?: LimitValues;
   /** V4-B: true while a built-in role still carries its built-in prompt. Read-only. */
   default_prompt?: boolean;
 }
@@ -158,6 +178,8 @@ export interface ProjectSummary {
   last_team_id: string | null;
   /** V5-E3: whether cuttlefish installs dependencies before a team starts. */
   env_prepare: PrepareSetting;
+  /** V5-limit-settings: the project's own limits; a role's override them. */
+  limits: LimitValues;
   /** The last team was started with a review gate: a blocked role is then waiting for you. */
   require_approval: boolean;
   allow: string[][];
@@ -349,6 +371,19 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/presets`, {
       method: "PATCH",
       body: JSON.stringify({ presets }),
+    });
+  }
+
+  listLimits(): Promise<{ limits: LimitInfo[] }> {
+    return this.request("/api/limits");
+  }
+
+  /** Sets the project's own limits; an empty object clears them. A running team keeps the
+   * values it started with. */
+  updateLimits(id: string, limits: LimitValues): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/limits`, {
+      method: "PATCH",
+      body: JSON.stringify({ limits }),
     });
   }
 

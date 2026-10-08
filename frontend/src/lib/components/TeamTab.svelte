@@ -3,6 +3,8 @@
     AccessLevel,
     BuiltinRole,
     FleetClient,
+    LimitInfo,
+    LimitValues,
     ProjectSummary,
     RoleDefinition,
     TeamTemplate,
@@ -18,7 +20,9 @@
     roleFromBuiltin,
     roleNameProblem,
   } from "../team";
+  import { overrideCount, sameLimits } from "../limits";
   import Icon from "./Icon.svelte";
+  import LimitsEditor from "./LimitsEditor.svelte";
 
   let {
     client,
@@ -39,6 +43,16 @@
     { value: "auto", label: "Auto" },
     { value: "read-only", label: "Read-only" },
   ];
+
+  let limitCatalog = $state<LimitInfo[]>([]);
+  // The project's own limits being edited, and a counter that re-creates the editors when the
+  // values change from outside them (a save, a discard, another role).
+  let projectLimits = $state<LimitValues>({ ...project.limits });
+  let limitsReset = $state(0);
+  let savingLimits = $state(false);
+  let limitsError = $state<string | null>(null);
+  let limitsNotice = $state<string | null>(null);
+  const limitsDirty = $derived(!sameLimits(projectLimits, project.limits));
 
   let builtins = $state<BuiltinRole[]>([]);
   let templates = $state<TeamTemplate[]>([]);
@@ -65,7 +79,8 @@
     return (
       a.persona !== b.persona ||
       (a.backend ?? null) !== (b.backend ?? null) ||
-      (a.access ?? null) !== (b.access ?? null)
+      (a.access ?? null) !== (b.access ?? null) ||
+      !sameLimits(a.limits, b.limits)
     );
   }
 
@@ -80,15 +95,39 @@
 
   function discard() {
     if (selected) delete drafts[selected.name];
+    limitsReset += 1;
+  }
+
+  async function saveProjectLimits() {
+    savingLimits = true;
+    limitsError = null;
+    limitsNotice = null;
+    try {
+      await client.updateLimits(project.id, projectLimits);
+      await onChanged();
+      limitsNotice = "Saved. A team already running keeps the values it started with.";
+    } catch {
+      limitsError = "Couldn't save that. Check that the daemon is still running, then try again.";
+    } finally {
+      savingLimits = false;
+    }
+  }
+
+  function discardProjectLimits() {
+    projectLimits = { ...project.limits };
+    limitsReset += 1;
+    limitsError = null;
+    limitsNotice = null;
   }
   const addable = $derived(addableBuiltins(project.roles, builtins));
   const newNameProblem = $derived(newName ? roleNameProblem(newName, project.roles) : null);
 
   $effect(() => {
-    Promise.all([client.listBuiltinRoles(), client.listTemplates()]).then(
-      ([roleResult, templateResult]) => {
+    Promise.all([client.listBuiltinRoles(), client.listTemplates(), client.listLimits()]).then(
+      ([roleResult, templateResult, limitResult]) => {
         builtins = roleResult.roles;
         templates = templateResult.templates;
+        limitCatalog = limitResult.limits;
       },
       () => (loadError = "Couldn't load the built-in roles. Check that the daemon is still running."),
     );
@@ -96,6 +135,7 @@
 
   function select(name: string) {
     selectedName = name;
+    limitsReset += 1;
     confirmingRemove = false;
     error = null;
     notice = null;
@@ -122,7 +162,10 @@
     if (!draft || !selected) return;
     const name = selected.name;
     const ok = await write(replaceRole(project.roles, name, draft), `Saved ${name}.`);
-    if (ok) delete drafts[name];
+    if (ok) {
+      delete drafts[name];
+      limitsReset += 1;
+    }
   }
 
   function resetDraft() {
@@ -339,6 +382,29 @@
             </p>
           {/if}
 
+          {#if limitCatalog.length > 0}
+            <details class="role-limits" open={overrideCount(draft.limits) > 0}>
+              <summary class="title-small">
+                Limits for {selected.name}
+                <span class="body-small muted">
+                  {overrideCount(draft.limits) > 0
+                    ? `${overrideCount(draft.limits)} set here`
+                    : "using the project's"}
+                </span>
+              </summary>
+              {#key `${selected.name}:${limitsReset}`}
+                <LimitsEditor
+                  catalog={limitCatalog}
+                  values={draft.limits ?? {}}
+                  inherited={project.limits}
+                  inheritedFrom="the project"
+                  idPrefix="role-limit"
+                  onChange={(next) => edit({ limits: next })}
+                />
+              {/key}
+            </details>
+          {/if}
+
           <label class="field prompt">
             <span class="field-label">Prompt</span>
             <textarea
@@ -375,6 +441,41 @@
       {/if}
     </div>
   </section>
+
+  {#if limitCatalog.length > 0}
+    <section aria-labelledby="limits-heading">
+      <div class="heading-row">
+        <h2 id="limits-heading" class="title-large">Limits for this project</h2>
+        {#if limitsNotice}<span class="body-small muted" role="status">{limitsNotice}</span>{/if}
+      </div>
+      <p class="body-medium muted">
+        How much room a round gets and how long a role runs on its own before it stops or is held for
+        you. A role can override any of these in its own editor above. Blank uses the daemon's
+        setting. They apply to kopicode; Claude Code and Codex have no such controls.
+      </p>
+      <div class="card filled limits-card">
+        {#key limitsReset}
+          <LimitsEditor
+            catalog={limitCatalog}
+            values={projectLimits}
+            inheritedFrom="the daemon's settings"
+            idPrefix="project-limit"
+            onChange={(next) => (projectLimits = next)}
+          />
+        {/key}
+        {#if limitsError}<p class="body-small error" role="alert">{limitsError}</p>{/if}
+        <div class="editor-actions">
+          <span class="grow"></span>
+          <button class="btn btn-text" disabled={!limitsDirty || savingLimits} onclick={discardProjectLimits}>
+            Discard changes
+          </button>
+          <button class="btn btn-filled" disabled={!limitsDirty || savingLimits} onclick={saveProjectLimits}>
+            {savingLimits ? "Saving…" : "Save limits"}
+          </button>
+        </div>
+      </div>
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -519,6 +620,32 @@
 
   .editor :global(.field-label) {
     background: var(--md-sys-color-surface-container-lowest);
+  }
+
+  .role-limits {
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--md-sys-shape-corner-small);
+    padding: 12px 16px;
+  }
+
+  .role-limits[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .role-limits summary {
+    cursor: pointer;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .limits-card {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
   }
 
   .prompt textarea {
