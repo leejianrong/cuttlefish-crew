@@ -396,6 +396,29 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 usage_totals, max_tokens=max_tokens, max_cost_usd=max_cost_usd
             )
 
+            # ADR-0030: a round that ran out of turns or tokens and was not stuck is a
+            # checkpoint. Carry on from the latest handover with a fresh session. Journaled
+            # before the steering grace so the role reads "working", not "blocked", while it
+            # waits; a steering message in that window still wins.
+            auto_continue = (
+                not require_approval
+                and not budget_hit
+                and outcome.kind == "failed"
+                and outcome.failure_kind in CHECKPOINT_STOPS
+                and continuations[name] < max_continuations
+            )
+            if auto_continue:
+                continuations[name] += 1
+                await journal(
+                    team_id,
+                    RoundContinued(
+                        reason=str(outcome.failure_kind),
+                        count=continuations[name],
+                        limit=max_continuations,
+                        role=name,
+                    ),
+                )
+
             if require_approval or budget_hit:
                 # No timeout -- see run_task's identical wait for why.
                 decision = await satay.wait_for_event(
@@ -422,26 +445,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                     redirect_text = steer_event.text
 
             heading = None
-            if (
-                redirect_text is None
-                and not require_approval
-                and not budget_hit
-                and outcome.kind == "failed"
-                and outcome.failure_kind in CHECKPOINT_STOPS
-                and continuations[name] < max_continuations
-            ):
-                # ADR-0030: a round that ran out of turns or tokens and was not stuck is a
-                # checkpoint. Carry on from the latest handover with a fresh session.
-                continuations[name] += 1
-                await journal(
-                    team_id,
-                    RoundContinued(
-                        reason=str(outcome.failure_kind),
-                        count=continuations[name],
-                        limit=max_continuations,
-                        role=name,
-                    ),
-                )
+            if auto_continue and redirect_text is None:
                 heading = "This round was continued automatically:"
                 redirect_text = CONTINUE_TEXT[str(outcome.failure_kind)]
 
@@ -484,6 +488,11 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             }
         else:
             reason = outcome.reason or outcome.summary
+            if outcome.failure_kind in CHECKPOINT_STOPS and max_continuations > 0:
+                reason += (
+                    f"; it had already continued {continuations[name]} of {max_continuations} "
+                    "times on its own (CUTTLEFISH_MAX_CONTINUATIONS)"
+                )
             await journal(team_id, TaskFailed(error=reason, role=name))
             role_results[name] = {"status": "failed", "error": reason}
         await maybe_handover(team_id, token_budget=token_budget, role=name)

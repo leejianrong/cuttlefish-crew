@@ -137,6 +137,8 @@ async def test_continuing_is_bounded_and_the_last_stop_fails_the_role(tmp_path: 
     assert [p.count for p in payloads if isinstance(p, RoundContinued)] == [1, 2]
     failures = [p for p in payloads if isinstance(p, DelegationFailed)]
     assert len(failures) == 3 and failures[-1].failure_kind == "max_turns"
+    assert "continued 2 of 2 times" in result["roles"]["builder"]["error"]
+    assert "CUTTLEFISH_MAX_CONTINUATIONS" in result["roles"]["builder"]["error"]
 
 
 async def test_zero_continuations_keeps_a_checkpoint_stop_a_failed_round(tmp_path: Path) -> None:

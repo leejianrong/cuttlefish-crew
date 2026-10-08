@@ -34,7 +34,9 @@ environment, kopicode only), and the run's cost ceilings are checked at round bo
    `RoundContinued` and starts the next round on a fresh session with the latest handover and a line
    saying the previous round stopped for room, not because it was done. At most
    `CUTTLEFISH_MAX_CONTINUATIONS` (default 20, `0` keeps the old behaviour) per role per run; after
-   that the last stop fails the role as before. A person's steering message still wins, and a
+   that the last stop fails the role as before, and its error says how many continuations were used.
+   `RoundContinued` is journaled before the steering grace, so the role reads `working`, not `blocked`,
+   while it waits. A person's steering message still wins, and a
    `require_approval` or cost-ceiling stop still waits for a decision.
 3. **Not a checkpoint:** every other failure, including `environment_stuck`, `verification_failed`,
    provider errors and `cancelled`.

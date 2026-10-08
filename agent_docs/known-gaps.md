@@ -249,3 +249,6 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **A typed answer to a question is kept as typed**: the journal scrubs known secret values from it, not
   anything key-shaped, so a credential a person types into an answer stays in `episodic.db`, satay's own
   database and the history API.
+- **A checkpoint round still reads "Round failed"** in the activity log, with the failure styling, and the
+  next row says Continued (ADR-0030). The "Round started" row also carries the whole continuation prompt,
+  handover included, which grows with each round. Both are cosmetic and not yet changed.
