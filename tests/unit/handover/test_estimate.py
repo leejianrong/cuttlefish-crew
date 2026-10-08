@@ -58,8 +58,8 @@ def test_a_rounds_tool_calls_and_edits_count_and_reach_the_summary_prompt() -> N
     assert "boom" in prompt
     assert 'write_file ok: {"path":"one.txt"}' in prompt
     assert "refused: rm x" in prompt
-    assert "ls" not in prompt.split("4. ConsentDecided")[1].split("\n")[0]  # an allow says nothing
+    assert "4. ConsentDecided" not in prompt  # an allow says nothing, so it is left out
     assert "edited: a.py, b.py" in prompt
-    assert "which files were created or changed" in prompt
+    assert "Done (name the files and modules)" in prompt
     assert all(estimate_event_tokens(payload) > 0 for _, payload in window[:3] + window[4:])
     assert estimate_event_tokens(window[3][1]) == 0  # an allowed command is not progress

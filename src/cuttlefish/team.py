@@ -134,7 +134,10 @@ logger = logging.getLogger(__name__)
 _CARRY_ON = (
     "You are already in the repository root; do not cd elsewhere. Check the repository's "
     "current state (list and read the files, git status, the tests) against the progress above, "
-    "then carry on with what remains. If the task is already done, say so and stop."
+    "then carry on with what remains. The repository state at the end of the progress above was "
+    "read from git by cuttlefish, so trust it: do not re-read files or re-run checks it already "
+    "settles. Do the next unfinished step first, then verify what you changed. If the task is "
+    "already done, say so and stop."
 )
 CONTINUE_TEXT = {
     "max_turns": (
@@ -296,7 +299,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
 
     for role in roles:
         await journal(team_id, TaskSubmitted(text=role["text"], role=role["name"]))
-        await maybe_handover(team_id, token_budget=token_budget, role=role["name"])
+        await maybe_handover(team_id, token_budget=token_budget, role=role["name"], root=root)
 
     runtime_ = runtime.current()
     sandbox_provider = runtime_.sandbox_provider
@@ -435,7 +438,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
 
             # ADR-0010/KAN-1704: checked every round, per role, not only at a
             # role's own start and end -- see run_task's identical fix for why.
-            if await maybe_handover(team_id, token_budget=token_budget, role=name):
+            if await maybe_handover(team_id, token_budget=token_budget, role=name, root=root):
                 round_summaries[name].clear()
 
             # A round finalizes unless something actively redirects it -- either a
@@ -502,7 +505,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 # continuation then carries the file list, as before.
                 try:
                     if await maybe_handover(
-                        team_id, token_budget=token_budget, role=name, force=True
+                        team_id, token_budget=token_budget, role=name, force=True, root=root
                     ):
                         round_summaries[name].clear()
                 except Exception:
@@ -596,7 +599,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 )
             await journal(team_id, TaskFailed(error=reason, role=name))
             role_results[name] = {"status": "failed", "error": reason}
-        await maybe_handover(team_id, token_budget=token_budget, role=name)
+        await maybe_handover(team_id, token_budget=token_budget, role=name, root=root)
 
     return {"status": _overall_status(role_results), "roles": role_results}
 

@@ -12,6 +12,7 @@ const LABELS: Record<string, string> = {
   DelegationFailed: "Round failed",
   SteeringMessage: "You",
   HandoverWritten: "Checkpoint",
+  LlmCallCompleted: "Summary",
   TaskCompleted: "Finished",
   TaskFailed: "Task failed",
   TeamResumed: "Resumed",
@@ -217,6 +218,11 @@ export function summarize(event: EpisodicEventView): string {
       return String(p.text);
     case "HandoverWritten":
       return String(p.summary);
+    case "LlmCallCompleted": {
+      // The summariser's own call, kept for what it cost; its prompt and answer are in the journal.
+      const tokens = (value: unknown) => (typeof value === "number" ? value.toLocaleString("en-GB") : "?");
+      return `Wrote the checkpoint with ${p.model} (${tokens(p.input_tokens)} tokens in, ${tokens(p.output_tokens)} out).`;
+    }
     case "TaskCompleted":
       return String(p.result);
     case "TaskFailed":

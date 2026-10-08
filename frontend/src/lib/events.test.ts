@@ -324,3 +324,18 @@ describe("checkpointedRounds", () => {
     expect([...checkpointedRounds(events)]).toEqual([1]);
   });
 });
+
+describe("the summariser's call", () => {
+  it("reads as what it did and what it cost, never as raw JSON", () => {
+    const call = event("LlmCallCompleted", {
+      model: "m",
+      prompt: "p",
+      response: "r",
+      input_tokens: 12345,
+      output_tokens: null,
+      role: "builder",
+    });
+    expect(eventLabel("LlmCallCompleted")).toBe("Summary");
+    expect(summarize(call)).toBe("Wrote the checkpoint with m (12,345 tokens in, ? out).");
+  });
+});
