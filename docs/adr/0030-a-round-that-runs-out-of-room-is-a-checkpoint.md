@@ -73,3 +73,8 @@ environment, kopicode only), and the run's cost ceilings are checked at round bo
   workflow is replayed, and a card raised in the body came back on every replay after a steer (found by
   the exploratory pass). The role's card on the project page says it waits for a steer, with no timeout,
   while such a card is open.
+- **A restart keeps a Stuck card.** `blocked` requests (ADR-0029's stuck agent, and this ADR's held role)
+  have nothing waiting on them, so the startup sweep leaves them open for a team it is about to resume
+  (`sweep_abandoned(keep_blocked=...)`), and `_launch_team` puts them back in the broker with
+  `restore_blocked`, without a second `RequestRaised`. The resumed role replays to the same wait for a
+  steer, and the card, badge and role-card text say so. A team that is not resumed still abandons them.

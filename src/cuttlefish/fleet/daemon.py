@@ -21,7 +21,7 @@ import contextlib
 import dataclasses
 import logging
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypedDict
@@ -298,12 +298,16 @@ class FleetDaemon:
         ended = [e for e in history(self._last_team_events(project)) if e.resolved is not None]
         return ended[::-1][:limit]
 
-    def sweep_abandoned(self) -> int:
+    def sweep_abandoned(self, keep_blocked: Collection[str] = ()) -> int:
         """Resolve as `abandoned` every request a project's last team raised and never resolved.
 
         A pending request cannot outlive the `kopicode serve` child waiting on it, so after a
         restart any unresolved one is dead (ADR-0028). Journaled straight to each project's own
-        store, like `_mark_resumed`. Returns how many were abandoned."""
+        store, like `_mark_resumed`. Returns how many were abandoned.
+
+        ``keep_blocked`` names teams about to be resumed: their ``blocked`` requests (a stuck or
+        held role, nothing waiting on them) are left open, and `_launch_team` puts them back in
+        the broker, because the resumed role is still waiting for a steer."""
         count = 0
         for project in self._projects.list():
             path = Path(project.root) / ".cuttlefish" / "episodic.db"
@@ -312,6 +316,8 @@ class FleetDaemon:
             store = EpisodicStore.open(path)
             try:
                 for raised in unresolved(store.read(project.last_team_id)):
+                    if raised.kind == "blocked" and project.last_team_id in keep_blocked:
+                        continue
                     store.append(
                         project.last_team_id,
                         RequestResolved(
@@ -512,9 +518,10 @@ class FleetDaemon:
                     extra_backends=[r["backend"] for r in role_inputs if r.get("backend")],
                 )
                 self._team_stores[team_id] = prepared.episodic_store
-                self.requests.seed_grants(
-                    team_id, granted_rules(prepared.episodic_store.read(team_id))
-                )
+                events = list(prepared.episodic_store.read(team_id))
+                self.requests.seed_grants(team_id, granted_rules(events))
+                # A resumed role may still be held for a person (a Stuck card): put it back.
+                self.requests.restore_blocked(project.id, team_id, unresolved(events))
                 runtime.configure(
                     dataclasses.replace(
                         prepared.as_runtime(),
@@ -645,14 +652,16 @@ class FleetDaemon:
         last team already reached a terminal state is skipped too -- nothing to
         resume.
         """
-        self.sweep_abandoned()
-        attempts: list[ResumeAttempt] = []
+        resumable: list[tuple[Project, str]] = []
         for project in self._projects.list():
             team_id = project.last_team_id
             if team_id is None or not project.last_team_roles or self.is_running(project.id):
                 continue
-            if not await self._is_resumable(project, team_id):
-                continue
+            if await self._is_resumable(project, team_id):
+                resumable.append((project, team_id))
+        self.sweep_abandoned(keep_blocked={team_id for _, team_id in resumable})
+        attempts: list[ResumeAttempt] = []
+        for project, team_id in resumable:
             role_inputs = _persisted_roles_to_inputs(project.last_team_roles)
             self._mark_resumed(project, team_id)
             try:

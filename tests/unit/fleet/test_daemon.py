@@ -12,10 +12,11 @@ from pathlib import Path
 import pytest
 
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
-from cuttlefish.episodic.events import TaskSubmitted, TeamResumed
+from cuttlefish.episodic.events import RequestRaised, TaskSubmitted, TeamResumed
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RunningTeam, _build_role_inputs
 from cuttlefish.projects.store import PersistedRole, ProjectStore, RoleDefinition
+from cuttlefish.requests import unresolved
 
 
 def _daemon(tmp_path: Path) -> FleetDaemon:
@@ -284,3 +285,56 @@ def test_the_environment_note_sits_between_the_persona_and_the_task(tmp_path: Pa
     )
     assert _compose_role_text(None, "do it", "Environment: x") == "Environment: x\n\ndo it"
     assert _compose_role_text(role, "do it") == "You are builder. Build things.\n\ndo it"
+
+
+# -- a restart keeps a Stuck card for a role that is resumed (ADR-0029, ADR-0030) --------
+
+
+def _raised(request_id: str, kind: str) -> RequestRaised:
+    return RequestRaised(
+        request_id=request_id,
+        kind=kind,  # type: ignore[arg-type]
+        title="t",
+        detail="d",
+        why="w",
+        answers=[] if kind == "blocked" else ["deny"],
+        expires_at="",
+        role="builder",
+    )
+
+
+def _journal_two_requests(daemon: FleetDaemon, tmp_path: Path) -> tuple[Path, str]:
+    root = tmp_path / "alpha"
+    root.mkdir()
+    project = daemon.projects.register(name="alpha", root=str(root))
+    daemon.projects.record_team_started(
+        project.id, "t-1", (PersistedRole(name="builder", text="do it"),)
+    )
+    store = EpisodicStore.open(root / ".cuttlefish" / "episodic.db")
+    store.append("t-1", _raised("stuck", "blocked"))
+    store.append("t-1", _raised("held", "permission"))
+    store.close()
+    return root, "t-1"
+
+
+def _unresolved_ids(root: Path) -> set[str]:
+    store = EpisodicStore.open(root / ".cuttlefish" / "episodic.db")
+    try:
+        return {r.request_id for r in unresolved(store.read("t-1"))}
+    finally:
+        store.close()
+
+
+def test_the_sweep_abandons_every_pending_request_by_default(tmp_path: Path) -> None:
+    daemon = _daemon(tmp_path)
+    root, _ = _journal_two_requests(daemon, tmp_path)
+    assert daemon.sweep_abandoned() == 2
+    assert _unresolved_ids(root) == set()
+
+
+def test_the_sweep_keeps_a_blocked_request_of_a_team_about_to_resume(tmp_path: Path) -> None:
+    """A held command's agent process is gone; a Stuck card has nothing waiting on it."""
+    daemon = _daemon(tmp_path)
+    root, team = _journal_two_requests(daemon, tmp_path)
+    assert daemon.sweep_abandoned(keep_blocked={team}) == 1
+    assert _unresolved_ids(root) == {"stuck"}

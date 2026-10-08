@@ -256,9 +256,3 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   legitimately spends rounds reading (a reviewer), can hit the no-progress stop; it counts only after a round
   ran out of room, and `CUTTLEFISH_MAX_IDLE_ROUNDS=0` turns it off. It does not notice an agent that edits the
   same file back and forth. The wall-clock limit counts time spent waiting for you in Needs you.
-- **A restart loses a Stuck card.** `blocked` Needs-you cards (an agent stuck on its environment, ADR-0029;
-  a role held for going round in circles, ADR-0030) live in the broker's memory and the startup sweep
-  abandons them like any other pending request. The resumed role still waits for a steer with no timeout,
-  but nothing on the dashboard says so, no badge counts it, and its role card falls back to "ends in a few
-  seconds". Steering it works. Found by the V5-guards exploratory pass; the fix is to re-create these cards
-  on resume instead of abandoning them. Not yet done.

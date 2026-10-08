@@ -418,3 +418,8 @@ kept) in `CHECKPOINT_STOPS`, not a `DelegationError`. In `run_team`, `idle_round
 with no `edited_paths`; at `CUTTLEFISH_MAX_IDLE_ROUNDS` the role is not continued, `_raise_no_progress` raises a
 `blocked` card, and the role waits for a steer (no timeout) that resets the count. Tests: `test_team_continue.py`,
 `test_limits.py`, `test_kopicode_serve.py`.
+
+V5-restore-cards: **a restart no longer loses a Stuck card.** `FleetDaemon.resume_pending` works out which teams it
+will resume first, then `sweep_abandoned(keep_blocked=...)` skips their unresolved `blocked` requests (every other
+kind is still abandoned: its agent process is gone), and `_launch_team` calls `RequestBroker.restore_blocked` with the
+journal's unresolved requests. Nothing is journaled again; steering or the team ending resolves the same id.
