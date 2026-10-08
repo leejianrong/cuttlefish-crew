@@ -153,13 +153,17 @@
         onRegistered={(project) => go({ view: "project", id: project.id, tab: "overview" })}
       />
     {:else if openProjectId}
-      <ProjectDetail
-        {client}
-        projectId={openProjectId}
-        tab={projectTab}
-        onTabChange={(tab) => go({ view: "project", id: openProjectId, tab })}
-        onBack={() => go(HOME)}
-      />
+      <!-- Keyed by project: switching by the URL alone must not carry one project's page state (a
+           draft, a half-typed task) over to another. -->
+      {#key openProjectId}
+        <ProjectDetail
+          {client}
+          projectId={openProjectId}
+          tab={projectTab}
+          onTabChange={(tab) => go({ view: "project", id: openProjectId, tab })}
+          onBack={() => go(HOME)}
+        />
+      {/key}
     {:else}
       <Portfolio
         {client}
