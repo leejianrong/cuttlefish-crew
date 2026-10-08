@@ -45,6 +45,7 @@ from cuttlefish.episodic.events import (
     encode_payload,
 )
 from cuttlefish.episodic.redact import Redactor
+from cuttlefish.limits import CHECKPOINT_STOPS
 
 _LOG = logging.getLogger(__name__)
 
@@ -98,7 +99,9 @@ def _describe(payload: EventPayload) -> tuple[int, str]:
             return logging.WARNING, reason
         case DelegationFailed(reason=reason, failure_kind=kind, record=record, tokens=tokens):
             tail = "".join([f" kind={kind}" if kind else "", f" record={record}" if record else ""])
-            return logging.WARNING, f"{reason} tokens={tokens}{tail}"
+            # A round that ran out of room is a checkpoint the team carries on from, not a fault.
+            level = logging.INFO if kind in CHECKPOINT_STOPS else logging.WARNING
+            return level, f"{reason} tokens={tokens}{tail}"
         case TaskCompleted(result=result):
             return logging.INFO, _clip(result)
         case TaskFailed(error=error):

@@ -1,7 +1,17 @@
 <script lang="ts">
   import type { RoleStatus } from "../api";
 
-  let { status }: { status: RoleStatus } = $props();
+  let {
+    status,
+    label,
+    tone,
+  }: {
+    status: RoleStatus;
+    /** Words to show instead of the status's own. */
+    label?: string;
+    /** Colour as this status while saying `label`: "finishing" is calm, not blocked. */
+    tone?: RoleStatus;
+  } = $props();
 
   const labels: Record<RoleStatus, string> = {
     queued: "queued",
@@ -13,8 +23,8 @@
   };
 </script>
 
-<span class="chip chip-{status}">
-  <span class="dot"></span>{labels[status]}
+<span class="chip chip-{tone ?? status}">
+  <span class="dot"></span>{label ?? labels[status]}
 </span>
 
 <style>

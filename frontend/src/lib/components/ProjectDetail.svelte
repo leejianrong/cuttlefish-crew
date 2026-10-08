@@ -432,9 +432,8 @@
   }
 
   .resumed-banner {
-    background: var(--status-blocked-bg);
-    color: var(--status-blocked-fg);
-    border: 1px solid var(--status-blocked-fg);
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
     border-radius: var(--md-sys-shape-corner-small);
     padding: 0.6rem 0.9rem;
     font-size: 0.85rem;
@@ -488,6 +487,16 @@
 
   .hint code {
     color: var(--text);
+  }
+
+  /* An example sentence can be longer than a phone: wrap it rather than run off the screen. */
+  .examples :global(.chip) {
+    height: auto;
+    min-height: 32px;
+    max-width: 100%;
+    padding-block: 6px;
+    white-space: normal;
+    text-align: left;
   }
 
   .examples {
