@@ -252,3 +252,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **A checkpoint round still reads "Round failed"** in the activity log, with the failure styling, and the
   next row says Continued (ADR-0030). The "Round started" row also carries the whole continuation prompt,
   handover included, which grows with each round. Both are cosmetic and not yet changed.
+- **"No progress" means no file edit.** A role that only changes files by running a shell generator, or that
+  legitimately spends rounds reading (a reviewer), can hit the no-progress stop; it counts only after a round
+  ran out of room, and `CUTTLEFISH_MAX_IDLE_ROUNDS=0` turns it off. It does not notice an agent that edits the
+  same file back and forth. The wall-clock limit counts time spent waiting for you in Needs you.

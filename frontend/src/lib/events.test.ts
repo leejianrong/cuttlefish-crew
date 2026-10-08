@@ -179,6 +179,14 @@ describe("failed rounds in the activity log", () => {
     );
   });
 
+  it("words a round stopped by the time limit", () => {
+    expect(failureText("round_timeout", "stopped: the round ran longer than 7200 seconds")).toContain(
+      "time limit",
+    );
+    const text = summarize(event("RoundContinued", { reason: "round_timeout", count: 1, limit: 20 }));
+    expect(text).toContain("time limit");
+  });
+
   it("labels the round and the task apart and does not repeat the raw stop reason", () => {
     expect(eventLabel("DelegationFailed")).toBe("Round failed");
     expect(eventLabel("TaskFailed")).toBe("Task failed");

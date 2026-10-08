@@ -82,6 +82,7 @@ FAILURE_KINDS = (
     "budget_exhausted",
     "cancelled",
     "environment_stuck",  # cuttlefish cancelled it: N shell failures in a row on the environment
+    "round_timeout",  # cuttlefish cancelled it: the round passed its wall-clock limit (ADR-0030)
     "open_failed",  # session.start refused: a bad model, a missing credential
     "protocol_error",  # a -32xxx reply, or a stop this client does not know
 )
@@ -698,6 +699,29 @@ def classify_turn(
     )
 
 
+def _timeout_outcome(
+    events: list[Mapping[str, Any]],
+    timeout: float | None,
+    consents: list[ConsentDecisionRecord],
+) -> DelegationOutcome:
+    """The round cuttlefish cancelled because it ran past its wall-clock limit. What the agent
+    did before then (edits, tool calls, tokens) is kept, so the next round starts from a record
+    that says so. A distinct ``failure_kind`` lets a team treat it as a checkpoint (ADR-0030)."""
+    base = classify_stream(
+        [e for e in events if e.get("kind") != "session_ended"]
+        + [{"kind": "session_ended", "reason": "cancelled", "exit_code": 1, "text": ""}]
+    )
+    limit = "its time limit" if timeout is None else f"{timeout:g} seconds"
+    return dataclasses.replace(
+        base,
+        kind="failed",
+        summary="kopicode was stopped: the round ran past its time limit (round_timeout)",
+        reason=f"stopped: the round ran longer than {limit}",
+        failure_kind="round_timeout",
+        consent_decisions=consents,
+    )
+
+
 def _stuck_outcome(
     outcome: DelegationOutcome, verdict: StuckVerdict, env: Mapping[str, str] | None
 ) -> DelegationOutcome:
@@ -855,6 +879,7 @@ async def run_kopicode_serve(
             on_consent=on_consent,
             consent_timeout=consent_timeout,
         )
+    timed_out = False
     child.register(session, decide, ask)
     if process_factory is None:
         threshold = threshold_from_env() if stuck_threshold is None else stuck_threshold
@@ -873,9 +898,9 @@ async def run_kopicode_serve(
                 },
             )
             response = await asyncio.wait_for(pending, timeout)
-        except TimeoutError as exc:
+        except TimeoutError:
             await asyncio.shield(child.abort_session(session))
-            raise DelegationError(f"kopicode timed out after {timeout}s") from exc
+            timed_out = True
         except asyncio.CancelledError:
             await asyncio.shield(child.abort_session(session))
             raise
@@ -885,8 +910,9 @@ async def run_kopicode_serve(
             raise DelegationError(
                 f"{exc}; stderr: {_redacted_stderr_tail(tail, env) or '<empty>'}"
             ) from exc
-        if isinstance(response.get("result"), dict):
-            await asyncio.shield(child.end_session(session))
+        else:
+            if isinstance(response.get("result"), dict):
+                await asyncio.shield(child.end_session(session))
     finally:
         events = child.forget(session)
         verdict = child.stuck.pop(session, None)
@@ -900,6 +926,8 @@ async def run_kopicode_serve(
         if pool is None:
             await asyncio.shield(child.close())
 
+    if timed_out:
+        return _timeout_outcome(events, timeout, consents)
     error = response.get("error")
     if isinstance(error, dict):
         code = error.get("code")

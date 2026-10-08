@@ -54,3 +54,18 @@ environment, kopicode only), and the run's cost ceilings are checked at round bo
   `max_turns` is already terminal and is not reopened.
 - Not yet run against a real kopicode, only the scripted fake. A real model's handover quality
   after many continuations is unmeasured.
+
+## Update: the guards
+
+- **A wall-clock limit per round** (`CUTTLEFISH_ROUND_TIMEOUT`, default 2 hours, `0` off). kopicode's
+  `serve` has no time limit, so cuttlefish cancels the session itself. A timeout used to raise
+  `DelegationError`; it is now a failed outcome with `failure_kind="round_timeout"`, keeping the edits and
+  tool calls the round made, and it is a checkpoint stop like the other two. A round held open for a
+  person's answer counts against the clock.
+- **A no-progress stop** (`CUTTLEFISH_MAX_IDLE_ROUNDS`, default 3, `0` off). The signal is the round's
+  `edited_paths` (kopicode's `edit_applied` events and confirmed whole-file writes): after N checkpoint
+  rounds in a row with none, the role is not continued. A blocked Needs-you card ("has gone round in
+  circles") says so, the role waits for a steer with no timeout (as for a stuck agent), and a steer starts
+  the count again. Without a steerable team the role ends failed and its error says it was held. Reads and
+  shell commands that change files only through the shell do not count as edits, so a role that works by
+  running a generator can look idle; raise the setting or turn it off there.

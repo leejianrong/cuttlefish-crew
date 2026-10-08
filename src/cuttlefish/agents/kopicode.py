@@ -32,7 +32,11 @@ from cuttlefish.delegate.kopicode_serve import (
     serve_supports_limits,
 )
 from cuttlefish.delegate.policy import write_policy_file
-from cuttlefish.limits import max_turns_from_env, session_token_budget_from_env
+from cuttlefish.limits import (
+    max_turns_from_env,
+    round_timeout_from_env,
+    session_token_budget_from_env,
+)
 from cuttlefish.requests import AskingDecider, ShellAsker
 from cuttlefish.sandbox.provider import (
     SandboxHandle,
@@ -137,6 +141,7 @@ class KopicodeBackend:
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
                 session_limits=await self._session_limits(),
+                timeout=round_timeout_from_env(),
             )
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
             policy, consent_timeout = await self._consent(allow, mode, asker)
@@ -149,6 +154,7 @@ class KopicodeBackend:
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
                 session_limits=await self._session_limits(),
+                timeout=round_timeout_from_env(),
             )
         if mode == "auto":
             raise DelegationError(
@@ -230,6 +236,7 @@ class KopicodeBackend:
         consent_timeout: float | None = None,
         ask: AskHandler | None = None,
         session_limits: Mapping[str, int] | None = None,
+        timeout: float | None = None,
     ) -> DelegationOutcome:
         """One sandbox, one ``serve`` child, one session; the sandbox is destroyed after.
 
@@ -258,6 +265,7 @@ class KopicodeBackend:
                 ),
                 ask=ask,
                 session_limits=session_limits,
+                timeout=timeout,
             )
         finally:
             await asyncio.shield(provider.destroy(handle))
