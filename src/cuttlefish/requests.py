@@ -74,6 +74,13 @@ _ANSWER_RESOLUTION: dict[str, Resolution] = {
 
 #: The most of a model's question, or of the context it gives, a card carries.
 _QUESTION_CHARS = 2000
+
+
+def _clip(text: str) -> str:
+    """``text`` cut to a card's size, with an ellipsis so a cut is never silent."""
+    return text if len(text) <= _QUESTION_CHARS else text[: _QUESTION_CHARS - 1] + "…"
+
+
 #: The most a person's typed answer may be.
 ANSWER_TEXT_CHARS = 4000
 
@@ -223,9 +230,8 @@ class RequestBroker:
                 request_id=uuid.uuid4().hex,
                 kind="question",
                 title=f"{who} has a question for you",
-                detail=question[:_QUESTION_CHARS],
-                why=context[:_QUESTION_CHARS]
-                or "It asked for your input and is waiting for an answer.",
+                detail=_clip(question),
+                why=_clip(context) or "It asked for your input and is waiting for an answer.",
                 answers=["answer", "decline"],
                 expires_at=(self._now() + timedelta(seconds=window_s)).isoformat(),
                 role=role,

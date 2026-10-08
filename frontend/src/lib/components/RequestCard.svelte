@@ -88,10 +88,11 @@
   </div>
 
   <h3 id="req-{request.id}" class="title-medium">{request.title}</h3>
-  <p class="body-medium muted why">{request.why}</p>
   {#if question}
     <p class="asked body-large" aria-label="The question">{request.detail}</p>
+    <p class="body-medium muted why">{request.why}</p>
   {:else}
+    <p class="body-medium muted why">{request.why}</p>
     <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
   {/if}
 
@@ -204,6 +205,8 @@
 
   .why {
     margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 
   .command {
@@ -221,7 +224,7 @@
   .asked {
     margin: 4px 0 0;
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
   .actions {

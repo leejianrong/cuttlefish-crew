@@ -157,3 +157,18 @@ async def test_the_backend_wires_ask_only_when_it_can_be_held(
     handler = await KopicodeBackend("kopicode")._ask_handler(asker, timeout)
     assert (handler is not None) is wired
     assert await KopicodeBackend("kopicode")._ask_handler(None, 630.0) is None
+
+
+async def test_a_long_question_is_cut_with_an_ellipsis_not_silently() -> None:
+    broker, _, _ = setup()
+    request = broker.raise_question(
+        project_id="p1",
+        team_id="t1",
+        role=None,
+        backend="kopicode",
+        question="q" * 3000,
+        context="c" * 3000,
+        window_s=30,
+    )
+    for text in (request.record.detail, request.record.why):
+        assert len(text) == 2000 and text.endswith("…")

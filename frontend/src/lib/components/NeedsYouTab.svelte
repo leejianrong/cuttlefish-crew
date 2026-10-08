@@ -36,7 +36,7 @@
 <section class="stack" aria-labelledby="needs-heading">
   <h2 id="needs-heading" class="title-large">Waiting on you</h2>
   <p class="body-medium muted">
-    A kopicode agent that wants to run a command it isn't allowed to pauses here until you answer.
+    A kopicode agent that wants to run a command it isn't allowed to, or has a question for you, pauses here until you answer.
     An agent that kept failing on the project's environment shows as Stuck: it was stopped, so there is nothing to
     answer.
     {#if otherBackends.length > 0}
@@ -51,8 +51,8 @@
     <div class="card filled empty">
       <p class="title-medium">Nothing is waiting on you.</p>
       <p class="body-medium muted">
-        When an agent asks to run something outside the allowed commands, it shows up here and the
-        agent waits.
+        When an agent asks to run something outside the allowed commands, or asks you a question, it
+        shows up here and the agent waits.
       </p>
     </div>
   {:else}
