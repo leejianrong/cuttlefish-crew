@@ -145,7 +145,10 @@ latest request's prompt) and `context_window` (absent when kopicode does not kno
   the serve connection, so it works for a kopicode in a sandbox too (unlike the stuck detector).
 - Cancelling is not graceful: a tool call in flight is cut off, and the no-progress guard still bounds a role
   that fills its context without changing a file.
-- Not measured against a real model yet: where 75% is right is a guess until a long real run shows what a
-  round does between 60% and 90%.
+- Checked against real kopicode v0.4.0 (a few cents): with the limit at 2%, a round on a 262,144-token window was
+  ended at 5,342 tokens with `context_pressure` and kept the seven files it had written. A long real run
+  (qwen3-coder-next, 100 turns) held only about 105,000 tokens of context at its last turn (40% of that window),
+  so at 75% the token budget would have ended the round first: 75% is a guess that matters for models with
+  smaller windows, and has not been seen to fire in a real long run.
 - Still open: per-project and per-role settings instead of environment variables.
 
