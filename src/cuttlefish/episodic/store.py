@@ -34,6 +34,7 @@ from cuttlefish.episodic.events import (
     LlmCallFailed,
     RequestRaised,
     RequestResolved,
+    RoundContinued,
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
@@ -135,6 +136,8 @@ def _describe(payload: EventPayload) -> tuple[int, str]:
                 logging.WARNING,
                 f"{ecosystem}: failed ({how}) after {seconds:.1f}s: {_clip(tail)}".rstrip(": "),
             )
+        case RoundContinued(reason=reason, count=count, limit=limit):
+            return logging.INFO, f"{reason}: continuing ({count} of {limit})"
         case TeamStopped() | TeamResumed():
             return logging.INFO, ""
         case ToolCallRecorded(tool=tool, status=status, detail=detail):

@@ -38,6 +38,7 @@ from cuttlefish.episodic.events import (
     DelegationFailed,
     DelegationRefused,
     DelegationStarted,
+    RoundContinued,
     SteeringMessage,
     TaskCompleted,
     TaskFailed,
@@ -46,6 +47,7 @@ from cuttlefish.episodic.events import (
     decode_payload,
 )
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, maybe_handover
+from cuttlefish.limits import CHECKPOINT_STOPS, max_continuations_from_env
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 from cuttlefish.steering import DEFAULT_STEERING_GRACE_SECONDS, compose_steered_text, steering_key
 from cuttlefish.tasks.delegate import delegate_to_agent_backend
@@ -107,6 +109,27 @@ class TeamInput(TypedDict):
     require_approval: NotRequired[bool]
     max_tokens: NotRequired[int]
     max_cost_usd: NotRequired[float]
+    #: Rounds a role may continue on its own after a turn or token stop (ADR-0030); ``None``
+    #: reads ``CUTTLEFISH_MAX_CONTINUATIONS``.
+    max_continuations: NotRequired[int]
+
+
+#: What a round continued on its own is told, by why its predecessor stopped.
+_CARRY_ON = (
+    "Check the repository's current state (git status, git diff, the tests) against the "
+    "progress above, then carry on with what remains. If the task is already done, say so "
+    "and stop."
+)
+CONTINUE_TEXT = {
+    "max_turns": (
+        "your previous round stopped at its turn limit, not because the task is finished. "
+        + _CARRY_ON
+    ),
+    "budget_exhausted": (
+        "your previous round used up its token budget, not because the task is finished. "
+        + _CARRY_ON
+    ),
+}
 
 
 def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[str, str]) -> bool:
@@ -234,6 +257,10 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     }
     current_text: dict[str, str] = {role["name"]: role["text"] for role in roles}
     round_summaries: dict[str, list[str]] = {role["name"]: [] for role in roles}
+    max_continuations = team_input.get("max_continuations")
+    if max_continuations is None:
+        max_continuations = max_continuations_from_env()
+    continuations: dict[str, int] = {role["name"]: 0 for role in roles}
     final_outcome: dict[str, DelegationOutcome | BaseException] = {}
 
     # Round-boundary steering (ADR-0008): each round still gathers only plain
@@ -369,6 +396,29 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 usage_totals, max_tokens=max_tokens, max_cost_usd=max_cost_usd
             )
 
+            # ADR-0030: a round that ran out of turns or tokens and was not stuck is a
+            # checkpoint. Carry on from the latest handover with a fresh session. Journaled
+            # before the steering grace so the role reads "working", not "blocked", while it
+            # waits; a steering message in that window still wins.
+            auto_continue = (
+                not require_approval
+                and not budget_hit
+                and outcome.kind == "failed"
+                and outcome.failure_kind in CHECKPOINT_STOPS
+                and continuations[name] < max_continuations
+            )
+            if auto_continue:
+                continuations[name] += 1
+                await journal(
+                    team_id,
+                    RoundContinued(
+                        reason=str(outcome.failure_kind),
+                        count=continuations[name],
+                        limit=max_continuations,
+                        role=name,
+                    ),
+                )
+
             if require_approval or budget_hit:
                 # No timeout -- see run_task's identical wait for why.
                 decision = await satay.wait_for_event(
@@ -394,6 +444,11 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                     await journal(team_id, steer_event)
                     redirect_text = steer_event.text
 
+            heading = None
+            if auto_continue and redirect_text is None:
+                heading = "This round was continued automatically:"
+                redirect_text = CONTINUE_TEXT[str(outcome.failure_kind)]
+
             if redirect_text is None:
                 continue
 
@@ -409,6 +464,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 round_summaries[name],
                 redirect_text,
                 handover_summary=handover_summary,
+                **({"heading": heading} if heading else {}),
             )
             del final_outcome[name]
             next_active.append(name)
@@ -432,6 +488,11 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             }
         else:
             reason = outcome.reason or outcome.summary
+            if outcome.failure_kind in CHECKPOINT_STOPS and max_continuations > 0:
+                reason += (
+                    f"; it had already continued {continuations[name]} of {max_continuations} "
+                    "times on its own (CUTTLEFISH_MAX_CONTINUATIONS)"
+                )
             await journal(team_id, TaskFailed(error=reason, role=name))
             role_results[name] = {"status": "failed", "error": reason}
         await maybe_handover(team_id, token_budget=token_budget, role=name)

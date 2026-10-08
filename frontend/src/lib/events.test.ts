@@ -169,6 +169,16 @@ describe("failureText", () => {
 });
 
 describe("failed rounds in the activity log", () => {
+  it("says a round continued on its own, and why", () => {
+    expect(eventLabel("RoundContinued")).toBe("Continued");
+    const turns = summarize(event("RoundContinued", { reason: "max_turns", count: 2, limit: 20 }));
+    expect(turns).toContain("turn limit");
+    expect(turns).toContain("2 of 20");
+    expect(summarize(event("RoundContinued", { reason: "budget_exhausted", count: 1, limit: 5 }))).toContain(
+      "token budget",
+    );
+  });
+
   it("labels the round and the task apart and does not repeat the raw stop reason", () => {
     expect(eventLabel("DelegationFailed")).toBe("Round failed");
     expect(eventLabel("TaskFailed")).toBe("Task failed");

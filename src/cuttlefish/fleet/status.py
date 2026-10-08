@@ -18,6 +18,7 @@ from cuttlefish.episodic.events import (
     DelegationRefused,
     DelegationStarted,
     EventPayload,
+    RoundContinued,
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
@@ -44,6 +45,7 @@ _LIFECYCLE_TYPES: tuple[type[EventPayload], ...] = (
     DelegationFailed,
     TaskCompleted,
     TaskFailed,
+    RoundContinued,
 )
 
 
@@ -93,7 +95,8 @@ def _status_from(payload: EventPayload | None) -> RoleStatus:
         return "done"
     if isinstance(payload, TaskFailed):
         return "failed"
-    if isinstance(payload, DelegationStarted):
+    if isinstance(payload, DelegationStarted | RoundContinued):
+        # A continued round is on its way: the team has decided to carry on (ADR-0030).
         return "working"
     # DelegationCompleted / DelegationRefused / DelegationFailed: a round
     # finished (whichever way) and the workflow hasn't yet journaled

@@ -80,6 +80,8 @@ def _counting_kopicode_wrapper(tmp_path: Path, real_binary: str) -> tuple[str, P
     wrapper.write_text(
         "#!/usr/bin/env bash\n"
         "set -euo pipefail\n"
+        # `version --json` is cuttlefish's feature probe, not a delegation: do not count it.
+        f'if [ "${{1:-}}" = version ]; then exec "{real_binary}" "$@"; fi\n'
         f'count=$(cat "{counter_file}")\n'
         f'echo $((count + 1)) > "{counter_file}"\n'
         f'exec "{real_binary}" "$@"\n'

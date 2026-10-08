@@ -15,6 +15,7 @@ const LABELS: Record<string, string> = {
   TaskCompleted: "Finished",
   TaskFailed: "Task failed",
   TeamResumed: "Resumed",
+  RoundContinued: "Continued",
   TeamStopped: "Stopped",
   EnvironmentPrepareStarted: "Installing",
   EnvironmentPrepared: "Install done",
@@ -192,6 +193,8 @@ export function summarize(event: EpisodicEventView): string {
       return `${ecosystemLabel(p)}: ${(p.commands as string[][]).map((c) => c.join(" ")).join(" && ")} (${p.reason})`;
     case "EnvironmentPrepared":
       return preparedText(p);
+    case "RoundContinued":
+      return `${p.reason === "budget_exhausted" ? "The round used up its token budget" : "The round reached its turn limit"} and was not stuck, so a fresh round started from the latest handover (${p.count} of ${p.limit}).`;
     case "TeamStopped":
       return "You stopped the team. Roles that had not finished are stopped; starting again begins a new run.";
     case "TeamResumed":

@@ -13,6 +13,7 @@ from cuttlefish.episodic.events import (
     DelegationStarted,
     EventPayload,
     HandoverWritten,
+    RoundContinued,
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
@@ -151,5 +152,21 @@ def test_a_role_that_starts_again_after_a_stop_is_working() -> None:
         DelegationStarted(task_text="do it", root="/tmp", role="builder"),
         TeamStopped(),
         DelegationStarted(task_text="do it", root="/tmp", role="builder"),
+    )
+    assert role_statuses(events, ["builder"]) == {"builder": "working"}
+
+
+def test_a_round_the_team_is_continuing_is_working_not_blocked() -> None:
+    """ADR-0030: a checkpoint stop with a continuation on the way is not waiting on a person."""
+    failed = DelegationFailed(reason="stop=max_turns", role="builder", failure_kind="max_turns")
+    events = _events(
+        DelegationStarted(task_text="do it", root="/tmp", role="builder"),
+        failed,
+    )
+    assert role_statuses(events, ["builder"]) == {"builder": "blocked"}
+    events = _events(
+        DelegationStarted(task_text="do it", root="/tmp", role="builder"),
+        failed,
+        RoundContinued(reason="max_turns", count=1, limit=20, role="builder"),
     )
     assert role_statuses(events, ["builder"]) == {"builder": "working"}

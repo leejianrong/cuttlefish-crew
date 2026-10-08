@@ -337,6 +337,21 @@ class RequestResolved:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class RoundContinued:
+    """A role's round ran out of room (``reason``: ``max_turns`` or ``budget_exhausted``) with no
+    sign it was stuck, so the team started the next round on its own with a fresh session and the
+    latest handover, instead of ending the role as failed (ADR-0030). ``count`` is how many times
+    this role has continued, of at most ``limit``."""
+
+    EVENT_TYPE: ClassVar[str] = "RoundContinued"
+
+    reason: str
+    count: int
+    limit: int
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamStopped:
     """The operator stopped this team and it has now ended (KAN-1896). Written straight to the
     store by the daemon, like ``TeamResumed``, because satay's cancel journals nothing of its
@@ -438,6 +453,7 @@ EventPayload = (
     | RequestRaised
     | RequestResolved
     | TeamResumed
+    | RoundContinued
     | TeamStopped
     | EnvironmentPrepareStarted
     | EnvironmentPrepared
@@ -465,6 +481,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         RequestRaised,
         RequestResolved,
         TeamResumed,
+        RoundContinued,
         TeamStopped,
         EnvironmentPrepareStarted,
         EnvironmentPrepared,
