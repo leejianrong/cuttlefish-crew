@@ -203,9 +203,9 @@ def test_a_folder_of_an_ecosystem_the_root_has_is_a_workspace_member_not_a_proje
     _write(tmp_path, "packages/a/package.json", "{}")
     _write(tmp_path, "docs/package.json", "{}")
 
-    assert [(e.ecosystem, e.path) for e in environment.detect(tmp_path).ecosystems] == [
-        ("node", ".")
-    ]
+    (root_env,) = environment.detect(tmp_path).ecosystems
+    assert (root_env.ecosystem, root_env.path) == ("node", ".")
+    assert "also in docs/, not installed separately" in " ".join(root_env.notes)
 
 
 def test_only_one_folder_down_is_read_and_dependency_folders_never(tmp_path: Path) -> None:

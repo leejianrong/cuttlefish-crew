@@ -45,7 +45,7 @@
     {/each}
   </ul>
   <p class="body-small muted">
-    This runs the project's own install scripts in <span class="mono">{root}</span>. Nothing else is
+    This runs the project's own install scripts in <span class="mono">{root}</span>, or in the folder named beside an install. Nothing else is
     touched. A lockfile you have is not rewritten, but a first install can create one (go.sum, Cargo.lock).
   </p>
   <div class="actions">

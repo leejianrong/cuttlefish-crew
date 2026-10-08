@@ -521,13 +521,33 @@ def detect(root: str | Path) -> EnvironmentSpec:
     found = [env for detector in _DETECTORS if (env := detector(path)) is not None]
     at_root = {env.ecosystem for env in found}
     nested = 0
+    skipped: dict[Ecosystem, list[str]] = {}
     for folder in _subfolders(path):
         for detector in _DETECTORS:
             env = detector(folder)
-            if env is None or env.ecosystem in at_root:
-                continue  # a workspace member or a second copy: the root's own install covers it
+            if env is None:
+                continue
+            if env.ecosystem in at_root:
+                # A workspace member, or a second copy: the root's own install is the one that runs.
+                skipped.setdefault(env.ecosystem, []).append(folder.name)
+                continue
             if nested >= MAX_SUBPROJECTS:
                 break
             found.append(dataclasses.replace(env, path=folder.name))
             nested += 1
+    # Say so on the root's row, so a project in a skipped folder is not silently ignored.
+    found = [
+        dataclasses.replace(
+            env,
+            notes=(
+                *env.notes,
+                "also in "
+                + ", ".join(f"{name}/" for name in skipped[env.ecosystem])
+                + ", not installed separately",
+            ),
+        )
+        if env.path == "." and env.ecosystem in skipped
+        else env
+        for env in found
+    ]
     return EnvironmentSpec(root=str(path), ecosystems=tuple(found), root_exists=path.is_dir())

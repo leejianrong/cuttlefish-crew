@@ -238,4 +238,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **A stuck-agent card has no button** (V5-E5b). Nothing could be answered: the round is over. The person fixes the
   environment and steers the role from the project page; the card ends when they do. A stuck role in a steerable team (the daemon's always are) waits for a steer with no timeout instead of
   the usual five-second grace, so a role nobody steers keeps the team running until it is stopped.
+- **A project with no dependencies still reads "node_modules is missing" after its install** (V5-E3, found again in V5-E6b). The
+  install ran and made no folder, which `env.json` remembers (`produced: false`) so nothing is reinstalled, but the Environment card
+  only looks at the folder. It is not due, so nothing re-prompts; the wording can make a person think the install failed.
 
