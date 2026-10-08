@@ -69,3 +69,7 @@ environment, kopicode only), and the run's cost ceilings are checked at round bo
   the count again. Without a steerable team the role ends failed and its error says it was held. Reads and
   shell commands that change files only through the shell do not count as edits, so a role that works by
   running a generator can look idle; raise the setting or turn it off there.
+- The hold card is raised by a durable task (`raise_no_progress_card`), not from the workflow body: a
+  workflow is replayed, and a card raised in the body came back on every replay after a steer (found by
+  the exploratory pass). The role's card on the project page says it waits for a steer, with no timeout,
+  while such a card is open.

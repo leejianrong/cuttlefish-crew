@@ -128,8 +128,8 @@
     </p>
   {:else if blocked}
     <p class="body-small muted">
-      Nothing is waiting for an answer: this agent was stopped. Fix the environment, then steer
-      {request.role ?? "it"} from the project page to give it another round.
+      Nothing is waiting for an answer: this agent was stopped. Read why above and fix what is
+      wrong, then steer {request.role ?? "it"} from the project page to give it another round.
     </p>
   {:else}
   <div class="actions">

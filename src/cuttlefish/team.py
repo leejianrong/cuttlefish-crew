@@ -50,7 +50,7 @@ from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, m
 from cuttlefish.limits import CHECKPOINT_STOPS, max_continuations_from_env, max_idle_rounds_from_env
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 from cuttlefish.steering import DEFAULT_STEERING_GRACE_SECONDS, compose_steered_text, steering_key
-from cuttlefish.tasks.delegate import delegate_to_agent_backend
+from cuttlefish.tasks.delegate import delegate_to_agent_backend, raise_no_progress_card
 from cuttlefish.tasks.journal import journal, read_episodic_events
 
 
@@ -137,28 +137,6 @@ CONTINUE_TEXT = {
         "finished. " + _CARRY_ON
     ),
 }
-
-
-def _raise_no_progress(
-    runtime_: runtime.Runtime, team_id: str, role: str, backend: str, rounds: int
-) -> None:
-    """Say, where a person looks, that a role was held because several rounds changed nothing
-    (ADR-0030). Nothing waits on the card: it ends when the role is steered or the team ends."""
-    requests = runtime_.requests
-    if requests is None or requests.broker.is_closed(team_id):
-        return
-    requests.broker.raise_blocked(
-        project_id=requests.project_id,
-        team_id=team_id,
-        role=role,
-        backend=backend,
-        title="{who} has gone round in circles",
-        detail=f"{rounds} rounds in a row used all their room and changed no file.",
-        why=(
-            "It was stopped before it spent more. Look at what it is stuck on, then steer it "
-            "to give it another round."
-        ),
-    )
 
 
 def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[str, str]) -> bool:
@@ -448,8 +426,8 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 and continuations[name] < max_continuations
             )
             if no_progress:
-                _raise_no_progress(
-                    runtime_, team_id, name, backend_by_name[name], idle_rounds[name]
+                await raise_no_progress_card(
+                    team_id, name, backend_by_name[name], idle_rounds[name]
                 )
             if auto_continue:
                 continuations[name] += 1
@@ -541,7 +519,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             ):
                 reason += (
                     f"; it changed no file in {idle_rounds[name]} rounds in a row, so it was "
-                    "held for you (CUTTLEFISH_MAX_IDLE_ROUNDS)"
+                    "not continued (CUTTLEFISH_MAX_IDLE_ROUNDS)"
                 )
             elif outcome.failure_kind in CHECKPOINT_STOPS and max_continuations > 0:
                 reason += (

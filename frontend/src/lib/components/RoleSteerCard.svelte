@@ -13,6 +13,7 @@
     budget = { max_tokens: null, max_cost_usd: null },
     requireApproval = false,
     lastRound = null,
+    held = false,
   }: {
     client: FleetClient;
     projectId: string;
@@ -30,6 +31,9 @@
     requireApproval?: boolean;
     /** How this role's latest round ended, in words, so "blocked" can say why. */
     lastRound?: RoundOutcome | null;
+    /** A stopped-for-a-person card (ADR-0029, ADR-0030) is open for this role, so it waits for a
+     * steer with no timeout instead of ending in a few seconds. */
+    held?: boolean;
   } = $props();
 
   const tokensOverBudget = $derived(
@@ -161,6 +165,8 @@
       {/if}
       {#if lastRound?.failureKind === "environment_stuck"}
         {role} waits for you: fix the environment, then send a message above to give it another round.
+      {:else if held}
+        {role} waits for you: see its Needs you card, then send a message above to give it another round.
       {:else}
         The task ends in a few seconds unless you send {role} a message above.
       {/if}
