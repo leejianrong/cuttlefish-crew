@@ -481,7 +481,7 @@ V5-cli-limits: `run-team --limit KEY=N` and `--role-limit NAME:KEY=N` (`cli._par
 V5-routing: the dashboard's screen and project tab live in the URL hash (`lib/route.ts`: `#/projects`, `#/projects/<id>[/<tab>]`, `#/add`,
 `#/needs-you`, `#/roles`, `#/sprites`), so a reload, the browser's Back and Forward and a pasted link land on the same screen. `App.svelte`
 holds one `route` (`go()` pushes history; `popstate`/`hashchange` re-read it); `ProjectDetail` takes its tab as a prop. An unknown hash
-is the project list. Unsaved Permissions or Team drafts are still lost when you leave the project (they were before). Tests: `route.test.ts`.
+is the project list. Unsaved Permissions or Team drafts were lost when you left the project; V5-ui-churn-drafts keeps them. Tests: `route.test.ts`.
 
 V5-handover-quality (ADR-0030's sixth update, from the 16-round real run): `handover._write_summary` (third-person prompt with the
 previous summary, one stricter retry, then carry-forward, `_usable`, `_fallback`), `tasks/repo.py` `read_repo_state` appended
@@ -496,4 +496,13 @@ Summary row). `agent_docs/model-costs.md` holds the model comparison. Tests: `te
 V5-codex-model: `delegate.codex.codex_model_args` adds `--model` and `-c model_reasoning_effort=...` from `CUTTLEFISH_CODEX_MODEL`
 and `CUTTLEFISH_CODEX_EFFORT`. Checked live with `gpt-5.6-luna` at low effort on a ChatGPT login (one small task: 25k input tokens, 22k
 cached). The Codex spike (below, in known-gaps) was run with it.
+
+V5-ui-churn-drafts: polling assigns data only when it differs (`lib/same.ts` `keepIfSame`, used for the project, events, requests,
+the project list and the rail count), so an unchanged poll re-renders nothing (an idle project page went from 12 DOM mutations
+per 10 s to 0; a running one lost its 20 `disabled` writes, and a half-open `<details>` no longer closes itself). Unsaved Permissions
+and Team edits (role prompts, role and project limits) live in `lib/drafts.ts`, keyed by project, so leaving the project and
+coming back keeps them; a draft equal to the saved value is dropped; the leave-page warning covers both tabs. The project page is
+keyed by project in `App.svelte`, so switching by the URL cannot carry one project's draft to another. Tests: `same.test.ts`.
+Not changed: the pixel sprite and the elapsed-time counter still mutate the DOM every second (about 56 records per second on a running
+project and on the Projects list), unrelated to polling.
 
