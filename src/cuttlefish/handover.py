@@ -97,7 +97,11 @@ def estimate_event_tokens(payload: EventPayload) -> int:
 
 
 async def maybe_handover(
-    task_id: str, *, token_budget: int = DEFAULT_TOKEN_BUDGET, role: str | None = None
+    task_id: str,
+    *,
+    token_budget: int = DEFAULT_TOKEN_BUDGET,
+    role: str | None = None,
+    force: bool = False,
 ) -> bool:
     """Summarise and checkpoint if the window since the last handover is over budget.
 
@@ -107,6 +111,10 @@ async def maybe_handover(
     and — only once that window's estimated size crosses `token_budget` — makes one
     bounded ``call_llm`` call to distill it, then journals the result. Returns
     whether a handover was written, so a caller (mainly a test) can assert it fired.
+
+    ``force`` writes one whatever the window's size (but not for an empty window): a fresh
+    session after a checkpoint has only what it is told, and a round that ran 100 turns can
+    sit well under the budget in journal tokens (ADR-0030).
 
     ``role`` (ADR-0007) narrows every step to events tagged with exactly this role
     (``None`` for a plain, non-team run — the identical filter every event written
@@ -133,7 +141,7 @@ async def maybe_handover(
         return False
 
     total_tokens = sum(estimate_event_tokens(payload) for _, payload in window)
-    if total_tokens < token_budget:
+    if total_tokens < token_budget and not force:
         return False
 
     response = await call_llm(_build_summary_prompt(window))

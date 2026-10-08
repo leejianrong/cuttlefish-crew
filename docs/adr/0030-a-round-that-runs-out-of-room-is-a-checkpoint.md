@@ -152,3 +152,29 @@ latest request's prompt) and `context_window` (absent when kopicode does not kno
   smaller windows, and has not been seen to fire in a real long run.
 - Still open: per-project and per-role settings instead of environment variables.
 
+## Update: the first long real run (100 turns, the defaults)
+
+A real kopicode v0.4.0 team (one builder, qwen3-coder-next, a six-module Python project with its own `.venv`, Standard
+permissions, about 16 minutes, about $0.71) at the default limits. Round one ended at turn 100 with 5,005,272 tokens
+(`budget_exhausted`; the turn cap landed on the same turn, so which one fired first cannot be told), a continuation
+started a fresh session, and round two finished the task: 239 tests passing, everything committed. 61 Needs-you
+cards were answered over the API. The context at turn 100 was about 105,000 tokens, so the token budget (which counts
+the history resent on every request, 4.78M of the 5.0M here being cache reads) is what ends a long round, not the window.
+It found:
+
+- **No handover was written.** `maybe_handover` fires when the journal's window passes its budget (8,000 estimated
+  tokens), and a 100-turn round of tool calls did not, so the continuation carried only the list of changed files. It
+  worked because the repository state (git log, the tests) told the next round what was left, but nothing carried a
+  plan. A continuation now forces a handover (`maybe_handover(force=True)`): the next session has only what it is told.
+  Without a summariser (no `OPENROUTER_API_KEY`) the write fails, is logged, and the continuation carries the file list
+  as before.
+- **The cost was invisible.** `DelegationOutcome.cost_usd` was always `None` for kopicode, so the run showed no cost and
+  `max_cost_usd` could never trip. kopicode v0.4.0 reports `usage.cost_usd` on a turn result (every request must have
+  reported one); that is now the round's cost. Never estimated.
+- **A resident child logged another team's id.** Consent log lines of a second team carried the first team's id and
+  `role=-`: the pooled child's reader inherited the context of the team that spawned it. Work for a session now runs in
+  that session's logging context.
+- Seen and left alone: the model hallucinated `cd /testbed && ...` repeatedly (each chained command raised a card), and
+  a run whose commands were all denied still ended as a completed task with a failing test. That is the model's
+  verification, not something cuttlefish can see.
+

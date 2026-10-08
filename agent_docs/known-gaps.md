@@ -130,12 +130,11 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   still holds every secret it's given in the clear, inside its own sandbox
   or subprocess. A credential-broker/proxy is real future work, deliberately
   deferred. `docs/QUESTIONS.md` Q34, ADR-0006.
-- `KopicodeBackend`'s own `DelegationOutcome.cost_usd` is always `None` --
-  kopicode's headless `run --print` surface reports a summed token total per
-  session (`provider_response`'s own `size` field) but no dollar figure at
-  all, verified against its own source (`internal/engine/event.go`). A
-  per-model pricing table to estimate one was considered and rejected as a
-  stale-by-construction guess, not built. ADR-0017.
+- `KopicodeBackend`'s `DelegationOutcome.cost_usd` is the figure kopicode reports in a turn's `usage`
+  (v0.4.0, seen live: about $0.66 for two rounds), which kopicode gives only when every request reported
+  a cost. An older kopicode, a round cut off by a wall-clock timeout (no turn result) and a route that
+  reports no cost leave it `None`; it is never estimated from a price table (rejected as
+  stale-by-construction). The `max_cost_usd` ceiling therefore cannot trip for those. ADR-0017.
 - A `max_tokens`/`max_cost_usd` ceiling (KAN-1712, ADR-0017) is checked
   against the *current run's own* cumulative usage, never a lifetime or
   calendar-window total across every run a project has started -- the
@@ -249,4 +248,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   browser's Back button lands on the Projects list. This is what the "opening a project while a team is blocked lands on
   Projects" report turned out to be (not reproduced by clicking in 23 tries; reload reproduces it every time). Deep links
   and Back need a router; not built.
+- **A continuation's handover needs the summariser.** Each auto-continued round writes one (ADR-0030's fourth update), so a
+  long team now needs `OPENROUTER_API_KEY` (or `CUTTLEFISH_LLM_PROVIDER=replay`, placeholder text); without one the write
+  fails, is logged, and the next round gets the list of changed files only.
 
