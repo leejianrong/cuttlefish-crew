@@ -47,12 +47,17 @@
   let limitCatalog = $state<LimitInfo[]>([]);
   // The project's own limits being edited, and a counter that re-creates the editors when the
   // values change from outside them (a save, a discard, another role).
-  let projectLimits = $state<LimitValues>({ ...project.limits });
+  const ownLimits = (): LimitValues => ({ ...project.limits });
+  let projectLimits = $state<LimitValues>(ownLimits());
   let limitsReset = $state(0);
   let savingLimits = $state(false);
+  let limitsInvalid = $state(false);
+  let roleLimitsInvalid = $state(false);
   let limitsError = $state<string | null>(null);
   let limitsNotice = $state<string | null>(null);
   const limitsDirty = $derived(!sameLimits(projectLimits, project.limits));
+  // A box holding something that cannot be saved keeps Save off (the stored value is the last valid one).
+  const limitsSavable = $derived(limitsDirty && !limitsInvalid);
 
   let builtins = $state<BuiltinRole[]>([]);
   let templates = $state<TeamTemplate[]>([]);
@@ -114,7 +119,7 @@
   }
 
   function discardProjectLimits() {
-    projectLimits = { ...project.limits };
+    projectLimits = ownLimits();
     limitsReset += 1;
     limitsError = null;
     limitsNotice = null;
@@ -400,6 +405,7 @@
                   inheritedFrom="the project"
                   idPrefix="role-limit"
                   onChange={(next) => edit({ limits: next })}
+                  onProblem={(has) => (roleLimitsInvalid = has)}
                 />
               {/key}
             </details>
@@ -429,7 +435,7 @@
             <button class="btn btn-text" disabled={!dirty || saving} onclick={discard}>
               Discard changes
             </button>
-            <button class="btn btn-filled" disabled={!dirty || saving} onclick={saveRole}>
+            <button class="btn btn-filled" disabled={!dirty || saving || roleLimitsInvalid} onclick={saveRole}>
               {saving ? "Saving…" : "Save role"}
             </button>
           </div>
@@ -461,6 +467,7 @@
             inheritedFrom="the daemon's settings"
             idPrefix="project-limit"
             onChange={(next) => (projectLimits = next)}
+            onProblem={(has) => (limitsInvalid = has)}
           />
         {/key}
         {#if limitsError}<p class="body-small error" role="alert">{limitsError}</p>{/if}
@@ -469,7 +476,7 @@
           <button class="btn btn-text" disabled={!limitsDirty || savingLimits} onclick={discardProjectLimits}>
             Discard changes
           </button>
-          <button class="btn btn-filled" disabled={!limitsDirty || savingLimits} onclick={saveProjectLimits}>
+          <button class="btn btn-filled" disabled={!limitsSavable || savingLimits} onclick={saveProjectLimits}>
             {savingLimits ? "Saving…" : "Save limits"}
           </button>
         </div>

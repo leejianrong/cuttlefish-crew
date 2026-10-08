@@ -12,6 +12,7 @@
     inheritedFrom,
     idPrefix,
     onChange,
+    onProblem,
   }: {
     catalog: LimitInfo[];
     /** What is set here. A key that is absent inherits. */
@@ -22,6 +23,9 @@
     inheritedFrom: string;
     idPrefix: string;
     onChange: (next: LimitValues) => void;
+    /** Told whether any box holds something that cannot be saved, so the parent can keep its Save
+     * button off: otherwise a valid entry followed by an invalid one would save the stale value. */
+    onProblem?: (has: boolean) => void;
   } = $props();
 
   // What is typed, per key, so a half-typed or invalid entry is not rewritten under the cursor.
@@ -39,6 +43,10 @@
     const parsed = parseLimit(info, texts[info.key] ?? "");
     return parsed.kind === "invalid" ? parsed.problem : null;
   }
+
+  $effect(() => {
+    onProblem?.(catalog.some((info) => problem(info) !== null));
+  });
 
   function type(info: LimitInfo, text: string) {
     texts[info.key] = text;
@@ -82,12 +90,12 @@
             value={texts[info.key] ?? ""}
             placeholder={String(fallback)}
             aria-invalid={problem(info) !== null}
-            aria-describedby="{id}-now"
+            aria-describedby={problem(info) ? `${id}-problem ${id}-now` : `${id}-now`}
             oninput={(event) => type(info, event.currentTarget.value)}
           />
         </label>
         {#if problem(info)}
-          <span class="body-small error" role="alert">{problem(info)}</span>
+          <span class="body-small error" id="{id}-problem" role="alert">{problem(info)}</span>
         {:else if info.zero_means}
           <span class="body-small muted">0 means {info.zero_means}.</span>
         {/if}

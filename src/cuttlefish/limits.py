@@ -152,8 +152,8 @@ LIMIT_SPECS: tuple[LimitSpec, ...] = (
         "context_limit_percent",
         "Context limit",
         "How full the model's context window may get before the round is ended and the role "
-        "continues with a fresh one. Needs kopicode v0.4.0.",
-        "% of the window",
+        "continues with a fresh one. Needs kopicode v0.4.0; an older one ignores it.",
+        "% of the model's window",
         0,
         95,
         _env_context_percent,

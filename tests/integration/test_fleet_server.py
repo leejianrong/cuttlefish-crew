@@ -708,6 +708,9 @@ def test_a_projects_limits_are_set_cleared_and_validated(
     bad = client.patch(url, json={"limits": {"turns": 5}})
     assert bad.status_code == 400 and "max_turns" in bad.json()["detail"]
     assert client.patch("/api/projects/nope/limits", json={"limits": {}}).status_code == 404
+    # Forgetting the key must not silently clear what is set.
+    assert client.patch(url, json={}).status_code == 400
+    assert client.get(f"/api/projects/{created['id']}").json()["limits"] == {"max_turns": 40}
     assert client.patch(url, json={"limits": {}}).json()["limits"] == {}
 
 

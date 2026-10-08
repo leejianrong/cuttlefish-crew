@@ -641,6 +641,8 @@ def create_app(
         """Set (or, with an empty object, clear) the project's own limits. A team already
         running keeps the values it started with."""
         body = await _json_body(request)
+        if "limits" not in body:
+            raise HTTPException(400, "'limits' is required; send {} to clear them")
         limits = _limits_from(body.get("limits"))
         try:
             daemon.projects.update_limits(project_id, limits)
