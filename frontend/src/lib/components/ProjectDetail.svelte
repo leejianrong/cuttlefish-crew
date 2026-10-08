@@ -11,6 +11,7 @@
   import { installProgress } from "../environment";
   import { latestRound } from "../events";
   import type { ProjectTab } from "../route";
+  import { keepIfSame } from "../same";
   import { modeLabel, startFailure } from "../team";
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
@@ -68,6 +69,7 @@
   let confirmingStop = $state(false);
   let stopping = $state(false);
   let permissionsDirty = $state(false);
+  let teamDirty = $state(false);
   // The scene's roles. A role finishing well is not asking for anything: no attention mark on its sprite.
   const sceneRoles = $derived.by(() => {
     const current = project;
@@ -129,11 +131,12 @@
 
   async function refresh() {
     try {
-      project = await client.getProject(projectId);
-      events = (await client.getEvents(projectId)).events;
+      // Only what changed is taken: a poll that finds the same data must not re-render the page.
+      project = keepIfSame(project, await client.getProject(projectId));
+      events = keepIfSame(events, (await client.getEvents(projectId)).events);
       const requests = await client.listProjectRequests(projectId);
-      pending = requests.pending;
-      resolved = requests.resolved;
+      pending = keepIfSame(pending, requests.pending);
+      resolved = keepIfSame(resolved, requests.resolved);
       requestsFetchedAt = Date.now();
       unreachable = false;
       missing = false;
@@ -152,9 +155,10 @@
     return () => clearInterval(interval);
   });
 
-  // Unsaved Permissions edits are the one thing a stray reload would lose.
+  // Unsaved Permissions and Team edits are what a stray reload would lose (leaving the project
+  // keeps them: lib/drafts.ts).
   $effect(() => {
-    if (!permissionsDirty) return;
+    if (!permissionsDirty && !teamDirty) return;
     const guard = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
@@ -423,7 +427,7 @@
     </div>
 
     <div id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden={tab !== "team"}>
-      <TeamTab {client} {project} onChanged={refresh} />
+      <TeamTab {client} {project} onChanged={refresh} onDirtyChange={(dirty) => (teamDirty = dirty)} />
     </div>
   {:else if !unreachable && !missing}
     <p class="muted" role="status">Loading…</p>

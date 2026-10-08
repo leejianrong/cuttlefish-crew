@@ -9,6 +9,7 @@
   import Shell from "./lib/components/Shell.svelte";
   import SpriteGallery from "./lib/components/SpriteGallery.svelte";
   import { NAV_ITEMS } from "./lib/nav";
+  import { keepIfSame } from "./lib/same";
   import { HOME, parseHash, routeHash, sameRoute, type ProjectTab, type Route } from "./lib/route";
   import { clearConnection, loadConnection, saveConnection } from "./lib/session";
   import { applyTheme, loadTheme, type ThemePreference } from "./lib/theme";
@@ -76,7 +77,7 @@
   async function refreshWaiting() {
     if (!client) return;
     try {
-      waiting = (await client.listRequests()).requests;
+      waiting = keepIfSame(waiting, (await client.listRequests()).requests);
       waitingFetchedAt = Date.now();
       waitingUnreachable = false;
     } catch {
