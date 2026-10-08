@@ -36,5 +36,6 @@ async def test_call_llm_returns_the_configured_providers_response(tmp_path: Path
         "text": "a summary",
         "input_tokens": 10,
         "output_tokens": 4,
+        "cost_usd": None,
     }
     store.close()

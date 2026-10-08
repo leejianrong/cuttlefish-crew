@@ -250,4 +250,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **Limits apply to kopicode.** `cuttlefish run-team` takes `--limit`/`--role-limit`, `run` reads the environment only; Claude Code
   and Codex ignore turns, tokens, context and time (they have no such controls), so a role on them only honours its
   continuation and no-change counters. A change to a project's or role's limits applies at the next start (ADR-0030).
+- **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
+  CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
+  in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
 

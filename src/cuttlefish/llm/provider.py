@@ -19,6 +19,9 @@ class LlmResponse:
     text: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    #: What the provider says the call cost, in US dollars, when it says (OpenRouter does);
+    #: never estimated from a price table.
+    cost_usd: float | None = None
 
 
 class LlmProvider(Protocol):

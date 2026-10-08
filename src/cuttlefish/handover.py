@@ -171,6 +171,7 @@ async def maybe_handover(
                 input_tokens=_as_int(call.get("input_tokens")),
                 output_tokens=_as_int(call.get("output_tokens")),
                 role=role,
+                cost_usd=_as_float(call.get("cost_usd")),
             ),
         )
     if root:
@@ -251,6 +252,12 @@ def _usable(text: str) -> bool:
 
 def _as_int(value: object) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _as_float(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value)
 
 
 def _prompt_of(call: dict[str, object]) -> str:

@@ -171,6 +171,7 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_AGENT_BACKEND` | `kopicode` | Which coding-agent backend a delegation runs through: `kopicode`, `claude-code`, or `codex`. One choice per process — every project and role a given `cuttlefish serve` runs shares it. |
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
+| `CUTTLEFISH_LLM_MODEL` | `qwen/qwen3-30b-a3b-instruct-2507` | The OpenRouter model for cuttlefish's own summaries (handovers). A small non-reasoning model on purpose (about $0.003 a summary, and it cannot spend its output cap thinking); any OpenRouter model id works. The provider reports each call's cost, shown on the Summary rows of the activity log. |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
 | `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` | unset | Names (comma-separated, `*` ends a prefix) to pass to agents on top of the allowlist (see What an agent's environment is). |
 | `CUTTLEFISH_KEEP_WINDOWS_PATH` | unset | `1` keeps WSL's `/mnt/...` entries on an agent's `PATH`; they are dropped by default. |

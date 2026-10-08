@@ -100,6 +100,9 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   `frontend-test`/`frontend-build`, gates on). CI additionally builds
   kopicode from source so the delegation's integration tests run against
   the real binary, not a mock.
+- **Tests that call a real model are opt-in.** `make test-live` (cents, asks first) sets
+  `CUTTLEFISH_TEST_LIVE=1`; a key in `.env` alone no longer runs them. They used to run on every
+  `make test-all`, which is how a daily credit limit went. Every other test needs no credit.
 - **To see the dashboard against a real team** (UI checks, screenshots), run
   `cuttlefish serve` with `HOME` pointed at a scratch dir and a freshly generated
   `CUTTLEFISH_SECRETS_KEY` exported, never against your own `~/.cuttlefish`. Project roots hold

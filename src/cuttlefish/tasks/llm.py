@@ -13,11 +13,12 @@ from cuttlefish import runtime
 
 
 @satay.task()
-async def call_llm(prompt: str) -> dict[str, str | int | None]:
+async def call_llm(prompt: str) -> dict[str, str | int | float | None]:
     response = await runtime.current().llm_provider.complete(prompt)
     return {
         "model": response.model,
         "text": response.text,
         "input_tokens": response.input_tokens,
         "output_tokens": response.output_tokens,
+        "cost_usd": response.cost_usd,
     }
