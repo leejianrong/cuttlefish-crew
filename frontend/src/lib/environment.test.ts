@@ -76,6 +76,19 @@ describe("environmentRows and hasMissingInstall", () => {
       ],
     });
     expect(hasMissingInstall(ok)).toBe(false);
+    const none = environmentRows({
+      root: "/r",
+      root_exists: true,
+      prepare: {
+        setting: "ask",
+        steps: [],
+        unsupported: [],
+        nothing_to_install: [{ ecosystem: "node", path: "." }],
+      },
+      ecosystems: [env({ ecosystem: "node", installed: false })],
+    });
+    expect(none[0].stateLabel).toBe("no dependencies to install");
+    expect(hasMissingInstall(none)).toBe(false);
     expect(hasMissingInstall(missing)).toBe(true);
     expect(hasMissingInstall([])).toBe(false);
   });

@@ -67,6 +67,12 @@ export function environmentRows(spec: EnvironmentSpec): EnvironmentRow[] {
     const step = spec.prepare.steps.find(
       (entry) => entry.ecosystem === env.ecosystem && (entry.path ?? ".") === (env.path ?? "."),
     );
+    const none = (spec.prepare.nothing_to_install ?? []).some(
+      (entry) => entry.ecosystem === env.ecosystem && (entry.path ?? ".") === (env.path ?? "."),
+    );
+    if (none && row.state === "missing") {
+      return { ...row, state: null, stateLabel: "no dependencies to install" };
+    }
     // Go, Rust, Java and Ruby keep nothing in the project folder (state null): a step for them
     // means their dependencies are not fetched, or are out of date.
     return step && (row.state === "installed" || row.state === null)

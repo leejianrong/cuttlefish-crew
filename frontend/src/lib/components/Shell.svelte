@@ -261,11 +261,46 @@
 
     .destination {
       width: auto;
-      flex: 1;
+      min-width: 0;
+      flex: 1 1 0;
+    }
+
+    .destination .label {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pill {
+      width: min(56px, 100%);
     }
 
     .footer {
       flex-direction: row;
+      flex: none;
+    }
+  }
+
+  /* Four destinations and the two footer buttons must fit a 320px phone without sideways scroll. */
+  @media (max-width: 400px) {
+    .rail {
+      gap: 4px;
+      padding: 8px 6px;
+    }
+
+    .destinations {
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .footer {
+      gap: 0;
+    }
+
+    .icon-button {
+      width: 36px;
+      height: 36px;
     }
   }
 </style>

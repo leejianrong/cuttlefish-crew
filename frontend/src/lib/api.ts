@@ -131,6 +131,8 @@ export interface PrepareInfo {
   steps: PrepareStepView[];
   /** Ecosystems cuttlefish cannot install yet, with why: shown, never hidden. */
   unsupported: { ecosystem: EcosystemEnv["ecosystem"]; name: string; reason: string }[];
+  /** Projects whose install ran and made no folder: no dependencies, so nothing is missing. */
+  nothing_to_install?: { ecosystem: EcosystemEnv["ecosystem"]; path: string }[];
 }
 
 export interface EnvironmentSpec {

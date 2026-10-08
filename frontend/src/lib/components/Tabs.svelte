@@ -83,7 +83,13 @@
     }
 
     .tab {
-      padding: 12px 10px;
+      padding: 12px 8px;
+      font-size: 0.8125rem;
+    }
+
+    .count {
+      margin-left: 4px;
+      padding: 0 5px;
     }
   }
 
