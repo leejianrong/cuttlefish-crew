@@ -63,3 +63,16 @@ def test_a_rounds_tool_calls_and_edits_count_and_reach_the_summary_prompt() -> N
     assert "Done (name the files and modules)" in prompt
     assert all(estimate_event_tokens(payload) > 0 for _, payload in window[:3] + window[4:])
     assert estimate_event_tokens(window[3][1]) == 0  # an allowed command is not progress
+
+
+def test_a_round_that_ran_out_of_room_is_not_summarised_as_a_failure() -> None:
+    from cuttlefish.episodic.events import DelegationFailed
+
+    prompt = _build_summary_prompt(
+        [
+            (1, DelegationFailed(reason="stop=max_turns exit_code=4", failure_kind="max_turns")),
+            (2, DelegationFailed(reason="boom", failure_kind="provider_auth")),
+        ]
+    )
+    assert "ran out of room (max_turns); the work continues" in prompt
+    assert "stop=max_turns" not in prompt and "boom" in prompt

@@ -223,3 +223,11 @@ the agent to trust that state, not to re-read or re-run what it settles, and to 
 summariser call is journaled as `LlmCallCompleted` (with its role, tokens in and out; shown as "Summary" in the activity log and
 not counted as progress to summarise), and a round's token total is now kopicode's own `usage.total`.
 
+Checked live, partly: a rerun on this code was cut off by the OpenRouter key's weekly limit after two rounds. Those two handovers were
+third-person reports with the headings, with a repository block that matched git, and wrote "unconfirmed" where the old ones wrote
+"did not happen"; token totals matched kopicode's session sums exactly (95,169, 102,417 and 21,310) and the cost too. It also found
+the summariser (`openrouter/auto` resolved to a reasoning model) twice returning an empty answer after spending its whole 4096-token
+output cap, so the second handover was the first carried forward, and a `max_turns` stop filed under "Failed". The summariser now has
+8192 tokens and asks for low reasoning effort (not yet seen live), and a round that ended for room is summarised as ending for room.
+Not seen: rounds 3 to 16, so whether the no-edit loop and the false-claim drift are gone is open until a full run.
+

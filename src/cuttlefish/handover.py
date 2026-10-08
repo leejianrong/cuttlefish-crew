@@ -38,6 +38,7 @@ from cuttlefish.episodic.events import (
     ToolCallRecorded,
     decode_payload,
 )
+from cuttlefish.limits import CHECKPOINT_STOPS
 from cuttlefish.tasks.journal import journal, read_episodic_events
 from cuttlefish.tasks.llm import call_llm
 from cuttlefish.tasks.repo import REPO_STATE_MARKER, read_repo_state
@@ -75,6 +76,10 @@ def _texts(payload: EventPayload) -> tuple[str, ...]:
             return (summary, "edited: " + ", ".join(paths)) if paths else (summary,)
         case DelegationRefused(reason=reason):
             return (reason,)
+        case DelegationFailed(failure_kind=kind) if kind in CHECKPOINT_STOPS:
+            # Running out of room is a checkpoint the role carries on from, not a failure: say so,
+            # or a summary files it under "Failed" and the next session reads an error.
+            return (f"the round ended because it ran out of room ({kind}); the work continues",)
         case DelegationFailed(reason=reason, detail=detail):
             return (reason, detail) if detail else (reason,)
         # What the agent actually did in a round. Without these a handover knows only that a round
