@@ -75,3 +75,36 @@ async def test_a_missing_cost_stays_missing_never_estimated(
     response = await _provider(monkeypatch, _Completions(usage)).complete("p")
     assert response.cost_usd is None
     assert (await _provider(monkeypatch, _Completions(None, text=None)).complete("p")).text == ""
+
+
+async def test_a_different_model_than_asked_is_logged_and_a_router_says_how_to_pin(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    class Swapped(_Completions):
+        async def create(self, **kwargs: Any) -> Any:
+            kwargs["model"] = "z-ai/glm-5.3-flash"  # what OpenRouter says it served
+            return await super().create(**kwargs)
+
+    caplog.set_level("INFO", logger="cuttlefish.llm.openrouter")
+    monkeypatch.setenv(MODEL_ENV, "openrouter/auto")
+    await _provider(monkeypatch, Swapped(_Usage(prompt_tokens=1, completion_tokens=1))).complete(
+        "p"
+    )
+    assert any(
+        r.levelname == "INFO"
+        and "z-ai/glm-5.3-flash" in r.getMessage()
+        and MODEL_ENV in r.getMessage()
+        for r in caplog.records
+    )
+
+    caplog.clear()
+    monkeypatch.setenv(MODEL_ENV, DEFAULT_MODEL)
+    await _provider(monkeypatch, Swapped(_Usage(prompt_tokens=1, completion_tokens=1))).complete(
+        "p"
+    )
+    assert any(r.levelname == "WARNING" for r in caplog.records)  # a pinned model swapped out
+
+    caplog.clear()
+    same = _Completions(_Usage(prompt_tokens=1, completion_tokens=1))
+    await _provider(monkeypatch, same).complete("p")
+    assert not caplog.records  # served as asked: silent
