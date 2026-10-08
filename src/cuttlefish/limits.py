@@ -25,8 +25,13 @@ DEFAULT_ROUND_TIMEOUT_S = 2 * 3600
 #: for a person: 100 turns of nothing is not progress.
 DEFAULT_MAX_IDLE_ROUNDS = 3
 
+#: Percent of the model's context window a round may fill before cuttlefish ends it and the role
+#: continues from the handover: past about three quarters a model reads its history worse, and
+#: the next request may not fit at all. Needs a kopicode that reports the window (v0.4.0).
+DEFAULT_CONTEXT_LIMIT_PERCENT = 75
+
 #: The ``failure_kind`` values that mean "the round ran out of room", not "it went wrong".
-CHECKPOINT_STOPS = frozenset({"max_turns", "budget_exhausted", "round_timeout"})
+CHECKPOINT_STOPS = frozenset({"max_turns", "budget_exhausted", "round_timeout", "context_pressure"})
 
 
 def _whole(name: str, default: int, *, minimum: int, environ: Mapping[str, str] | None) -> int:
@@ -69,3 +74,15 @@ def round_timeout_from_env(environ: Mapping[str, str] | None = None) -> float | 
 def max_idle_rounds_from_env(environ: Mapping[str, str] | None = None) -> int:
     """``CUTTLEFISH_MAX_IDLE_ROUNDS``: ``0`` turns the no-progress stop off."""
     return _whole("CUTTLEFISH_MAX_IDLE_ROUNDS", DEFAULT_MAX_IDLE_ROUNDS, minimum=0, environ=environ)
+
+
+def context_limit_from_env(environ: Mapping[str, str] | None = None) -> float | None:
+    """``CUTTLEFISH_CONTEXT_LIMIT_PERCENT`` as a fraction of the window: ``0`` turns it off, and
+    a value over 95 is read as 95 (a round cannot be ended after the window is full)."""
+    percent = _whole(
+        "CUTTLEFISH_CONTEXT_LIMIT_PERCENT",
+        DEFAULT_CONTEXT_LIMIT_PERCENT,
+        minimum=0,
+        environ=environ,
+    )
+    return min(percent, 95) / 100 if percent > 0 else None

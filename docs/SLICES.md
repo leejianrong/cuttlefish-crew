@@ -881,7 +881,8 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
    `session.start`; a round that stops on either, unstuck, continues from the handover (`RoundContinued`),
    up to 20 times per role. ADR-0030. Next: a no-progress stop, a wall-clock limit per round, and ending
    a round on context pressure (`session.usage`). The no-progress stop and a 2-hour round limit shipped
-   next (ADR-0030's update).
+   next (ADR-0030's update), then V5-context-pressure: a round ends when its context passes 75% of the
+   model's window.
 9. **V5-E6: more ecosystems and isolation**, in three PRs. Node version managers are not part of it.
    **E6a (shipped):** prepare poetry, pipenv, Go, Rust, Ruby and Java (see the ADR's update).
    **E6b (shipped):** monorepo subfolders: the root and the folders directly under it; each nested project has its

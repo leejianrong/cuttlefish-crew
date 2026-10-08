@@ -1063,3 +1063,80 @@ async def test_a_refusal_alongside_a_real_write_is_not_a_refused_round(
     )
     outcome = await run(binary, tmp_path)
     assert outcome.kind == "completed" and outcome.edited_paths == ["src/a.py"]
+
+
+# -- a round that fills the model's context window (ADR-0030) ---------------------------
+
+
+def pressure_scenario(context_tokens: int, window: int | None, *, then: list[Any]) -> list[Any]:
+    usage: dict[str, Any] = {"context_tokens": context_tokens, "requests": 1, "turns": 1}
+    if window is not None:
+        usage["context_window"] = window
+    return [
+        {"start": True},
+        {"emit": event({"kind": "edit_applied", "path": "a.py"})},
+        {"emit": event({"kind": "provider_response", "size": 9})},
+        {"usage": usage},
+        *then,
+    ]
+
+
+_CANCELLED = [
+    {"wait_for": "session.cancel"},
+    {"emit": respond("cancelled", 1)},
+    {"close": [ended("cancelled", 1)]},
+    {"eof": []},
+]
+
+
+async def test_a_context_past_the_limit_cancels_the_round_as_context_pressure(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(pressure_scenario(210_000, 262_144, then=_CANCELLED))
+    outcome = await run(binary, tmp_path, context_limit=0.75)
+    assert outcome.kind == "failed" and outcome.failure_kind == "context_pressure"
+    assert "210000 of 262144 context tokens" in (outcome.reason or "")
+    assert outcome.edited_paths == ["a.py"]  # what the round did before is kept
+    methods = [m.get("method") for m in sent(tmp_path)]
+    assert "session.usage" in methods and "session.cancel" in methods
+
+
+async def test_a_context_under_the_limit_is_left_alone(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        pressure_scenario(
+            50_000, 262_144, then=[{"emit": respond()}, {"close": [ended()]}, {"eof": []}]
+        )
+    )
+    outcome = await run(binary, tmp_path, context_limit=0.75)
+    assert outcome.kind == "completed"
+    assert not any(m.get("method") == "session.cancel" for m in sent(tmp_path))
+
+
+async def test_an_unknown_window_never_ends_a_round(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        pressure_scenario(
+            900_000, None, then=[{"emit": respond()}, {"close": [ended()]}, {"eof": []}]
+        )
+    )
+    outcome = await run(binary, tmp_path, context_limit=0.75)
+    assert outcome.kind == "completed"
+
+
+async def test_no_limit_means_no_usage_question(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        [
+            {"start": True},
+            {"emit": event({"kind": "provider_response", "size": 9})},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    await run(binary, tmp_path)
+    assert not any(m.get("method") == "session.usage" for m in sent(tmp_path))

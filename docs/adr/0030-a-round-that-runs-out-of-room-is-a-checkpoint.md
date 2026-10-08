@@ -127,3 +127,25 @@ interpreter and imported it, so the environment slices (E3 to E5) held with a re
 Also seen: the real model asked a question ("should I commit?") through `ask`, which arrived as a live
 question card, and the person's decline reached it as "no human is present". The run was driven through the
 HTTP API, not by clicking the dashboard.
+
+## Update: ending a round on context pressure
+
+The token budget counts the history resent on every request, so it says little about how full the model's
+window is, and a round that stays under it can still end up reading its own history badly. kopicode v0.4.0
+reports the number that matters: `session.usage` answers inline, even mid-turn, with `context_tokens` (the
+latest request's prompt) and `context_window` (absent when kopicode does not know the model's).
+
+- On each `provider_response` event the serve child asks `session.usage` (one question at a time per session).
+  When `context_tokens` reaches `CUTTLEFISH_CONTEXT_LIMIT_PERCENT` (default 75, `0` off, capped at 95) of a
+  known window, it cancels the session and the round ends as `failure_kind="context_pressure"`, keeping its
+  edits and tool calls, like a round timeout. It is a checkpoint stop: the next round starts on a fresh
+  session from the handover with a line saying the context was nearly full.
+- It fails open. No answer, no window, an older kopicode (it needs `session.usage`, `usage.context` and
+  `usage.context_window` in `version --json`) all mean no check, never a stopped round. The question travels over
+  the serve connection, so it works for a kopicode in a sandbox too (unlike the stuck detector).
+- Cancelling is not graceful: a tool call in flight is cut off, and the no-progress guard still bounds a role
+  that fills its context without changing a file.
+- Not measured against a real model yet: where 75% is right is a guess until a long real run shows what a
+  round does between 60% and 90%.
+- Still open: per-project and per-role settings instead of environment variables.
+

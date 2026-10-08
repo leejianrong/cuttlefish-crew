@@ -444,3 +444,12 @@ reads "no dependencies to install" instead of "node_modules is missing". The act
 and was continued as "Round ended" (`checkpointedRounds`, derived from the journal, nothing new stored), and cuts a long
 "Round started" prompt with the whole text under "Whole prompt". `FleetDaemon._launch_team` no longer raises when a
 stopped team's run has no terminal event, so a stop logs no ERROR traceback.
+
+V5-context-pressure (ADR-0030's third update): `ServeChild.watch_context` and `_check_context` ask `session.usage` on each
+`provider_response` (one in flight per session) and cancel the session once `context_tokens` passes
+`CUTTLEFISH_CONTEXT_LIMIT_PERCENT` of a known `context_window`; `run_kopicode_serve(context_limit=...)` turns that into a
+`context_pressure` outcome (`_pressure_outcome`), which is in `limits.CHECKPOINT_STOPS` so `run_team` continues it.
+`KopicodeBackend._context_limit` passes a limit only when `version --json` lists `session.usage`, `usage.context` and
+`usage.context_window`. The fake serve has a `{"usage": {...}}` step. Tests: `test_kopicode_serve.py`,
+`test_team_continue.py`, `test_limits.py`.
+

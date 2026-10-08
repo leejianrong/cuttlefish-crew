@@ -83,6 +83,7 @@ FAILURE_KINDS = (
     "cancelled",
     "environment_stuck",  # cuttlefish cancelled it: N shell failures in a row on the environment
     "round_timeout",  # cuttlefish cancelled it: the round passed its wall-clock limit (ADR-0030)
+    "context_pressure",  # cuttlefish cancelled it: its context neared the model's window (ADR-0030)
     "open_failed",  # session.start refused: a bad model, a missing credential
     "protocol_error",  # a -32xxx reply, or a stop this client does not know
 )
@@ -95,6 +96,9 @@ DEFAULT_CONSENT_DEADLINE = 30.0
 
 #: How long to wait, after stdin EOF, for kopicode to close its sessions and exit.
 _SHUTDOWN_GRACE = 15.0
+
+#: How long a ``session.usage`` reply may take; it answers inline, even mid-turn.
+_USAGE_TIMEOUT = 10.0
 
 #: How long ``session.close`` may take: it queues behind the session's in-flight turn, so
 #: this also bounds a cancelled turn's unwinding.
@@ -175,6 +179,12 @@ async def serve_supports_ask(binary: str) -> bool:
 async def serve_supports_limits(binary: str) -> bool:
     """Whether ``binary`` takes ``max_turns`` and ``token_budget`` on ``session.start``."""
     return "session.limits" in await serve_features(binary)
+
+
+async def serve_supports_usage(binary: str) -> bool:
+    """Whether ``binary`` answers ``session.usage`` with the context in use and its window."""
+    features = await serve_features(binary)
+    return {"session.usage", "usage.context", "usage.context_window"} <= features
 
 
 async def serve_supports_consent_timeout(binary: str) -> bool:
@@ -268,6 +278,12 @@ class ServeChild:
         self._watches: dict[str, tuple[SessionRecord, StuckDetector]] = {}
         #: session id -> why cuttlefish cancelled it, once the detector fired.
         self.stuck: dict[str, StuckVerdict] = {}
+        #: session id -> the fraction of the model's window it may fill (ADR-0030).
+        self._context_limits: dict[str, float] = {}
+        #: sessions with a usage check under way: one at a time, so a fast stream is not a flood.
+        self._checking_context: set[str] = set()
+        #: session id -> (tokens in context, window), once cuttlefish cancelled it for that.
+        self.pressure: dict[str, tuple[int, int]] = {}
         #: one read of a record at a time, so two checks never consume the same lines.
         self._stuck_lock = asyncio.Lock()
         self.stderr = bytearray()
@@ -333,11 +349,17 @@ class ServeChild:
         if detector.enabled:
             self._watches[session] = (record, detector)
 
+    def watch_context(self, session: str, fraction: float) -> None:
+        """Have the child cancel ``session`` once its context passes ``fraction`` of the window."""
+        self._context_limits[session] = fraction
+
     def forget(self, session: str) -> list[Mapping[str, Any]]:
         """Drop a finished session's decider and hand back (and free) its events."""
         self._deciders.pop(session, None)
         self._askers.pop(session, None)
         self._watches.pop(session, None)
+        self._context_limits.pop(session, None)
+        self._checking_context.discard(session)
         return self.events.pop(session, [])
 
     def take_consents(self, session: str) -> list[ConsentRecord]:
@@ -440,6 +462,16 @@ class ServeChild:
         if isinstance(session, str) and isinstance(event, dict):
             self.events.setdefault(session, []).append(event)
             if (
+                event.get("kind") == "provider_response"
+                and session in self._context_limits
+                and session not in self.pressure
+                and session not in self._checking_context
+            ):
+                self._checking_context.add(session)
+                check = asyncio.create_task(self._check_context(session))
+                self._background.add(check)
+                check.add_done_callback(self._background.discard)
+            if (
                 event.get("kind") == "tool_result"
                 and event.get("tool") == SHELL_TOOL
                 and session in self._watches
@@ -448,6 +480,38 @@ class ServeChild:
                 task = asyncio.create_task(self._check_stuck(session))
                 self._background.add(task)
                 task.add_done_callback(self._background.discard)
+
+    async def _check_context(self, session: str) -> None:
+        """Ask kopicode how full the session's context is and cancel it past the limit. Fails
+        open: no answer, or a model whose window kopicode does not know, is "no evidence"."""
+        try:
+            fraction = self._context_limits.get(session)
+            if fraction is None or not self.alive:
+                return
+            reply = await asyncio.wait_for(
+                await self.request("session.usage", {"session": session}), _USAGE_TIMEOUT
+            )
+            result = reply.get("result")
+            usage = result.get("usage") if isinstance(result, dict) else None
+            if not isinstance(usage, dict):
+                return
+            tokens, window = usage.get("context_tokens"), usage.get("context_window")
+            if not (isinstance(tokens, int) and isinstance(window, int) and window > 0):
+                return
+            if tokens >= fraction * window and session in self._context_limits:
+                self.pressure[session] = (tokens, window)
+                _LOG.warning(
+                    "session %s used %d of %d context tokens (%.0f%%): ending the round",
+                    session,
+                    tokens,
+                    window,
+                    100 * tokens / window,
+                )
+                await self.cancel_session(session)
+        except Exception:
+            _LOG.debug("context check for session %s failed", session, exc_info=True)
+        finally:
+            self._checking_context.discard(session)
 
     async def _check_stuck(self, session: str) -> None:
         """Read what the session's record gained and cancel the session if its agent has
@@ -722,6 +786,24 @@ def _timeout_outcome(
     )
 
 
+def _pressure_outcome(
+    outcome: DelegationOutcome, tokens: int, window: int, consents: list[ConsentDecisionRecord]
+) -> DelegationOutcome:
+    """The round cuttlefish ended because its context neared the model's window. The edits and
+    tool calls so far are kept; a distinct ``failure_kind`` makes it a checkpoint (ADR-0030)."""
+    return dataclasses.replace(
+        outcome,
+        kind="failed",
+        summary="kopicode was stopped: its context was nearly full (context_pressure)",
+        reason=(
+            f"stopped: {tokens} of {window} context tokens in use "
+            f"({100 * tokens // window}% of the model's window)"
+        ),
+        failure_kind="context_pressure",
+        consent_decisions=consents,
+    )
+
+
 def _stuck_outcome(
     outcome: DelegationOutcome, verdict: StuckVerdict, env: Mapping[str, str] | None
 ) -> DelegationOutcome:
@@ -816,6 +898,7 @@ async def run_kopicode_serve(
     stuck_threshold: int | None = None,
     ask: AskHandler | None = None,
     session_limits: Mapping[str, int] | None = None,
+    context_limit: float | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
 
@@ -829,6 +912,10 @@ async def run_kopicode_serve(
 
     ``session_limits`` (``max_turns``, ``token_budget``) go into ``session.start`` as given; the
     caller passes them only for a kopicode that advertises ``session.limits`` (v0.4.0).
+
+    ``context_limit`` (a fraction of the model's window, e.g. ``0.75``) cancels the round once the
+    context in use passes it, read from ``session.usage``; the caller passes it only for a
+    kopicode that reports the window (:func:`serve_supports_usage`). ``None`` never does.
 
     ``ask`` answers the model's own questions live (``ask_mode: "remote"``); the caller passes
     it only for a kopicode that advertises ``ask.request`` (:func:`serve_supports_ask`).
@@ -881,6 +968,8 @@ async def run_kopicode_serve(
         )
     timed_out = False
     child.register(session, decide, ask)
+    if context_limit is not None:
+        child.watch_context(session, context_limit)
     if process_factory is None:
         threshold = threshold_from_env() if stuck_threshold is None else stuck_threshold
         child.watch(session, SessionRecord(root, session), StuckDetector(threshold))
@@ -916,6 +1005,7 @@ async def run_kopicode_serve(
     finally:
         events = child.forget(session)
         verdict = child.stuck.pop(session, None)
+        pressure = child.pressure.pop(session, None)
         consents = [
             ConsentDecisionRecord(
                 r.kind, r.detail, "allow" if r.answer == "allow" else "deny", r.rule
@@ -958,6 +1048,8 @@ async def run_kopicode_serve(
     if not isinstance(result, dict):
         raise DelegationError("kopicode serve replied with neither result nor error")
     outcome = classify_turn(events, result, env=env)
+    if pressure is not None and outcome.kind != "completed":
+        outcome = _pressure_outcome(outcome, *pressure, consents)
     if verdict is not None and outcome.kind != "completed":
         outcome = _stuck_outcome(outcome, verdict, env)
     record = result.get("record")
