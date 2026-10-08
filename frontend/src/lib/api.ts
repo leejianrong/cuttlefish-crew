@@ -110,6 +110,8 @@ export interface EcosystemEnv {
    * null when there is nothing in the project folder to look for. */
   installed: boolean | null;
   notes: string[];
+  /** The folder it was found in, relative to the project root: \`.\` is the root itself (V5-E6b). */
+  path?: string;
 }
 
 /** Whether cuttlefish installs dependencies before a team starts (V5-E3). */
@@ -121,6 +123,7 @@ export interface PrepareStepView {
   name: string;
   commands: string[][];
   reason: string;
+  path?: string;
 }
 
 export interface PrepareInfo {

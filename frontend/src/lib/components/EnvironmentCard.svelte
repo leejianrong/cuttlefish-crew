@@ -91,12 +91,12 @@
     </p>
   {:else if rows.length === 0}
     <p class="body-medium muted">
-      No recognised project files at the top of this folder (Python, Node, Go, Rust, Java or
-      Ruby). Files in subfolders are not scanned.
+      No recognised project files in this folder or the folders directly under it (Python, Node,
+      Go, Rust, Java or Ruby). Anything deeper is not scanned.
     </p>
   {:else}
     <ul class="rows">
-      {#each rows as row (row.name)}
+      {#each rows as row (row.key)}
         <li>
           <span class="name title-small">{row.name}</span>
           <span class="details body-medium muted mono">{row.details.join(" · ")}</span>

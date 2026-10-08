@@ -172,10 +172,70 @@ def test_mise_toml_supplies_a_version(tmp_path: Path) -> None:
     assert _only(tmp_path, "node").version_hint == "22"
 
 
-def test_only_the_root_is_read(tmp_path: Path) -> None:
+def test_a_project_one_folder_down_is_found_with_its_folder(tmp_path: Path) -> None:
     _write(tmp_path, "frontend/package.json", "{}")
+    _write(tmp_path, "frontend/pnpm-lock.yaml", "x")
+    _write(tmp_path, "backend/pyproject.toml", '[project]\nname = "x"\n')
+    _write(tmp_path, "backend/.venv/pyvenv.cfg")
+
+    found = {(e.ecosystem, e.path): e for e in environment.detect(tmp_path).ecosystems}
+
+    assert set(found) == {("node", "frontend"), ("python", "backend")}
+    assert found[("node", "frontend")].tool == "pnpm"
+    assert found[("python", "backend")].installed is True
+    assert found[("python", "backend")].to_json()["path"] == "backend"
+
+
+def test_the_root_comes_first_and_has_the_dot_path(tmp_path: Path) -> None:
+    _write(tmp_path, "go.mod", "module x\n\ngo 1.22\n")
+    _write(tmp_path, "web/package.json", "{}")
+
+    assert [(e.ecosystem, e.path) for e in environment.detect(tmp_path).ecosystems] == [
+        ("go", "."),
+        ("node", "web"),
+    ]
+
+
+def test_a_folder_of_an_ecosystem_the_root_has_is_a_workspace_member_not_a_project(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, "package.json", '{"workspaces": ["packages/*"]}')
+    _write(tmp_path, "packages/a/package.json", "{}")
+    _write(tmp_path, "docs/package.json", "{}")
+
+    (root_env,) = environment.detect(tmp_path).ecosystems
+    assert (root_env.ecosystem, root_env.path) == ("node", ".")
+    assert "also in docs/, not installed separately" in " ".join(root_env.notes)
+
+
+def test_only_one_folder_down_is_read_and_dependency_folders_never(tmp_path: Path) -> None:
+    _write(tmp_path, "a/b/package.json", "{}")
+    _write(tmp_path, "node_modules/left-pad/package.json", "{}")
+    _write(tmp_path, ".hidden/package.json", "{}")
+    _write(tmp_path, "vendor/x/go.mod", "module x\n")
+    _write(tmp_path, "target/Cargo.toml", "[package]\n")
 
     assert environment.detect(tmp_path).ecosystems == ()
+
+
+def test_a_repository_of_many_examples_is_capped(tmp_path: Path) -> None:
+    for i in range(30):
+        _write(tmp_path, f"ex{i:02d}/go.mod", "module x\n")
+    # the same ecosystem repeated is fine below the root; different ones are what is capped
+    found = environment.detect(tmp_path).ecosystems
+
+    assert len(found) <= environment.MAX_SUBPROJECTS
+
+
+def test_a_nested_project_is_described_and_briefed_with_its_folder(tmp_path: Path) -> None:
+    _write(tmp_path, "frontend/package.json", "{}")
+    _write(tmp_path, "backend/pyproject.toml", '[project]\nname = "x"\n')
+    spec = environment.detect(tmp_path)
+
+    assert "Node in frontend/" in spec.summary()
+    note = environment.brief(spec)
+    assert "`cd frontend`" in note and "not on PATH" in note
+    assert "`backend/.venv/bin/python`" in note
 
 
 def test_a_huge_marker_file_is_not_read(tmp_path: Path) -> None:

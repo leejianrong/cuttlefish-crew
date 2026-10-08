@@ -200,13 +200,16 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   own loopback `Host` check (ADR-0014) rejects. None of ADR-0013 has been
   checked against a real, live tailnet in this environment (no `tailscale`
   binary/account available here) — named honestly, not glossed over.
-- **Environment detection reads only the project root, and runs nothing** (V5-E2, ADR-0029). A
-  monorepo's `frontend/package.json` or `services/api/pyproject.toml` is not found from the root, and
-  "is the install in sync with the lockfile?" is unknown until V5-E3 hashes them. Both are on purpose:
-  scanning subfolders needs a rule for which one an agent works in, and probing with the project's own
-  tools would run its code before anyone agreed to. The Environment card says "subfolders are not
-  scanned" instead of implying a complete answer. `cuttlefish.fleet.fs`'s folder-picker language list
-  is a separate, coarser set of markers.
+- **Environment detection reads the root and the folders directly under it, and runs nothing** (V5-E2, V5-E6b,
+  ADR-0029). `frontend/package.json` and `backend/pyproject.toml` are found; `services/api/pyproject.toml` is not
+  (two levels), nor anything under a hidden folder, `node_modules`, `vendor`, `target`, `dist`, `build` and the
+  like. A folder whose ecosystem the root already has is skipped, because it is almost always a workspace member
+  the root's own install covers (npm and pnpm workspaces, a Cargo workspace, a uv workspace): a repository with a
+  root `package.json` and an unrelated `docs/package.json` therefore does not get the second one installed. At most
+  12 nested projects are reported. Cuttlefish puts only the **root's** `.venv` and `node_modules/.bin` on an agent's
+  `PATH`; for a nested project the brief says where it is and to `cd` there. Probing with a project's own tools
+  would run its code before anyone agreed to, so "is the install in sync?" is the fingerprint, not a probe.
+  `cuttlefish.fleet.fs`'s folder-picker language list is a separate, coarser set of markers.
 - **What cuttlefish installs is a fixed list** (V5-E3a, V5-E6a, ADR-0029): `uv`, poetry, pipenv, the JS package
   managers, `go mod download`, `cargo fetch`, `bundle install`, Maven and Gradle. A pip project with only a
   `pyproject.toml` (no `requirements.txt`) is reported "not prepared", never silently skipped. Go, Rust, Java and
@@ -219,9 +222,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   that built this). An install
   runs the project's own scripts, so `ask` is the default and a person (or a client) must say `yes`;
   there is no sandbox around it, only a timeout, a scrubbed environment and a fixed program list. A failed
-  install fails the team rather than starting agents without dependencies. Not covered: installs in
-  subfolders (detection reads only the root), and a stop during an install of a team that was
-  resumed after a daemon restart (resume never installs).
+  install fails the team rather than starting agents without dependencies. Not covered: a stop during an
+  install of a team that was resumed after a daemon restart (resume never installs).
 - **An agent's environment is an allowlist, and a variable it needs may not be on it** (V5-E4, ADR-0029, Q58). `SSH_AUTH_SOCK`
   (so `git` over SSH), `AWS_*` or `GOOGLE_*` (Claude Code on Bedrock or Vertex), a private registry's token for an agent's own
   `npm install` and anything custom are not passed; name them in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. That is deliberate:
@@ -236,4 +238,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **A stuck-agent card has no button** (V5-E5b). Nothing could be answered: the round is over. The person fixes the
   environment and steers the role from the project page; the card ends when they do. A stuck role in a steerable team (the daemon's always are) waits for a steer with no timeout instead of
   the usual five-second grace, so a role nobody steers keeps the team running until it is stopped.
+- **A project with no dependencies still reads "node_modules is missing" after its install** (V5-E3, found again in V5-E6b). The
+  install ran and made no folder, which `env.json` remembers (`produced: false`) so nothing is reinstalled, but the Environment card
+  only looks at the folder. It is not due, so nothing re-prompts; the wording can make a person think the install failed.
 

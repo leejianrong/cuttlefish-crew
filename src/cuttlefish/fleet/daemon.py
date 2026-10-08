@@ -82,7 +82,10 @@ class EnvironmentConfirmationError(FleetError):
     project's `env_prepare` is `ask` and the start call named no `prepare`."""
 
     def __init__(self, project_id: str, plan: envprep.PreparePlan) -> None:
-        names = ", ".join(f"{s.ecosystem} ({s.reason})" for s in plan.steps)
+        names = ", ".join(
+            f"{s.ecosystem}{'' if s.path == '.' else f' in {s.path}/'} ({s.reason})"
+            for s in plan.steps
+        )
         super().__init__(
             f"project {project_id!r}: its dependencies need installing first: {names}. "
             "Start again with prepare=yes to install them now, prepare=skip to start without "
@@ -91,7 +94,7 @@ class EnvironmentConfirmationError(FleetError):
         self.plan = plan
 
 
-def _install_failure_text(ecosystem: str, result: envprep.StepResult) -> str:
+def _install_failure_text(ecosystem: str, result: envprep.StepResult, path: str = ".") -> str:
     """Why a role is recorded failed when its project's dependencies would not install: the
     cause in words, and the way out. The output itself is in the install row, not here (the
     last line of a tool's output is often a fragment of a longer sentence)."""
@@ -102,7 +105,8 @@ def _install_failure_text(ecosystem: str, result: envprep.StepResult) -> str:
         "tool_missing": f"{result.command[0] if result.command else 'the tool'} is not installed",
     }.get(str(result.failure), str(result.failure))
     return (
-        f"couldn't install the {ecosystem} dependencies ({cause}). "
+        f"couldn't install the {ecosystem}{'' if path == '.' else f' ({path}/)'} dependencies "
+        f"({cause}). "
         "The install row above has the output; start again with 'Start without installing' "
         "(prepare=skip over the API) to go without."
     )
@@ -420,6 +424,7 @@ class FleetDaemon:
                     team_id,
                     EnvironmentPrepareStarted(
                         ecosystem=step.ecosystem,
+                        path=step.path,
                         commands=[list(c) for c in step.commands],
                         reason=step.reason,
                     ),
@@ -429,6 +434,7 @@ class FleetDaemon:
                     team_id,
                     EnvironmentPrepared(
                         ecosystem=step.ecosystem,
+                        path=step.path,
                         ok=result.ok,
                         exit_code=result.exit_code,
                         duration_s=round(result.duration_s, 2),
@@ -443,27 +449,27 @@ class FleetDaemon:
                     await asyncio.to_thread(
                         envprep.write_state,
                         project.root,
-                        step.ecosystem,
+                        envprep.state_key(step.ecosystem, step.path),
                         fingerprint=step.fingerprint,
                         how="failed",
                     )
                 if result.cancelled:
                     return False
                 if not result.ok:
-                    why = _install_failure_text(step.ecosystem, result)
+                    why = _install_failure_text(step.ecosystem, result, step.path)
                     for name in role_names:
                         store.append(team_id, TaskFailed(error=why, role=name))
                     return False
                 await asyncio.to_thread(
                     envprep.write_state,
                     project.root,
-                    step.ecosystem,
+                    envprep.state_key(step.ecosystem, step.path),
                     # What is on disk now: an install may have written its own lockfile.
                     fingerprint=envprep.fingerprint_now(
-                        project.root, step.ecosystem, default=step.fingerprint
+                        project.root, step.ecosystem, default=step.fingerprint, path=step.path
                     ),
                     how="prepared",
-                    produced=envprep.produced_env(project.root, step.ecosystem),
+                    produced=envprep.produced_env(project.root, step.ecosystem, step.path),
                 )
             return True
         finally:

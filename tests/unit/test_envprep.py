@@ -524,3 +524,79 @@ def test_what_is_remembered_after_an_install_includes_the_lockfile_it_wrote(tmp_
     assert now != step.fingerprint
     assert _plan(tmp_path).steps == ()
     assert envprep.fingerprint_now(tmp_path, "go", default="d") == "d"
+
+
+# --- projects in subfolders (V5-E6b) -----------------------------------------------------
+
+
+def test_a_nested_project_is_planned_in_its_own_folder_with_its_own_state_key(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, "web/package.json", "{}")
+    _write(tmp_path, "web/package-lock.json", "{}")
+    _write(tmp_path, "api/pyproject.toml", '[project]\\nname = "x"\\n')
+    _write(tmp_path, "api/uv.lock", "lock")
+
+    steps = {(s.ecosystem, s.path): s for s in _plan(tmp_path).steps}
+
+    assert set(steps) == {("node", "web"), ("python", "api")}
+    assert steps[("node", "web")].commands == (("npm", "ci"),)
+    assert steps[("node", "web")].reason == "node_modules is missing"
+    assert steps[("node", "web")].to_json()["path"] == "web"
+    assert envprep.state_key("node", "web") == "node:web"
+    assert envprep.state_key("node") == "node"
+
+
+def test_a_nested_install_is_remembered_and_noticed_separately(tmp_path: Path) -> None:
+    _write(tmp_path, "web/package.json", "{}")
+    _write(tmp_path, "web/package-lock.json", "{}")
+    _write(tmp_path, "package.json", "{}")  # a root of the same ecosystem: web is a member
+    assert [s.path for s in _plan(tmp_path).steps] == ["."]
+
+    other = tmp_path / "other"
+    _write(other, "api/go.mod", "module x\\n\\ngo 1.22\\n")
+    (step,) = _plan(other).steps
+    fp = envprep.fingerprint_now(other, "go", default="d", path="api")
+    assert fp == step.fingerprint
+    envprep.write_state(other, envprep.state_key("go", "api"), fingerprint=fp, how="prepared")
+
+    assert _plan(other).steps == ()
+    assert "go:api" in envprep.read_state(other)
+
+    _write(other, "api/go.mod", "module y\\n\\ngo 1.22\\n")
+    assert [s.reason for s in _plan(other).steps] == ["go.mod changed since the last install"]
+
+
+def test_a_person_s_own_nested_install_is_adopted_under_its_key(tmp_path: Path) -> None:
+    _write(tmp_path, "web/package.json", "{}")
+    _write(tmp_path, "web/package-lock.json", "{}")
+    _write(tmp_path, "web/node_modules/x/index.js")
+
+    found = _plan(tmp_path)
+    envprep.record_adopted(tmp_path, found)
+
+    assert found.steps == ()
+    assert envprep.read_state(tmp_path)["node:web"]["how"] == "adopted"
+
+
+async def test_a_nested_step_runs_in_its_folder(tmp_path: Path, shims: Path) -> None:
+    root = tmp_path / "proj"
+    (root / "web").mkdir(parents=True)
+    _shim(shims, "npm", 'echo "in $(pwd)"; mkdir -p node_modules')
+    step = envprep.PrepareStep(
+        ecosystem="node", commands=(("npm", "ci"),), reason="t", fingerprint="f", path="web"
+    )
+
+    result = await envprep.run_step(step, root)
+
+    assert result.ok and f"in {root / 'web'}" in result.tail
+    assert envprep.produced_env(root, "node", "web") is True
+    assert envprep.produced_env(root, "node") is False
+
+
+def test_an_unpreparable_nested_project_says_where(tmp_path: Path) -> None:
+    _write(tmp_path, "svc/pyproject.toml", '[project]\\nname = "x"\\n')
+
+    found = _plan(tmp_path)
+
+    assert dict(found.unsupported)["python"] == "in svc/: no requirements.txt to install from"

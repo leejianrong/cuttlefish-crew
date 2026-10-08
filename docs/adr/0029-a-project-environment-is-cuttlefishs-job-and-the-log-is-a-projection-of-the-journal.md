@@ -222,3 +222,17 @@ when it has one). A step can carry settings for its own commands (`PrepareStep.e
   fingerprint of what is on disk when the install ends (`envprep.fingerprint_now`).
 - **Still true:** an install runs project code, so the same confirmation applies; detection runs nothing.
 
+## Update (V5-E6b, 2026-10-07): projects in subfolders
+
+Detection reads the root and then each folder directly under it, with the same detectors. A hit in a subfolder carries its `path`,
+and everything that was per ecosystem is now per ecosystem and folder: the plan, the step's working directory, the `env.json` key
+(`node:frontend`; the root keeps the bare name, so existing files stay valid), and the install events.
+
+- **A subfolder of an ecosystem the root already has is skipped.** A root `package.json` with workspaces, a Cargo workspace or a uv
+  workspace installs its members itself; a second `npm ci` in `packages/a` would be wrong. The cost is that an unrelated `docs/package.json`
+  next to a root `package.json` is not installed either. Judged the safer error: a missing install is visible, a wrong one is not.
+- **One level, capped at 12.** Deeper discovery needs a rule for which project an agent works in, and a repository of examples would
+  otherwise be a wall of installs a person must approve.
+- **The agent's `PATH` is unchanged.** Putting several projects' `.venv/bin` on one `PATH` makes `python` depend on their order. The
+  brief says where each nested project is and to work from its folder.
+

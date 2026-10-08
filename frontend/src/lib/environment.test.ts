@@ -113,6 +113,7 @@ describe("stepLines", () => {
     expect(stepLines(prepare)).toEqual([
       {
         name: "Python",
+        key: "python:.",
         commands: ["uv venv", "uv pip install -r requirements.txt"],
         reason: ".venv is missing",
       },
@@ -221,5 +222,49 @@ describe("an ecosystem that keeps nothing in the project folder", () => {
   });
   it("says nothing about a fetch when nothing is due", () => {
     expect(environmentRows(spec([]))[0].state).toBeNull();
+  });
+});
+
+describe("a project in a subfolder", () => {
+  const at = (seq: number, type: string, payload: Record<string, unknown>) =>
+    ({ seq, ts: "2026-10-07T10:00:00Z", event_type: type, payload }) as EpisodicEventView;
+  const web = env({ ecosystem: "node", tool: "npm", installed: false, path: "web" });
+  const root = env({ ecosystem: "node", tool: "npm", installed: false });
+  const spec = {
+    root: "/r",
+    root_exists: true,
+    ecosystems: [root, web],
+    prepare: {
+      setting: "ask" as const,
+      unsupported: [],
+      steps: [
+        {
+          ecosystem: "node" as const,
+          name: "Node",
+          path: "web",
+          commands: [["npm", "ci"]],
+          reason: "web/node_modules is missing",
+        },
+      ],
+    },
+  };
+
+  it("names the folder and keeps each row apart", () => {
+    const rows = environmentRows(spec);
+    expect(rows.map((r) => r.name)).toEqual(["Node", "Node in web/"]);
+    expect(new Set(rows.map((r) => r.key)).size).toBe(2);
+    expect(rows[1].stateLabel).toBe("web/node_modules is missing");
+  });
+  it("names the folder in the install it asks about and in the one that runs", () => {
+    expect(stepLines(spec.prepare)[0]).toMatchObject({ name: "Node in web/", key: "node:web" });
+    const started = at(1, "EnvironmentPrepareStarted", {
+      ecosystem: "node",
+      path: "web",
+      commands: [["npm", "ci"]],
+      reason: "r",
+    });
+    const rootDone = at(2, "EnvironmentPrepared", { ecosystem: "node", path: ".", ok: true });
+    expect(installProgress([started, rootDone])?.name).toBe("Node in web/");
+    expect(installProgress([started, { ...rootDone, payload: { ecosystem: "node", path: "web" } }])).toBeNull();
   });
 });
