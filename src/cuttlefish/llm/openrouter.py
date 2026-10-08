@@ -14,12 +14,14 @@ logged (ADR-0004's redactor also has ``OPENROUTER_API_KEY`` in its known-secret 
 
 from __future__ import annotations
 
+import logging
 import os
 
 import openai
 
 from cuttlefish.llm.provider import LlmResponse
 
+_LOG = logging.getLogger(__name__)
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 #: cuttlefish's own summaries (handovers) need no strong model. Pinned, not `openrouter/auto`: auto
@@ -59,6 +61,7 @@ class OpenRouterLlmProvider:
             # `usage.include` makes OpenRouter report what the call cost.
             extra_body={"reasoning": {"effort": "low"}, "usage": {"include": True}},
         )
+        self._note_model(response.model)
         choice = response.choices[0]
         text = choice.message.content or ""
         usage = response.usage
@@ -69,4 +72,22 @@ class OpenRouterLlmProvider:
             input_tokens=usage.prompt_tokens if usage else None,
             output_tokens=usage.completion_tokens if usage else None,
             cost_usd=float(reported) if isinstance(reported, int | float) else None,
+        )
+
+    def _note_model(self, served: str | None) -> None:
+        """Say which model answered. A router (``openrouter/auto``, ``openrouter/free``) picks per
+        request and the choice is invisible unless looked for: a live run once found its summaries
+        written by a reasoning model nobody chose. A pinned model that is served as another one
+        (a fallback or an alias OpenRouter resolved) is worth a warning too."""
+        if not served or served == self._model:
+            return
+        router = self._model.startswith("openrouter/")
+        _LOG.log(
+            logging.INFO if router else logging.WARNING,
+            "OpenRouter served %r for a request to %r%s",
+            served,
+            self._model,
+            ""
+            if not router
+            else f" (a router picks the model per request: pin one with {MODEL_ENV})",
         )

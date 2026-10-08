@@ -45,3 +45,21 @@ small kopicode change first, and a CPU-sized model is unlikely to be a reliable 
 - A lower turn cap per round (the project's own limits, ADR-0030) bounds one round's spend; the token budget counts resent
   history, so it is the better ceiling for money.
 - `max_cost_usd` on a project now trips on kopicode's reported cost.
+
+## Why the summariser was a GLM model, and how to keep a model choice from happening silently
+
+cuttlefish's summariser asked OpenRouter for `openrouter/auto` (the default since the first OpenRouter provider commit, #8). That
+is a router: OpenRouter picks a model per request, and it served `z-ai/glm-5.3-flash`, a reasoning model that spent its output cap
+thinking and returned nothing. Nothing in cuttlefish chose GLM, and nothing recorded or said so until the summariser's calls were
+journaled (the `model` on `LlmCallCompleted` is the served model). The coding model is separate (kopicode's own default,
+`qwen/qwen3-coder-next`).
+
+What keeps it from recurring:
+
+- The default is pinned (`CUTTLEFISH_LLM_MODEL`), and a test fails if the default is `openrouter/auto`.
+- The served model is on every summary row of the activity log, and the provider logs a line when the served model differs from the
+  requested one: INFO for a router (with how to pin), WARNING for a pinned model that was swapped.
+- On OpenRouter's side (your account, not ours): give each key a credit limit (the weekly limit on this key is what stopped the
+  last run, and it worked as a guard), restrict the workspace's allowed models or providers to the ones you accept, and
+  review the Activity page for the models actually billed. Use a separate key for tests and runs so one cannot drain the other.
+
