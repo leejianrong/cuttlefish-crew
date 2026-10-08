@@ -877,7 +877,11 @@ in `~/.cuttlefish/logs/cuttlefish.log`.
 7. **V5-ask (shipped, after E5): a live answer to a kopicode `ask` question.** kopicode v0.4.0 released
    `ask.request`; a `question` Needs-you card with a text box, `answer` (with `text`) and `decline`.
    See ADR-0028's update.
-8. **V5-E6: more ecosystems and isolation**, in three PRs. Node version managers are not part of it.
+8. **V5-limits (shipped, after ask): long unattended runs.** `max_turns` 100 and a 5M token budget on
+   `session.start`; a round that stops on either, unstuck, continues from the handover (`RoundContinued`),
+   up to 20 times per role. ADR-0030. Next: a no-progress stop, a wall-clock limit per round, and ending
+   a round on context pressure (`session.usage`).
+9. **V5-E6: more ecosystems and isolation**, in three PRs. Node version managers are not part of it.
    **E6a (shipped):** prepare poetry, pipenv, Go, Rust, Ruby and Java (see the ADR's update).
    **E6b (shipped):** monorepo subfolders: the root and the folders directly under it; each nested project has its
    own `path`, install, `env.json` key (`node:frontend`) and journal events.

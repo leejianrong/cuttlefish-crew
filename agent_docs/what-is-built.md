@@ -402,3 +402,12 @@ the API and MCP `answer_request` take `text`. The card is a text box with Send a
 activity now says "Asked a question: ..." because the tool-call row cannot say whether anyone answered.
 Sandboxed serve sessions get the handler too. Tests: `test_kopicode_ask.py` against the fake (which has an
 `ask` step), plus the HTTP round trip.
+
+V5-limits (ADR-0030, after V5-ask): **a team can keep going on its own.** `cuttlefish.limits` holds the three
+settings (`CUTTLEFISH_MAX_TURNS` 100, `CUTTLEFISH_SESSION_TOKEN_BUDGET` 5M, `CUTTLEFISH_MAX_CONTINUATIONS` 20).
+`serve_features` reads `version --json` once per binary; with `session.limits` listed, `KopicodeBackend` sends
+the first two on `session.start`. In `run_team`, a round that fails with `max_turns` or `budget_exhausted`
+(`limits.CHECKPOINT_STOPS`) and was not steered, approved or stuck journals `RoundContinued` and re-enters the
+steering path with a "continued automatically" heading and the latest handover. `max_continuations` is also a
+`TeamInput` field. Only `run_team`; `workflow.py` is unchanged. Tests: `test_team_continue.py` (one fake process
+plays every round, because the pool keeps one child per team), `test_limits.py`.

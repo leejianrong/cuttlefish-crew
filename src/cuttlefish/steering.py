@@ -63,8 +63,10 @@ def compose_steered_text(
     steering_text: str,
     *,
     handover_summary: str | None = None,
+    heading: str = "The operator just sent this update -- take it into account:",
 ) -> str:
-    """The next round's task text.
+    """The next round's task text. ``heading`` introduces ``steering_text``; a round the team
+    continued by itself passes its own, since no operator sent anything.
 
     A fresh backend invocation has no memory of a prior round beyond whatever it
     already wrote to the checkout, so this is the only way it learns either what
@@ -83,7 +85,7 @@ def compose_steered_text(
         lines.append(f"Progress so far (checkpointed summary): {handover_summary}")
     for index, summary in enumerate(round_summaries, start=1):
         lines.append(f"Round {index} since that checkpoint: {summary}")
-    lines.append(f"The operator just sent this update -- take it into account: {steering_text}")
+    lines.append(f"{heading} {steering_text}")
     return "\n".join(lines)
 
 

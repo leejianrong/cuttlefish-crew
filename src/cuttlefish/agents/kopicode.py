@@ -29,8 +29,10 @@ from cuttlefish.delegate.kopicode_serve import (
     run_kopicode_serve,
     serve_supports_ask,
     serve_supports_consent_timeout,
+    serve_supports_limits,
 )
 from cuttlefish.delegate.policy import write_policy_file
+from cuttlefish.limits import max_turns_from_env, session_token_budget_from_env
 from cuttlefish.requests import AskingDecider, ShellAsker
 from cuttlefish.sandbox.provider import (
     SandboxHandle,
@@ -134,6 +136,7 @@ class KopicodeBackend:
                 pool=self._pool,
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
+                session_limits=await self._session_limits(),
             )
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
             policy, consent_timeout = await self._consent(allow, mode, asker)
@@ -145,6 +148,7 @@ class KopicodeBackend:
                 secrets=secrets,
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
+                session_limits=await self._session_limits(),
             )
         if mode == "auto":
             raise DelegationError(
@@ -173,6 +177,16 @@ class KopicodeBackend:
             )
         finally:
             policy_path.unlink(missing_ok=True)
+
+    async def _session_limits(self) -> dict[str, int]:
+        """The turn cap and token budget for a session, when this kopicode takes them (v0.4.0).
+        An older one keeps its own defaults (ADR-0030)."""
+        if not await serve_supports_limits(self._binary):
+            return {}
+        return {
+            "max_turns": max_turns_from_env(),
+            "token_budget": session_token_budget_from_env(),
+        }
 
     async def _ask_handler(
         self, asker: ShellAsker | None, consent_timeout: float | None
@@ -215,6 +229,7 @@ class KopicodeBackend:
         secrets: Mapping[str, str],
         consent_timeout: float | None = None,
         ask: AskHandler | None = None,
+        session_limits: Mapping[str, int] | None = None,
     ) -> DelegationOutcome:
         """One sandbox, one ``serve`` child, one session; the sandbox is destroyed after.
 
@@ -242,6 +257,7 @@ class KopicodeBackend:
                     self._spawn_serve, provider, handle, cwd=root, consent_timeout=consent_timeout
                 ),
                 ask=ask,
+                session_limits=session_limits,
             )
         finally:
             await asyncio.shield(provider.destroy(handle))

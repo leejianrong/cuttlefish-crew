@@ -131,16 +131,16 @@ UNCONFIGURABLE_WINDOW = 45.0
 _TIMEOUT_FLAG_SUPPORT: dict[str, bool] = {}
 
 
-_ASK_SUPPORT: dict[str, bool] = {}
+_FEATURES: dict[str, frozenset[str]] = {}
 
 
-async def serve_supports_ask(binary: str) -> bool:
-    """Whether ``binary`` advertises ``ask.request`` (kopicode v0.4.0 and later) in its
-    ``version --json`` features. Probed once per binary; any failure is ``False``, which only
-    leaves the model's question unanswered as before."""
-    if binary in _ASK_SUPPORT:
-        return _ASK_SUPPORT[binary]
-    supported = False
+async def serve_features(binary: str) -> frozenset[str]:
+    """The ``features`` ``binary`` lists in ``version --json`` (kopicode v0.3.0 and later).
+    Probed once per binary; any failure is the empty set, which only leaves a newer capability
+    unused."""
+    if binary in _FEATURES:
+        return _FEATURES[binary]
+    features: frozenset[str] = frozenset()
     try:
         process = await asyncio.create_subprocess_exec(
             binary,
@@ -157,12 +157,23 @@ async def serve_supports_ask(binary: str) -> bool:
             process.kill()
             await process.wait()
             output = b""
-        features = json.loads(output).get("features")
-        supported = isinstance(features, list) and "ask.request" in features
+        listed = json.loads(output).get("features")
+        if isinstance(listed, list):
+            features = frozenset(f for f in listed if isinstance(f, str))
     except (OSError, ValueError, AttributeError):
-        supported = False
-    _ASK_SUPPORT[binary] = supported
-    return supported
+        features = frozenset()
+    _FEATURES[binary] = features
+    return features
+
+
+async def serve_supports_ask(binary: str) -> bool:
+    """Whether ``binary`` advertises ``ask.request`` (kopicode v0.4.0 and later)."""
+    return "ask.request" in await serve_features(binary)
+
+
+async def serve_supports_limits(binary: str) -> bool:
+    """Whether ``binary`` takes ``max_turns`` and ``token_budget`` on ``session.start``."""
+    return "session.limits" in await serve_features(binary)
 
 
 async def serve_supports_consent_timeout(binary: str) -> bool:
@@ -780,6 +791,7 @@ async def run_kopicode_serve(
     process_factory: Callable[[], Awaitable[asyncio.subprocess.Process]] | None = None,
     stuck_threshold: int | None = None,
     ask: AskHandler | None = None,
+    session_limits: Mapping[str, int] | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
 
@@ -790,6 +802,9 @@ async def run_kopicode_serve(
 
     ``consent_timeout`` (seconds) is passed to a child this call spawns as ``--consent-timeout``,
     so kopicode waits that long for an answer; a decider that asks a person needs it (ADR-0028).
+
+    ``session_limits`` (``max_turns``, ``token_budget``) go into ``session.start`` as given; the
+    caller passes them only for a kopicode that advertises ``session.limits`` (v0.4.0).
 
     ``ask`` answers the model's own questions live (``ask_mode: "remote"``); the caller passes
     it only for a kopicode that advertises ``ask.request`` (:func:`serve_supports_ask`).
@@ -854,6 +869,7 @@ async def run_kopicode_serve(
                     "prompt": task_text,
                     "consent_mode": "remote_interactive",
                     **({"ask_mode": "remote"} if ask is not None else {}),
+                    **(session_limits or {}),
                 },
             )
             response = await asyncio.wait_for(pending, timeout)

@@ -131,7 +131,7 @@ def features_binary(tmp_path: Path, features: list[str]) -> str:
 async def test_the_probe_reads_the_features(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(kopicode_serve, "_ASK_SUPPORT", {})
+    monkeypatch.setattr(kopicode_serve, "_FEATURES", {})
     new = features_binary(tmp_path, ["mcp", "ask.request"])
     assert await serve_supports_ask(new) is True
     old_dir = tmp_path / "old"
