@@ -271,3 +271,46 @@ async def test_a_team_ending_ends_its_blocked_request() -> None:
     pending = _blocked(broker)
     assert [o.resolution for o in broker.end_team("t1", "abandoned")] == ["abandoned"]
     assert broker.pending() == [] and pending.id
+
+
+# -- restoring a Stuck card after a restart ------------------------------------------------
+
+
+def _raised_blocked(request_id: str, kind: str = "blocked") -> RequestRaised:
+    return RequestRaised(
+        request_id=request_id,
+        kind=kind,  # type: ignore[arg-type]
+        title="t",
+        detail="d",
+        why="w",
+        answers=[],
+        expires_at="",
+        lands="next_round",
+        role="builder",
+    )
+
+
+async def test_restore_blocked_puts_back_only_blocked_requests_without_journaling_again() -> None:
+    journal = Journal()
+    broker = RequestBroker(journal.append)
+    restored = broker.restore_blocked(
+        "p1",
+        "t1",
+        [_raised_blocked("a"), _raised_blocked("b", kind="permission"), _raised_blocked("c")],
+    )
+    assert [r.id for r in restored] == ["a", "c"]
+    assert [r.id for r in broker.pending("p1")] == ["a", "c"]
+    assert journal.events == []  # the journal already holds the raise
+    assert broker.restore_blocked("p1", "t1", [_raised_blocked("a")]) == []  # not twice
+
+
+async def test_a_restored_card_ends_when_the_role_is_steered_and_when_the_team_ends() -> None:
+    journal = Journal()
+    broker = RequestBroker(journal.append)
+    broker.restore_blocked("p1", "t1", [_raised_blocked("a")])
+    (outcome,) = broker.supersede("t1", "builder")
+    assert outcome.resolution == "superseded" and broker.pending() == []
+    assert journal.kinds() == ["RequestResolved"]
+    broker.restore_blocked("p1", "t2", [_raised_blocked("z")])
+    broker.end_team("t2", "abandoned")
+    assert broker.pending() == []

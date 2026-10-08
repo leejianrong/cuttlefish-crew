@@ -275,6 +275,31 @@ class RequestBroker:
             window_s=NO_DEADLINE_S,
         )
 
+    def restore_blocked(
+        self, project_id: str, team_id: str, records: Iterable[RequestRaised]
+    ) -> list[PendingRequest]:
+        """Put back the ``blocked`` requests a resumed team's journal raised and never resolved.
+
+        A ``blocked`` request has nothing waiting on it, so a restart does not kill it the way it
+        kills a held command: the resumed workflow replays to the same wait for a steer, and the
+        card must be there to say so. Not journaled again; the journal already holds the raise,
+        and the eventual resolution lands against the same id. Any other kind is skipped (its
+        agent process is gone)."""
+        restored: list[PendingRequest] = []
+        for record in records:
+            if record.kind != "blocked" or record.request_id in self._pending:
+                continue
+            pending = PendingRequest(
+                project_id=project_id,
+                team_id=team_id,
+                record=record,
+                deadline=self._now() + timedelta(seconds=NO_DEADLINE_S),
+                _future=asyncio.get_running_loop().create_future(),
+            )
+            self._pending[pending.id] = pending
+            restored.append(pending)
+        return restored
+
     def supersede(self, team_id: str, role: str) -> list[Outcome]:
         """End a role's ``blocked`` requests because a person steered it or decided its round."""
         return [
