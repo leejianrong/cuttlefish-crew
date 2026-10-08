@@ -254,4 +254,6 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **Limits are set for kopicode teams started by the daemon.** `cuttlefish run-team` and `run` read the environment only; Claude Code
   and Codex ignore turns, tokens, context and time (they have no such controls), so a role on them only honours its
   continuation and no-change counters. A change to a project's or role's limits applies at the next start (ADR-0030).
+- **A finished role still shows the attention sprite for a few seconds.** The chip reads "finishing" (calm), but the sprite's "!" and the
+  tab's "!" follow the role's `blocked` status during the short steering grace before the task ends (ADR-0008).
 

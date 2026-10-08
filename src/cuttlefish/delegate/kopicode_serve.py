@@ -507,7 +507,7 @@ class ServeChild:
                 return
             if tokens >= fraction * window and session in self._context_limits:
                 self.pressure[session] = (tokens, window)
-                _LOG.warning(
+                _LOG.info(  # a checkpoint the role carries on from, not a fault
                     "session %s used %d of %d context tokens (%.0f%%): ending the round",
                     session,
                     tokens,
