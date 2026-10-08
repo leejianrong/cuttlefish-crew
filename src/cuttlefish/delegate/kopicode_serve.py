@@ -803,14 +803,21 @@ def _timeout_outcome(
 
 
 def _with_reported_cost(outcome: DelegationOutcome, result: Mapping[str, Any]) -> DelegationOutcome:
-    """The dollar cost kopicode reports for the session (``usage.cost_usd`` on a turn result,
-    v0.4.0), which is the round's own: every delegation is its own session. kopicode leaves it
-    out unless every request reported a cost, and then so does this: never estimated."""
+    """What kopicode itself says the session used (``usage`` on a turn result, v0.4.0): the
+    dollar cost, which is the round's own because every delegation is its own session, and the
+    token total, which replaces the sum of ``provider_response`` sizes (a live 16-round run found
+    that sum 15 to 18 per cent off kopicode's own total). kopicode leaves the cost out unless every
+    request reported one, and then so does this: never estimated."""
     usage = result.get("usage")
-    cost = usage.get("cost_usd") if isinstance(usage, dict) else None
+    if not isinstance(usage, dict):
+        return outcome
+    cost, total = usage.get("cost_usd"), usage.get("total")
+    changes: dict[str, Any] = {}
     if isinstance(cost, int | float) and not isinstance(cost, bool) and cost >= 0:
-        return dataclasses.replace(outcome, cost_usd=float(cost))
-    return outcome
+        changes["cost_usd"] = float(cost)
+    if isinstance(total, int) and not isinstance(total, bool) and total > 0:
+        changes["tokens"] = total
+    return dataclasses.replace(outcome, **changes) if changes else outcome
 
 
 def _pressure_outcome(

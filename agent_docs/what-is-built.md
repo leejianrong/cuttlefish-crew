@@ -483,3 +483,9 @@ V5-routing: the dashboard's screen and project tab live in the URL hash (`lib/ro
 holds one `route` (`go()` pushes history; `popstate`/`hashchange` re-read it); `ProjectDetail` takes its tab as a prop. An unknown hash
 is the project list. Unsaved Permissions or Team drafts are still lost when you leave the project (they were before). Tests: `route.test.ts`.
 
+V5-handover-quality (ADR-0030's sixth update, from the 16-round real run): `handover._write_summary` (third-person prompt with the
+previous summary, one stricter retry, then carry-forward, `_usable`, `_fallback`), `tasks/repo.py` `read_repo_state` appended
+by `maybe_handover(root=...)`, `LlmCallCompleted` journaled per summariser call (with `role`; no longer counted by `_texts`), the
+continuation text in `team._CARRY_ON`, and `kopicode_serve._with_reported_cost` taking `usage.total`. Frontend: "Summary" rows.
+Tests: `test_maybe_handover.py`, `test_workflow.py`, `test_kopicode_serve.py`, `events.test.ts`.
+

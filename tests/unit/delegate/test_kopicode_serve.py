@@ -1203,3 +1203,21 @@ async def test_a_consent_is_logged_in_the_context_of_the_session_that_asked(
         await pool.aclose()
         logger.removeHandler(handler)
     assert seen and all(c.get("team") == "team-2" for c in seen), seen
+
+
+async def test_the_token_total_kopicode_reports_replaces_the_sum_of_response_sizes(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    done = respond()
+    done["result"]["usage"] = {"total": 20887, "cost_usd": 0.0016}
+    binary = fake(
+        [
+            {"start": True},
+            {"emit": event({"kind": "provider_response", "size": 5})},
+            {"emit": done},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    outcome = await run(binary, tmp_path)
+    assert outcome.tokens == 20887

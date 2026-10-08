@@ -125,7 +125,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
     max_cost_usd = task_input.get("max_cost_usd")
 
     await journal(task_id, TaskSubmitted(text=text))
-    await maybe_handover(task_id, token_budget=token_budget)
+    await maybe_handover(task_id, token_budget=token_budget, root=root)
 
     # Every delegation now runs behind its own backend's declared-allowlist
     # policy gate (KAN-987, ADR-0002's addendum) -- this records what was
@@ -178,7 +178,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
             # it always has.
             reason = str(exc)
             await journal(task_id, DelegationFailed(reason=reason))
-            await maybe_handover(task_id, token_budget=token_budget)
+            await maybe_handover(task_id, token_budget=token_budget, root=root)
             await journal(task_id, TaskFailed(error=reason))
             return {"status": "failed", "error": reason}
 
@@ -239,7 +239,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
         # all. A fresh handover already covers this round's own outcome (just
         # journaled above), so `round_summaries` -- the *un*-checkpointed rounds --
         # resets rather than restating it again next round.
-        if await maybe_handover(task_id, token_budget=token_budget):
+        if await maybe_handover(task_id, token_budget=token_budget, root=root):
             round_summaries.clear()
 
         # A round finalizes unless something actively redirects it -- either a
@@ -312,7 +312,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
             text, round_summaries, redirect_text, handover_summary=handover_summary
         )
 
-    await maybe_handover(task_id, token_budget=token_budget)
+    await maybe_handover(task_id, token_budget=token_budget, root=root)
 
     if outcome.kind == "completed":
         await journal(task_id, TaskCompleted(result=outcome.summary))

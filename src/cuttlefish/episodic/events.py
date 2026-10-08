@@ -46,6 +46,8 @@ class LlmCallCompleted:
     response: str
     input_tokens: int | None = None
     output_tokens: int | None = None
+    #: Which role's handover this call wrote (a team's), so the log can say whose.
+    role: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

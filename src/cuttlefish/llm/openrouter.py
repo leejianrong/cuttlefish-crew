@@ -23,7 +23,9 @@ from cuttlefish.llm.provider import LlmResponse
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 DEFAULT_MODEL = "openrouter/auto"
-DEFAULT_MAX_TOKENS = 4096
+#: Room for a model that thinks before it answers: with `openrouter/auto` a reasoning model
+#: spent all 4096 tokens on that and returned an empty summary (found by a live run).
+DEFAULT_MAX_TOKENS = 8192
 
 
 class MissingApiKeyError(RuntimeError):
@@ -50,6 +52,8 @@ class OpenRouterLlmProvider:
             model=self._model,
             max_tokens=self._max_tokens,
             messages=[{"role": "user", "content": prompt}],
+            # A short report needs little thinking; models that cannot be told so ignore it.
+            extra_body={"reasoning": {"effort": "low"}},
         )
         choice = response.choices[0]
         text = choice.message.content or ""

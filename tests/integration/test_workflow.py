@@ -197,8 +197,8 @@ async def test_handover_fires_and_is_readable_from_the_journal(
             episodic_store=episodic_store,
             llm_provider=ReplayLlmProvider(
                 [
-                    LlmResponse(model="replay", text="handover after submission"),
-                    LlmResponse(model="replay", text="handover after delegation failure"),
+                    LlmResponse(model="replay", text="Done: handover after submission"),
+                    LlmResponse(model="replay", text="Done: handover after delegation failure"),
                 ]
             ),
             kopicode_binary="kopicode",
@@ -228,25 +228,27 @@ async def test_handover_fires_and_is_readable_from_the_journal(
     kinds = [type(event.payload).__name__ for event in events]
     assert kinds == [
         "TaskSubmitted",
+        "LlmCallCompleted",  # the summariser's own call, journaled for its cost
         "HandoverWritten",
         "DelegationStarted",
         "DelegationFailed",
+        "LlmCallCompleted",
         "HandoverWritten",
         "TaskFailed",
     ]
-    first_handover = events[1].payload
+    first_handover = events[2].payload
     assert isinstance(first_handover, HandoverWritten)
-    assert first_handover.summary == "handover after submission"
+    assert first_handover.summary == "Done: handover after submission"
     assert first_handover.covers_seq_from == 1
     assert first_handover.covers_seq_to == 1
 
     # Covers both DelegationStarted (seq 3) and DelegationFailed (seq 4) -- the
     # whole window since the first handover.
-    second_handover = events[4].payload
+    second_handover = events[6].payload
     assert isinstance(second_handover, HandoverWritten)
-    assert second_handover.summary == "handover after delegation failure"
-    assert second_handover.covers_seq_from == 3
-    assert second_handover.covers_seq_to == 4
+    assert second_handover.summary == "Done: handover after delegation failure"
+    assert second_handover.covers_seq_from == 4
+    assert second_handover.covers_seq_to == 5
 
     episodic_store.close()
     satay_store.close()

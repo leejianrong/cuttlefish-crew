@@ -200,3 +200,34 @@ key inherits: **role over project over the daemon's environment over the built-i
   the daemon's; a resume repeats them with the other arguments. `cuttlefish run` has no such flags (it does not continue).
   Claude Code and Codex have no such controls, so for them the settings are inert, and the dashboard says so.
 
+## Update: what the first 16-round run said about handovers
+
+A real run (kopicode v0.4.0, qwen3-coder-next, 9 modules, 45 tests, 12 turns per round to force continuations, about $0.12 for
+the rounds) finished: 16 rounds, 15 continuations, 45 of 45 tests passing. Its handovers were the weak part:
+
+- Two of the 15 were empty and three were the model narrating ("I'll re-verify ..."), so the next round was told nothing, and
+  a later handover claimed a commit had never happened that git showed (the chain had lost it).
+- Each covers only the window after the last one, and nothing carried the earlier summary forward except the next round's
+  prompt happening to embed it.
+- The summariser sees tool names and status but not output, so every handover said test results were unconfirmed.
+- Rounds 11 to 15 re-read files and re-ran checks with no edits, about 40 per cent of the run.
+- The summariser's calls were not journaled, so their cost was invisible; the daemon's token total ran 15 to 18 per cent above
+  kopicode's own session total.
+
+Changes: the summary prompt now asks for a third-person report (Done, Remaining, Failed, Open questions), states that the log has
+no tool output so results are "unconfirmed" and never "did not happen", and includes the previous summary (without its repository
+block) to carry forward. An empty or first-person answer is asked for once more; failing again, the previous summary is carried
+forward with the files changed since, never an empty handover. After the summary, cuttlefish appends `git log` and `git status`
+read by `tasks.repo.read_repo_state`, so the next session starts from facts about the repository. The continuation prompt tells
+the agent to trust that state, not to re-read or re-run what it settles, and to do the next unfinished step first. Each
+summariser call is journaled as `LlmCallCompleted` (with its role, tokens in and out; shown as "Summary" in the activity log and
+not counted as progress to summarise), and a round's token total is now kopicode's own `usage.total`.
+
+Checked live, partly: a rerun on this code was cut off by the OpenRouter key's weekly limit after two rounds. Those two handovers were
+third-person reports with the headings, with a repository block that matched git, and wrote "unconfirmed" where the old ones wrote
+"did not happen"; token totals matched kopicode's session sums exactly (95,169, 102,417 and 21,310) and the cost too. It also found
+the summariser (`openrouter/auto` resolved to a reasoning model) twice returning an empty answer after spending its whole 4096-token
+output cap, so the second handover was the first carried forward, and a `max_turns` stop filed under "Failed". The summariser now has
+8192 tokens and asks for low reasoning effort (not yet seen live), and a round that ended for room is summarised as ending for room.
+Not seen: rounds 3 to 16, so whether the no-edit loop and the false-claim drift are gone is open until a full run.
+
