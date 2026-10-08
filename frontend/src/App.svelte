@@ -9,6 +9,7 @@
   import Shell from "./lib/components/Shell.svelte";
   import SpriteGallery from "./lib/components/SpriteGallery.svelte";
   import { NAV_ITEMS } from "./lib/nav";
+  import { HOME, parseHash, routeHash, sameRoute, type ProjectTab, type Route } from "./lib/route";
   import { clearConnection, loadConnection, saveConnection } from "./lib/session";
   import { applyTheme, loadTheme, type ThemePreference } from "./lib/theme";
 
@@ -16,11 +17,34 @@
   let client = $state<FleetClient | null>(
     remembered ? new FleetClient(remembered.baseUrl, remembered.token) : null,
   );
-  let openProjectId = $state<string | null>(null);
-  let showGallery = $state(false);
-  let showRoles = $state(false);
-  let adding = $state(false);
-  let showNeedsYou = $state(false);
+  // Where we are lives in the URL hash, so a reload, Back and a pasted link land on the same screen.
+  let route = $state<Route>(parseHash(window.location.hash));
+  const openProjectId = $derived(route.view === "project" ? route.id : null);
+  const projectTab = $derived<ProjectTab>(route.view === "project" ? route.tab : "overview");
+  const showGallery = $derived(route.view === "sprites");
+  const showRoles = $derived(route.view === "roles");
+  const showNeedsYou = $derived(route.view === "needs-you");
+  const adding = $derived(route.view === "add");
+
+  function go(next: Route) {
+    if (sameRoute(next, route)) return;
+    route = next;
+    history.pushState(null, "", routeHash(next));
+  }
+
+  // Back, Forward and a hand-edited hash re-read the URL.
+  $effect(() => {
+    const reread = () => {
+      const next = parseHash(window.location.hash);
+      if (!sameRoute(next, route)) route = next;
+    };
+    window.addEventListener("popstate", reread);
+    window.addEventListener("hashchange", reread);
+    return () => {
+      window.removeEventListener("popstate", reread);
+      window.removeEventListener("hashchange", reread);
+    };
+  });
   // Every request waiting on a person, polled with the same 2.5 s beat as the rest of the app.
   let waiting = $state<NeedsYouRequest[]>([]);
   let waitingFetchedAt = $state(Date.now());
@@ -63,32 +87,30 @@
 
   function disconnect() {
     client = null;
-    openProjectId = null;
-    showGallery = false;
-    showRoles = false;
-    showNeedsYou = false;
-    adding = false;
+    go(HOME);
     waiting = [];
     clearConnection();
   }
 
   function navigate(id: string) {
-    showGallery = id === "sprites";
-    showRoles = id === "roles";
-    showNeedsYou = id === "needs-you";
     // Choosing Projects from inside a project or the add screen goes back to the list.
-    if (id === "projects") {
-      openProjectId = null;
-      adding = false;
-    }
+    go(
+      id === "sprites"
+        ? { view: "sprites" }
+        : id === "roles"
+          ? { view: "roles" }
+          : id === "needs-you"
+            ? { view: "needs-you" }
+            : HOME,
+    );
   }
 </script>
 
 {#if !client}
   {#if showGallery}
-    <SpriteGallery onBack={() => (showGallery = false)} />
+    <SpriteGallery onBack={() => go(HOME)} />
   {:else}
-    <ConnectScreen {onConnected} onShowGallery={() => (showGallery = true)} />
+    <ConnectScreen {onConnected} onShowGallery={() => go({ view: "sprites" })} />
   {/if}
 {:else}
   <Shell
@@ -100,7 +122,7 @@
     onThemeChange={(next) => (theme = next)}
   >
     {#if showGallery}
-      <SpriteGallery onBack={() => (showGallery = false)} />
+      <SpriteGallery onBack={() => go(HOME)} />
     {:else if showRoles}
       <RolesLibrary {client} />
     {:else if showNeedsYou}
@@ -110,27 +132,27 @@
         fetchedAt={waitingFetchedAt}
         unreachable={waitingUnreachable}
         onAnswered={refreshWaiting}
-        onOpenProject={(id) => {
-          showNeedsYou = false;
-          openProjectId = id;
-        }}
+        onOpenProject={(id) => go({ view: "project", id, tab: "overview" })}
       />
     {:else if adding}
       <AddProject
         {client}
-        onCancel={() => (adding = false)}
-        onRegistered={(project) => {
-          adding = false;
-          openProjectId = project.id;
-        }}
+        onCancel={() => go(HOME)}
+        onRegistered={(project) => go({ view: "project", id: project.id, tab: "overview" })}
       />
     {:else if openProjectId}
-      <ProjectDetail {client} projectId={openProjectId} onBack={() => (openProjectId = null)} />
+      <ProjectDetail
+        {client}
+        projectId={openProjectId}
+        tab={projectTab}
+        onTabChange={(tab) => go({ view: "project", id: openProjectId, tab })}
+        onBack={() => go(HOME)}
+      />
     {:else}
       <Portfolio
         {client}
-        onOpenProject={(id) => (openProjectId = id)}
-        onAddProject={() => (adding = true)}
+        onOpenProject={(id) => go({ view: "project", id, tab: "overview" })}
+        onAddProject={() => go({ view: "add" })}
       />
     {/if}
   </Shell>

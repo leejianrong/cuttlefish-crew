@@ -478,3 +478,8 @@ completed is only finishing; the role card chip, its note and the office sprite 
 V5-cli-limits: `run-team --limit KEY=N` and `--role-limit NAME:KEY=N` (`cli._parse_limits`, validated by `limits.validate_limits`) put
 `limits` on each `RoleInput`, the same shape the daemon composes. Tests: `test_cli_parser.py`.
 
+V5-routing: the dashboard's screen and project tab live in the URL hash (`lib/route.ts`: `#/projects`, `#/projects/<id>[/<tab>]`, `#/add`,
+`#/needs-you`, `#/roles`, `#/sprites`), so a reload, the browser's Back and Forward and a pasted link land on the same screen. `App.svelte`
+holds one `route` (`go()` pushes history; `popstate`/`hashchange` re-read it); `ProjectDetail` takes its tab as a prop. An unknown hash
+is the project list. Unsaved Permissions or Team drafts are still lost when you leave the project (they were before). Tests: `route.test.ts`.
+

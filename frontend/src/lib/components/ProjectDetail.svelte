@@ -9,6 +9,7 @@
   } from "../api";
   import { installProgress } from "../environment";
   import { latestRound } from "../events";
+  import type { ProjectTab } from "../route";
   import { modeLabel, startFailure } from "../team";
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
@@ -25,10 +26,17 @@
   let {
     client,
     projectId,
+    tab,
+    onTabChange,
     onBack,
-  }: { client: FleetClient; projectId: string; onBack: () => void } = $props();
-
-  type TabId = "overview" | "needs-you" | "permissions" | "team";
+  }: {
+    client: FleetClient;
+    projectId: string;
+    /** Which tab is open: part of the URL, so a reload and Back keep it. */
+    tab: ProjectTab;
+    onTabChange: (tab: ProjectTab) => void;
+    onBack: () => void;
+  } = $props();
 
   let project = $state<ProjectSummary | null>(null);
   let events = $state<EpisodicEventView[]>([]);
@@ -57,7 +65,6 @@
   let confirmingStop = $state(false);
   let stopping = $state(false);
   let permissionsDirty = $state(false);
-  let tab = $state<TabId>("overview");
   // The scene's roles. A role finishing well is not asking for anything: no attention mark on its sprite.
   const sceneRoles = $derived.by(() => {
     const current = project;
@@ -225,7 +232,7 @@
       <p class="root mono">{project.root}</p>
     </header>
 
-    <Tabs tabs={TABS} active={tab} label="Project" onSelect={(id) => (tab = id as TabId)} />
+    <Tabs tabs={TABS} active={tab} label="Project" onSelect={(id) => onTabChange(id as ProjectTab)} />
 
     <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== "overview"}>
       {#if resumedEvents.length > 0}
@@ -377,7 +384,7 @@
 
       <section class="card filled events" aria-labelledby="activity-heading">
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>
-        <EventLog {events} onOpenPermissions={() => (tab = "permissions")} />
+        <EventLog {events} onOpenPermissions={() => onTabChange("permissions")} />
       </section>
     </div>
 
@@ -397,7 +404,7 @@
         {client}
         {project}
         onChanged={refresh}
-        onOpenTeam={() => (tab = "team")}
+        onOpenTeam={() => onTabChange("team")}
         onDirtyChange={(dirty) => (permissionsDirty = dirty)}
       />
     </div>
