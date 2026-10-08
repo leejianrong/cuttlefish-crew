@@ -50,6 +50,12 @@
   // message (ADR-0008): showing Approve and Reject then offers a decision nobody is waiting for.
   const awaitingDecision = $derived(requireApproval || tokensOverBudget || costOverBudget);
 
+  // A round that finished well leaves the role "blocked" for a few seconds, in case you want to add
+  // to it (ADR-0008). That is the task ending, not something needing you: say so, calmly.
+  const finishing = $derived(
+    status === "blocked" && !awaitingDecision && !held && lastRound?.kind === "completed",
+  );
+
   let message = $state("");
   let sending = $state(false);
   let sent = $state(false);
@@ -99,7 +105,11 @@
 <div class="card filled role-card">
   <div class="role-head">
     <span class="role-name">{role}</span>
-    <StatusChip {status} />
+    {#if finishing}
+      <StatusChip {status} tone="done" label="finishing" />
+    {:else}
+      <StatusChip {status} />
+    {/if}
   </div>
   <p class="usage" class:over={tokensOverBudget || costOverBudget}>
     {usage.tokens.toLocaleString()} tokens{budget.max_tokens !== null

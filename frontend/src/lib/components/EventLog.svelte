@@ -174,7 +174,10 @@
   .row.handover {
     background: color-mix(in srgb, var(--accent) 8%, transparent);
     border-radius: 6px;
+    /* Padding and a matching negative margin keep its columns on the other rows' lines. */
+    margin: 0 -0.4rem;
     padding-left: 0.4rem;
+    padding-right: 0.4rem;
   }
 
   .row.handover .type {
@@ -200,9 +203,8 @@
     align-items: center;
     gap: 0.6rem;
     grid-template-columns: unset;
-    background: var(--status-blocked-bg);
-    color: var(--status-blocked-fg);
-    border: 1px solid var(--status-blocked-fg);
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
     border-radius: 8px;
     padding: 0.5rem 0.75rem;
   }

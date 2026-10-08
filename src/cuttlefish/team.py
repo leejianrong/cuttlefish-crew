@@ -48,7 +48,13 @@ from cuttlefish.episodic.events import (
     decode_payload,
 )
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, maybe_handover
-from cuttlefish.limits import CHECKPOINT_STOPS, max_continuations_from_env, max_idle_rounds_from_env
+from cuttlefish.limits import (
+    CHECKPOINT_STOPS,
+    max_continuations_for,
+    max_continuations_from_env,
+    max_idle_rounds_for,
+    max_idle_rounds_from_env,
+)
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 from cuttlefish.steering import DEFAULT_STEERING_GRACE_SECONDS, compose_steered_text, steering_key
 from cuttlefish.tasks.delegate import delegate_to_agent_backend, raise_no_progress_card
@@ -71,6 +77,10 @@ class RoleInput(TypedDict):
     backend: NotRequired[str]
     access: NotRequired[str]
     presets: NotRequired[list[str]]
+    #: This role's own limits (the project's laid under the role's, ADR-0030): turns, token
+    #: budget, context, time per round, continuations, rounds with no change. A key it lacks
+    #: falls back to the team's setting, then the environment.
+    limits: NotRequired[dict[str, int]]
 
 
 class TeamInput(TypedDict):
@@ -196,6 +206,9 @@ def _backend_kwargs(role: RoleInput) -> dict[str, Any]:
     presets = role.get("presets")
     if presets is not None:
         kwargs["presets"] = presets
+    limits = role.get("limits")
+    if limits:
+        kwargs["limits"] = limits
     return kwargs
 
 
@@ -295,13 +308,22 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     }
     current_text: dict[str, str] = {role["name"]: role["text"] for role in roles}
     round_summaries: dict[str, list[str]] = {role["name"]: [] for role in roles}
-    max_continuations = team_input.get("max_continuations")
-    if max_continuations is None:
-        max_continuations = max_continuations_from_env()
+    team_continuations = team_input.get("max_continuations")
+    if team_continuations is None:
+        team_continuations = max_continuations_from_env()
+    # Per role: its own limit, else the team's, else the environment's (ADR-0030).
+    max_continuations_by_role: dict[str, int] = {}
+    for role in roles:
+        own = max_continuations_for(role.get("limits"))
+        max_continuations_by_role[role["name"]] = team_continuations if own is None else own
     continuations: dict[str, int] = {role["name"]: 0 for role in roles}
-    max_idle_rounds = team_input.get("max_idle_rounds")
-    if max_idle_rounds is None:
-        max_idle_rounds = max_idle_rounds_from_env()
+    team_idle = team_input.get("max_idle_rounds")
+    if team_idle is None:
+        team_idle = max_idle_rounds_from_env()
+    max_idle_by_role: dict[str, int] = {}
+    for role in roles:
+        own_idle = max_idle_rounds_for(role.get("limits"))
+        max_idle_by_role[role["name"]] = team_idle if own_idle is None else own_idle
     idle_rounds: dict[str, int] = {role["name"]: 0 for role in roles}
     final_outcome: dict[str, DelegationOutcome | BaseException] = {}
 
@@ -449,6 +471,8 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             idle_rounds[name] = (
                 (idle_rounds[name] + 1) if checkpoint and not outcome.edited_paths else 0
             )
+            max_idle_rounds = max_idle_by_role[name]
+            max_continuations = max_continuations_by_role[name]
             no_progress = checkpoint and 0 < max_idle_rounds <= idle_rounds[name]
             auto_continue = (
                 not require_approval
@@ -558,15 +582,17 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             }
         else:
             reason = outcome.reason or outcome.summary
+            max_idle_rounds = max_idle_by_role[name]
+            max_continuations = max_continuations_by_role[name]
             if _checkpoint_reason(outcome) and idle_rounds[name] >= max_idle_rounds > 0:
                 reason += (
                     f"; it changed no file in {idle_rounds[name]} rounds in a row, so it was "
-                    "not continued (CUTTLEFISH_MAX_IDLE_ROUNDS)"
+                    "not continued (the rounds-with-no-change setting, CUTTLEFISH_MAX_IDLE_ROUNDS)"
                 )
             elif _checkpoint_reason(outcome) and max_continuations > 0:
                 reason += (
                     f"; it had already continued {continuations[name]} of {max_continuations} "
-                    "times on its own (CUTTLEFISH_MAX_CONTINUATIONS)"
+                    "times on its own (the continuations setting, CUTTLEFISH_MAX_CONTINUATIONS)"
                 )
             await journal(team_id, TaskFailed(error=reason, role=name))
             role_results[name] = {"status": "failed", "error": reason}

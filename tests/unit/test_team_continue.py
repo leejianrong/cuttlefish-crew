@@ -311,3 +311,41 @@ async def test_a_continuation_writes_a_handover_even_when_the_journal_is_small(
     store.close()
     assert result["status"] == "completed"
     assert "BUILT slug; NEXT wrap" in _sent(tmp_path)[1]["params"]["prompt"]
+
+
+def _builder(**limits: int) -> list[dict[str, Any]]:
+    return [{"name": "builder", "text": "build it", "limits": limits}]
+
+
+async def test_a_roles_own_turn_limit_is_what_kopicode_is_told(tmp_path: Path) -> None:
+    result, _ = await _run(
+        tmp_path,
+        _wrapper(tmp_path, stops=0),
+        roles=_builder(max_turns=7, session_token_budget=1234),
+    )
+    assert result["status"] == "completed"
+    params = _sent(tmp_path)[0]["params"]
+    assert params["max_turns"] == 7 and params["token_budget"] == 1234
+
+
+async def test_a_roles_own_continuation_count_beats_the_teams(tmp_path: Path) -> None:
+    result, payloads = await _run(
+        tmp_path,
+        _wrapper(tmp_path, stops=99),
+        roles=_builder(max_continuations=1, max_idle_rounds=0),
+        max_continuations=20,
+    )
+    assert result["status"] == "failed"
+    assert [p.count for p in payloads if isinstance(p, RoundContinued)] == [1]
+    assert "continued 1 of 1 times" in result["roles"]["builder"]["error"]
+
+
+async def test_a_roles_idle_limit_holds_it_sooner_than_the_teams(tmp_path: Path) -> None:
+    result, payloads = await _run(
+        tmp_path,
+        _script(tmp_path, [s for _ in range(9) for s in _round("max_turns", 4)]),
+        roles=_builder(max_idle_rounds=1),
+        steerable=False,
+    )
+    assert result["status"] == "failed"
+    assert len([p for p in payloads if isinstance(p, DelegationStarted)]) == 1

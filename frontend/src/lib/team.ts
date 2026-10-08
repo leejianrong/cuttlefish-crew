@@ -102,7 +102,8 @@ export function canReset(role: RoleDefinition, builtins: readonly BuiltinRole[])
 export function resetRole(role: RoleDefinition, builtins: readonly BuiltinRole[]): RoleDefinition {
   const builtin = builtinByName(builtins, role.name);
   if (!builtin) return role;
-  return { ...roleFromBuiltin(builtin), backend: role.backend ?? null };
+  // Limits are not part of the built-in role: a reset puts back the prompt and permissions only.
+  return { ...roleFromBuiltin(builtin), backend: role.backend ?? null, limits: role.limits };
 }
 
 /** Built-ins not yet on the team, for the "Add a role" menu. */

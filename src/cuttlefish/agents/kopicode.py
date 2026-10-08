@@ -34,10 +34,10 @@ from cuttlefish.delegate.kopicode_serve import (
 )
 from cuttlefish.delegate.policy import write_policy_file
 from cuttlefish.limits import (
-    context_limit_from_env,
-    max_turns_from_env,
-    round_timeout_from_env,
-    session_token_budget_from_env,
+    context_limit_for,
+    max_turns_for,
+    round_timeout_for,
+    session_token_budget_for,
 )
 from cuttlefish.requests import AskingDecider, ShellAsker
 from cuttlefish.sandbox.provider import (
@@ -127,8 +127,12 @@ class KopicodeBackend:
         sandbox_provider: SandboxProvider | None,
         mode: str = "standard",
         asker: ShellAsker | None = None,
+        limits: Mapping[str, int] | None = None,
     ) -> DelegationOutcome:
-        """``asker`` (ADR-0028) lets a command nothing approves be put to a person, who has
+        """``limits`` are the project's and role's own settings (turns, token budget, context,
+        time); a key it lacks falls back to the environment, then the built-in default.
+
+        ``asker`` (ADR-0028) lets a command nothing approves be put to a person, who has
         ``asker.window_s`` to answer (less when this kopicode cannot wait that long). Only the
         ``serve`` transport can hold a request open; ``run --print`` ignores it."""
         if self._transport == "serve" and sandbox_provider is None:
@@ -142,9 +146,9 @@ class KopicodeBackend:
                 pool=self._pool,
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
-                session_limits=await self._session_limits(),
-                context_limit=await self._context_limit(),
-                timeout=round_timeout_from_env(),
+                session_limits=await self._session_limits(limits),
+                context_limit=await self._context_limit(limits),
+                timeout=round_timeout_for(limits),
             )
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
             policy, consent_timeout = await self._consent(allow, mode, asker)
@@ -156,9 +160,9 @@ class KopicodeBackend:
                 secrets=secrets,
                 consent_timeout=consent_timeout,
                 ask=await self._ask_handler(asker, consent_timeout),
-                session_limits=await self._session_limits(),
-                context_limit=await self._context_limit(),
-                timeout=round_timeout_from_env(),
+                session_limits=await self._session_limits(limits),
+                context_limit=await self._context_limit(limits),
+                timeout=round_timeout_for(limits),
             )
         if mode == "auto":
             raise DelegationError(
@@ -188,19 +192,19 @@ class KopicodeBackend:
         finally:
             policy_path.unlink(missing_ok=True)
 
-    async def _context_limit(self) -> float | None:
+    async def _context_limit(self, limits: Mapping[str, int] | None = None) -> float | None:
         """How much of the model's window a round may fill, when this kopicode reports it (v0.4.0);
         an older one has nothing to read it from (ADR-0030)."""
-        return context_limit_from_env() if await serve_supports_usage(self._binary) else None
+        return context_limit_for(limits) if await serve_supports_usage(self._binary) else None
 
-    async def _session_limits(self) -> dict[str, int]:
+    async def _session_limits(self, limits: Mapping[str, int] | None = None) -> dict[str, int]:
         """The turn cap and token budget for a session, when this kopicode takes them (v0.4.0).
         An older one keeps its own defaults (ADR-0030)."""
         if not await serve_supports_limits(self._binary):
             return {}
         return {
-            "max_turns": max_turns_from_env(),
-            "token_budget": session_token_budget_from_env(),
+            "max_turns": max_turns_for(limits),
+            "token_budget": session_token_budget_for(limits),
         }
 
     async def _ask_handler(

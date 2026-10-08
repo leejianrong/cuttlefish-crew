@@ -58,6 +58,7 @@ from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
+from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
     ACCESS_LEVELS,
     BACKEND_NOTES,
@@ -107,6 +108,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "backend": project.backend,
         "mode": project.mode,
         "env_prepare": project.env_prepare,
+        "limits": dict(project.limits),
         "presets": list(project.presets if project.presets is not None else DEFAULT_PRESETS),
         "roles": [
             {
@@ -114,6 +116,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
                 "persona": r.persona,
                 "backend": r.backend,
                 "access": r.access,
+                "limits": dict(r.limits),
                 "default_prompt": is_default_prompt(r),
             }
             for r in project.roles
@@ -206,9 +209,18 @@ def _roles_from_body(body: dict[str, Any]) -> tuple[RoleDefinition, ...]:
             persona=r.get("persona", ""),
             backend=_backend_from(r.get("backend")),
             access=_access_from(r.get("access")),
+            limits=_limits_from(r.get("limits")),
         )
         for r in body.get("roles", [])
     )
+
+
+def _limits_from(value: Any) -> dict[str, int]:
+    """A request's limits (ADR-0030): known keys, whole numbers in range, ``null`` inherits."""
+    try:
+        return validate_limits(value)
+    except LimitsError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def _access_from(value: Any) -> str | None:
@@ -472,6 +484,26 @@ def create_app(
             ],
         }
 
+    @app.get("/api/limits")
+    async def limits_catalog() -> dict[str, Any]:
+        """The settings a project or a role may override, each with what it reads now when
+        nothing is set (the environment variable, else the built-in default)."""
+        return {
+            "limits": [
+                {
+                    "key": spec.key,
+                    "title": spec.title,
+                    "summary": spec.summary,
+                    "unit": spec.unit,
+                    "minimum": spec.minimum,
+                    "maximum": spec.maximum,
+                    "default": spec.effective(),
+                    "zero_means": spec.zero_means,
+                }
+                for spec in LIMIT_SPECS
+            ]
+        }
+
     @app.get("/api/roles")
     async def list_builtin_roles() -> dict[str, Any]:
         return {
@@ -601,6 +633,20 @@ def create_app(
             return _project_json(daemon, project_id)
         except UnknownPresetError as exc:
             raise HTTPException(400, str(exc)) from exc
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/limits")
+    async def update_limits(project_id: str, request: Request) -> dict[str, Any]:
+        """Set (or, with an empty object, clear) the project's own limits. A team already
+        running keeps the values it started with."""
+        body = await _json_body(request)
+        if "limits" not in body:
+            raise HTTPException(400, "'limits' is required; send {} to clear them")
+        limits = _limits_from(body.get("limits"))
+        try:
+            daemon.projects.update_limits(project_id, limits)
+            return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 

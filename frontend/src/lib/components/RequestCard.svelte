@@ -84,7 +84,9 @@
     {#if request.role}<span class="label-large who">{request.role}</span>{/if}
     {#if request.backend}<span class="tag">{request.backend}</span>{/if}
     {#if showProject}<span class="label-medium muted">{request.project_name}</span>{/if}
-    <span class="label-medium lands" class:live>{landsLabel(request.lands)}</span>
+    <span class="label-medium lands" class:live>
+      {blocked ? "Waits for your message, no time limit" : landsLabel(request.lands)}
+    </span>
   </div>
 
   <h3 id="req-{request.id}" class="title-medium">{request.title}</h3>

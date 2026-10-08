@@ -9,7 +9,8 @@ the stuck-agent detector (ADR-0029) and the run's cost ceilings are what stop a 
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 
 #: Turns one prompt may take. kopicode's own REPL default; its ``serve`` default is 20.
 DEFAULT_MAX_TURNS = 100
@@ -86,3 +87,175 @@ def context_limit_from_env(environ: Mapping[str, str] | None = None) -> float | 
         environ=environ,
     )
     return min(percent, 95) / 100 if percent > 0 else None
+
+
+# --- settings: a project's and a role's own limits ---------------------------------------------
+#
+# Every limit above is a global environment variable. A project (and a role in it) may set its
+# own: role over project over the environment over the built-in default. Plain ``dict[str, int]``
+# everywhere, so it journals, persists and travels as JSON; an absent key inherits.
+
+
+class LimitsError(ValueError):
+    """A limits mapping with an unknown key or a value out of range."""
+
+
+@dataclass(frozen=True, slots=True)
+class LimitSpec:
+    """One setting: what the dashboard shows and the range the API accepts."""
+
+    key: str
+    title: str
+    summary: str
+    unit: str
+    minimum: int
+    maximum: int | None
+    #: What a role or project that sets nothing gets right now (the environment, else built-in).
+    effective: Callable[[], int]
+    #: Meaning of ``0``, when it is more than the smallest value (``None``: it is just a number).
+    zero_means: str | None = None
+
+
+def _env_round_timeout_minutes() -> int:
+    seconds = round_timeout_from_env()
+    return 0 if seconds is None else max(round(seconds / 60), 1)
+
+
+def _env_context_percent() -> int:
+    fraction = context_limit_from_env()
+    return 0 if fraction is None else round(fraction * 100)
+
+
+LIMIT_SPECS: tuple[LimitSpec, ...] = (
+    LimitSpec(
+        "max_turns",
+        "Turns per round",
+        "How many model turns one round may take before it stops for room and the role "
+        "continues from the handover.",
+        "turns",
+        1,
+        None,
+        max_turns_from_env,
+    ),
+    LimitSpec(
+        "session_token_budget",
+        "Tokens per round",
+        "Tokens one round may spend, counting the history resent on every request, so it is "
+        "far more than the window.",
+        "tokens",
+        0,
+        None,
+        session_token_budget_from_env,
+        zero_means="no limit",
+    ),
+    LimitSpec(
+        "context_limit_percent",
+        "Context limit",
+        "How full the model's context window may get before the round is ended and the role "
+        "continues with a fresh one. Needs kopicode v0.4.0; an older one ignores it.",
+        "% of the model's window",
+        0,
+        95,
+        _env_context_percent,
+        zero_means="off",
+    ),
+    LimitSpec(
+        "round_timeout_minutes",
+        "Time per round",
+        "How long one round may run before cuttlefish stops it; the role continues from the "
+        "handover. Time spent waiting for you counts.",
+        "minutes",
+        0,
+        None,
+        _env_round_timeout_minutes,
+        zero_means="no limit",
+    ),
+    LimitSpec(
+        "max_continuations",
+        "Continuations",
+        "How many times a role may carry on by itself after a round that ran out of room, "
+        "in one run.",
+        "continuations",
+        0,
+        None,
+        max_continuations_from_env,
+        zero_means="a round that runs out of room fails the role",
+    ),
+    LimitSpec(
+        "max_idle_rounds",
+        "Rounds with no change",
+        "How many rounds in a row may use all their room without changing a file before the "
+        "role is held for you.",
+        "rounds",
+        0,
+        None,
+        max_idle_rounds_from_env,
+        zero_means="never held",
+    ),
+)
+
+_SPEC_BY_KEY = {spec.key: spec for spec in LIMIT_SPECS}
+
+
+def validate_limits(raw: object) -> dict[str, int]:
+    """``raw`` as a limits mapping: only known keys, whole numbers in range. ``None`` values
+    are dropped (they mean "inherit"). Raises :class:`LimitsError` naming the first problem."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        raise LimitsError("'limits' must be an object")
+    found: dict[str, int] = {}
+    for key, value in raw.items():
+        spec = _SPEC_BY_KEY.get(key)
+        if spec is None:
+            raise LimitsError(f"unknown limit {key!r}; known: {', '.join(_SPEC_BY_KEY)}")
+        if value is None:
+            continue
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise LimitsError(f"{spec.title.lower()} must be a whole number")
+        if value < spec.minimum or (spec.maximum is not None and value > spec.maximum):
+            high = f" to {spec.maximum}" if spec.maximum is not None else " or more"
+            raise LimitsError(f"{spec.title.lower()} must be {spec.minimum}{high}")
+        found[key] = value
+    return found
+
+
+def merge_limits(*layers: Mapping[str, int] | None) -> dict[str, int]:
+    """The layers laid over one another, later ones winning (project, then role)."""
+    merged: dict[str, int] = {}
+    for layer in layers:
+        merged.update(layer or {})
+    return merged
+
+
+def max_turns_for(limits: Mapping[str, int] | None) -> int:
+    return limits["max_turns"] if limits and "max_turns" in limits else max_turns_from_env()
+
+
+def session_token_budget_for(limits: Mapping[str, int] | None) -> int:
+    if limits and "session_token_budget" in limits:
+        return limits["session_token_budget"]
+    return session_token_budget_from_env()
+
+
+def max_continuations_for(limits: Mapping[str, int] | None) -> int | None:
+    """The role's own setting, or ``None`` to fall through to the team's and the environment's."""
+    return limits.get("max_continuations") if limits else None
+
+
+def max_idle_rounds_for(limits: Mapping[str, int] | None) -> int | None:
+    return limits.get("max_idle_rounds") if limits else None
+
+
+def round_timeout_for(limits: Mapping[str, int] | None) -> float | None:
+    if limits and "round_timeout_minutes" in limits:
+        minutes = limits["round_timeout_minutes"]
+        return float(minutes * 60) if minutes > 0 else None
+    return round_timeout_from_env()
+
+
+def context_limit_for(limits: Mapping[str, int] | None) -> float | None:
+    if limits and "context_limit_percent" in limits:
+        percent = limits["context_limit_percent"]
+        return min(percent, 95) / 100 if percent > 0 else None
+    return context_limit_from_env()

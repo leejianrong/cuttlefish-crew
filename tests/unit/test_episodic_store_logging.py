@@ -84,16 +84,16 @@ def test_a_failed_delegation_log_line_carries_its_kind_and_record(
         store.append(
             "t1",
             DelegationFailed(
-                reason="stop=max_turns exit_code=4",
+                reason="stop=error exit_code=4",
                 role="builder",
-                failure_kind="max_turns",
+                failure_kind="harness_error",
                 record="/work/p/.kopicode/sessions/abc",
             ),
         )
     store.close()
 
     message = caplog.records[0].getMessage()
-    assert "kind=max_turns" in message
+    assert "kind=harness_error" in message
     assert "record=/work/p/.kopicode/sessions/abc" in message
 
 
@@ -127,3 +127,13 @@ def test_an_install_is_projected_with_its_command_and_its_failure_in_words(
     assert started.getMessage().endswith("python: uv sync --frozen (.venv is missing)")
     assert failed.levelno == logging.WARNING
     assert "failed (exit code 2) after 1.5s: no matching distribution" in failed.getMessage()
+
+
+def test_a_round_that_ran_out_of_room_is_logged_below_warning() -> None:
+    from cuttlefish.episodic.events import DelegationFailed
+    from cuttlefish.episodic.store import _describe
+
+    level, _ = _describe(DelegationFailed(reason="stop=max_turns", failure_kind="max_turns"))
+    assert level == logging.INFO
+    level, _ = _describe(DelegationFailed(reason="boom", failure_kind="provider_auth"))
+    assert level == logging.WARNING

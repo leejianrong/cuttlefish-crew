@@ -147,3 +147,10 @@ and this folder disagree after a slice lands, update this folder.
 - The project page in screen 2 uses a Full crew team while screen 1 selects Builder +
   reviewer; they are different projects.
 - No screenshots are checked in; the canvas is the visual reference.
+
+- **V5-limit-settings (Team tab) shipped.** A **Limits for this project** card under Roles and a **Limits for {role}**
+  disclosure in each role's editor (open when the role sets any). Six rows from `GET /api/limits`: title, one-line summary,
+  "Inherits 100 turns from the project" or "Set here: 40 turns", a number box whose placeholder is what it inherits, a
+  note when 0 means something ("0 means no limit"), and "Use the project's" / "Use the default" to clear. An invalid entry
+  says why in words and is not saved. Neutral surfaces, no coral. Not in the mockups.
+

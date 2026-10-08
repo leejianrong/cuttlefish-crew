@@ -459,3 +459,16 @@ every `RoundContinued` in `run_team` (a failure is logged, never fatal); `_with_
 (consent, ask, stuck and context checks) in a copy of the logging context its `register` was called in. Tests:
 `test_team_continue.py`, `test_kopicode_serve.py`.
 
+V5-limit-settings (ADR-0030's fifth update): `limits.LIMIT_SPECS` and `validate_limits`/`merge_limits`/`*_for` resolve
+role over project over environment. `projects.limits_json`, `RoleDefinition.limits`, `PersistedRole.limits`;
+`_build_role_inputs` composes `RoleInput.limits`; `team._backend_kwargs` passes it to the delegate task and `run_team` reads
+the per-role counters; `KopicodeBackend.delegate(limits=...)`. `GET /api/limits`, `PATCH /api/projects/{id}/limits`.
+Frontend: `lib/limits.ts`, `LimitsEditor.svelte`, the Team tab. Tests: `test_limits.py`, `test_project_store.py`,
+`test_daemon.py`, `test_team_continue.py`, `test_fleet_server.py`, `limits.test.ts`.
+
+V5-e2e-fixes (from the first browser pass over a long-running team, ADR-0030): a role whose last round completed shows
+**finishing** (calm) in the few seconds before the task ends, not blocked (`RoleSteerCard`, `StatusChip` `label`/`tone`); the
+resume banner and row use the secondary container, not the blocked amber; the Checkpoint row keeps its columns aligned;
+a Stuck card says "Waits for your message, no time limit"; `DelegationFailed` for a checkpoint kind logs at INFO, not WARNING;
+an example chip wraps on a phone; an invalid limit box keeps Save off.
+
