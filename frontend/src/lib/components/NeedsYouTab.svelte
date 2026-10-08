@@ -40,10 +40,10 @@
     An agent that kept failing on the project's environment shows as Stuck: it was stopped, so there is nothing to
     answer.
     {#if otherBackends.length > 0}
-      {otherBackends.map(backendLabel).join(" and ")} can't pause mid-run, so a command they need is refused; you'll
-      find that in Recent activity.
+      {otherBackends.map(backendLabel).join(" and ")} can't pause mid-run, so nothing is asked here. Claude Code refuses a
+      command it isn't allowed; Codex doesn't filter commands, and a write its sandbox stops just fails inside the round.
     {:else}
-      Claude Code and Codex can't pause mid-run, so there a command is refused instead.
+      Claude Code and Codex can't pause mid-run, so nothing is asked for them here.
     {/if}
   </p>
 

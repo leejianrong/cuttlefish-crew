@@ -165,7 +165,7 @@ uv run cuttlefish run --require-approval "add a .gitignore entry"   # then: cutt
 
 `cuttlefish run` and `run-team` have no inbox: a command nothing approves is
 refused there rather than waiting. Only a team started from the dashboard can ask
-you, and only a kopicode agent can pause for it (Claude Code and Codex refuse).
+you, and only a kopicode agent can pause for it (Claude Code refuses; Codex does not filter commands, it runs in a folder sandbox).
 Everything else (project-scoped secrets, container/E2B sandboxes, token ceilings,
 Tailscale access, the MCP server, every flag) is in the
 [CLI reference](https://leejianrong.github.io/cuttlefish-crew/docs/cli-reference/).
