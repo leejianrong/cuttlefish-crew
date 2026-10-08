@@ -53,6 +53,7 @@ async def delegate_to_agent_backend(
     agent_backend: str | None = None,
     access: str | None = None,
     presets: list[str] | None = None,
+    limits: dict[str, int] | None = None,
 ) -> DelegationOutcome:
     """``agent_backend`` (KAN-1809) is a per-call override of the runtime's default;
     callers pass it only when set, so a call that names none has the identical
@@ -68,7 +69,10 @@ async def delegate_to_agent_backend(
     ``auto`` and ``read-only`` also reach the backend as ``mode``.
 
     ``presets`` (V4-F) is the project's chosen command groups, passed only when it differs from
-    the defaults, for the same replay reason."""
+    the defaults, for the same replay reason.
+
+    ``limits`` (ADR-0030) is the role's own turn, token, context and time settings, passed only
+    when it sets any; only kopicode takes them (the others have no such controls)."""
     runtime_ = runtime.current()
     backend = resolve_backend(
         agent_backend or runtime_.agent_backend,
@@ -94,6 +98,8 @@ async def delegate_to_agent_backend(
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
+    if limits and backend.NAME == "kopicode":
+        mode_kwargs["limits"] = limits
     outcome = await backend.delegate(
         task_text=task_text,
         root=root,

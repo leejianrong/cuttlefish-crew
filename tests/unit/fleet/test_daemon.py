@@ -62,6 +62,25 @@ def test_build_role_inputs_threads_the_projects_declared_allow_to_every_role(
         assert role_input["allow"] == [["uv", "run", "pytest"], ["go", "test"]]
 
 
+def test_a_roles_limits_are_the_projects_with_its_own_laid_over(tmp_path: Path) -> None:
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
+    project = daemon.projects.register(
+        name="alpha",
+        root=str(tmp_path / "alpha"),
+        roles=(RoleDefinition(name="builder", limits={"max_turns": 10}),),
+    )
+    project = daemon.projects.update_limits(project.id, {"max_turns": 40, "max_idle_rounds": 1})
+
+    builder, reviewer = _build_role_inputs(
+        project, [{"name": "builder", "text": "a"}, {"name": "reviewer", "text": "b"}]
+    )
+
+    assert builder["limits"] == {"max_turns": 10, "max_idle_rounds": 1}
+    assert reviewer["limits"] == {"max_turns": 40, "max_idle_rounds": 1}
+    bare = daemon.projects.register(name="beta", root=str(tmp_path / "beta"))
+    assert "limits" not in _build_role_inputs(bare, [{"name": "builder", "text": "a"}])[0]
+
+
 async def test_starting_an_already_running_project_raises_without_touching_it(
     tmp_path: Path,
 ) -> None:

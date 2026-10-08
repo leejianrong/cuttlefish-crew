@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS projects (
     backend TEXT,
     mode TEXT,
     presets_json TEXT,
-    env_prepare TEXT
+    env_prepare TEXT,
+    limits_json TEXT
 )
 """
 
@@ -112,6 +113,11 @@ _ADD_PRESETS_COLUMN = "ALTER TABLE projects ADD COLUMN presets_json TEXT"
 #: so an existing row keeps asking rather than installing on its own.
 _ADD_ENV_PREPARE_COLUMN = "ALTER TABLE projects ADD COLUMN env_prepare TEXT"
 
+#: `limits_json` was added for V5-limit-settings/ADR-0030 -- the project's own limits (turns,
+#: token budget, context, time per round, continuations, rounds with no change) as a JSON object.
+#: `NULL` is none set, so an existing row keeps reading the environment's values.
+_ADD_LIMITS_COLUMN = "ALTER TABLE projects ADD COLUMN limits_json TEXT"
+
 
 @dataclass(frozen=True, slots=True)
 class RoleDefinition:
@@ -126,6 +132,8 @@ class RoleDefinition:
     #: ``"read-only"`` restricts the role's shell to inspection (roles.py, ADR-0024); ``None``
     #: is the project's normal access.
     access: str | None = None
+    #: This role's own limits (``cuttlefish.limits``), laid over the project's. Empty inherits.
+    limits: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +153,7 @@ class PersistedRole:
     backend: str | None = None
     access: str | None = None
     presets: tuple[str, ...] | None = None
+    limits: Mapping[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,6 +191,9 @@ class Project:
     presets: tuple[str, ...] | None = None
     #: Whether cuttlefish installs dependencies before a team starts: `ask`, `auto` or `off`.
     env_prepare: str = DEFAULT_PREPARE_MODE
+    #: The project's own limits (``cuttlefish.limits``); a role's override them, the
+    #: environment fills what neither sets.
+    limits: Mapping[str, int] = field(default_factory=dict)
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -205,6 +217,7 @@ def _encode_roles(roles: tuple[RoleDefinition, ...]) -> str:
                 "persona": r.persona,
                 **({"backend": r.backend} if r.backend else {}),
                 **({"access": r.access} if r.access else {}),
+                **({"limits": dict(r.limits)} if r.limits else {}),
             }
             for r in roles
         ]
@@ -218,6 +231,7 @@ def _decode_roles(raw: str) -> tuple[RoleDefinition, ...]:
             persona=r.get("persona", ""),
             backend=r.get("backend"),
             access=r.get("access"),
+            limits=r.get("limits") or {},
         )
         for r in json.loads(raw)
     )
@@ -245,6 +259,7 @@ def _encode_persisted_roles(roles: tuple[PersistedRole, ...]) -> str:
                 **({"backend": r.backend} if r.backend else {}),
                 **({"access": r.access} if r.access else {}),
                 **({"presets": list(r.presets)} if r.presets is not None else {}),
+                **({"limits": dict(r.limits)} if r.limits else {}),
             }
             for r in roles
         ]
@@ -260,6 +275,7 @@ def _decode_persisted_roles(raw: str) -> tuple[PersistedRole, ...]:
             backend=r.get("backend"),
             access=r.get("access"),
             presets=tuple(r["presets"]) if r.get("presets") is not None else None,
+            limits=r.get("limits") or {},
         )
         for r in json.loads(raw)
     )
@@ -282,6 +298,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         mode=row["mode"] or DEFAULT_MODE,
         presets=_decode_presets(row["presets_json"]),
         env_prepare=row["env_prepare"] or DEFAULT_PREPARE_MODE,
+        limits=json.loads(row["limits_json"]) if row["limits_json"] else {},
     )
 
 
@@ -311,6 +328,8 @@ class ProjectStore:
             self._conn.execute(_ADD_PRESETS_COLUMN)
         if "env_prepare" not in columns:
             self._conn.execute(_ADD_ENV_PREPARE_COLUMN)
+        if "limits_json" not in columns:
+            self._conn.execute(_ADD_LIMITS_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -435,6 +454,18 @@ class ProjectStore:
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute(
             "UPDATE projects SET env_prepare = ? WHERE id = ?", (setting, project_id)
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_limits(self, project_id: str, limits: Mapping[str, int]) -> Project:
+        """Set the project's own limits (an empty mapping clears them, so every limit reads the
+        environment again). The caller validates them (``limits.validate_limits``). A team
+        already running keeps the values it started with."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET limits_json = ? WHERE id = ?",
+            (json.dumps(dict(limits)) if limits else None, project_id),
         )
         self._conn.commit()
         return self.get(project_id)

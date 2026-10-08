@@ -46,6 +46,7 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
+from cuttlefish.limits import merge_limits
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
 from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
 from cuttlefish.requests import (
@@ -171,6 +172,11 @@ def _build_role_inputs(
             role_input["access"] = access
         if project.presets is not None and list(project.presets) != list(DEFAULT_PRESETS):
             role_input["presets"] = list(project.presets)
+        # The project's limits with the role's laid over them; what neither sets is read from the
+        # environment when it is used. Composed once, here, and persisted for a resume (ADR-0030).
+        limits = merge_limits(project.limits, role_def.limits if role_def else None)
+        if limits:
+            role_input["limits"] = limits
         inputs.append(role_input)
     return inputs
 
@@ -189,6 +195,7 @@ def _to_persisted_roles(role_inputs: list[RoleInput]) -> tuple[PersistedRole, ..
             backend=role.get("backend"),
             access=role.get("access"),
             presets=tuple(role["presets"]) if "presets" in role else None,
+            limits=role.get("limits") or {},
         )
         for role in role_inputs
     )
@@ -208,6 +215,8 @@ def _persisted_roles_to_inputs(roles: tuple[PersistedRole, ...]) -> list[RoleInp
             role_input["access"] = role.access
         if role.presets is not None:
             role_input["presets"] = list(role.presets)
+        if role.limits:
+            role_input["limits"] = dict(role.limits)
         inputs.append(role_input)
     return inputs
 

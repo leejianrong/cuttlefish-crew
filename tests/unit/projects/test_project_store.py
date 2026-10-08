@@ -408,3 +408,32 @@ def test_add_allow_appends_once(tmp_path: Path) -> None:
     store.add_allow(project.id, ("docker", "compose", "up"))
     store.add_allow(project.id, ("make", "test"))
     assert store.get(project.id).allow == (("make", "test"), ("docker", "compose", "up"))
+
+
+def test_project_and_role_limits_round_trip_and_clear(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(
+        name="demo",
+        root=str(tmp_path / "demo"),
+        roles=(RoleDefinition(name="builder", limits={"max_turns": 30}),),
+    )
+    assert project.limits == {} and store.get(project.id).role("builder").limits == {
+        "max_turns": 30
+    }  # type: ignore[union-attr]
+    assert store.update_limits(project.id, {"max_idle_rounds": 1}).limits == {"max_idle_rounds": 1}
+    assert store.get(project.id).limits == {"max_idle_rounds": 1}
+    assert store.update_limits(project.id, {}).limits == {}
+    store.close()
+
+
+def test_a_persisted_roles_limits_survive_for_a_resume(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    project = store.register(name="demo", root=str(tmp_path / "demo"))
+    store.record_team_started(
+        project.id,
+        "t1",
+        (PersistedRole(name="builder", text="x", limits={"max_turns": 7}),),
+        require_approval=False,
+    )
+    assert store.get(project.id).last_team_roles[0].limits == {"max_turns": 7}
+    store.close()

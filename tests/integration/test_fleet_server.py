@@ -62,6 +62,7 @@ def test_register_then_list_round_trips(client: TestClient, tmp_path: Path) -> N
             "persona": "ships fast",
             "backend": None,
             "access": None,
+            "limits": {},
             "default_prompt": False,
         }
     ]
@@ -674,3 +675,56 @@ def test_environment_route_says_when_the_project_folder_is_gone(
     body = client.get(f"/api/projects/{project['id']}/environment").json()
 
     assert (body["root_exists"], body["ecosystems"]) == (False, [])
+
+
+def test_the_limits_catalogue_says_what_each_setting_reads_now(client: TestClient) -> None:
+    body = client.get("/api/limits").json()["limits"]
+    by_key = {item["key"]: item for item in body}
+    assert list(by_key) == [
+        "max_turns",
+        "session_token_budget",
+        "context_limit_percent",
+        "round_timeout_minutes",
+        "max_continuations",
+        "max_idle_rounds",
+    ]
+    assert by_key["max_turns"]["default"] == 100 and by_key["max_turns"]["minimum"] == 1
+    assert by_key["round_timeout_minutes"]["default"] == 120
+    assert by_key["context_limit_percent"]["maximum"] == 95
+
+
+def test_a_projects_limits_are_set_cleared_and_validated(
+    client: TestClient, tmp_path: Path
+) -> None:
+    created = client.post("/api/projects", json={"name": "a", "root": str(tmp_path / "a")}).json()
+    assert created["limits"] == {}
+    url = f"/api/projects/{created['id']}/limits"
+    set_ = client.patch(url, json={"limits": {"max_turns": 40, "max_idle_rounds": None}}).json()
+    assert set_["limits"] == {"max_turns": 40}
+    assert client.get(f"/api/projects/{created['id']}").json()["limits"] == {"max_turns": 40}
+    assert client.patch(url, json={"limits": {"max_turns": 0}}).status_code == 400
+    assert client.patch(url, json={"limits": {"context_limit_percent": 99}}).status_code == 400
+    assert client.patch(url, json={"limits": {"max_turns": "ten"}}).status_code == 400
+    bad = client.patch(url, json={"limits": {"turns": 5}})
+    assert bad.status_code == 400 and "max_turns" in bad.json()["detail"]
+    assert client.patch("/api/projects/nope/limits", json={"limits": {}}).status_code == 404
+    assert client.patch(url, json={"limits": {}}).json()["limits"] == {}
+
+
+def test_a_roles_own_limits_round_trip_and_a_bad_one_is_400(
+    client: TestClient, tmp_path: Path
+) -> None:
+    created = client.post(
+        "/api/projects",
+        json={
+            "name": "a",
+            "root": str(tmp_path / "a"),
+            "roles": [{"name": "builder", "limits": {"max_turns": 30}}, {"name": "reviewer"}],
+        },
+    ).json()
+    assert [r["limits"] for r in created["roles"]] == [{"max_turns": 30}, {}]
+    bad = client.patch(
+        f"/api/projects/{created['id']}/roles",
+        json={"roles": [{"name": "builder", "limits": {"max_continuations": -1}}]},
+    )
+    assert bad.status_code == 400
