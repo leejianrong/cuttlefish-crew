@@ -93,6 +93,22 @@
     }
   }
 
+  /* At 360px and below the four labels cannot share one line: let them shrink and wrap
+     ("Needs you" onto two lines) rather than scroll the row. */
+  @media (max-width: 400px) {
+    .tabs {
+      gap: 0;
+    }
+
+    .tab {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 8px 4px;
+      text-align: center;
+      white-space: normal;
+    }
+  }
+
   .count {
     display: inline-grid;
     place-items: center;

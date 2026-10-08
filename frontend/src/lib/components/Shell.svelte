@@ -294,6 +294,11 @@
       min-width: 0;
     }
 
+    .destination {
+      font-size: 0.6875rem;
+      letter-spacing: 0;
+    }
+
     .footer {
       gap: 0;
     }

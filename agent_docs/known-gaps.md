@@ -245,3 +245,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   legitimately spends rounds reading (a reviewer), can hit the no-progress stop; it counts only after a round
   ran out of room, and `CUTTLEFISH_MAX_IDLE_ROUNDS=0` turns it off. It does not notice an agent that edits the
   same file back and forth. The wall-clock limit counts time spent waiting for you in Needs you.
+- **The dashboard has no URL routing.** Which screen and project are open lives in memory (`App.svelte`), so a reload or the
+  browser's Back button lands on the Projects list. This is what the "opening a project while a team is blocked lands on
+  Projects" report turned out to be (not reproduced by clicking in 23 tries; reload reproduces it every time). Deep links
+  and Back need a router; not built.
+
