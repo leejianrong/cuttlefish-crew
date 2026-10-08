@@ -433,7 +433,11 @@ def test_a_successful_install_that_made_no_folder_is_not_stale(tmp_path: Path) -
     current = envprep.fingerprint(tmp_path, detect(tmp_path).ecosystems[0])
     envprep.write_state(tmp_path, "node", fingerprint=current, how="prepared", produced=False)
 
-    assert _plan(tmp_path).steps == ()
+    found = _plan(tmp_path)
+
+    assert found.steps == ()
+    # The card is told, so it does not say node_modules is missing after an install that ran.
+    assert found.to_json()["nothing_to_install"] == [{"ecosystem": "node", "path": "."}]
 
 
 def test_a_folder_the_install_made_and_a_person_deleted_is_stale(tmp_path: Path) -> None:

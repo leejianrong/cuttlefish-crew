@@ -83,7 +83,29 @@
     }
 
     .tab {
-      padding: 12px 10px;
+      padding: 12px 8px;
+      font-size: 0.8125rem;
+    }
+
+    .count {
+      margin-left: 4px;
+      padding: 0 5px;
+    }
+  }
+
+  /* At 360px and below the four labels cannot share one line: let them shrink and wrap
+     ("Needs you" onto two lines) rather than scroll the row. */
+  @media (max-width: 400px) {
+    .tabs {
+      gap: 0;
+    }
+
+    .tab {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 8px 4px;
+      text-align: center;
+      white-space: normal;
     }
   }
 

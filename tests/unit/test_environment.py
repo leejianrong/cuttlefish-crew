@@ -129,6 +129,10 @@ def test_node_without_a_lockfile_says_so_and_node_modules_is_looked_for(tmp_path
 
     (tmp_path / "node_modules").mkdir()
     node = _only(tmp_path, "node")
+    assert (node.env_dir, node.installed) == (None, False)  # a hand-made empty folder is no install
+
+    _write(tmp_path, "node_modules/left-pad/package.json", "{}")
+    node = _only(tmp_path, "node")
     assert (node.env_dir, node.installed) == ("node_modules", True)
 
 
@@ -295,9 +299,16 @@ def test_a_missing_install_is_described_as_missing_unless_it_is_about_to_be_made
     assert "`python` and `pip` are its own" in environment.brief(spec, installing={"python"})
 
 
+def test_the_brief_does_not_claim_dependencies_in_an_empty_node_modules(tmp_path: Path) -> None:
+    _write(tmp_path, "package.json", "{}")
+    (tmp_path / "node_modules").mkdir()
+
+    assert "not installed (no `node_modules`)" in environment.brief(environment.detect(tmp_path))
+
+
 def test_node_gets_its_own_tool_in_the_note(tmp_path: Path) -> None:
     _write(tmp_path, "package.json", '{"packageManager": "pnpm@9.1.0"}')
-    (tmp_path / "node_modules").mkdir()
+    _write(tmp_path, "node_modules/left-pad/package.json", "{}")
 
     note = environment.brief(environment.detect(tmp_path))
 

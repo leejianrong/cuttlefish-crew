@@ -392,7 +392,13 @@ def _node(root: Path) -> EcosystemEnv | None:
         or _mise_tool(root, "node")
         or (engine_node if isinstance(engine_node, str) else None)
     )
-    installed = (root / "node_modules").is_dir()
+    modules = root / "node_modules"
+    # A hand-made empty folder is not an install: the brief would tell an agent its dependencies
+    # are there.
+    try:
+        installed = modules.is_dir() and any(modules.iterdir())
+    except OSError:
+        installed = False
     return EcosystemEnv(
         ecosystem="node",
         tool=tool,

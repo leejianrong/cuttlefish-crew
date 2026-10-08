@@ -238,21 +238,15 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **A stuck-agent card has no button** (V5-E5b). Nothing could be answered: the round is over. The person fixes the
   environment and steers the role from the project page; the card ends when they do. A stuck role in a steerable team (the daemon's always are) waits for a steer with no timeout instead of
   the usual five-second grace, so a role nobody steers keeps the team running until it is stopped.
-- **A project with no dependencies still reads "node_modules is missing" after its install** (V5-E3, found again in V5-E6b). The
-  install ran and made no folder, which `env.json` remembers (`produced: false`) so nothing is reinstalled, but the Environment card
-  only looks at the folder. It is not due, so nothing re-prompts; the wording can make a person think the install failed.
-
-- **A stop logs an ERROR traceback** (`RuntimeError: run did not reach a terminal state`, "Task exception
-  was never retrieved" from `FleetDaemon._launch_team`'s `_drive`) about a second after a normal stop. Found
-  by the V5-ask exploratory pass; it predates that slice (it happens with no request pending). The stop itself
-  works. Not yet fixed.
 - **A typed answer to a question is kept as typed**: the journal scrubs known secret values from it, not
   anything key-shaped, so a credential a person types into an answer stays in `episodic.db`, satay's own
   database and the history API.
-- **A checkpoint round still reads "Round failed"** in the activity log, with the failure styling, and the
-  next row says Continued (ADR-0030). The "Round started" row also carries the whole continuation prompt,
-  handover included, which grows with each round. Both are cosmetic and not yet changed.
 - **"No progress" means no file edit.** A role that only changes files by running a shell generator, or that
   legitimately spends rounds reading (a reviewer), can hit the no-progress stop; it counts only after a round
   ran out of room, and `CUTTLEFISH_MAX_IDLE_ROUNDS=0` turns it off. It does not notice an agent that edits the
   same file back and forth. The wall-clock limit counts time spent waiting for you in Needs you.
+- **The dashboard has no URL routing.** Which screen and project are open lives in memory (`App.svelte`), so a reload or the
+  browser's Back button lands on the Projects list. This is what the "opening a project while a team is blocked lands on
+  Projects" report turned out to be (not reproduced by clicking in 23 tries; reload reproduces it every time). Deep links
+  and Back need a router; not built.
+

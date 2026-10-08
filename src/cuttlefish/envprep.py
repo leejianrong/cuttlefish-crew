@@ -111,6 +111,9 @@ class PreparePlan:
     #: Ecosystems with an install the person made themselves, to remember so a later change to
     #: their files is noticed (``record_adopted``).
     adopt: tuple[tuple[str, str], ...] = ()
+    #: ``(ecosystem, folder)`` of projects whose last install ran and made no folder: they have
+    #: no dependencies, so the folder's absence is expected and the card must not call it missing.
+    nothing_to_install: tuple[tuple[str, str], ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -119,6 +122,7 @@ class PreparePlan:
                 {"ecosystem": e, "name": ecosystem_name(e), "reason": r}
                 for e, r in self.unsupported
             ],
+            "nothing_to_install": [{"ecosystem": e, "path": p} for e, p in self.nothing_to_install],
         }
 
 
@@ -316,6 +320,7 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
     steps: list[PrepareStep] = []
     unsupported: list[tuple[Ecosystem, str]] = []
     adopt: list[tuple[str, str]] = []
+    nothing: list[tuple[str, str]] = []
     for env in found.ecosystems:
         settings: Settings = ()
         base = path / env.path
@@ -355,6 +360,7 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
             reason = "the last install did not finish"
         elif not env.installed:
             if how == "prepared" and recorded == current and record.get("produced") is False:
+                nothing.append((env.ecosystem, env.path))
                 continue  # a project with no dependencies installs nothing: absence is expected
             reason = f"{folder} is missing"
         elif recorded is not None and recorded != current:
@@ -374,7 +380,12 @@ def plan(root: str | Path, spec: EnvironmentSpec | None = None) -> PreparePlan:
                 path=env.path,
             )
         )
-    return PreparePlan(steps=tuple(steps), unsupported=tuple(unsupported), adopt=tuple(adopt))
+    return PreparePlan(
+        steps=tuple(steps),
+        unsupported=tuple(unsupported),
+        adopt=tuple(adopt),
+        nothing_to_install=tuple(nothing),
+    )
 
 
 def record_adopted(root: str | Path, found: PreparePlan) -> None:
