@@ -7,6 +7,7 @@ import pytest
 from cuttlefish.cli import (
     ConfigError,
     _parse_allow,
+    _parse_limits,
     _parse_roles,
     _resolve_dashboard_dir,
     build_parser,
@@ -262,3 +263,43 @@ def test_serve_with_an_unusable_home_says_so_instead_of_a_traceback(
     assert code == cli.EXIT_TASK_FAILED
     assert "cannot open the project registry" in err
     assert "Traceback" not in err
+
+
+def test_run_team_limit_flags_become_each_roles_limits() -> None:
+    args = build_parser().parse_args(
+        [
+            "run-team",
+            "--role", "builder:a",
+            "--role", "reviewer:b",
+            "--limit", "max_turns=40",
+            "--limit", "max_idle_rounds=1",
+            "--role-limit", "reviewer:max_turns=10",
+        ]
+    )  # fmt: skip
+    limits = _parse_limits(args.limit, args.role_limit, {"builder", "reviewer"})
+    assert limits == {
+        "builder": {"max_turns": 40, "max_idle_rounds": 1},
+        "reviewer": {"max_turns": 10, "max_idle_rounds": 1},
+    }
+
+
+def test_a_team_that_sets_no_limit_has_none() -> None:
+    assert _parse_limits(None, None, {"builder"}) == {}
+
+
+@pytest.mark.parametrize(
+    ("flags", "role_flags", "message"),
+    [
+        (["max_turns"], None, "KEY=NUMBER"),
+        (["turns=5"], None, "unknown limit"),
+        (["max_turns=0"], None, "1 or more"),
+        (["max_turns=ten"], None, "--limit"),
+        (None, ["builder"], "NAME:KEY=NUMBER"),
+        (None, ["ghost:max_turns=5"], "not a declared role"),
+    ],
+)
+def test_a_bad_limit_flag_says_which_flag_and_why(
+    flags: list[str] | None, role_flags: list[str] | None, message: str
+) -> None:
+    with pytest.raises(ConfigError, match=message):
+        _parse_limits(flags, role_flags, {"builder"})

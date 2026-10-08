@@ -196,6 +196,7 @@ key inherits: **role over project over the daemon's environment over the built-i
 - Surfaces: `GET /api/limits` (the catalogue, with what each reads now), `PATCH /api/projects/{id}/limits`, `limits` on a
   project and on its roles (a 400 for an unknown key or a value out of range), and the dashboard's Team tab: a "Limits for
   this project" section and a "Limits for {role}" block in each role's editor, each box showing what it inherits.
-- Not done: a CLI flag for `run-team`, which still reads the environment (and the team input's two counters); Claude Code
-  and Codex have no such controls, so for them the settings are inert, and the dashboard says so.
+- `cuttlefish run-team` takes `--limit KEY=N` (every role) and `--role-limit NAME:KEY=N`, laid into each role's `limits` like
+  the daemon's; a resume repeats them with the other arguments. `cuttlefish run` has no such flags (it does not continue).
+  Claude Code and Codex have no such controls, so for them the settings are inert, and the dashboard says so.
 
