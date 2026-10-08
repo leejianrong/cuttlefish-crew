@@ -990,3 +990,76 @@ async def test_the_help_probe_does_not_inherit_cuttlefishs_own_venv(
     virtual_env, path = seen.read_text().strip().split("|", 1)
     assert virtual_env == ""
     assert str(own) not in path
+
+
+# -- a whole-file write has no path in the stream, only in the record (ADR-0030) ----------
+
+
+def write_record(call_id: str, path: str, *, fails: bool = False) -> list[dict[str, Any]]:
+    parsed = {
+        "type": "ToolCallParsed",
+        "payload": {
+            "call_id": call_id,
+            "tool": "write_file",
+            "args": {"path": path, "content": "x"},
+        },
+    }
+    result: dict[str, Any] = {
+        "type": "ToolResult",
+        "payload": {"call_id": call_id, "tool": "write_file", "output": {"inline": "ok"}},
+    }
+    if fails:
+        result["payload"]["error_kind"] = "denied"
+    return [parsed, result]
+
+
+def cut_write_events() -> list[Any]:
+    """What the stream shows for a write with real content: the call's arguments cut at 120
+    characters (no usable path) and a tool_result."""
+    cut = '{"content":"' + "x" * 100 + "…"
+    return [
+        {"emit": event({"kind": "tool_call_parsed", "tool": "write_file", "detail": cut})},
+        {"emit": event({"kind": "tool_result", "tool": "write_file", "size": 9})},
+    ]
+
+
+async def test_a_file_written_with_cut_arguments_is_still_an_edit_from_the_record(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        [
+            {"start": True},
+            *cut_write_events(),
+            {
+                "record": [
+                    *write_record("a", "src/a.py"),
+                    *write_record("b", "tests/b.py", fails=True),
+                ]
+            },
+            {"emit": respond("max_turns", 4)},
+            {"close": [ended("max_turns", 4)]},
+            {"eof": []},
+        ]
+    )
+    outcome = await run(binary, tmp_path)
+    assert outcome.kind == "failed" and outcome.failure_kind == "max_turns"
+    assert outcome.edited_paths == ["src/a.py"]  # the failed write is not an edit
+
+
+async def test_a_refusal_alongside_a_real_write_is_not_a_refused_round(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    denied = event({"kind": "permission_decided", "decision": "deny", "reason": "denied"})
+    binary = fake(
+        [
+            {"start": True},
+            *cut_write_events(),
+            {"emit": denied},
+            {"record": write_record("a", "src/a.py")},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    outcome = await run(binary, tmp_path)
+    assert outcome.kind == "completed" and outcome.edited_paths == ["src/a.py"]

@@ -88,6 +88,7 @@ const CONTINUED_WHY: Record<string, string> = {
   max_turns: "The round reached its turn limit",
   budget_exhausted: "The round used up its token budget",
   round_timeout: "The round ran past its time limit",
+  refused: "A command was refused and the round ended",
 };
 
 const FAILURE_KINDS: Record<string, string> = {

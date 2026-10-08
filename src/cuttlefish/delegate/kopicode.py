@@ -152,6 +152,7 @@ def classify_stream(
     exit_code = session_ended.get("exit_code")
     stop_reason = session_ended.get("reason", "unknown")
 
+    edited_paths = list(dict.fromkeys(edited_paths))  # a path seen twice is one file
     if edited_paths:
         return DelegationOutcome(
             kind="completed",

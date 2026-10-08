@@ -33,7 +33,17 @@ def _event(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _round(stop: str, exit_code: int, edit: bool = False) -> list[Any]:
+def _refusal(command: str) -> list[Any]:
+    """A command the agent tried and the gate refused: what makes a round ``refused``."""
+    detail = json.dumps({"command": command})
+    return [
+        {"emit": _event({"kind": "tool_call_parsed", "tool": "run_shell", "detail": detail})},
+        {"emit": _event({"kind": "permission_decided", "decision": "deny", "reason": "denied"})},
+        {"emit": _event({"kind": "tool_result", "tool": "run_shell", "reason": "denied"})},
+    ]
+
+
+def _round(stop: str, exit_code: int, edit: bool = False, refused: str | None = None) -> list[Any]:
     result = {
         "jsonrpc": "2.0",
         "id": "$start_id",
@@ -47,7 +57,8 @@ def _round(stop: str, exit_code: int, edit: bool = False) -> list[Any]:
     }
     ended = _event({"kind": "session_ended", "reason": stop, "exit_code": exit_code})
     edited = [{"emit": _event({"kind": "edit_applied", "path": "a.py"})}] if edit else []
-    return [{"start": True}, *edited, {"emit": result}, {"close": [ended]}]
+    denied = _refusal(refused) if refused else []
+    return [{"start": True}, *edited, *denied, {"emit": result}, {"close": [ended]}]
 
 
 def _script(tmp_path: Path, rounds: list[Any], features: list[str] = FEATURES) -> str:
@@ -214,3 +225,28 @@ async def test_a_held_role_raises_a_card_that_says_nothing_is_waiting(tmp_path: 
     assert card.record.title == "{who} has gone round in circles".format(who="builder")
     assert "3 rounds in a row" in card.record.detail
     store.close()
+
+
+async def test_a_refused_command_does_not_end_the_role_and_the_next_round_is_told_which(
+    tmp_path: Path,
+) -> None:
+    binary = _script(
+        tmp_path,
+        [*_round("completed", 0, refused="cd /testbed && git status"), *_round("completed", 0)],
+    )
+    result, payloads = await _run(tmp_path, binary)
+    assert result["status"] == "completed"
+    assert [p.reason for p in payloads if isinstance(p, RoundContinued)] == ["refused"]
+    second = _sent(tmp_path)[1]["params"]["prompt"]
+    assert "cd /testbed && git status" in second and "refused" in second
+    assert "do not cd elsewhere" in second
+
+
+async def test_refusals_that_never_stop_hold_the_role_like_any_other_going_round_in_circles(
+    tmp_path: Path,
+) -> None:
+    rounds = [s for _ in range(5) for s in _round("completed", 0, refused="rm -rf /")]
+    result, payloads = await _run(tmp_path, _script(tmp_path, rounds))
+    assert result["status"] == "failed"
+    assert "changed no file in 3 rounds in a row" in result["roles"]["builder"]["error"]
+    assert len([p for p in payloads if isinstance(p, DelegationStarted)]) == 3

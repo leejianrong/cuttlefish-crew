@@ -119,9 +119,9 @@ class TeamInput(TypedDict):
 
 #: What a round continued on its own is told, by why its predecessor stopped.
 _CARRY_ON = (
-    "Check the repository's current state (git status, git diff, the tests) against the "
-    "progress above, then carry on with what remains. If the task is already done, say so "
-    "and stop."
+    "You are already in the repository root; do not cd elsewhere. Check the repository's "
+    "current state (list and read the files, git status, the tests) against the progress above, "
+    "then carry on with what remains. If the task is already done, say so and stop."
 )
 CONTINUE_TEXT = {
     "max_turns": (
@@ -137,6 +137,30 @@ CONTINUE_TEXT = {
         "finished. " + _CARRY_ON
     ),
 }
+
+
+def _checkpoint_reason(outcome: DelegationOutcome) -> str | None:
+    """Why a finished round is a checkpoint rather than an ending, or ``None``: it ran out of
+    room (turns, tokens, time) or a command was refused, with the agent not stuck. A refusal
+    is one because the agent saw it and a person or policy may have been right to say no; the
+    next round is told which command, and the no-progress guard bounds a loop of them."""
+    if outcome.kind == "refused":
+        return "refused"
+    if outcome.kind == "failed" and outcome.failure_kind in CHECKPOINT_STOPS:
+        return outcome.failure_kind
+    return None
+
+
+def _continue_text(outcome: DelegationOutcome, why: str) -> str:
+    if why != "refused":
+        return CONTINUE_TEXT[why]
+    denied = [call.detail for call in outcome.tool_calls if call.status == "denied"][:3]
+    which = "; ".join(denied) if denied else "a command"
+    return (
+        f"your previous round ended after this was refused: {which}. Do not try it again as it "
+        "stands: do the work another way, with your file tools or a plain command from the "
+        "list, and if you truly cannot, say what you need. " + _CARRY_ON
+    )
 
 
 def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[str, str]) -> bool:
@@ -411,7 +435,8 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             # checkpoint. Carry on from the latest handover with a fresh session. Journaled
             # before the steering grace so the role reads "working", not "blocked", while it
             # waits; a steering message in that window still wins.
-            checkpoint = outcome.kind == "failed" and outcome.failure_kind in CHECKPOINT_STOPS
+            why_continue = _checkpoint_reason(outcome)
+            checkpoint = why_continue is not None
             # No progress: a round that used its room and changed no file. Several in a row is
             # an agent going round in circles, so hold the role for a person.
             idle_rounds[name] = (
@@ -434,7 +459,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 await journal(
                     team_id,
                     RoundContinued(
-                        reason=str(outcome.failure_kind),
+                        reason=str(why_continue),
                         count=continuations[name],
                         limit=max_continuations,
                         role=name,
@@ -472,7 +497,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             heading = None
             if auto_continue and redirect_text is None:
                 heading = "This round was continued automatically:"
-                redirect_text = CONTINUE_TEXT[str(outcome.failure_kind)]
+                redirect_text = _continue_text(outcome, str(why_continue))
 
             if redirect_text is None:
                 continue
@@ -515,15 +540,12 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             }
         else:
             reason = outcome.reason or outcome.summary
-            if (
-                outcome.failure_kind in CHECKPOINT_STOPS
-                and idle_rounds[name] >= max_idle_rounds > 0
-            ):
+            if _checkpoint_reason(outcome) and idle_rounds[name] >= max_idle_rounds > 0:
                 reason += (
                     f"; it changed no file in {idle_rounds[name]} rounds in a row, so it was "
                     "not continued (CUTTLEFISH_MAX_IDLE_ROUNDS)"
                 )
-            elif outcome.failure_kind in CHECKPOINT_STOPS and max_continuations > 0:
+            elif _checkpoint_reason(outcome) and max_continuations > 0:
                 reason += (
                     f"; it had already continued {continuations[name]} of {max_continuations} "
                     "times on its own (CUTTLEFISH_MAX_CONTINUATIONS)"

@@ -102,3 +102,28 @@ for every round (5 sessions, 5 handovers in the first run). It also found two th
 - **A model may finish early.** In one of the two later runs the model called the task finished with two
   of four files. That is the model's call, not a cuttlefish fault, so the live test asserts the mechanism
   and that progress crossed sessions, and only reports the final file count.
+
+## Update: the first manual run (real kopicode, a project with its own `.venv`)
+
+A real kopicode v0.4.0 team (one builder, `CUTTLEFISH_MAX_TURNS=6` then 12, a few cents) on a small Python
+project whose `.venv` held a package cuttlefish's own did not. The agent's `pytest` ran under the project's
+interpreter and imported it, so the environment slices (E3 to E5) held with a real model. It found two bugs:
+
+- **A refused round ended the role.** One denied command (a hallucinated `cd /testbed && git status`)
+  ended a round as `refused`, and the role failed on the spot although the agent had carried on for five
+  more tool calls. For a run meant to last days that is the wrong default. A refused round is now a
+  checkpoint like the others (`_checkpoint_reason`): the next round is told which command was refused and
+  to do the work another way, and a loop of refusals ends at the no-progress hold. It also drops "git status"
+  as a prescribed first step in favour of "list and read the files, git status, the tests", and says the
+  agent is already in the repository root. In the second run the agent, refused a chained
+  `git add ... && git commit`, ran the two as plain commands in a later round and committed.
+- **Files written with real content were not counted as edits.** kopicode's stream cuts each tool call's
+  arguments at 120 characters, so a `write_file` with content has no usable `path` there, and cuttlefish saw
+  no edit. That made the no-progress guard fire on a role that was working, and made a round with a refusal
+  and real writes read as `refused`. The session record holds the call in full (`ToolCallParsed` `args`), so
+  `SessionRecord.written_paths` reads the paths of writes and deletes the tool did not fail on, and they join
+  the edits the classifier sees. A path seen twice counts once.
+
+Also seen: the real model asked a question ("should I commit?") through `ask`, which arrived as a live
+question card, and the person's decline reached it as "no human is present". The run was driven through the
+HTTP API, not by clicking the dashboard.

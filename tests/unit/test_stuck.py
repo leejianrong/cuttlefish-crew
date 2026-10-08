@@ -111,3 +111,35 @@ def test_a_spilled_output_is_read_from_the_end_of_its_blob(tmp_path: Path) -> No
     assert first.output.endswith("No module named 'numpy'")
     assert len(first.output) < 20_000
     assert second.output == ""  # a blob is a name, never a path
+
+
+def test_written_paths_reads_whole_file_writes_the_tool_did_not_fail_on(tmp_path: Path) -> None:
+    import json
+
+    from cuttlefish.stuck import SessionRecord
+
+    def line(kind: str, **payload: object) -> str:
+        return json.dumps({"type": kind, "payload": payload})
+
+    folder = tmp_path / ".kopicode" / "sessions" / "s1"
+    folder.mkdir(parents=True)
+    (folder / "events.jsonl").write_text(
+        "\n".join(
+            [
+                line("ToolCallParsed", call_id="1", tool="write_file", args={"path": "a.py"}),
+                line("ToolResult", call_id="1", tool="write_file"),
+                line("ToolCallParsed", call_id="2", tool="write_file", args={"path": "bad.py"}),
+                line("ToolResult", call_id="2", tool="write_file", error_kind="denied"),
+                line("ToolCallParsed", call_id="3", tool="delete_file", args={"path": "old.py"}),
+                line("ToolResult", call_id="3", tool="delete_file"),
+                line("ToolCallParsed", call_id="4", tool="read_file", args={"path": "r.py"}),
+                line("ToolResult", call_id="4", tool="read_file"),
+                line("ToolCallParsed", call_id="5", tool="write_file", args={"path": "a.py"}),
+                line("ToolResult", call_id="5", tool="write_file"),
+                "not json",
+            ]
+        )
+        + "\n"
+    )
+    assert SessionRecord(str(tmp_path), "s1").written_paths() == ["a.py", "old.py"]
+    assert SessionRecord(str(tmp_path), "nope").written_paths() == []

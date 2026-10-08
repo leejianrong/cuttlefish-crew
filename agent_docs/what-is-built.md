@@ -429,3 +429,9 @@ input) now includes `ToolCallRecorded`, a refused `ConsentDecided`, `DelegationF
 `DelegationCompleted.edited_paths`, and the prompt asks for files, done, remaining and failures; a continued round's
 summary lists its changed files. Found by the first real-kopicode run of `test_context_refresh_live.py` (see ADR-0030's
 update); it passed twice afterwards (2 of 4 files once, 4 of 4 across 4 sessions once).
+
+V5-refused-continues (ADR-0030's second update): found by the first manual run on real kopicode. `team._checkpoint_reason`
+treats a `refused` round as a checkpoint (`RoundContinued` reason `refused`, `_continue_text` names the refused commands)
+and the idle guard bounds it. `SessionRecord.written_paths` (read in `run_kopicode_serve` for every local session) feeds
+the whole-file writes whose path the stream's cut arguments lose into `classify_turn` as `edit_applied` events;
+`classify_stream` dedupes edited paths. Tests: `test_team_continue.py`, `test_kopicode_serve.py`, `test_stuck.py`.
