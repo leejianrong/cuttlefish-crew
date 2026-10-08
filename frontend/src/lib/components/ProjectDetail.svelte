@@ -238,6 +238,7 @@
               budget={project.budget}
               requireApproval={project.require_approval}
               lastRound={latestRound(events, role)}
+              held={pending.some((r) => r.kind === "blocked" && r.role === role)}
             />
           {/each}
         </section>

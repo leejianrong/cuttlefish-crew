@@ -28,6 +28,7 @@ was never told to look for).
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import satay
@@ -38,6 +39,8 @@ from cuttlefish.agents.registry import resolve_backend
 from cuttlefish.delegate.presets import read_only_allow, resolve_allow
 from cuttlefish.permissions import READ_ONLY
 from cuttlefish.secrets.store import DEFAULT_PROJECT
+
+_LOG = logging.getLogger(__name__)
 
 
 @satay.task(side_effect=True)
@@ -120,3 +123,28 @@ async def delegate_to_agent_backend(
             ),
         )
     return outcome
+
+
+@satay.task(side_effect=True)
+async def raise_no_progress_card(team_id: str, role: str, backend: str, rounds: int) -> bool:
+    """Say, where a person looks, that a role was held because several rounds changed nothing
+    (ADR-0030). A durable task, not a call in the workflow body: a workflow is replayed, and a
+    card raised there would be raised again on every replay. Nothing waits on the card: it ends
+    when the role is steered or the team ends. ``False`` when there is no inbox to put it in."""
+    requests = runtime.current().requests
+    if requests is None or requests.broker.is_closed(team_id):
+        return False
+    requests.broker.raise_blocked(
+        project_id=requests.project_id,
+        team_id=team_id,
+        role=role,
+        backend=backend,
+        title="{who} has gone round in circles",
+        detail=f"{rounds} rounds in a row used all their room and changed no file.",
+        why=(
+            "It was stopped before it spent more. Look at what it is stuck on, then steer it "
+            "to give it another round."
+        ),
+    )
+    _LOG.warning("role %s held after %d rounds in a row that changed no file", role, rounds)
+    return True

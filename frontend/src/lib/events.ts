@@ -84,11 +84,18 @@ function preparedText(p: Record<string, unknown>): string {
 
 const STOP_REASON = /^stop=\w+/;
 
+const CONTINUED_WHY: Record<string, string> = {
+  max_turns: "The round reached its turn limit",
+  budget_exhausted: "The round used up its token budget",
+  round_timeout: "The round ran past its time limit",
+};
+
 const FAILURE_KINDS: Record<string, string> = {
   max_turns: "It used all its turns before finishing",
   verification_failed: "Its own check of the work (the project's tests) failed",
   budget_exhausted: "It reached the token or cost limit",
   cancelled: "It was cancelled",
+  round_timeout: "It ran past the time limit for one round, so cuttlefish stopped it",
   environment_stuck:
     "It kept failing on the project's environment (a missing tool or package), so cuttlefish stopped it",
   provider_auth: "The model provider rejected the API key",
@@ -194,7 +201,7 @@ export function summarize(event: EpisodicEventView): string {
     case "EnvironmentPrepared":
       return preparedText(p);
     case "RoundContinued":
-      return `${p.reason === "budget_exhausted" ? "The round used up its token budget" : "The round reached its turn limit"} and was not stuck, so a fresh round started from the latest handover (${p.count} of ${p.limit}).`;
+      return `${CONTINUED_WHY[String(p.reason)] ?? "The round ran out of room"} and was not stuck, so a fresh round started from the latest handover (${p.count} of ${p.limit}).`;
     case "TeamStopped":
       return "You stopped the team. Roles that had not finished are stopped; starting again begins a new run.";
     case "TeamResumed":

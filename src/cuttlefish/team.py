@@ -47,10 +47,10 @@ from cuttlefish.episodic.events import (
     decode_payload,
 )
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET, latest_handover_summary, maybe_handover
-from cuttlefish.limits import CHECKPOINT_STOPS, max_continuations_from_env
+from cuttlefish.limits import CHECKPOINT_STOPS, max_continuations_from_env, max_idle_rounds_from_env
 from cuttlefish.secrets.store import DEFAULT_PROJECT
 from cuttlefish.steering import DEFAULT_STEERING_GRACE_SECONDS, compose_steered_text, steering_key
-from cuttlefish.tasks.delegate import delegate_to_agent_backend
+from cuttlefish.tasks.delegate import delegate_to_agent_backend, raise_no_progress_card
 from cuttlefish.tasks.journal import journal, read_episodic_events
 
 
@@ -112,6 +112,9 @@ class TeamInput(TypedDict):
     #: Rounds a role may continue on its own after a turn or token stop (ADR-0030); ``None``
     #: reads ``CUTTLEFISH_MAX_CONTINUATIONS``.
     max_continuations: NotRequired[int]
+    #: Auto-continued rounds in a row with no file changed before the role is held for a person
+    #: (ADR-0030); ``None`` reads ``CUTTLEFISH_MAX_IDLE_ROUNDS``, ``0`` is off.
+    max_idle_rounds: NotRequired[int]
 
 
 #: What a round continued on its own is told, by why its predecessor stopped.
@@ -128,6 +131,10 @@ CONTINUE_TEXT = {
     "budget_exhausted": (
         "your previous round used up its token budget, not because the task is finished. "
         + _CARRY_ON
+    ),
+    "round_timeout": (
+        "your previous round was stopped for running too long, not because the task is "
+        "finished. " + _CARRY_ON
     ),
 }
 
@@ -261,6 +268,10 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     if max_continuations is None:
         max_continuations = max_continuations_from_env()
     continuations: dict[str, int] = {role["name"]: 0 for role in roles}
+    max_idle_rounds = team_input.get("max_idle_rounds")
+    if max_idle_rounds is None:
+        max_idle_rounds = max_idle_rounds_from_env()
+    idle_rounds: dict[str, int] = {role["name"]: 0 for role in roles}
     final_outcome: dict[str, DelegationOutcome | BaseException] = {}
 
     # Round-boundary steering (ADR-0008): each round still gathers only plain
@@ -400,13 +411,24 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             # checkpoint. Carry on from the latest handover with a fresh session. Journaled
             # before the steering grace so the role reads "working", not "blocked", while it
             # waits; a steering message in that window still wins.
+            checkpoint = outcome.kind == "failed" and outcome.failure_kind in CHECKPOINT_STOPS
+            # No progress: a round that used its room and changed no file. Several in a row is
+            # an agent going round in circles, so hold the role for a person.
+            idle_rounds[name] = (
+                (idle_rounds[name] + 1) if checkpoint and not outcome.edited_paths else 0
+            )
+            no_progress = checkpoint and 0 < max_idle_rounds <= idle_rounds[name]
             auto_continue = (
                 not require_approval
                 and not budget_hit
-                and outcome.kind == "failed"
-                and outcome.failure_kind in CHECKPOINT_STOPS
+                and checkpoint
+                and not no_progress
                 and continuations[name] < max_continuations
             )
+            if no_progress:
+                await raise_no_progress_card(
+                    team_id, name, backend_by_name[name], idle_rounds[name]
+                )
             if auto_continue:
                 continuations[name] += 1
                 await journal(
@@ -434,7 +456,9 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 # A role cuttlefish stopped for failing on its environment (ADR-0029) waits for
                 # a person with no timeout: its Needs-you card says "fix it, then steer", and a
                 # five-second grace would end the team before anyone could.
-                stuck = outcome.kind == "failed" and outcome.failure_kind == "environment_stuck"
+                stuck = (
+                    outcome.kind == "failed" and outcome.failure_kind == "environment_stuck"
+                ) or no_progress
                 steer_event = await satay.wait_for_event(
                     SteeringMessage,
                     key=steering_key(team_id, name),
@@ -443,6 +467,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 if steer_event is not None:
                     await journal(team_id, steer_event)
                     redirect_text = steer_event.text
+                    idle_rounds[name] = 0  # a person looked at it: start counting again
 
             heading = None
             if auto_continue and redirect_text is None:
@@ -488,7 +513,15 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             }
         else:
             reason = outcome.reason or outcome.summary
-            if outcome.failure_kind in CHECKPOINT_STOPS and max_continuations > 0:
+            if (
+                outcome.failure_kind in CHECKPOINT_STOPS
+                and idle_rounds[name] >= max_idle_rounds > 0
+            ):
+                reason += (
+                    f"; it changed no file in {idle_rounds[name]} rounds in a row, so it was "
+                    "not continued (CUTTLEFISH_MAX_IDLE_ROUNDS)"
+                )
+            elif outcome.failure_kind in CHECKPOINT_STOPS and max_continuations > 0:
                 reason += (
                     f"; it had already continued {continuations[name]} of {max_continuations} "
                     "times on its own (CUTTLEFISH_MAX_CONTINUATIONS)"

@@ -411,3 +411,10 @@ the first two on `session.start`. In `run_team`, a round that fails with `max_tu
 steering path with a "continued automatically" heading and the latest handover. `max_continuations` is also a
 `TeamInput` field. Only `run_team`; `workflow.py` is unchanged. Tests: `test_team_continue.py` (one fake process
 plays every round, because the pool keeps one child per team), `test_limits.py`.
+
+V5-guards (ADR-0030's update): **the brakes for a team that runs for days.** `CUTTLEFISH_ROUND_TIMEOUT` is passed
+as `timeout` to `run_kopicode_serve`; a timeout is now `_timeout_outcome` (`failure_kind="round_timeout"`, edits
+kept) in `CHECKPOINT_STOPS`, not a `DelegationError`. In `run_team`, `idle_rounds[role]` counts checkpoint rounds
+with no `edited_paths`; at `CUTTLEFISH_MAX_IDLE_ROUNDS` the role is not continued, `_raise_no_progress` raises a
+`blocked` card, and the role waits for a steer (no timeout) that resets the count. Tests: `test_team_continue.py`,
+`test_limits.py`, `test_kopicode_serve.py`.

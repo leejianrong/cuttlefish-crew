@@ -526,7 +526,7 @@ async def test_a_missing_binary_is_a_delegation_error(tmp_path: Path) -> None:
         await run("kopicode-binary-that-does-not-exist", tmp_path)
 
 
-async def test_a_timeout_cancels_the_session_and_raises(
+async def test_a_timeout_cancels_the_session_and_is_a_round_timeout_outcome(
     fake: Callable[[list[Any]], str], tmp_path: Path
 ) -> None:
     binary = fake(
@@ -538,10 +538,11 @@ async def test_a_timeout_cancels_the_session_and_raises(
             {"eof": []},
         ]
     )
-    with pytest.raises(DelegationError, match="timed out"):
-        await run_kopicode_serve(
-            binary=binary, task_text="x", root=str(tmp_path), policy=POLICY, timeout=0.3
-        )
+    outcome = await run_kopicode_serve(
+        binary=binary, task_text="x", root=str(tmp_path), policy=POLICY, timeout=0.3
+    )
+    assert outcome.kind == "failed" and outcome.failure_kind == "round_timeout"
+    assert "longer than 0.3 seconds" in (outcome.reason or "")
     assert any(m.get("method") == "session.cancel" for m in sent(tmp_path))
 
 
