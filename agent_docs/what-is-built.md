@@ -493,3 +493,7 @@ V5-summariser-model: `OpenRouterLlmProvider` defaults to a pinned small instruct
 OpenRouter for the call's cost, and `LlmResponse.cost_usd` flows through `call_llm` into `LlmCallCompleted.cost_usd` (shown on the
 Summary row). `agent_docs/model-costs.md` holds the model comparison. Tests: `test_openrouter_provider.py`, `test_maybe_handover.py`.
 
+V5-codex-model: `delegate.codex.codex_model_args` adds `--model` and `-c model_reasoning_effort=...` from `CUTTLEFISH_CODEX_MODEL`
+and `CUTTLEFISH_CODEX_EFFORT`. Checked live with `gpt-5.6-luna` at low effort on a ChatGPT login (one small task: 25k input tokens, 22k
+cached). The Codex spike (below, in known-gaps) was run with it.
+
