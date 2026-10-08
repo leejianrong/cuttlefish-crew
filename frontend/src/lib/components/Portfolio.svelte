@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { keepIfSame } from "../same";
   import type { FleetClient, ProjectSummary } from "../api";
   import ProjectCard from "./ProjectCard.svelte";
   import Icon from "./Icon.svelte";
@@ -20,7 +21,7 @@
   async function refresh() {
     try {
       const result = await client.listProjects();
-      projects = result.projects;
+      projects = keepIfSame(projects, result.projects);
       unreachable = false;
     } catch {
       unreachable = true;

@@ -20,6 +20,7 @@
     roleFromBuiltin,
     roleNameProblem,
   } from "../team";
+  import { clearDraft, loadDraft, saveDraft } from "../drafts";
   import { overrideCount, sameLimits } from "../limits";
   import Icon from "./Icon.svelte";
   import LimitsEditor from "./LimitsEditor.svelte";
@@ -28,7 +29,14 @@
     client,
     project,
     onChanged,
-  }: { client: FleetClient; project: ProjectSummary; onChanged: () => Promise<void> } = $props();
+    onDirtyChange,
+  }: {
+    client: FleetClient;
+    project: ProjectSummary;
+    onChanged: () => Promise<void>;
+    /** Whether any role or limits edit is unsaved, for the page's leave-page warning. */
+    onDirtyChange?: (dirty: boolean) => void;
+  } = $props();
 
   const BACKENDS = [
     { value: "", label: "Project default" },
@@ -48,7 +56,10 @@
   // The project's own limits being edited, and a counter that re-creates the editors when the
   // values change from outside them (a save, a discard, another role).
   const ownLimits = (): LimitValues => ({ ...project.limits });
-  let projectLimits = $state<LimitValues>(ownLimits());
+  // Unsaved edits survive leaving the project and coming back (lib/drafts.ts).
+  type Kept = { roles: Record<string, RoleDefinition>; limits: LimitValues | null };
+  const kept = () => loadDraft<Kept>(project.id, "team");
+  let projectLimits = $state<LimitValues>(kept()?.limits ?? ownLimits());
   let limitsReset = $state(0);
   let savingLimits = $state(false);
   let limitsInvalid = $state(false);
@@ -66,7 +77,7 @@
   const firstRole = () => project.roles[0]?.name ?? null;
   let selectedName = $state<string | null>(firstRole());
   // Edits in progress, one per role, so moving to another role never loses them.
-  let drafts = $state<Record<string, RoleDefinition>>({});
+  let drafts = $state<Record<string, RoleDefinition>>({ ...kept()?.roles });
   let adding = $state(false);
   let newName = $state("");
   let confirmTemplate = $state<string | null>(null);
@@ -92,6 +103,19 @@
   function isEdited(role: RoleDefinition): boolean {
     return differs(drafts[role.name] ?? role, role);
   }
+
+  // Keep what differs from what is saved; drop it when it is saved, discarded or edited back.
+  const anyEdited = $derived(project.roles.some(isEdited) || limitsDirty);
+  $effect(() => onDirtyChange?.(anyEdited));
+  $effect(() => {
+    if (!anyEdited) return clearDraft(project.id, "team");
+    const roles: Record<string, RoleDefinition> = {};
+    for (const role of project.roles) if (isEdited(role)) roles[role.name] = $state.snapshot(drafts[role.name]);
+    saveDraft(project.id, "team", {
+      roles,
+      limits: limitsDirty ? $state.snapshot(projectLimits) : null,
+    });
+  });
 
   function edit(patch: Partial<RoleDefinition>) {
     if (!selected || !draft) return;

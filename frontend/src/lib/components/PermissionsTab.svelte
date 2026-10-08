@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FleetClient, PermissionMode, PermissionsCatalog, ProjectSummary } from "../api";
+  import { clearDraft, loadDraft, saveDraft } from "../drafts";
   import { radiogroup } from "../radiogroup";
   import {
     accessLabel,
@@ -38,9 +39,12 @@
   // Read through a closure on purpose: the draft starts from the saved values, then lives on
   // its own until Save or Discard.
   const saved0 = () => project;
-  let mode = $state<PermissionMode>(saved0().mode);
-  let presets = $state<string[]>([...saved0().presets]);
-  let extras = $state<string[]>(allowToLines(saved0().allow));
+  // An unsaved edit survives leaving the project and coming back (lib/drafts.ts).
+  type Draft = { mode: PermissionMode; presets: string[]; extras: string[] };
+  const kept = loadDraft<Draft>(saved0().id, "permissions");
+  let mode = $state<PermissionMode>(kept?.mode ?? saved0().mode);
+  let presets = $state<string[]>(kept ? [...kept.presets] : [...saved0().presets]);
+  let extras = $state<string[]>(kept ? [...kept.extras] : allowToLines(saved0().allow));
   let commandText = $state("");
   let saving = $state(false);
   let saveError = $state<string | null>(null);
@@ -53,6 +57,10 @@
       !sameSet(extras, savedExtras),
   );
   $effect(() => onDirtyChange(dirty));
+  $effect(() => {
+    if (dirty) saveDraft(project.id, "permissions", $state.snapshot({ mode, presets, extras }));
+    else clearDraft(project.id, "permissions");
+  });
   const catalogueOrder = $derived(catalog?.presets.map((preset) => preset.name) ?? []);
 
   $effect(() => {
