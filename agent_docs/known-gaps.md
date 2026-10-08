@@ -264,4 +264,4 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   whole round** (the process is not killed); a resume reruns the round from scratch; tokens appear only after the round, cost never
   (`cost_usd` null). The UI wording that said Codex "refuses" a command was wrong and is corrected. Making Codex first-class would need:
   journalling its final message, an external round timeout and kill, a commit path, and resuming its session.
-
+  V4-L (`docs/research/codex-app-server-spike.md`) found `codex app-server` answers each of those; V4-M would build them.
