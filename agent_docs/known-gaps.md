@@ -242,3 +242,10 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   install ran and made no folder, which `env.json` remembers (`produced: false`) so nothing is reinstalled, but the Environment card
   only looks at the folder. It is not due, so nothing re-prompts; the wording can make a person think the install failed.
 
+- **A stop logs an ERROR traceback** (`RuntimeError: run did not reach a terminal state`, "Task exception
+  was never retrieved" from `FleetDaemon._launch_team`'s `_drive`) about a second after a normal stop. Found
+  by the V5-ask exploratory pass; it predates that slice (it happens with no request pending). The stop itself
+  works. Not yet fixed.
+- **A typed answer to a question is kept as typed**: the journal scrubs known secret values from it, not
+  anything key-shaped, so a credential a person types into an answer stays in `episodic.db`, satay's own
+  database and the history API.

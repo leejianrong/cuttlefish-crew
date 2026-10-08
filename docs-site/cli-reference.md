@@ -306,7 +306,9 @@ The dashboard shows these under **Needs you**. When a kopicode agent asks to run
   unknown request is a 404; a refused rule is a 422 with the reason and the request stays pending.
 - A request of kind `question` is a kopicode agent asking a person something (its `ask` tool).
   It takes `{"answer": "answer", "text": "..."}` (non-empty, at most 4000 characters, passed to
-  the agent as the reply) or `{"answer": "decline"}`. It is raised only for a kopicode that
+  the agent as the reply) or `{"answer": "decline"}`. The journal and the history keep the text; only
+  known secret values are scrubbed from it (as everywhere in the journal), so do not type a
+  credential into an answer. It is raised only for a kopicode that
   advertises `ask.request` (v0.4.0 and later) and only where permission requests are, so the
   agent is paused on it exactly as on a command. An older kopicode, `auto`, a read-only role and
   `cuttlefish run` give the agent the fixed "no human is present" reply as before.
