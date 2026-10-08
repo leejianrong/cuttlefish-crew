@@ -340,7 +340,7 @@ or `read-only`), and the role's own setting wins.
 
 | Mode | Shell commands | File edits |
 | --- | --- | --- |
-| `ask-first` | None run on their own. On kopicode a command stops the agent and appears under **Needs you** for you to allow or deny; Claude Code and Codex cannot pause, so there it is refused. | Yes (not on Codex) |
+| `ask-first` | None run on their own. On kopicode a command stops the agent and appears under **Needs you** for you to allow or deny; Claude Code cannot pause, so there it is refused; Codex cannot pause and gets a read-only sandbox. | Yes (not on Codex) |
 | `standard` | The built-in presets plus `--allow`. On kopicode a command off that list appears under **Needs you** instead of being refused; elsewhere it is refused. | Yes |
 | `auto` | Any command except the never-allowed list | Yes |
 | `read-only` (a role) | Inspection only (`ls`, `grep`, `git diff`, ...) | No on Claude Code and Codex; **yes on kopicode** |

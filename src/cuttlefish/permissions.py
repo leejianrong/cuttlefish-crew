@@ -5,9 +5,10 @@ access of a delegation is the role's own, else the project's, else ``standard``.
 
 - ``ask-first``: files can be read and edited; no shell command runs on its own. On kopicode
   inside the fleet daemon a command stops the agent and waits for a person (ADR-0028); on
-  Claude Code and Codex, which cannot pause, it is refused.
+  Claude Code, which cannot pause, it is refused, and Codex gets a read-only sandbox.
 - ``standard``: the built-in dev presets plus anything declared (ADR-0023); on kopicode a
-  command off the list is asked about, as in ask-first.
+  command off the list is asked about, as in ask-first. Codex does not filter commands (it
+  runs in a folder sandbox), so the list is not enforced there.
 - ``auto``: any shell command runs, except the never-allowed list (``never_allowed``).
 - ``read-only`` (a role access, not a project mode): inspection-only shell, and no file
   edits where the backend can stop them.
@@ -36,13 +37,16 @@ MODE_INFO: dict[str, tuple[str, str]] = {
     "ask-first": (
         "Ask first",
         "Agents can read and edit files. No command runs on its own. With kopicode, each "
-        "command stops the agent until you allow or deny it. Claude Code and Codex cannot "
-        "pause, so there a command is refused.",
+        "command stops the agent until you allow or deny it. Claude Code cannot pause, so "
+        "there a command is refused. Codex cannot pause either and runs in a read-only "
+        "sandbox, so it can read but not edit.",
     ),
     "standard": (
         "Standard",
         "Everyday dev commands run on their own. With kopicode, anything off the list stops "
-        "the agent until you allow or deny it. Claude Code and Codex refuse it.",
+        "the agent until you allow or deny it. Claude Code refuses it. Codex does not filter "
+        "commands: it runs in a sandbox that lets it edit the project folder and /tmp, so a "
+        "command off the list can still run (seen live: docker and curl ran).",
     ),
     "auto": (
         "Auto",
@@ -71,8 +75,10 @@ BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
     (
         "codex",
         "Set for each run, coarse",
-        "Only two sandboxes exist: read-only, or edit the folder. It cannot pause to ask. Ask "
-        "first and read-only roles get the read-only one, and Auto is the same as Standard. "
-        "Single commands cannot be filtered.",
+        "Only two sandboxes exist: read-only, or edit the project folder and /tmp. It cannot "
+        "pause to ask and does not filter single commands, so Standard and Auto are the same: "
+        "your command list is not enforced. A write the sandbox stops just fails inside the "
+        "run and the round can still read completed, never refused. Ask first and read-only "
+        "roles get the read-only sandbox. Commits can fail (.git is read-only there).",
     ),
 )

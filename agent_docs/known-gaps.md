@@ -253,4 +253,15 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **Codex is a one-shot, sandbox-only backend, and does not fit the long-run loop** (spike 2026-10-08, `gpt-5.6-luna` at low effort on a
+  ChatGPT login, small team on a six-module project). Seen: a round is the whole task and runs to its end (nine modules in one round: 57 s,
+  454k tokens, 45 of 45 tests); concurrent roles on one root work; a read-only role stays read-only; steering works at the round boundary
+  with only a one-line summary of the last round; the tool-call journal and edited files are recorded. Not working or not applicable:
+  **the command list is not enforced** (Standard ran `docker` and `curl` and wrote `/tmp`; workspace-write is the whole policy); a write the
+  sandbox stops reads "completed" or "no edit needed", never refused, and the agent's reply is never journaled, so a person cannot see why;
+  **no Needs-you card is ever raised**; **commits sometimes fail** (`.git` is read-only in the sandbox: two of nine landed); none of the
+  limits (turns, tokens, context, time) applies, so a round is never cut or continued and no handover is written; **Stop waits for the
+  whole round** (the process is not killed); a resume reruns the round from scratch; tokens appear only after the round, cost never
+  (`cost_usd` null). The UI wording that said Codex "refuses" a command was wrong and is corrected. Making Codex first-class would need:
+  journalling its final message, an external round timeout and kill, a commit path, and resuming its session.
 
