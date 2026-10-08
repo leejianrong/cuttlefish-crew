@@ -37,6 +37,32 @@ export function eventLabelFor(event: EpisodicEventView): string {
   return eventLabel(event.event_type);
 }
 
+/** The seqs of rounds that ran out of room (turns, tokens, time) and were continued: not failures,
+ * the next round for that role began from the handover. Read from the journal, not stored. */
+export function checkpointedRounds(events: readonly EpisodicEventView[]): Set<number> {
+  const found = new Set<number>();
+  events.forEach((event, index) => {
+    const kind = event.payload.failure_kind;
+    if (
+      event.event_type !== "DelegationFailed" ||
+      typeof kind !== "string" ||
+      kind === "refused" ||
+      !(kind in CONTINUED_WHY)
+    ) {
+      return;
+    }
+    for (const later of events.slice(index + 1)) {
+      if (later.payload.role !== event.payload.role) continue;
+      if (later.event_type === "RoundContinued") found.add(event.seq);
+      if (later.event_type !== "HandoverWritten") break;
+    }
+  });
+  return found;
+}
+
+/** A long task text (a continuation prompt carries the whole handover) is cut for the row. */
+export const LONG_TEXT = 280;
+
 /** Why a command was refused, from the rule id the daemon journals. */
 export function refusalReason(rule: string): string {
   if (rule.startsWith("never_allowed:")) {

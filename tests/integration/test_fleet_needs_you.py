@@ -137,9 +137,13 @@ async def test_stopping_the_team_while_asked_cancels_the_request(
     project = daemon.projects.register(name="alpha", root=str(root))
     team_id = await daemon.start(project.id, [{"name": "builder", "text": "bring the db up"}])
     await _until(lambda: bool(daemon.requests.pending(project.id)))
+    driver = daemon._running[project.id].task
     await daemon.stop(project.id)  # satay's cancel waits for the round, so this releases the agent
     assert not daemon.requests.pending(project.id)
     await _until(lambda: not daemon.is_running(project.id))
+    await _until(driver.done)
+    # A normal stop is not an error: it used to end in "run did not reach a terminal state".
+    assert driver.exception() is None
     resolved = [p for p in _journal(project.root, team_id) if isinstance(p, RequestResolved)]
     assert [r.resolution for r in resolved] == ["cancelled"]
     assert '"result": {"answer": "deny"}' in (tmp_path / "sent.jsonl").read_text()

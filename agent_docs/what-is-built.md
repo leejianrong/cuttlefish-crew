@@ -435,3 +435,12 @@ treats a `refused` round as a checkpoint (`RoundContinued` reason `refused`, `_c
 and the idle guard bounds it. `SessionRecord.written_paths` (read in `run_kopicode_serve` for every local session) feeds
 the whole-file writes whose path the stream's cut arguments lose into `classify_turn` as `edit_applied` events;
 `classify_stream` dedupes edited paths. Tests: `test_team_continue.py`, `test_kopicode_serve.py`, `test_stuck.py`.
+
+V5-small-items: **tidying what live runs and the first browser pass found.** The bottom nav bar and the project tab row
+fit 320px and 390px (`Shell.svelte`, `Tabs.svelte`). `environment._node` counts `node_modules` as an install only when it
+has something in it, so a hand-made empty folder no longer gets "dependencies are in node_modules" in the brief.
+`PreparePlan.nothing_to_install` (from the `produced: false` record) reaches the card as `prepare.nothing_to_install`, which
+reads "no dependencies to install" instead of "node_modules is missing". The activity log reads a round that ran out of room
+and was continued as "Round ended" (`checkpointedRounds`, derived from the journal, nothing new stored), and cuts a long
+"Round started" prompt with the whole text under "Whole prompt". `FleetDaemon._launch_team` no longer raises when a
+stopped team's run has no terminal event, so a stop logs no ERROR traceback.

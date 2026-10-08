@@ -17,7 +17,6 @@ simply never calling it that way before this fix.
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import dataclasses
 import logging
 import uuid
@@ -556,8 +555,15 @@ class FleetDaemon:
                     handle = satay.start(run_team, workflow_input, run_id=team_id, store=app.store)
                     # The episodic journal already recorded why (Q16's posture) --
                     # nothing further for the daemon to do with a failed team.
-                    with contextlib.suppress(satay.WorkflowFailedError):
+                    try:
                         await handle.result()
+                    except satay.WorkflowFailedError:
+                        pass
+                    except RuntimeError:
+                        # A stop cancels the run between rounds, so satay finds it without a
+                        # terminal event: expected after a stop, a real error otherwise.
+                        if team_id not in self._stopping:
+                            raise
             except Exception as exc:
                 if not ready.done():
                     logger.error("team failed to start: %s", exc, exc_info=True)

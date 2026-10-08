@@ -1,11 +1,21 @@
 <script lang="ts">
   import type { EpisodicEventView } from "../api";
-  import { eventLabelFor, formatWhen, installOutput, isRefusedCommand, summarize } from "../events";
+  import {
+    checkpointedRounds,
+    eventLabelFor,
+    formatWhen,
+    installOutput,
+    isRefusedCommand,
+    LONG_TEXT,
+    summarize,
+  } from "../events";
 
   let {
     events,
     onOpenPermissions,
   }: { events: EpisodicEventView[]; onOpenPermissions?: () => void } = $props();
+
+  const checkpointed = $derived(checkpointedRounds(events));
 </script>
 
 <div class="log">
@@ -32,9 +42,17 @@
         <span class="ts mono" title={event.ts}>{formatWhen(event.ts)}</span>
         <!-- Always a cell, so a row with no role keeps the label and text in their own columns. -->
         <span class="role mono">{event.payload.role ?? ""}</span>
-        <span class="type" title="{event.event_type}, #{event.seq}">{eventLabelFor(event)}</span>
+        <span class="type" title="{event.event_type}, #{event.seq}">{checkpointed.has(event.seq) ? "Round ended" : eventLabelFor(event)}</span>
         <span class="text">
-          {summarize(event)}
+          {#if event.event_type === "DelegationStarted" && summarize(event).length > LONG_TEXT}
+            {summarize(event).slice(0, LONG_TEXT)}…
+            <details class="output">
+              <summary>Whole prompt</summary>
+              <pre class="mono">{summarize(event)}</pre>
+            </details>
+          {:else}
+            {summarize(event)}
+          {/if}
           {#if onOpenPermissions && isRefusedCommand(event)}
             <button type="button" class="link" onclick={onOpenPermissions}>Change permissions</button>
           {/if}

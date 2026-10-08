@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { EpisodicEventView } from "./api";
 import {
+  checkpointedRounds,
   commandText,
   eventLabel,
   eventLabelFor,
@@ -305,5 +306,21 @@ describe("eventLabelFor", () => {
     expect(eventLabelFor(event("EnvironmentPrepared", { ok: true }))).toBe("Install done");
     expect(eventLabelFor(event("EnvironmentPrepared", { ok: false }))).toBe("Install failed");
     expect(eventLabelFor(event("TaskFailed", { error: "x" }))).toBe("Task failed");
+  });
+});
+
+describe("checkpointedRounds", () => {
+  const at = (seq: number, type: string, payload: Record<string, unknown>) =>
+    ({ ...event(type, payload), seq }) as EpisodicEventView;
+
+  it("marks a round that ran out of room and was continued, and no other failure", () => {
+    const events = [
+      at(1, "DelegationFailed", { role: "dev", failure_kind: "max_turns", reason: "stop=max_turns" }),
+      at(2, "HandoverWritten", { role: "dev" }),
+      at(3, "RoundContinued", { role: "dev", reason: "max_turns" }),
+      at(4, "DelegationFailed", { role: "dev", failure_kind: "max_turns", reason: "stop=max_turns" }),
+      at(5, "DelegationFailed", { role: "qa", failure_kind: "provider_auth", reason: "x" }),
+    ];
+    expect([...checkpointedRounds(events)]).toEqual([1]);
   });
 });
