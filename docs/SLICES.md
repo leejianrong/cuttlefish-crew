@@ -801,7 +801,7 @@ Claude Code and Codex are real but unverified, so each gets a spike before its b
     `AskUserQuestion` message shapes and the answer round trip in a research note. No
     product code.
 11. **V4-K: Claude Code live prompts**, only if V4-J works, on the shapes it recorded.
-12. **V4-L: Codex spike.** Install `codex`, drive `codex app-server`, record the
+12. **V4-L: Codex spike (done 2026-10-08, `docs/research/codex-app-server-spike.md`: approvals, interrupt, resume, usage all work over `app-server`).** Install `codex`, drive `codex app-server`, record the
     approval and user-input requests (note open Codex issues #14192 and #21982). No
     product code.
 13. **V4-M: Codex live prompts**, only if V4-L works.
