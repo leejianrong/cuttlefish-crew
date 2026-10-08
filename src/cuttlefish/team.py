@@ -22,6 +22,7 @@ need").
 
 from __future__ import annotations
 
+import logging
 from typing import Any, NotRequired, TypedDict
 
 import satay
@@ -116,6 +117,8 @@ class TeamInput(TypedDict):
     #: (ADR-0030); ``None`` reads ``CUTTLEFISH_MAX_IDLE_ROUNDS``, ``0`` is off.
     max_idle_rounds: NotRequired[int]
 
+
+logger = logging.getLogger(__name__)
 
 #: What a round continued on its own is told, by why its predecessor stopped.
 _CARRY_ON = (
@@ -469,6 +472,17 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                         role=name,
                     ),
                 )
+                # The next session starts with nothing but what it is told, so write the handover
+                # now rather than wait for the journal to cross its budget (a 100-turn round can
+                # stay under it). Failing to (no summariser key) is not a reason to stop: the
+                # continuation then carries the file list, as before.
+                try:
+                    if await maybe_handover(
+                        team_id, token_budget=token_budget, role=name, force=True
+                    ):
+                        round_summaries[name].clear()
+                except Exception:
+                    logger.warning("no handover for %s at a checkpoint", name, exc_info=True)
 
             if require_approval or budget_hit:
                 # No timeout -- see run_task's identical wait for why.

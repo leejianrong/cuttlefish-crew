@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import stat
 import sys
 from collections.abc import Callable
@@ -1140,3 +1141,65 @@ async def test_no_limit_means_no_usage_question(
     )
     await run(binary, tmp_path)
     assert not any(m.get("method") == "session.usage" for m in sent(tmp_path))
+
+
+# -- the cost kopicode reports (v0.4.0 usage.cost) --------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("usage", "cost"),
+    [({"cost_usd": 0.0123, "total": 900}, 0.0123), ({"total": 900}, None), (None, None)],
+)
+async def test_the_cost_kopicode_reports_is_the_rounds_cost_and_never_estimated(
+    fake: Callable[[list[Any]], str], tmp_path: Path, usage: dict[str, Any] | None, cost: Any
+) -> None:
+    done = respond()
+    if usage is not None:
+        done["result"]["usage"] = usage
+    binary = fake([{"start": True}, {"emit": done}, {"close": [ended()]}, {"eof": []}])
+    outcome = await run(binary, tmp_path)
+    assert outcome.cost_usd == cost
+
+
+# -- a resident child logs each session in its own team's context -----------------------
+
+
+async def test_a_consent_is_logged_in_the_context_of_the_session_that_asked(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    from cuttlefish import logsetup
+
+    consent = {"id": "c-1", "kind": "run_shell", "detail": SH + "uv run pytest -q"}
+    binary = fake(
+        [
+            {"start": True},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"start": True},
+            {"consent": consent},
+            {"emit": respond()},
+            {"close": [ended()]},
+            {"eof": []},
+        ]
+    )
+    seen: list[dict[str, str]] = []
+
+    class Spy(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            seen.append(dict(logsetup._CONTEXT.get() or {}))
+
+    logger = logging.getLogger("cuttlefish.delegate.consent")
+    handler = Spy()
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
+    pool = ServePool()
+    try:
+        # One resident child, spawned under the first team and reused by the second.
+        with logsetup.bind(team="team-1"):
+            await run(binary, tmp_path, pool=pool)
+        with logsetup.bind(team="team-2", role="builder"):
+            await run(binary, tmp_path, pool=pool)
+    finally:
+        await pool.aclose()
+        logger.removeHandler(handler)
+    assert seen and all(c.get("team") == "team-2" for c in seen), seen

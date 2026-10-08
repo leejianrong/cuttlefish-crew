@@ -453,3 +453,9 @@ V5-context-pressure (ADR-0030's third update): `ServeChild.watch_context` and `_
 `usage.context_window`. The fake serve has a `{"usage": {...}}` step. Tests: `test_kopicode_serve.py`,
 `test_team_continue.py`, `test_limits.py`.
 
+V5-live-findings (ADR-0030's fourth update, from the first 100-turn real run): `maybe_handover(force=True)` is called at
+every `RoundContinued` in `run_team` (a failure is logged, never fatal); `_with_reported_cost` sets
+`DelegationOutcome.cost_usd` from a kopicode turn result's `usage.cost_usd`; `ServeChild` runs the work for a session
+(consent, ask, stuck and context checks) in a copy of the logging context its `register` was called in. Tests:
+`test_team_continue.py`, `test_kopicode_serve.py`.
+

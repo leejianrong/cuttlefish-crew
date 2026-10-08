@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import dataclasses
 import functools
 import inspect
@@ -42,7 +43,7 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping
 from typing import Any
 
 from cuttlefish.agents.outcome import (
@@ -260,6 +261,10 @@ class ServeChild:
         self._deciders: dict[str, Decider] = {}
         #: session id -> who answers its model's questions (``ask.request``).
         self._askers: dict[str, AskHandler] = {}
+        #: session id -> the ``contextvars`` (log project, team, role) of whoever started it. A
+        #: resident child is spawned by one team and outlives it, so its reader's own context
+        #: is the first team's: work done for a session runs in that session's instead.
+        self._contexts: dict[str, contextvars.Context] = {}
         self.loop = asyncio.get_running_loop()
         self._deadline = consent_deadline
         self._on_consent = on_consent
@@ -341,6 +346,7 @@ class ServeChild:
 
     def register(self, session: str, decide: Decider, ask: AskHandler | None = None) -> None:
         self._deciders[session] = decide
+        self._contexts[session] = contextvars.copy_context()
         if ask is not None:
             self._askers[session] = ask
 
@@ -357,6 +363,7 @@ class ServeChild:
         """Drop a finished session's decider and hand back (and free) its events."""
         self._deciders.pop(session, None)
         self._askers.pop(session, None)
+        self._contexts.pop(session, None)
         self._watches.pop(session, None)
         self._context_limits.pop(session, None)
         self._checking_context.discard(session)
@@ -468,7 +475,7 @@ class ServeChild:
                 and session not in self._checking_context
             ):
                 self._checking_context.add(session)
-                check = asyncio.create_task(self._check_context(session))
+                check = self._task_for(session, self._check_context(session))
                 self._background.add(check)
                 check.add_done_callback(self._background.discard)
             if (
@@ -477,7 +484,7 @@ class ServeChild:
                 and session in self._watches
                 and session not in self.stuck
             ):
-                task = asyncio.create_task(self._check_stuck(session))
+                task = self._task_for(session, self._check_stuck(session))
                 self._background.add(task)
                 task.add_done_callback(self._background.discard)
 
@@ -546,11 +553,20 @@ class ServeChild:
             await self.cancel_session(session)
             return
 
+    def _task_for(self, session: object, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+        """A task for work on ``session``, in that session's logging context (a copy: one
+        ``Context`` cannot be entered by two tasks at once)."""
+        context = self._contexts.get(session) if isinstance(session, str) else None
+        return asyncio.create_task(coro, context=context.copy() if context else None)
+
+    def _session_of(self, params: object) -> object:
+        return params.get("session") if isinstance(params, dict) else None
+
     def _start_consent(self, request_id: object, params: object) -> None:
         if not isinstance(request_id, str | int) or isinstance(request_id, bool):
             return  # no usable id to echo, so nothing to answer; kopicode's timeout denies
         key = str(request_id)
-        task = asyncio.create_task(self._answer_consent(request_id, params))
+        task = self._task_for(self._session_of(params), self._answer_consent(request_id, params))
         self._pending_consent[key] = task
         task.add_done_callback(functools.partial(self._consent_done, key))
 
@@ -598,7 +614,7 @@ class ServeChild:
         if not isinstance(request_id, str | int) or isinstance(request_id, bool):
             return
         key = str(request_id)
-        task = asyncio.create_task(self._answer_ask(request_id, params))
+        task = self._task_for(self._session_of(params), self._answer_ask(request_id, params))
         self._pending_consent[key] = task
         task.add_done_callback(functools.partial(self._consent_done, key))
 
@@ -784,6 +800,17 @@ def _timeout_outcome(
         failure_kind="round_timeout",
         consent_decisions=consents,
     )
+
+
+def _with_reported_cost(outcome: DelegationOutcome, result: Mapping[str, Any]) -> DelegationOutcome:
+    """The dollar cost kopicode reports for the session (``usage.cost_usd`` on a turn result,
+    v0.4.0), which is the round's own: every delegation is its own session. kopicode leaves it
+    out unless every request reported a cost, and then so does this: never estimated."""
+    usage = result.get("usage")
+    cost = usage.get("cost_usd") if isinstance(usage, dict) else None
+    if isinstance(cost, int | float) and not isinstance(cost, bool) and cost >= 0:
+        return dataclasses.replace(outcome, cost_usd=float(cost))
+    return outcome
 
 
 def _pressure_outcome(
@@ -1048,6 +1075,7 @@ async def run_kopicode_serve(
     if not isinstance(result, dict):
         raise DelegationError("kopicode serve replied with neither result nor error")
     outcome = classify_turn(events, result, env=env)
+    outcome = _with_reported_cost(outcome, result)
     if pressure is not None and outcome.kind != "completed":
         outcome = _pressure_outcome(outcome, *pressure, consents)
     if verdict is not None and outcome.kind != "completed":

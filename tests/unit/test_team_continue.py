@@ -285,3 +285,29 @@ async def test_a_kopicode_that_cannot_report_usage_is_never_asked(tmp_path: Path
     await _run(tmp_path, binary)
     lines = (tmp_path / "sent.jsonl").read_text()
     assert "session.usage" not in lines
+
+
+async def test_a_continuation_writes_a_handover_even_when_the_journal_is_small(
+    tmp_path: Path,
+) -> None:
+    from cuttlefish.llm.provider import LlmResponse
+
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([LlmResponse(model="m", text="BUILT slug; NEXT wrap")]),
+            kopicode_binary=_wrapper(tmp_path, stops=1),
+        )
+    )
+    root = tmp_path / "root"
+    root.mkdir()
+    result = await start(
+        run_team,
+        {"team_id": "t", "root": str(root), "roles": [{"name": "builder", "text": "build it"}]},
+        run_id="t",
+        store=SQLiteStore.open(":memory:"),
+    ).result()
+    store.close()
+    assert result["status"] == "completed"
+    assert "BUILT slug; NEXT wrap" in _sent(tmp_path)[1]["params"]["prompt"]

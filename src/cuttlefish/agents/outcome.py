@@ -84,10 +84,11 @@ class DelegationOutcome:
     # never a fabricated zero. `tokens` is a plain total (kopicode's own headless
     # surface reports only that, no prompt/completion split -- see
     # `cuttlefish.delegate.kopicode`'s own doc comment); `cost_usd` is `None` for
-    # every kopicode call (it reports no dollar figure at all, and inventing a
+    # a kopicode before v0.4.0 (it reports no dollar figure, and inventing a
     # per-model pricing table to estimate one is a maintenance burden and a
-    # silent-drift risk this project isn't taking on, an honest gap not a fixable
-    # oversight) and a real figure for Claude Code (`total_cost_usd`, verified
+    # silent-drift risk this project isn't taking on), the figure kopicode
+    # reports in a turn's `usage` from v0.4.0 (only when every request reported a
+    # cost; never estimated), and a real figure for Claude Code (`total_cost_usd`, verified
     # live against its own `stream-json` `result` event).
     tokens: int | None = None
     cost_usd: float | None = None
