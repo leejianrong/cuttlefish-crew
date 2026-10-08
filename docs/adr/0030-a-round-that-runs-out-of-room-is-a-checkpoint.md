@@ -78,3 +78,27 @@ environment, kopicode only), and the run's cost ceilings are checked at round bo
   (`sweep_abandoned(keep_blocked=...)`), and `_launch_team` puts them back in the broker with
   `restore_blocked`, without a second `RequestRaised`. The resumed role replays to the same wait for a
   steer, and the card, badge and role-card text say so. A team that is not resumed still abandons them.
+
+
+## Update: the first live run, and what a handover must hold
+
+First run of the mechanism against real kopicode v0.4.0 and a real model (2026-10-08,
+`tests/integration/test_context_refresh_live.py`, a few cents): kopicode accepted `max_turns` and
+`token_budget` on `session.start`, stopped on `max_turns`, and cuttlefish opened a new kopicode session
+for every round (5 sessions, 5 handovers in the first run). It also found two things.
+
+- **The handover was nearly empty.** The summariser was given the task text and `stop=max_turns`, because
+  the journal text it reads ignored `ToolCallRecorded`, a failed round's `detail` and a completed round's
+  `edited_paths`. The first handover said the results "aren't captured" although the round had written a
+  file. `handover._texts` now includes each tool call (tool, status, detail), a refused command, a failed
+  round's detail and the files a completed round edited, and the prompt asks for files created or changed,
+  what is done, what remains and what failed. A continued round's per-round summary also lists the files it
+  changed. The same task now produces handovers that name the file written, what is left and the next step.
+  This also raises the journal's token estimate, so handovers fire somewhat sooner than before.
+- **A refused command ends a role.** In that first run the agent tried a chained `cat ... && echo` outside
+  the allowed commands after all four files existed. A refused round is not a checkpoint, so the role ended
+  with `denied`. Inside the daemon a command off the list becomes a Needs-you request instead, so this
+  only bites runs without an inbox (`cuttlefish run-team`, the tests).
+- **A model may finish early.** In one of the two later runs the model called the task finished with two
+  of four files. That is the model's call, not a cuttlefish fault, so the live test asserts the mechanism
+  and that progress crossed sessions, and only reports the final file count.

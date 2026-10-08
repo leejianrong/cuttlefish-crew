@@ -423,3 +423,9 @@ V5-restore-cards: **a restart no longer loses a Stuck card.** `FleetDaemon.resum
 will resume first, then `sweep_abandoned(keep_blocked=...)` skips their unresolved `blocked` requests (every other
 kind is still abandoned: its agent process is gone), and `_launch_team` calls `RequestBroker.restore_blocked` with the
 journal's unresolved requests. Nothing is journaled again; steering or the team ending resolves the same id.
+
+V5-handover-content: **a handover says what the agent did.** `handover._texts` (token estimate and the summariser's
+input) now includes `ToolCallRecorded`, a refused `ConsentDecided`, `DelegationFailed.detail` and
+`DelegationCompleted.edited_paths`, and the prompt asks for files, done, remaining and failures; a continued round's
+summary lists its changed files. Found by the first real-kopicode run of `test_context_refresh_live.py` (see ADR-0030's
+update); it passed twice afterwards (2 of 4 files once, 4 of 4 across 4 sessions once).

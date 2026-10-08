@@ -482,6 +482,8 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 if outcome.kind == "completed"
                 else (outcome.reason or outcome.summary)
             )
+            if outcome.edited_paths and outcome.kind != "completed":
+                summary += f"; files it changed: {', '.join(outcome.edited_paths)}"
             round_summaries[name].append(summary)
             handover_summary = await latest_handover_summary(team_id, role=name)
             current_text[name] = compose_steered_text(

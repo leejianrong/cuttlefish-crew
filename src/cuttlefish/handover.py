@@ -20,6 +20,7 @@ sees.
 from __future__ import annotations
 
 from cuttlefish.episodic.events import (
+    ConsentDecided,
     DelegationCompleted,
     DelegationFailed,
     DelegationRefused,
@@ -32,6 +33,7 @@ from cuttlefish.episodic.events import (
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    ToolCallRecorded,
     decode_payload,
 )
 from cuttlefish.tasks.journal import journal, read_episodic_events
@@ -64,10 +66,20 @@ def _texts(payload: EventPayload) -> tuple[str, ...]:
             return (prompt, error)
         case DelegationStarted(task_text=task_text):
             return (task_text,)
-        case DelegationCompleted(summary=summary):
-            return (summary,)
-        case DelegationRefused(reason=reason) | DelegationFailed(reason=reason):
+        case DelegationCompleted(summary=summary, edited_paths=paths):
+            return (summary, "edited: " + ", ".join(paths)) if paths else (summary,)
+        case DelegationRefused(reason=reason):
             return (reason,)
+        case DelegationFailed(reason=reason, detail=detail):
+            return (reason, detail) if detail else (reason,)
+        # What the agent actually did in a round. Without these a handover knows only that a round
+        # ran and how it stopped, so the next session is told the task and nothing of its progress
+        # (found by the first live run: a round out of turns had written a file, and the summary
+        # said "results aren't captured").
+        case ToolCallRecorded(tool=tool, status=status, detail=detail):
+            return (f"{tool} {status}: {detail}",)
+        case ConsentDecided(answer=answer, detail=detail) if answer == "deny":
+            return (f"refused: {detail}",)
         case HandoverWritten(summary=summary):
             return (summary,)
         case TaskCompleted(result=result):
@@ -163,7 +175,8 @@ async def latest_handover_summary(task_id: str, *, role: str | None = None) -> s
 def _build_summary_prompt(window: list[tuple[int, EventPayload]]) -> str:
     lines = [
         "Summarise this task's progress so far in a few sentences, preserving "
-        "anything a continuation would need to know.",
+        "anything a continuation would need to know: which files were created or changed, "
+        "what is done, what remains, and anything that failed or was refused.",
         "",
     ]
     for seq, payload in window:

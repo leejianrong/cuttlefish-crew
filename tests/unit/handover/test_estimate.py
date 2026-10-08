@@ -1,7 +1,14 @@
 from __future__ import annotations
 
-from cuttlefish.episodic.events import DelegationFailed, TaskCompleted, TaskSubmitted
-from cuttlefish.handover import estimate_event_tokens, estimate_tokens
+from cuttlefish.episodic.events import (
+    ConsentDecided,
+    DelegationCompleted,
+    DelegationFailed,
+    TaskCompleted,
+    TaskSubmitted,
+    ToolCallRecorded,
+)
+from cuttlefish.handover import _build_summary_prompt, estimate_event_tokens, estimate_tokens
 
 
 def test_estimate_tokens_is_roughly_length_over_four() -> None:
@@ -34,3 +41,25 @@ def test_delegation_failed_reason_counts() -> None:
 def test_task_submitted_text_counts() -> None:
     payload = TaskSubmitted(text="c" * 12)
     assert estimate_event_tokens(payload) == 3
+
+
+def test_a_rounds_tool_calls_and_edits_count_and_reach_the_summary_prompt() -> None:
+    window = [
+        (1, DelegationFailed(reason="stop=max_turns exit_code=4", role="b", detail="boom")),
+        (
+            2,
+            ToolCallRecorded(tool="write_file", detail='{"path":"one.txt"}', status="ok", role="b"),
+        ),
+        (3, ConsentDecided(kind="run_shell", detail="rm x", answer="deny", rule="no", role="b")),
+        (4, ConsentDecided(kind="run_shell", detail="ls", answer="allow", rule="ok", role="b")),
+        (5, DelegationCompleted(summary="done", edited_paths=["a.py", "b.py"], role="b")),
+    ]
+    prompt = _build_summary_prompt(window)
+    assert "boom" in prompt
+    assert 'write_file ok: {"path":"one.txt"}' in prompt
+    assert "refused: rm x" in prompt
+    assert "ls" not in prompt.split("4. ConsentDecided")[1].split("\n")[0]  # an allow says nothing
+    assert "edited: a.py, b.py" in prompt
+    assert "which files were created or changed" in prompt
+    assert all(estimate_event_tokens(payload) > 0 for _, payload in window[:3] + window[4:])
+    assert estimate_event_tokens(window[3][1]) == 0  # an allowed command is not progress
