@@ -12,8 +12,11 @@ from cuttlefish.secrets.store import (
     DEFAULT_PROJECT,
     SHARED_SCOPE,
     InvalidSecretsKeyError,
+    LayeredSecrets,
     MissingSecretsKeyError,
     SecretsStore,
+    check_name,
+    check_value,
     generate_key,
 )
 
@@ -154,3 +157,37 @@ def test_secrets_are_stored_as_a_blob_column_not_plain_text(tmp_path: Path) -> N
     row = conn.execute("SELECT ciphertext FROM secrets").fetchone()
     conn.close()
     assert isinstance(row[0], bytes)
+
+
+@pytest.mark.parametrize("name", ["GITHUB_TOKEN", "_X", "A1_B2"])
+def test_a_name_that_can_be_an_environment_variable_is_accepted(name: str) -> None:
+    check_name(name)
+
+
+@pytest.mark.parametrize("name", ["", "github_token", "1TOKEN", "MY-TOKEN", "A B", "X" * 129])
+def test_a_name_that_cannot_be_an_environment_variable_is_refused(name: str) -> None:
+    with pytest.raises(ValueError, match="capital letters"):
+        check_name(name)
+
+
+def test_an_empty_or_huge_value_is_refused() -> None:
+    with pytest.raises(ValueError, match="needs a value"):
+        check_value("")
+    with pytest.raises(ValueError, match="at most"):
+        check_value("x" * 16_385)
+    check_value("x" * 16_384)
+
+
+def test_layered_stores_read_the_first_that_has_a_name(tmp_path: Path) -> None:
+    key = generate_key()
+    central = SecretsStore.open(tmp_path / "central.db", key=key)
+    folder = SecretsStore.open(tmp_path / "folder.db", key=key)
+    central.set("demo", "GITHUB_TOKEN", "from-central")
+    folder.set("demo", "GITHUB_TOKEN", "from-folder")
+    folder.set("demo", "HF_TOKEN", "only-in-folder")
+    layered = LayeredSecrets(central, folder)
+    assert layered.resolve("demo", ["GITHUB_TOKEN", "HF_TOKEN", "NOPE"]) == {
+        "GITHUB_TOKEN": "from-central",
+        "HF_TOKEN": "only-in-folder",
+    }
+    layered.close()

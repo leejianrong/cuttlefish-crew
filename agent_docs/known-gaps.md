@@ -290,3 +290,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   command list, the Needs-you cards, the refusal signal, the round time limit and Stop-by-interrupt on it (the default
   transport now); still open on Codex: the final message is not journaled, resume of its thread, the turn, token and
   context limits, and the handover.
+
+- **An agent's commands can read its harness's login file, and Claude Code's commands can see its API key** (CUT-78). All three
+  harnesses keep a login in a file of mode 600 owned by the same OS user, which any command they run can read; Claude Code's
+  `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` hides the key but also every project secret and needs `bwrap` and `socat` (it failed on WSL),
+  so it is not used. Only a sandbox provider, a container, a separate user or a credential broker (ADR-0006, deferred) closes this.
+  `docs/research/harness-credentials-spike.md`.

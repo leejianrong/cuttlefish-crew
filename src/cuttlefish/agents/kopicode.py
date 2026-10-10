@@ -54,7 +54,7 @@ _SANDBOX_KOPICODE_BINARY = "/usr/local/bin/kopicode"
 _SANDBOX_POLICY_FILE = "/tmp/cuttlefish-policy.toml"  # inside the sandbox, not the host
 
 #: kopicode's own model-provider credential (docs/QUESTIONS.md Q11).
-_CREDENTIAL_ENV_VARS = ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY")
+_CREDENTIAL_ENV_VARS = ("OPENROUTER_API_KEY",)
 
 
 #: Shared by every :class:`KopicodeBackend` in the process: ``delegate_to_agent_backend``

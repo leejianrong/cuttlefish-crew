@@ -85,6 +85,9 @@ Manage the project-scoped, encrypted-at-rest secrets store.
 | `delete --project NAME KEY` | Delete a secret. |
 | `list --project NAME` | List a scope's secret names — never values. |
 
+These read and write `.cuttlefish/secrets.db` in the current folder. The dashboard's secrets live in one central file,
+`~/.cuttlefish/secrets.db`, so a shared secret really is shared (see [Secrets in the dashboard](#secrets-in-the-dashboard)).
+
 ## `cuttlefish init [--root DIR] [--name NAME] [--backend B] [--role NAME[:PERSONA]]...`
 
 Guided first-run setup. Picks the backend (`--backend`, else
@@ -190,7 +193,7 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_MAX_IDLE_ROUNDS` | `3` | How many rounds in a row may end (out of room, or on a refused command) without changing a file before the role is held and a Needs-you card says so. A steer starts the count again. `0` turns it off. |
 | `CUTTLEFISH_CONTEXT_LIMIT_PERCENT` | `75` | How full a kopicode round's context may get, as a percentage of the model's window, before cuttlefish ends the round and the role continues from the handover with a fresh context. Needs kopicode v0.4.0 and a model whose window kopicode knows; otherwise nothing happens. `0` turns it off; above `95` counts as `95`. |
 | `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. cuttlefish asks kopicode for `--consent-timeout` when `serve --help` lists it (kopicode v0.3.0 and later). An older kopicode denies after its own fixed 60 seconds, so there you get 45. |
-| `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` are unavailable. |
+| `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` and the dashboard's secrets routes are unavailable. |
 | `CUTTLEFISH_SERVE_PASSWORD` | unset | Required for any non-loopback `cuttlefish serve` bind. |
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |
 
@@ -248,6 +251,29 @@ loaded from `.env` and everything `uv run` added are not passed. `PATH` has cutt
 A variable an agent needs and does not get (for example `SSH_AUTH_SOCK` for `git` over SSH, or `AWS_*` for Claude
 Code on Bedrock) goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. `cuttlefish doctor` lists the names that are withheld from this shell's environment, never the values (credentials, SSH and
 cloud names first; `cuttlefish doctor --all-env` lists them all).
+
+## Secrets in the dashboard
+
+Secrets set through the daemon are stored encrypted in `~/.cuttlefish/secrets.db`, one file for every project, under
+the daemon's `CUTTLEFISH_SECRETS_KEY`. A team start hands the agents every secret its project can use (its own and the
+shared ones) as environment variables; a change applies to the next start. A secret in the project folder's own
+`.cuttlefish/secrets.db` (what `cuttlefish secrets` wrote) is still read, after the central store.
+
+| Route | What it does |
+|---|---|
+| `GET /api/projects/{id}/secrets` | `{"enabled", "project": [{"name", "kind"}], "shared": [...]}`. `kind` is `credential` when a backend runs on that name (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`), else `secret`. Names only. |
+| `PUT /api/projects/{id}/secrets/{name}` | Body `{"value": "..."}`. Replaces any value. The name is capitals, digits and underscores (400 otherwise). |
+| `DELETE /api/projects/{id}/secrets/{name}` | Removes it (404 when not set). |
+| `GET /api/secrets`, `PUT`/`DELETE /api/secrets/{name}` | The same for secrets shared with every project. |
+
+A value is never in a response, the journal or a log line (the journal scrubs every secret a team was handed). With no
+key every write is a 409 saying how to make one. There are deliberately no secret tools over MCP.
+
+**What an agent's own commands can see.** A name a backend runs on is an agent *credential*; any other name is a project
+*secret*, which the project's commands are meant to see. kopicode keeps `OPENROUTER_API_KEY` out of its commands.
+Codex is started with `shell_environment_policy.exclude` for `OPENAI_API_KEY`. Claude Code's commands can see
+`ANTHROPIC_API_KEY`, and all three can read their own login file as the same OS user; only a sandbox provider, a container
+or a separate user stops that. The checks behind this are in `docs/research/harness-credentials-spike.md`.
 
 ## Default permissions
 

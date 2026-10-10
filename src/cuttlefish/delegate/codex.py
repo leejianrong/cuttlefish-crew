@@ -133,6 +133,7 @@ def build_codex_argv(
         "--sandbox",
         sandbox_mode,
         *codex_model_args(),
+        *codex_shell_policy_args(),
         task_text,
     ]
 
@@ -154,6 +155,18 @@ def codex_model_settings(
     model = env.get(MODEL_ENV, "").strip() or None
     effort = env.get(EFFORT_ENV, "").strip().lower()
     return model, effort if effort in EFFORTS else None
+
+
+#: The variables Codex runs on. Its own commands should not inherit them (docs/research/
+#: harness-credentials-spike.md): names only, so no value is ever on a command line.
+AGENT_CREDENTIALS: tuple[str, ...] = ("OPENAI_API_KEY",)
+
+
+def codex_shell_policy_args() -> list[str]:
+    """``-c shell_environment_policy.exclude=[...]``: Codex keeps its own credential out of the
+    commands it runs, and leaves every other variable (a project's secrets) in."""
+    names = ", ".join(f'"{name}"' for name in AGENT_CREDENTIALS)
+    return ["-c", f"shell_environment_policy.exclude=[{names}]"]
 
 
 def codex_model_args(environ: Mapping[str, str] | None = None) -> list[str]:

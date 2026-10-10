@@ -56,7 +56,13 @@ from cuttlefish.delegate.presets import (
 )
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
-from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart, UnknownRoleError
+from cuttlefish.fleet.daemon import (
+    FleetDaemon,
+    FleetError,
+    RoleStart,
+    SecretsUnavailableError,
+    UnknownRoleError,
+)
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
@@ -684,6 +690,74 @@ def create_app(
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    # -- secrets: names and kinds out, values in and never back (ADR-0006) ----------------------
+
+    async def _secret_value(request: Request) -> str:
+        body = await _json_body(request)
+        value = body.get("value")
+        if not isinstance(value, str):
+            raise HTTPException(400, "'value' (a string) is required")
+        return value
+
+    @app.get("/api/projects/{project_id}/secrets")
+    async def list_project_secrets(project_id: str) -> dict[str, Any]:
+        try:
+            return daemon.list_secrets(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except SecretsUnavailableError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.put("/api/projects/{project_id}/secrets/{name}")
+    async def set_project_secret(project_id: str, name: str, request: Request) -> dict[str, Any]:
+        value = await _secret_value(request)
+        try:
+            daemon.set_secret(project_id, name, value)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except SecretsUnavailableError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"name": name, "scope": "project"}
+
+    @app.delete("/api/projects/{project_id}/secrets/{name}")
+    async def delete_project_secret(project_id: str, name: str) -> dict[str, Any]:
+        try:
+            removed = daemon.delete_secret(project_id, name)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except SecretsUnavailableError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not removed:
+            raise HTTPException(404, f"no secret {name!r} for this project")
+        return {"name": name, "scope": "project"}
+
+    @app.get("/api/secrets")
+    async def list_shared_secrets() -> dict[str, Any]:
+        return daemon.list_shared_secrets()
+
+    @app.put("/api/secrets/{name}")
+    async def set_shared_secret(name: str, request: Request) -> dict[str, Any]:
+        value = await _secret_value(request)
+        try:
+            daemon.set_secret(None, name, value)
+        except SecretsUnavailableError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"name": name, "scope": "shared"}
+
+    @app.delete("/api/secrets/{name}")
+    async def delete_shared_secret(name: str) -> dict[str, Any]:
+        try:
+            removed = daemon.delete_secret(None, name)
+        except SecretsUnavailableError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        if not removed:
+            raise HTTPException(404, f"no shared secret {name!r}")
+        return {"name": name, "scope": "shared"}
 
     @app.delete("/api/projects/{project_id}", status_code=204)
     async def deregister_project(project_id: str) -> None:

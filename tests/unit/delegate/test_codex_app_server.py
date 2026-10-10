@@ -45,6 +45,10 @@ class Fake:
         lines = [json.loads(line) for line in self.log.read_text().splitlines()]
         return [m for m in lines if m.get("method") == method]
 
+    def argv(self) -> list[str]:
+        lines = [json.loads(line) for line in self.log.read_text().splitlines()]
+        return next(m["argv"] for m in lines if "argv" in m)
+
     def replies(self) -> list[Any]:
         lines = [json.loads(line) for line in self.log.read_text().splitlines()]
         return [m["result"].get("decision") for m in lines if "result" in m and "method" not in m]
@@ -271,3 +275,16 @@ async def test_an_unlisted_command_waits_for_a_person_and_their_answer_reaches_c
     # A person's answer is journaled as the request pair, not as a consent decision.
     assert outcome.consent_decisions == []
     assert any(isinstance(p, RequestResolved) for p in journal.payloads)
+
+
+async def test_codex_is_started_with_its_own_credential_hidden_from_its_commands(
+    tmp_path: Path,
+) -> None:
+    fake = Fake(tmp_path)
+    await fake.run(fake.script({"steps": []}))
+    # Before the subcommand: after it the setting is ignored (found live, docs/research).
+    assert fake.argv() == [
+        "-c",
+        'shell_environment_policy.exclude=["OPENAI_API_KEY"]',
+        "app-server",
+    ]

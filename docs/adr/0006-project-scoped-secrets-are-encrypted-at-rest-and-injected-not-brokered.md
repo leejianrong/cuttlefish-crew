@@ -152,3 +152,11 @@ inside its own sandbox or subprocess — this ADR does not reduce that
 exposure, only makes which secrets reach which project's agent an explicit,
 per-project decision instead of an ambient accident. Closing that exposure is
 exactly what the deferred broker/proxy is for.
+
+> Amended 2026-10-10: the fleet daemon keeps its secrets in one central `~/.cuttlefish/secrets.db`, not one file per
+> project folder, because a "shared" secret in a per-folder file is shared with nothing. It reads the folder's own
+> `.cuttlefish/secrets.db` after it, when there is one. A daemon-started team now declares every secret its project can
+> use (its names, never values, ride the runtime, not a task argument). A backend's own credential is told apart from a
+> project's secret by `CREDENTIAL_ENV_VARS`; what each harness can hide from its own commands is in
+> `docs/research/harness-credentials-spike.md`. Also fixed: only a backend's credential names were scrubbed from the
+> journal, so a declared secret's value was written to it; every secret a run resolves is now scrubbed.

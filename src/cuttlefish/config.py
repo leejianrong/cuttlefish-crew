@@ -28,7 +28,13 @@ from cuttlefish.agents.backend import AgentBackend
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.provider import LlmProvider
 from cuttlefish.sandbox.provider import SandboxProvider
-from cuttlefish.secrets.store import SECRETS_KEY_ENV, InvalidSecretsKeyError, SecretsStore
+from cuttlefish.secrets.store import (
+    SECRETS_KEY_ENV,
+    InvalidSecretsKeyError,
+    LayeredSecrets,
+    SecretsResolver,
+    SecretsStore,
+)
 
 _LOG = logging.getLogger(__name__)
 
@@ -176,17 +182,33 @@ def secrets_db_path(base_dir: Path) -> Path:
     return base_dir / ".cuttlefish" / "secrets.db"
 
 
-def resolve_secrets_store(base_dir: Path) -> SecretsStore | None:
+def resolve_secrets_store(
+    base_dir: Path, *, central_db: Path | None = None
+) -> SecretsResolver | None:
     """Project-scoped secrets (ADR-0006) — opt-in, mirroring
     :func:`resolve_sandbox_provider`'s "none by default" posture. An operator who
     never sets ``CUTTLEFISH_SECRETS_KEY`` gets today's exact V1/V2 behaviour: no
     store, every credential still resolved from ``os.environ`` by each backend's own
     ``_credential_envs``.
+
+    With ``central_db`` (the fleet daemon) the central store is read first and the project
+    folder's own ``secrets.db`` after it, only when one is already there: a daemon start does
+    not leave an empty one behind.
     """
     if SECRETS_KEY_ENV not in os.environ:
         return None
     try:
-        return SecretsStore.open(secrets_db_path(base_dir))
+        if central_db is None:
+            return SecretsStore.open(secrets_db_path(base_dir))
+        central = SecretsStore.open(central_db)
+        folder = secrets_db_path(base_dir)
+        if not folder.exists():
+            return central
+        try:
+            return LayeredSecrets(central, SecretsStore.open(folder))
+        except InvalidSecretsKeyError:
+            central.close()
+            raise
     except InvalidSecretsKeyError as exc:
         raise ConfigError(str(exc)) from exc
 
@@ -194,7 +216,7 @@ def resolve_secrets_store(base_dir: Path) -> SecretsStore | None:
 def resolve_project_secrets(
     *,
     backend: AgentBackend,
-    secrets_store: SecretsStore | None,
+    secrets_store: SecretsResolver | None,
     project: str,
     secret_names: list[str],
 ) -> dict[str, str]:
@@ -232,8 +254,10 @@ class PreparedRun:
     agent_backend: str
     llm_provider: LlmProvider
     sandbox_provider: SandboxProvider | None
-    secrets_store: SecretsStore | None
+    secrets_store: SecretsResolver | None
     episodic_store: EpisodicStore
+    #: The names this run declared; the fleet daemon's are every secret the project can use.
+    secret_names: tuple[str, ...] = ()
 
     def close(self) -> None:
         self.episodic_store.close()
@@ -250,6 +274,7 @@ class PreparedRun:
             agent_backend=self.agent_backend,
             sandbox_provider=self.sandbox_provider,
             secrets_store=self.secrets_store,
+            secret_names=self.secret_names,
         )
 
 
@@ -260,6 +285,7 @@ def prepare_run(
     base_dir: Path | None = None,
     agent_backend: str | None = None,
     extra_backends: Sequence[str] = (),
+    central_secrets_db: Path | None = None,
 ) -> PreparedRun:
     """Resolve the backend, LLM provider, sandbox, and secrets store for one
     delegation rooted at `base_dir` (default: `Path.cwd()`) -- or raise
@@ -306,7 +332,7 @@ def prepare_run(
         )
         llm_provider = resolve_llm_provider()
         sandbox_provider = resolve_sandbox_provider()
-        secrets_store = resolve_secrets_store(resolved_base_dir)
+        secrets_store = resolve_secrets_store(resolved_base_dir, central_db=central_secrets_db)
         resolved_secrets = resolve_project_secrets(
             backend=backend,
             secrets_store=secrets_store,
@@ -323,7 +349,11 @@ def prepare_run(
     def _redaction_lookup(name: str) -> str | None:
         return resolved_secrets.get(name) or os.environ.get(name)
 
-    redaction_names = sorted(set(DEFAULT_SECRET_ENV_VARS) | set(backend.CREDENTIAL_ENV_VARS))
+    # Every secret this run can hand an agent is scrubbed from the journal, not only the
+    # backend's own credential: a project secret's value must never be written either.
+    redaction_names = sorted(
+        set(DEFAULT_SECRET_ENV_VARS) | set(backend.CREDENTIAL_ENV_VARS) | set(resolved_secrets)
+    )
     episodic_store = EpisodicStore.open(
         resolved_base_dir / ".cuttlefish" / "episodic.db",
         redactor=Redactor(redaction_names, lookup=_redaction_lookup),
@@ -337,4 +367,5 @@ def prepare_run(
         sandbox_provider=sandbox_provider,
         secrets_store=secrets_store,
         episodic_store=episodic_store,
+        secret_names=tuple(secret_names),
     )

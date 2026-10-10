@@ -80,7 +80,9 @@ async def delegate_to_agent_backend(
         claude_code_binary=runtime_.claude_code_binary,
         codex_binary=runtime_.codex_binary,
     )
-    names = sorted(set(secret_names or []) | set(backend.CREDENTIAL_ENV_VARS))
+    names = sorted(
+        set(secret_names or []) | set(backend.CREDENTIAL_ENV_VARS) | set(runtime_.secret_names)
+    )
     secrets_store = runtime_.secrets_store
     resolved_secrets = secrets_store.resolve(project, names) if secrets_store is not None else {}
     if access == READ_ONLY:
