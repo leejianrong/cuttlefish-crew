@@ -112,10 +112,40 @@ async def test_secrets_are_resolved_from_the_store_scoped_to_the_declared_projec
             secret_names=["HUGGINGFACE_TOKEN"],
         )
 
-    assert calls == [
-        ("demo-project", ["ANTHROPIC_API_KEY", "HUGGINGFACE_TOKEN", "OPENROUTER_API_KEY"])
-    ]
+    assert calls == [("demo-project", ["HUGGINGFACE_TOKEN", "OPENROUTER_API_KEY"])]
 
+    store.close()
+    secrets_store.close()
+
+
+async def test_the_runtimes_secret_names_are_resolved_too_without_being_task_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The daemon hands every secret a project can use through the runtime, so the recorded
+    task arguments (and a replay of them) do not change."""
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    secrets_store = SecretsStore.open(tmp_path / "secrets.db", key=generate_key())
+    secrets_store.set("demo-project", "GITHUB_TOKEN", "gh_value")
+    calls: list[list[str]] = []
+    original_resolve = secrets_store.resolve
+
+    def spy(project: str, names: list[str]) -> dict[str, str]:
+        calls.append(sorted(names))
+        return original_resolve(project, names)
+
+    monkeypatch.setattr(secrets_store, "resolve", spy)
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary="kopicode-binary-that-does-not-exist",
+            secrets_store=secrets_store,
+            secret_names=("GITHUB_TOKEN",),
+        )
+    )
+    with pytest.raises(DelegationError):
+        await delegate_to_agent_backend("x", str(tmp_path), project="demo-project")
+    assert calls == [["GITHUB_TOKEN", "OPENROUTER_API_KEY"]]
     store.close()
     secrets_store.close()
 

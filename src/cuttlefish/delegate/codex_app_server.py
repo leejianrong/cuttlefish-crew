@@ -47,6 +47,7 @@ from cuttlefish.agents.outcome import (
     ToolCallRecord,
     describe_refusals,
 )
+from cuttlefish.delegate.codex import codex_shell_policy_args
 from cuttlefish.delegate.consent import ConsentDecision
 from cuttlefish.delegate.kopicode_serve import Decider
 from cuttlefish.delegate.subprocess_env import merge_env
@@ -456,6 +457,7 @@ async def run_codex_app_server(
     try:
         process = await asyncio.create_subprocess_exec(
             binary,
+            *codex_shell_policy_args(),
             "app-server",
             cwd=root,
             stdin=asyncio.subprocess.PIPE,

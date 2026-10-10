@@ -68,7 +68,8 @@ BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
         "Every command that prompts is decided as it is asked, like kopicode; what Claude Code "
         "itself treats as read-only (ls) never prompts. Never-allowed prefixes are also denied "
         "to it as tool rules. Its own questions are put to you too. Auto refuses curl and wget "
-        "outright. Read-only roles cannot edit files. Over a sandbox provider, or with "
+        "outright. Read-only roles cannot edit files. Its commands can see the API key it runs "
+        "with, and its login file. Over a sandbox provider, or with "
         "CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print, it cannot pause and refuses a command nothing "
         "approves.",
     ),
@@ -78,7 +79,8 @@ BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
         "Every command is decided as it is asked, like kopicode, and edits are accepted only "
         "inside the project folder. A command it accepts runs outside Codex's own sandbox, so "
         "the blocked list and your command list are the only guard. Read-only roles get the "
-        "read-only sandbox. Its own questions are not asked live yet. Over a sandbox provider, "
+        "read-only sandbox. Its commands cannot see its API key but can read its login file. Its "
+        "own questions are not asked live yet. Over a sandbox provider, "
         "or with CUTTLEFISH_CODEX_TRANSPORT=exec, it is coarse: two sandboxes, your command "
         "list not enforced, and it cannot pause.",
     ),

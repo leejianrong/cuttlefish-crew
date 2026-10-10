@@ -27,7 +27,7 @@ from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.provider import LlmProvider
 from cuttlefish.requests import RequestContext
 from cuttlefish.sandbox.provider import SandboxProvider
-from cuttlefish.secrets.store import SecretsStore
+from cuttlefish.secrets.store import SecretsResolver
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,8 +66,11 @@ class Runtime:
     codex_binary: str = "codex"
     agent_backend: str = "kopicode"
     sandbox_provider: SandboxProvider | None = None
-    secrets_store: SecretsStore | None = None
+    secrets_store: SecretsResolver | None = None
     requests: RequestContext | None = None
+    #: Secret names every delegation also resolves (the daemon's: all a project can use). Rides the
+    #: runtime, not a task argument, so a recorded call and its replay are unchanged.
+    secret_names: tuple[str, ...] = ()
 
 
 _runtime: contextvars.ContextVar[Runtime | None] = contextvars.ContextVar(

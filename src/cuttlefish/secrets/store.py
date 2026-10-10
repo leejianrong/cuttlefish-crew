@@ -18,9 +18,11 @@ precedence itself.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Protocol
 
 from cryptography.fernet import Fernet
 
@@ -36,6 +38,44 @@ SHARED_SCOPE = "*"
 DEFAULT_PROJECT = "default"
 
 SECRETS_KEY_ENV = "CUTTLEFISH_SECRETS_KEY"
+
+#: A secret becomes an environment variable, so its name is one: capitals, digits and underscores.
+_NAME = re.compile(r"[A-Z_][A-Z0-9_]*")
+MAX_NAME_CHARS = 128
+MAX_VALUE_CHARS = 16_384
+
+
+def default_secrets_db() -> Path:
+    """``~/.cuttlefish/secrets.db``: the dashboard's store, beside ``projects.db``. One file for
+    every project, so a shared secret really is shared (a project root's own
+    ``.cuttlefish/secrets.db``, which ``cuttlefish secrets`` writes, only ever sees that folder)."""
+    return Path.home() / ".cuttlefish" / "secrets.db"
+
+
+def check_name(name: str) -> None:
+    """Raise ``ValueError`` saying what is wrong with a secret's name, or return."""
+    if not name or len(name) > MAX_NAME_CHARS or _NAME.fullmatch(name) is None:
+        raise ValueError(
+            "a secret's name uses capital letters, digits and underscores, starting with a "
+            "letter or underscore, like GITHUB_TOKEN"
+        )
+
+
+def check_value(value: str) -> None:
+    """Raise ``ValueError`` when a secret's value is empty or too long, or return."""
+    if not value:
+        raise ValueError("a secret needs a value")
+    if len(value) > MAX_VALUE_CHARS:
+        raise ValueError(f"a secret's value is at most {MAX_VALUE_CHARS} characters")
+
+
+class SecretsResolver(Protocol):
+    """What a delegation needs of a secrets store: look names up, and close."""
+
+    def resolve(self, project: str, names: Sequence[str]) -> dict[str, str]: ...
+
+    def close(self) -> None: ...
+
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS secrets (
@@ -140,3 +180,25 @@ class SecretsStore:
             if value is not None:
                 resolved[name] = value
         return resolved
+
+
+class LayeredSecrets:
+    """Several stores read as one, earliest first: a name found in an earlier store wins. The
+    daemon reads its central store, then the project folder's own (what ``cuttlefish secrets``
+    wrote there), so a secret set before the dashboard had a screen keeps working."""
+
+    def __init__(self, *stores: SecretsStore) -> None:
+        self._stores = stores
+
+    def resolve(self, project: str, names: Sequence[str]) -> dict[str, str]:
+        resolved: dict[str, str] = {}
+        for store in self._stores:
+            missing = [name for name in names if name not in resolved]
+            if not missing:
+                break
+            resolved.update(store.resolve(project, missing))
+        return resolved
+
+    def close(self) -> None:
+        for store in self._stores:
+            store.close()

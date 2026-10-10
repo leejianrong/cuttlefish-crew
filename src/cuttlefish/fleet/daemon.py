@@ -17,10 +17,12 @@ simply never calling it that way before this fix.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import logging
+import os
 import uuid
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, TypedDict
@@ -61,6 +63,15 @@ from cuttlefish.requests import (
     history,
     unresolved,
 )
+from cuttlefish.secrets.store import (
+    SECRETS_KEY_ENV,
+    SHARED_SCOPE,
+    InvalidSecretsKeyError,
+    SecretsStore,
+    check_name,
+    check_value,
+    default_secrets_db,
+)
 from cuttlefish.steering import (
     SteeringDeliveryError,
     cancel_run,
@@ -70,6 +81,10 @@ from cuttlefish.steering import (
 from cuttlefish.team import RoleInput, TeamInput, run_team
 
 logger = logging.getLogger(__name__)
+
+
+class SecretsUnavailableError(Exception):
+    """The daemon has no usable secrets key, so no secret can be stored or read."""
 
 
 class UnknownRoleError(ValueError):
@@ -246,8 +261,11 @@ class FleetDaemon:
         project_store: ProjectStore,
         *,
         request_window_s: float = 600.0,
+        secrets_db: Path | None = None,
     ) -> None:
         self._projects = project_store
+        #: Where the dashboard's secrets live: ``~/.cuttlefish/secrets.db`` unless a test says.
+        self._secrets_db = secrets_db
         self._running: dict[str, RunningTeam] = {}
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
@@ -259,6 +277,73 @@ class FleetDaemon:
         #: team id -> the episodic store its requests are journaled to, while it runs.
         self._team_stores: dict[str, EpisodicStore] = {}
         self.requests = RequestBroker(self._append_for_team)
+
+    # -- secrets (the dashboard's, ADR-0006): names go out, values never do ----------------------
+
+    def secrets_path(self) -> Path:
+        return self._secrets_db if self._secrets_db is not None else default_secrets_db()
+
+    def secrets_enabled(self) -> bool:
+        return bool(os.environ.get(SECRETS_KEY_ENV))
+
+    @contextlib.contextmanager
+    def _secrets(self) -> Iterator[SecretsStore]:
+        if not self.secrets_enabled():
+            raise SecretsUnavailableError(
+                "Secrets are off: the daemon has no CUTTLEFISH_SECRETS_KEY. Make one with "
+                "`cuttlefish secrets generate-key`, set it in the environment of "
+                "`cuttlefish serve`, and restart it."
+            )
+        try:
+            store = SecretsStore.open(self.secrets_path())
+        except InvalidSecretsKeyError as exc:
+            raise SecretsUnavailableError(str(exc)) from exc
+        try:
+            yield store
+        finally:
+            store.close()
+
+    def project_secret_names(self, project: Project) -> list[str]:
+        """Every secret name this project's agents get: its own and the shared ones."""
+        if not self.secrets_enabled():
+            return []
+        with self._secrets() as store:
+            return sorted(
+                set(store.list_names(project.secrets_scope)) | set(store.list_names(SHARED_SCOPE))
+            )
+
+    def list_secrets(self, project_id: str) -> dict[str, object]:
+        """The names set for a project and shared with every project, each marked ``credential``
+        (a backend runs on it) or ``secret`` (the project's own). Never a value."""
+        project = self._projects.get(project_id)
+        if not self.secrets_enabled():
+            return {"enabled": False, "project": [], "shared": []}
+        with self._secrets() as store:
+            return {
+                "enabled": True,
+                "project": _secret_rows(store.list_names(project.secrets_scope)),
+                "shared": _secret_rows(store.list_names(SHARED_SCOPE)),
+            }
+
+    def list_shared_secrets(self) -> dict[str, object]:
+        if not self.secrets_enabled():
+            return {"enabled": False, "shared": []}
+        with self._secrets() as store:
+            return {"enabled": True, "shared": _secret_rows(store.list_names(SHARED_SCOPE))}
+
+    def set_secret(self, project_id: str | None, name: str, value: str) -> None:
+        """Store `value` under `name` for `project_id`, or for every project when it is ``None``.
+        Raises ``ValueError`` for a bad name or value, ``SecretsUnavailableError`` without a key."""
+        check_name(name)
+        check_value(value)
+        scope = SHARED_SCOPE if project_id is None else self._projects.get(project_id).secrets_scope
+        with self._secrets() as store:
+            store.set(scope, name, value)
+
+    def delete_secret(self, project_id: str | None, name: str) -> bool:
+        scope = SHARED_SCOPE if project_id is None else self._projects.get(project_id).secrets_scope
+        with self._secrets() as store:
+            return store.delete(scope, name)
 
     def _append_for_team(self, team_id: str, payload: EventPayload) -> EpisodicEvent:
         return self._team_stores[team_id].append(team_id, payload)
@@ -529,12 +614,15 @@ class FleetDaemon:
             # project and team (a `contextvars` copy, so a concurrent team's own never mixes in).
             logsetup.set_context(project=project.id, team=team_id)
             try:
+                # Every secret the project can use goes to its agents, as environment variables
+                # (decided at this start: a change applies to the next one).
                 prepared = prepare_run(
                     project=project.secrets_scope,
-                    secret_names=[],
+                    secret_names=self.project_secret_names(project),
                     base_dir=Path(project.root),
                     agent_backend=project.backend,
                     extra_backends=[r["backend"] for r in role_inputs if r.get("backend")],
+                    central_secrets_db=self.secrets_path(),
                 )
                 self._team_stores[team_id] = prepared.episodic_store
                 events = list(prepared.episodic_store.read(team_id))
@@ -821,3 +909,12 @@ class FleetDaemon:
         journal `cuttlefish show` reads, for the dashboard's own event-tail view."""
         project = self._projects.get(project_id)
         return self._last_team_events(project)
+
+
+def _secret_rows(names: Sequence[str]) -> list[dict[str, str]]:
+    from cuttlefish.agents.registry import credential_names
+
+    credentials = credential_names()
+    return [
+        {"name": name, "kind": "credential" if name in credentials else "secret"} for name in names
+    ]

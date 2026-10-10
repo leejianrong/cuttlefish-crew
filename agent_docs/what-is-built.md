@@ -553,3 +553,11 @@ refusal card and log order (exploratory pass, 2026-10-10): a role held after rou
 refused commands (`raise_no_progress_card(..., refused=...)`), not "has gone round in circles", which stays for rounds that ran out of room. A round's
 `ToolCallRecorded` and `ConsentDecided` events are journaled just before its `DelegationCompleted`/`Refused`/`Failed`, not after (ADR-0019 amended), in
 `workflow.run_task` and `team.run_team`. A run that is mid-round when cuttlefish is upgraded replays its journal tasks in the old order.
+
+secrets, slice 1 (CUT-79, 2026-10-10): the dashboard's secret routes (`GET/PUT/DELETE /api/projects/{id}/secrets[/{name}]`, `/api/secrets[/{name}]`) over one central
+`~/.cuttlefish/secrets.db` (`FleetDaemon.secrets_path`, `default_secrets_db`), names and kinds out and values never back, 409 with how to fix it when there is no key. A team
+start passes every name its project can use to `prepare_run` (the daemon also reads the folder's own `secrets.db` after the central one, `LayeredSecrets`) and to the runtime
+(`Runtime.secret_names`), not to the recorded task arguments. Found on the way: `prepare_run` scrubbed only the default names and the backend's credential from the journal,
+so a declared secret's value was written to it; it now scrubs every resolved secret. The credential split (docs/research/harness-credentials-spike.md): kopicode forwards
+only `OPENROUTER_API_KEY` (it never read `ANTHROPIC_API_KEY`), Codex gets `-c shell_environment_policy.exclude=["OPENAI_API_KEY"]` before the subcommand (after `app-server`
+it is ignored: found live), Claude Code is not enforced. No MCP secret tools. The screens are slices 2 and 3.

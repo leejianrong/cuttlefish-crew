@@ -35,3 +35,17 @@ def resolve_backend(
     raise UnknownBackendError(
         f"unknown agent backend {name!r}; expected 'kopicode', 'claude-code', or 'codex'"
     )
+
+
+def credential_names() -> frozenset[str]:
+    """Every variable a backend runs on (``AgentBackend.CREDENTIAL_ENV_VARS``): the agent
+    credentials, as opposed to a project's own secrets."""
+    from cuttlefish.agents.claude_code import ClaudeCodeBackend
+    from cuttlefish.agents.codex import CodexBackend
+    from cuttlefish.agents.kopicode import KopicodeBackend
+
+    return frozenset(
+        name
+        for backend in (KopicodeBackend, ClaudeCodeBackend, CodexBackend)
+        for name in backend.CREDENTIAL_ENV_VARS
+    )

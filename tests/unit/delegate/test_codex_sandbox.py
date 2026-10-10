@@ -41,13 +41,16 @@ def test_build_codex_argv_with_no_declared_allowlist_uses_read_only_sandbox() ->
         "--skip-git-repo-check",
         "--sandbox",
         "read-only",
+        "-c",
+        'shell_environment_policy.exclude=["OPENAI_API_KEY"]',
         "add a .gitignore entry",
     ]
 
 
 def test_build_codex_argv_with_a_declared_allowlist_uses_workspace_write_sandbox() -> None:
     argv = build_codex_argv("codex", "run the tests", allow=[["go", "test"]])
-    assert argv[-3:] == ["--sandbox", "workspace-write", "run the tests"]
+    assert argv[argv.index("--sandbox") + 1] == "workspace-write"
+    assert argv[-1] == "run the tests"
 
 
 async def test_run_codex_in_sandbox_execs_the_right_argv_at_the_right_cwd() -> None:
