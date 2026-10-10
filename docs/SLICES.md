@@ -796,11 +796,11 @@ Claude Code and Codex are real but unverified, so each gets a spike before its b
 9. **V4-I: blocked-action fallback.** For any backend without a live path: record
    what was blocked or asked, show it under Needs you labelled with when the answer
    lands, and "Allow and rerun round" / resume with the answer (`claude --resume`).
-10. **V4-J: Claude Code spike.** Run a real `claude` under `--input-format stream-json`
+10. **V4-J: Claude Code spike (done 2026-10-10, `docs/research/claude-code-stream-json-spike.md`: permission requests, `AskUserQuestion`, interrupt and resume all work over stream-json with `--permission-prompt-tool stdio`).** Run a real `claude` under `--input-format stream-json`
     plus `canUseTool` or `--permission-prompt-tool`; record the actual permission and
     `AskUserQuestion` message shapes and the answer round trip in a research note. No
     product code.
-11. **V4-K: Claude Code live prompts**, only if V4-J works, on the shapes it recorded.
+11. **V4-K: Claude Code live prompts**, unblocked by V4-J, on the shapes it recorded.
 12. **V4-L: Codex spike (done 2026-10-08, `docs/research/codex-app-server-spike.md`: approvals, interrupt, resume, usage all work over `app-server`).** Install `codex`, drive `codex app-server`, record the
     approval and user-input requests (note open Codex issues #14192 and #21982). No
     product code.
