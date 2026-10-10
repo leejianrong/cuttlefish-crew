@@ -29,7 +29,7 @@ import secrets
 import socket
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, NamedTuple
 
 import httpx
 import uvicorn
@@ -69,6 +69,15 @@ _DROP_RESPONSE: Final = frozenset(
 
 _METHODS: Final = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 _TIMEOUT: Final = httpx.Timeout(30.0, read=600.0)
+
+
+class BrokerRoute(NamedTuple):
+    """How a backend's own key is brokered: which upstream it talks to, the environment variable its
+    key is read from (the lease's token takes that place), and the one its base URL is read from."""
+
+    upstream: str
+    key_env: str
+    base_env: str
 
 
 @dataclass(frozen=True)

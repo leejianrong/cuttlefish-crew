@@ -7,17 +7,22 @@ after the first user message is read:
   ``{"write": "<abs path>"}``  the same for a Write
   ``{"tool": "<name>"}``       the same for another tool (``WebFetch``)
   ``{"ask": [{"question": "q", "options": ["a", "b"]}]}``  an ``AskUserQuestion`` request
+  ``{"api_call": true}``       POST ``$ANTHROPIC_BASE_URL/v1/messages`` with ``$ANTHROPIC_API_KEY``
   ``{"hang": true}``           waits for an ``interrupt`` request, acknowledges it, ends the turn
 ``crash``: exit with a message on stderr after reading the first message.
 """
 
 import json
+import os
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 scenario = json.loads(Path(sys.argv[1]).read_text())
 log = Path(sys.argv[2]).open("a", buffering=1)  # noqa: SIM115
 log.write(json.dumps({"argv": sys.argv[3:]}) + "\n")
+log.write(json.dumps({"env": dict(os.environ)}) + "\n")
 n = 0
 
 
@@ -128,6 +133,20 @@ for step in scenario.get("steps", []):
         tool_result(
             call, f"answered {answers}" if allowed else reply.get("message", ""), not allowed
         )
+    elif step.get("api_call"):
+        request = urllib.request.Request(
+            os.environ["ANTHROPIC_BASE_URL"] + "/v1/messages",
+            data=b"{}",
+            headers={
+                "x-api-key": os.environ["ANTHROPIC_API_KEY"],
+                "content-type": "application/json",
+            },
+        )
+        try:
+            status = urllib.request.urlopen(request, timeout=10).status
+        except urllib.error.HTTPError as exc:
+            status = exc.code
+        log.write(json.dumps({"api_status": status}) + "\n")
     elif step.get("hang"):
         tool_use("Bash", {"command": "sleep 100"})
         send(

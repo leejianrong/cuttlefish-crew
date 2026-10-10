@@ -6,12 +6,14 @@ mechanics (see tests/unit/agents/ for those).
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.agents.registry import UnknownBackendError
+from cuttlefish.broker import BrokerRoute, Lease
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.requests import RequestBroker, RequestContext
@@ -369,3 +371,110 @@ async def test_only_a_backend_that_can_pause_is_given_someone_to_ask(
     )
     store.close()
     assert ("asker" in backend.kwargs) is gets_asker
+
+
+class _FakeBroker:
+    def __init__(self) -> None:
+        self.leased: list[dict[str, object]] = []
+        self.revoked: list[object] = []
+
+    def lease(self, upstream: str, key: str, *, base: str | None, project: str | None) -> object:
+        lease = Lease(
+            token="cfb_t", upstream=upstream, base=base or "", header="x", url="u", key=key
+        )
+        self.leased.append({"upstream": upstream, "key": key, "base": base, "project": project})
+        return lease
+
+    def revoke(self, lease: object) -> None:
+        self.revoked.append(lease)
+
+
+class _BrokeredBackend:
+    NAME = "claude-code"
+    CREDENTIAL_ENV_VARS: tuple[str, ...] = ("ANTHROPIC_API_KEY",)
+    BROKER_ROUTE = BrokerRoute("anthropic", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL")
+
+    def __init__(self, fail: bool = False) -> None:
+        self.kwargs: dict[str, Any] = {}
+        self.fail = fail
+
+    async def delegate(self, **kwargs: Any) -> DelegationOutcome:
+        self.kwargs = kwargs
+        if self.fail:
+            raise DelegationError("boom")
+        return DelegationOutcome(kind="completed", summary="s")
+
+
+async def _brokered(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    backend: _BrokeredBackend,
+    broker: _FakeBroker | None,
+    key_in_env: str | None = "real-env-key",
+    sandbox: bool = False,
+) -> None:
+    monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ANTHROPIC_BASE_URL", raising=False)
+    if key_in_env:
+        monkeypatch.setenv("ANTHROPIC_API_KEY", key_in_env)
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://gateway.example")
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary="kopicode",
+            broker=broker,  # type: ignore[arg-type]
+            sandbox_provider=object() if sandbox else None,  # type: ignore[arg-type]
+        )
+    )
+    try:
+        await delegate_to_agent_backend("do it", str(tmp_path))
+    finally:
+        store.close()
+
+
+async def test_a_brokered_backend_is_leased_its_key_and_never_handed_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backend, broker = _BrokeredBackend(), _FakeBroker()
+    await _brokered(tmp_path, monkeypatch, backend=backend, broker=broker)
+    assert broker.leased == [
+        {
+            "upstream": "anthropic",
+            "key": "real-env-key",
+            "base": "https://gateway.example",
+            "project": "default",
+        }
+    ]
+    assert backend.kwargs["lease"].token == "cfb_t"
+    assert "ANTHROPIC_API_KEY" not in backend.kwargs["secrets"]
+    assert broker.revoked == [backend.kwargs["lease"]]
+
+
+async def test_a_lease_is_closed_even_when_the_round_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    broker = _FakeBroker()
+    with pytest.raises(DelegationError):
+        await _brokered(tmp_path, monkeypatch, backend=_BrokeredBackend(fail=True), broker=broker)
+    assert len(broker.revoked) == 1
+
+
+@pytest.mark.parametrize("case", ["no broker", "no key", "sandbox"])
+async def test_no_lease_is_taken_without_a_broker_a_key_or_on_the_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    backend, broker = _BrokeredBackend(), _FakeBroker()
+    await _brokered(
+        tmp_path,
+        monkeypatch,
+        backend=backend,
+        broker=None if case == "no broker" else broker,
+        key_in_env=None if case == "no key" else "real-env-key",
+        sandbox=case == "sandbox",
+    )
+    assert broker.leased == []
+    assert "lease" not in backend.kwargs

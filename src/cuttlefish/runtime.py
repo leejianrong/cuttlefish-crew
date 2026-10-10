@@ -23,6 +23,7 @@ from __future__ import annotations
 import contextvars
 from dataclasses import dataclass
 
+from cuttlefish.broker import Broker
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.provider import LlmProvider
 from cuttlefish.requests import RequestContext
@@ -71,6 +72,9 @@ class Runtime:
     #: Secret names every delegation also resolves (the daemon's: all a project can use). Rides the
     #: runtime, not a task argument, so a recorded call and its replay are unchanged.
     secret_names: tuple[str, ...] = ()
+    #: The credential broker (ADR-0031), when the daemon runs one: a delegation leases its agent's
+    #: key from it instead of handing the key over. Rides the runtime, never a task argument.
+    broker: Broker | None = None
 
 
 _runtime: contextvars.ContextVar[Runtime | None] = contextvars.ContextVar(

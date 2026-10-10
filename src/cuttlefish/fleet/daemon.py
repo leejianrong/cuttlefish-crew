@@ -34,6 +34,7 @@ from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
 from cuttlefish import environment, envprep, logsetup, runtime
+from cuttlefish.broker import Broker
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
@@ -253,6 +254,11 @@ class ResumeAttempt:
     error: str | None
 
 
+#: ``CUTTLEFISH_CREDENTIAL_BROKER=1`` makes the daemon hold each agent's model API key itself and
+#: lease the agent a token instead (ADR-0031).
+CREDENTIAL_BROKER_ENV = "CUTTLEFISH_CREDENTIAL_BROKER"
+
+
 class FleetDaemon:
     """Owns the `Project` registry and every currently-running team."""
 
@@ -277,6 +283,32 @@ class FleetDaemon:
         #: team id -> the episodic store its requests are journaled to, while it runs.
         self._team_stores: dict[str, EpisodicStore] = {}
         self.requests = RequestBroker(self._append_for_team)
+        #: The credential broker (ADR-0031): started with the first team that needs it.
+        self._broker: Broker | None = None
+
+    def broker_enabled(self) -> bool:
+        return os.environ.get(CREDENTIAL_BROKER_ENV, "").strip().lower() in (
+            "1",
+            "true",
+            "on",
+            "yes",
+        )
+
+    async def ensure_broker(self) -> Broker | None:
+        """The running broker when the setting is on (started now if need be), else None. A broker
+        that cannot start is an error, not a quiet fallback to handing out the key."""
+        if not self.broker_enabled():
+            return None
+        if self._broker is None:
+            self._broker = Broker()
+        await self._broker.start()
+        return self._broker
+
+    async def close(self) -> None:
+        """Release what the daemon holds open: the broker, and with it every lease."""
+        if self._broker is not None:
+            await self._broker.close()
+            self._broker = None
 
     # -- secrets (the dashboard's, ADR-0006): names go out, values never do ----------------------
 
@@ -657,6 +689,7 @@ class FleetDaemon:
                         requests=RequestContext(
                             self.requests, project.id, team_id, self._request_window_s
                         ),
+                        broker=await self.ensure_broker(),
                     )
                 )
                 workflow_input: TeamInput = {

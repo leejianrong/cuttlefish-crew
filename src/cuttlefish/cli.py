@@ -811,6 +811,7 @@ async def _serve(args: argparse.Namespace) -> int:
             print(f"cuttlefish serve: {exc}", file=sys.stderr)
             return EXIT_TASK_FAILED
     finally:
+        await daemon.close()
         store.close()
     return EXIT_OK
 

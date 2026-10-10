@@ -16,6 +16,7 @@ import pytest
 
 from cuttlefish.agents.claude_code import ClaudeCodeBackend
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.broker import Lease
 from cuttlefish.delegate.claude_code_live import build_live_argv, run_claude_code_live
 from cuttlefish.episodic.events import EventPayload
 from cuttlefish.episodic.store import EpisodicEvent
@@ -239,3 +240,32 @@ async def test_a_question_with_nobody_to_ask_is_denied(fake: Fake) -> None:
     backend = fake.script({"steps": [{"ask": [{"question": "Which?", "options": ["a"]}]}]})
     await fake.run(backend)
     assert fake.decisions() == ["deny"]
+
+
+async def test_a_lease_replaces_the_key_and_points_claude_at_the_broker(fake: Fake) -> None:
+    lease = Lease(
+        token="cfb_placeholder",
+        upstream="anthropic",
+        base="https://example.invalid",
+        header="x-api-key",
+        url="http://127.0.0.1:1/anthropic/cfb_placeholder",
+        key="real-key-never-given",
+    )
+    backend = fake.script({"steps": []})
+    await fake.run(backend, lease=lease)
+    # A declared key beats the environment, so give it one to prove the lease beats that too.
+    await backend.delegate(
+        task_text="do it",
+        root=str(fake.root),
+        allow=ALLOW,
+        secrets={"ANTHROPIC_API_KEY": "real-key-never-given", "GITHUB_TOKEN": "gh-value"},
+        sandbox_provider=None,
+        lease=lease,
+    )
+    envs = [m["env"] for m in fake.lines() if "env" in m]
+    assert len(envs) == 2
+    for env in envs:
+        assert env["ANTHROPIC_BASE_URL"] == lease.url
+        assert env["ANTHROPIC_API_KEY"] == "cfb_placeholder"
+    assert "real-key-never-given" not in fake.log.read_text()
+    assert envs[1]["GITHUB_TOKEN"] == "gh-value"  # a project secret still arrives

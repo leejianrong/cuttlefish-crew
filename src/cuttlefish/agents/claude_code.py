@@ -27,6 +27,7 @@ from typing import ClassVar, Literal
 
 from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.broker import BrokerRoute, Lease
 from cuttlefish.delegate.claude_code import run_claude_code, run_claude_code_in_sandbox
 from cuttlefish.delegate.claude_code_live import QuestionHandler, run_claude_code_live
 from cuttlefish.limits import round_timeout_for
@@ -54,6 +55,16 @@ def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
     return resolved
 
 
+def _env(secrets: Mapping[str, str], lease: Lease | None) -> dict[str, str]:
+    """What Claude Code's process is given: its declared credentials, and when a lease is held
+    (ADR-0031) the broker's address and token in the place of the key, whatever else said."""
+    env = _credential_envs(secrets)
+    if lease is not None:
+        env["ANTHROPIC_BASE_URL"] = lease.url
+        env["ANTHROPIC_API_KEY"] = lease.token
+    return env
+
+
 def _question_handler(asker: ShellAsker | None, mode: str) -> QuestionHandler | None:
     """A live answer for the model's own questions, when a person can be asked."""
     if asker is None or mode in ("auto", "read-only"):
@@ -78,6 +89,10 @@ class ClaudeCodeBackend:
 
     NAME: ClassVar[str] = "claude-code"
     CREDENTIAL_ENV_VARS: ClassVar[tuple[str, ...]] = _CREDENTIAL_ENV_VARS
+    #: Its key can be held by the credential broker (ADR-0031): it reads `ANTHROPIC_BASE_URL`.
+    BROKER_ROUTE: ClassVar[BrokerRoute] = BrokerRoute(
+        "anthropic", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"
+    )
 
     def __init__(
         self, binary: str = "claude", *, transport: Literal["stdio", "print"] | None = None
@@ -98,8 +113,11 @@ class ClaudeCodeBackend:
         mode: str = "standard",
         asker: ShellAsker | None = None,
         limits: Mapping[str, int] | None = None,
+        lease: Lease | None = None,
     ) -> DelegationOutcome:
-        """``asker`` (ADR-0028) lets a command nothing approves, and the model's own questions, be
+        """``lease`` (ADR-0031) is the broker's stand-in for the key; the real key is not in
+        ``secrets`` then. It is ignored inside a sandbox, which cannot reach the daemon's loopback.
+        ``asker`` (ADR-0028) lets a command nothing approves, and the model's own questions, be
         put to a person; only the ``stdio`` transport can hold a request open. ``limits`` carries
         the round's time limit; the other limits have no control on Claude Code."""
         if sandbox_provider is None and self._transport == "stdio":
@@ -110,7 +128,7 @@ class ClaudeCodeBackend:
                 decide=command_decider(allow, mode, asker),
                 mode=mode,
                 ask=_question_handler(asker, mode),
-                env=_credential_envs(secrets),
+                env=_env(secrets, lease),
                 timeout=round_timeout_for(limits),
             )
         if sandbox_provider is None:
@@ -120,7 +138,7 @@ class ClaudeCodeBackend:
                 root=root,
                 allow=allow,
                 mode=mode,
-                env=_credential_envs(secrets),
+                env=_env(secrets, lease),
             )
         return await self._delegate_inside_sandbox(
             sandbox_provider,
