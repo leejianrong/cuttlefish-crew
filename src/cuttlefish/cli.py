@@ -842,7 +842,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--root",
         default=None,
-        help="The repository or scratch checkout to delegate against (default: CWD)",
+        help="The repository or scratch checkout to delegate against (default: CWD). A one-shot "
+        "run has no Needs-you inbox: a command nothing approves is refused, not asked (use "
+        "`serve` to be asked)",
     )
     run_parser.add_argument(
         "--token-budget",

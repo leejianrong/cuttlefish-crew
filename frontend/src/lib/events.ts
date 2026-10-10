@@ -86,6 +86,10 @@ export function refusalReason(rule: string): string {
     unsafe_flag: "it used a flag that writes or runs other things",
     write_outside_root_never: "it writes outside the project folder",
     unknown_kind: "it asked for something this daemon does not allow",
+    edit_outside_root: "it writes outside the project folder",
+    cwd_outside_root: "it ran outside the project folder",
+    tool_not_granted: "this role may not use that tool",
+    file_change_not_granted: "it asked to write more than the project folder",
   };
   return reasons[rule] ?? rule;
 }
@@ -251,7 +255,13 @@ export function summarize(event: EpisodicEventView): string {
     case "RequestResolved":
       return OUTCOMES[p.resolution as RequestResolution] ?? String(p.resolution);
     case "ConsentDecided": {
-      const what = p.kind === "run_shell" ? commandText(String(p.detail)) : String(p.detail);
+      // A file edit is not a command: say so, and name the file, not "Command / Allowed".
+      const what =
+        p.kind === "run_shell"
+          ? commandText(String(p.detail))
+          : p.kind === "file_change"
+            ? `edit of ${String(p.detail)}`
+            : String(p.detail);
       return p.answer === "deny"
         ? `Refused ${what}. ${capitalise(refusalReason(String(p.rule)))}.`
         : `Allowed ${what}`;

@@ -46,7 +46,8 @@ MODE_INFO: dict[str, tuple[str, str]] = {
     ),
     "auto": (
         "Auto",
-        "Any command runs without asking, except the always-blocked list.",
+        "Any command runs without asking, except the always-blocked list (and curl and wget on "
+        "Claude Code, which cannot tell a download piped into a shell from a plain one).",
     ),
 }
 

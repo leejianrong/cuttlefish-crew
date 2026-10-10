@@ -59,6 +59,8 @@ _STDERR_CAP = 64 * 1024
 _STDERR_TAIL_CHARS = 2000
 #: Longest command line copied into a journaled consent record.
 _DETAIL_CHARS = 1024
+#: The most of Codex's final answer that goes into an outcome's summary.
+_REPLY_CHARS = 600
 
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash"})
 _SHELL_FLAGS = frozenset({"-c", "-lc"})
@@ -154,6 +156,12 @@ class _Round:
         if isinstance(total, Mapping):
             self.tokens = int(total.get("inputTokens") or 0) + int(total.get("outputTokens") or 0)
 
+    def _said(self, summary: str) -> str:
+        """``summary`` followed by what Codex said last (its final answer), so a person or an
+        MCP client reads what happened and not only how many files changed."""
+        reply = " ".join(self.final_answer.split())[:_REPLY_CHARS]
+        return f"{summary}: {reply}" if reply else summary
+
     def outcome(self) -> DelegationOutcome:
         common: dict[str, Any] = {
             "tokens": self.tokens,
@@ -164,20 +172,20 @@ class _Round:
             if self.edited_paths:
                 return DelegationOutcome(
                     kind="completed",
-                    summary=f"Codex edited {len(self.edited_paths)} file(s)",
+                    summary=self._said(f"Codex edited {len(self.edited_paths)} file(s)"),
                     edited_paths=self.edited_paths,
                     **common,
                 )
             if self.declined and not any(c.status == "ok" for c in self.tool_calls):
                 return DelegationOutcome(
                     kind="refused",
-                    summary="Codex's commands were declined and no file changed",
+                    summary=self._said("Codex's commands were declined and no file changed"),
                     reason=describe_refusals(self.consents)
                     or f"{self.declined} command(s) were not allowed",
                     **common,
                 )
             return DelegationOutcome(
-                kind="completed", summary="Codex finished with no edit needed", **common
+                kind="completed", summary=self._said("Codex finished with no edit needed"), **common
             )
         return DelegationOutcome(
             kind="failed",

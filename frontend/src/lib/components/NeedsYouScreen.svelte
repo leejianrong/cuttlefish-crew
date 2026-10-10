@@ -46,8 +46,8 @@
     <div class="card filled empty">
       <p class="title-medium">Nothing is waiting on you.</p>
       <p class="body-medium muted">
-        When an agent asks to run a command that isn't allowed, it appears here and pauses until you
-        answer.
+        When an agent asks to run a command that isn't allowed, or has a question for you (kopicode
+        and Claude Code), it appears here and pauses until you answer.
       </p>
     </div>
   {/if}
