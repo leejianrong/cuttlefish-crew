@@ -325,7 +325,9 @@ The dashboard shows these under **Needs you**. When a kopicode agent asks to run
   the project's own commands for later starts. The same answer sent twice returns `already: true`;
   a different one, or one after the window closed, is a 409 naming how the request ended; an
   unknown request is a 404; a refused rule is a 422 with the reason and the request stays pending.
-- A request of kind `question` is a kopicode agent asking a person something (its `ask` tool).
+- A request of kind `question` is an agent asking a person something (kopicode's `ask` tool, or Claude Code's own
+  question). When the agent offered choices the request carries them as `options` (at most six, each cut to 80
+  characters; none for a multi-select question) and the dashboard shows each as a button that sends it as the answer.
   It takes `{"answer": "answer", "text": "..."}` (non-empty, at most 4000 characters, passed to
   the agent as the reply) or `{"answer": "decline"}`. The journal and the history keep the text; only
   known secret values are scrubbed from it (as everywhere in the journal), so do not type a

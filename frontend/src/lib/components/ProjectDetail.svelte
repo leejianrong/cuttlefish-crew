@@ -10,6 +10,7 @@
   } from "../api";
   import { installProgress } from "../environment";
   import { latestRound } from "../events";
+  import { lastRun, runFigures, runHeading } from "../lastrun";
   import type { ProjectTab } from "../route";
   import { keepIfSame } from "../same";
   import { modeLabel, startFailure } from "../team";
@@ -90,6 +91,11 @@
             : status,
         }));
   });
+
+  // Once nothing is running, say how the last run ended instead of looking like it never started.
+  const ended = $derived(
+    project && !project.running ? lastRun(events, project.status, project.usage) : null,
+  );
 
   const TABS = $derived([
     { id: "overview", label: "Overview" },
@@ -308,6 +314,15 @@
         {/if}
         {#if startError}<p class="error" role="alert">{startError}</p>{/if}
       {:else}
+        {#if ended}
+          <section class="card filled last-run" class:bad={ended.outcome === "failed"} aria-labelledby="last-run-heading">
+            <h2 id="last-run-heading" class="title-medium">{runHeading(ended)}</h2>
+            <p class="body-medium muted">{runFigures(ended)}</p>
+            {#each ended.failures as failure (failure.role)}
+              <p class="body-medium"><strong>{failure.role}</strong>{failure.error ? `: ${failure.error}` : ""}</p>
+            {/each}
+          </section>
+        {/if}
         <section class="card filled start-form" aria-labelledby="start-heading">
           <h2 id="start-heading" class="title-large">Start a team</h2>
           {#if project.roles.length === 0}
@@ -468,6 +483,23 @@
     border-radius: var(--md-sys-shape-corner-small);
     font-size: 0.85rem;
     margin-bottom: 1rem;
+  }
+
+  .last-run {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 16px 20px;
+    margin-bottom: 1rem;
+  }
+
+  .last-run p {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .last-run.bad {
+    border-left: 4px solid var(--md-sys-color-error);
   }
 
   .roles {

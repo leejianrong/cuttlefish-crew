@@ -313,6 +313,9 @@ class RequestRaised:
     suggested_rule: list[str] | None = None
     role: str | None = None
     backend: str | None = None
+    #: A question's choices when the agent offered some to pick from, so a card can show them as
+    #: buttons. Empty for a free-text question and for every other kind.
+    options: list[str] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

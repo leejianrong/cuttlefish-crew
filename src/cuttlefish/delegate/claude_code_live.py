@@ -30,7 +30,7 @@ import dataclasses
 import inspect
 import json
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -59,7 +59,7 @@ _STDERR_TAIL_CHARS = 2000
 _DETAIL_CHARS = 1024
 
 #: Puts a model's question (and the options it gave) to a person: their answer, or ``None``.
-QuestionHandler = Callable[[str, str], Awaitable[str | None]]
+QuestionHandler = Callable[[str, str, Sequence[str]], Awaitable[str | None]]
 
 
 def build_live_argv(binary: str, *, mode: str = "standard") -> list[str]:
@@ -274,7 +274,9 @@ class _Connection:
                 else []
             )
             context = "Options: " + ", ".join(labels) if labels else ""
-            text = await self._ask(str(item["question"]), context)
+            # A multi-select question takes several answers, which a single button cannot give.
+            offered = [] if item.get("multiSelect") else labels
+            text = await self._ask(str(item["question"]), context, offered)
             if text is None:
                 return None
             answers[str(item["question"])] = text

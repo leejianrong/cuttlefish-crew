@@ -158,3 +158,8 @@ and this folder disagree after a slice lands, update this folder.
   for a tab), `#/add`, `#/needs-you`, `#/roles`, `#/sprites`. Reload keeps the screen, Back and Forward walk through the screens
   and tabs you visited, and a link can be pasted into a chat (it still needs the daemon's token, which is kept per browser).
 
+
+- **Question buttons and last-run card shipped (2026-10-10).** A question card shows the agent's choices as tonal buttons above the text box
+  ("Or write your own answer"); one click sends that choice. When nothing is running and the last run ended, Overview opens with a card
+  "The last run finished / failed / was stopped" with files changed, minutes, tokens and cost (cost left out when no backend reported one),
+  and a failed role's reason; it sits above Start a team. Neutral surface, an error-coloured edge only when it failed. Not in the mockups.

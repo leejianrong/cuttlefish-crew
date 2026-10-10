@@ -51,7 +51,9 @@
   let reply = $state("");
   const replyOk = $derived(reply.trim().length > 0);
 
-  async function answer(choice: RequestAnswer) {
+  const options = $derived(request.options ?? []);
+
+  async function answer(choice: RequestAnswer, text?: string) {
     busy = choice;
     problem = null;
     try {
@@ -60,7 +62,7 @@
         request.id,
         choice,
         choice === "allow_always" ? ruleWords : undefined,
-        choice === "answer" ? reply : undefined,
+        choice === "answer" ? (text ?? reply) : undefined,
       );
       onAnswered();
     } catch (error) {
@@ -99,8 +101,21 @@
   {/if}
 
   {#if question}
+    {#if options.length > 0}
+      <div class="choices" role="group" aria-label="Choices">
+        {#each options as option (option)}
+          <button
+            class="btn btn-tonal"
+            disabled={busy !== null || expired}
+            onclick={() => answer("answer", option)}
+          >
+            {option}
+          </button>
+        {/each}
+      </div>
+    {/if}
     <label class="field">
-      <span class="field-label">Your answer</span>
+      <span class="field-label">{options.length > 0 ? "Or write your own answer" : "Your answer"}</span>
       <textarea
         bind:value={reply}
         rows="3"
@@ -235,6 +250,13 @@
     align-items: center;
     gap: 8px;
     margin-top: 8px;
+  }
+
+  .choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
   }
 
   .timer {

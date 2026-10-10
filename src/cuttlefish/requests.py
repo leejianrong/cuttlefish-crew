@@ -81,6 +81,15 @@ def _clip(text: str) -> str:
     return text if len(text) <= _QUESTION_CHARS else text[: _QUESTION_CHARS - 1] + "…"
 
 
+#: Most choices a question card shows as buttons, and the longest label on one.
+MAX_OPTIONS = 6
+_OPTION_CHARS = 80
+
+
+def _clip_option(text: str) -> str:
+    return text if len(text) <= _OPTION_CHARS else text[: _OPTION_CHARS - 1] + "…"
+
+
 #: The most a person's typed answer may be.
 ANSWER_TEXT_CHARS = 4000
 
@@ -218,6 +227,7 @@ class RequestBroker:
         question: str,
         context: str,
         window_s: float,
+        options: Sequence[str] = (),
     ) -> PendingRequest:
         """A question the agent put to a person (kopicode's ``ask``, live over ``ask.request``).
         Both texts are model output: capped, and shown as text, never as markup."""
@@ -236,6 +246,7 @@ class RequestBroker:
                 expires_at=(self._now() + timedelta(seconds=window_s)).isoformat(),
                 role=role,
                 backend=backend,
+                options=[_clip_option(o) for o in list(options)[:MAX_OPTIONS]],
             ),
             window_s=window_s,
         )
@@ -554,9 +565,12 @@ class ShellAsker:
     def grants(self) -> list[tuple[str, ...]]:
         return self.context.broker.grants(self.context.team_id)
 
-    async def ask_person(self, question: str, context: str, *, window_s: float) -> str | None:
-        """Put a model's question to a person and hold. The answer's text, or ``None`` when
-        nobody answered (declined, expired, or the team was stopped)."""
+    async def ask_person(
+        self, question: str, context: str, *, window_s: float, options: Sequence[str] = ()
+    ) -> str | None:
+        """Put a model's question to a person and hold. ``options`` are the choices the agent
+        offered, shown as buttons. The answer's text, or ``None`` when nobody answered
+        (declined, expired, or the team was stopped)."""
         if self.context.broker.is_closed(self.context.team_id):
             return None
         request = self.context.broker.raise_question(
@@ -567,6 +581,7 @@ class ShellAsker:
             question=question,
             context=context,
             window_s=window_s,
+            options=options,
         )
         outcome = await self.context.broker.hold(request)
         return outcome.text if outcome.resolution == "answered" else None
