@@ -55,7 +55,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   and a sandbox provider fall back to `claude -p`, which refuses). `cuttlefish run` and `run-team` have
   no inbox and refuse as before (V4-I would add a blocked-action card for those paths).
 - **Claude Code's live path decides only what Claude Code asks about** (V4-K). What it treats as
-  read-only (`ls`) never prompts, edits inside the project run under `acceptEdits`, and the never-allowed
+  read-only (`uname`, `ls`) never prompts (the session runs `--permission-mode manual`, so a file edit and a shell
+  command that writes both reach us; `acceptEdits` and `--allowedTools Bash` were tried first and let a never-allowed
+  command through, found by the CLI exploratory pass), and the never-allowed
   prefixes are also passed as `--disallowedTools` for anything that does not prompt. No `Bash(...)` allow
   patterns are passed, so a command it would have allowed on its own reading of a pattern now asks, under
   our stricter plain-word rule. Another tool that prompts (`WebFetch`, `Task`, MCP) is refused. The

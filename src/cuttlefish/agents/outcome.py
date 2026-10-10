@@ -11,6 +11,7 @@ from here; nothing about their shape changed in the move.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 from typing import Literal
 
 
@@ -59,6 +60,16 @@ class ConsentDecisionRecord:
     detail: str
     answer: Literal["allow", "deny"]
     rule: str
+
+
+def describe_refusals(consents: Sequence[ConsentDecisionRecord], limit: int = 3) -> str:
+    """What was refused and by which rule, for the reason of a refused round:
+    ``'make build' (no_matching_allow_entry); 'touch /tmp/x' (never_allowed:write_outside_root)``.
+    The first ``limit`` only."""
+    denied = [c for c in consents if c.answer == "deny"]
+    shown = [f"{c.detail.removeprefix('/bin/sh -c ')!r} ({c.rule})" for c in denied[:limit]]
+    more = f"; and {len(denied) - limit} more" if len(denied) > limit else ""
+    return "; ".join(shown) + more
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

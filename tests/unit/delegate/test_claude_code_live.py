@@ -74,10 +74,11 @@ def test_the_live_argv_turns_the_protocol_on_and_passes_no_allow_patterns() -> N
     assert argv[argv.index("--permission-prompt-tool") + 1] == "stdio"
     assert argv[argv.index("--permission-prompts") + 1] == "host"
     assert "--allowedTools" not in argv
+    assert argv[argv.index("--permission-mode") + 1] == "manual"
     assert "Bash(sudo:*)" in argv
     assert "Write" not in argv
     auto = build_live_argv("claude", mode="auto")
-    assert auto[auto.index("--allowedTools") + 1] == "Bash"
+    assert "--allowedTools" not in auto
     assert "Bash(curl:*)" in auto
     assert "Write" in build_live_argv("claude", mode="read-only")
 
@@ -105,7 +106,8 @@ async def test_a_round_whose_every_call_was_declined_is_refused(fake: Fake) -> N
     backend = fake.script({"steps": [{"bash": "make build"}]})
     outcome = await fake.run(backend)
     assert outcome.kind == "refused"
-    assert "not allowed" in (outcome.reason or "")
+    assert "make build" in (outcome.reason or "")
+    assert "no_matching_allow_entry" in (outcome.reason or "")
 
 
 async def test_a_declined_command_does_not_hide_an_edit_that_landed(fake: Fake) -> None:
@@ -122,7 +124,7 @@ async def test_auto_allows_anything_not_never_allowed(fake: Fake) -> None:
     )
     await fake.run(backend, mode="auto", allow=[])
     assert fake.decisions() == ["allow", "deny"]
-    assert "Bash" in next(m["argv"] for m in fake.lines() if "argv" in m)
+    assert "--allowedTools" not in next(m["argv"] for m in fake.lines() if "argv" in m)
 
 
 async def test_an_edit_inside_the_root_is_accepted_and_one_outside_denied(

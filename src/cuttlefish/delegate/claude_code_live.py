@@ -15,7 +15,9 @@ Differences from the one-shot mapping: no ``Bash(<command>:*)`` allow patterns a
 let Claude Code approve a command on its own reading of the pattern; here every command that
 prompts is decided by our stricter policy (a plain word list, nothing chained). What Claude Code
 considers read-only (``ls``) never prompts, so it is not ours to refuse. The never-allowed
-prefixes stay as ``--disallowedTools``, the backstop for anything that does not prompt.
+prefixes stay as ``--disallowedTools``, the backstop for anything that does not prompt. The
+permission mode is ``manual``, not ``acceptEdits``: the latter lets Claude Code approve a shell
+command that writes into the project on its own (found live), so it never reached the policy.
 ``AskUserQuestion`` goes to a person when one can be asked. Every other tool that prompts is
 refused, as it was with ``--permission-prompts none``.
 """
@@ -32,7 +34,12 @@ from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import Any
 
-from cuttlefish.agents.outcome import ConsentDecisionRecord, DelegationError, DelegationOutcome
+from cuttlefish.agents.outcome import (
+    ConsentDecisionRecord,
+    DelegationError,
+    DelegationOutcome,
+    describe_refusals,
+)
 from cuttlefish.delegate.claude_code import (
     _AUTO_EXTRA_DENIED_BASH_PREFIXES,
     _EDIT_TOOLS,
@@ -57,7 +64,8 @@ QuestionHandler = Callable[[str, str], Awaitable[str | None]]
 
 def build_live_argv(binary: str, *, mode: str = "standard") -> list[str]:
     """The argv for one live session. Edits inside the working directory are accepted by Claude
-    Code itself (``acceptEdits``); every other prompt reaches the host."""
+    Code itself (``manual``) decides only what is read-only; every other tool call, a file edit
+    and a shell command that writes included, reaches the host."""
     args = [
         binary,
         "-p",
@@ -67,7 +75,7 @@ def build_live_argv(binary: str, *, mode: str = "standard") -> list[str]:
         "stream-json",
         "--verbose",
         "--permission-mode",
-        "acceptEdits",
+        "manual",
         "--permission-prompts",
         "host",
         "--permission-prompt-tool",
@@ -75,7 +83,8 @@ def build_live_argv(binary: str, *, mode: str = "standard") -> list[str]:
     ]
     denied = [f"Bash({prefix}:*)" for prefix in _NEVER_ALLOWED_BASH_PREFIXES]
     if mode == "auto":
-        args.extend(["--allowedTools", "Bash"])
+        # No ``--allowedTools Bash``: that would stop every command prompting, so the never-allowed
+        # check (writes outside the root, ...) would never see one. Auto answers each prompt itself.
         denied.extend(f"Bash({prefix}:*)" for prefix in _AUTO_EXTRA_DENIED_BASH_PREFIXES)
     if mode == "read-only":
         denied.extend(_EDIT_TOOLS)
@@ -358,6 +367,8 @@ async def run_claude_code_live(
         )
     outcome = classify_stream(session.events, root=root, denied_ids=frozenset(session.denied_ids))
     outcome = dataclasses.replace(outcome, consent_decisions=session.consents)
+    if outcome.kind == "refused" and any(c.answer == "deny" for c in session.consents):
+        outcome = dataclasses.replace(outcome, reason=describe_refusals(session.consents))
     if timed_out:
         limit = "its time limit" if timeout is None else f"{timeout:g} seconds"
         return dataclasses.replace(
