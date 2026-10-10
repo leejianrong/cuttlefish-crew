@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import ClassVar, Literal
 
 from cuttlefish.agents.deciders import command_decider
@@ -60,8 +60,8 @@ def _question_handler(asker: ShellAsker | None, mode: str) -> QuestionHandler | 
         return None
     window = asker.window_s
 
-    async def ask(question: str, context: str) -> str | None:
-        return await asker.ask_person(question, context, window_s=window)
+    async def ask(question: str, context: str, options: Sequence[str]) -> str | None:
+        return await asker.ask_person(question, context, window_s=window, options=options)
 
     return ask
 

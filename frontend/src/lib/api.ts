@@ -230,6 +230,8 @@ export interface NeedsYouRequest {
   why: string;
   answers: string[];
   suggested_rule: string[] | null;
+  /** A question's choices, when the agent offered some; shown as buttons. */
+  options?: string[];
   role: string | null;
   backend: string | null;
   /** When an answer takes effect: `now` is a live prompt, the others are not. */

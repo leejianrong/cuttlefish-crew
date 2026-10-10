@@ -314,3 +314,20 @@ async def test_a_restored_card_ends_when_the_role_is_steered_and_when_the_team_e
     broker.restore_blocked("p1", "t2", [_raised_blocked("z")])
     broker.end_team("t2", "abandoned")
     assert broker.pending() == []
+
+
+async def test_a_question_keeps_a_few_short_options_for_buttons() -> None:
+    broker = RequestBroker(Journal().append)
+    pending = broker.raise_question(
+        project_id="p1",
+        team_id="t1",
+        role="builder",
+        backend="claude-code",
+        question="Which runner?",
+        context="",
+        window_s=60,
+        options=["pytest", "x" * 200, *[f"o{i}" for i in range(10)]],
+    )
+    options = pending.record.options
+    assert len(options) == 6
+    assert options[0] == "pytest" and len(options[1]) == 80 and options[1].endswith("…")

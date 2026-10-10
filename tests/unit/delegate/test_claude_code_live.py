@@ -227,6 +227,7 @@ async def test_a_question_goes_to_a_person_and_their_words_reach_the_model(fake:
         await asyncio.sleep(0.05)
     (request,) = broker.pending()
     assert request.record.kind == "question"
+    assert request.record.options == ["Red", "Blue"]
     broker.answer(request.id, "answer", text="Teal")
     outcome = await run
     reply = next(m for m in fake.lines() if m.get("type") == "control_response")

@@ -544,3 +544,7 @@ pipe to a shell. Still text, not containment: a script, an alias or a name built
 open items, small (exploratory pass, 2026-10-10): `start_project` now refuses a role name the project never registered when the project has registered roles
 (`UnknownRoleError`, a 400 listing the roles; it used to run with no persona and spend credit); `register` over HTTP and `projects add` refuse a root another project
 already uses (`check_root_free`, resolved paths; `run` and `run-team` are not checked); the MCP server has `set_project_budget` over the existing budget route.
+
+question buttons and last-run card (exploratory pass, 2026-10-10): `RequestRaised` gains `options` (default empty; clipped to six labels of 80 characters), set by
+`ask_person(..., options=)` and passed from Claude Code's `AskUserQuestion` (single-select only); the question card shows them as buttons that send the label as the
+answer. The Overview shows `lib/lastrun.ts`'s card above Start a team once every role is done, failed or stopped. kopicode's `ask` carries no options today.
