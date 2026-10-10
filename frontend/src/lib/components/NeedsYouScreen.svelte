@@ -46,8 +46,8 @@
     <div class="card filled empty">
       <p class="title-medium">Nothing is waiting on you.</p>
       <p class="body-medium muted">
-        When a kopicode or Codex agent asks to run a command that isn't allowed, it appears here and
-        pauses until you answer. Claude Code can't pause, so it refuses instead.
+        When an agent asks to run a command that isn't allowed, it appears here and pauses until you
+        answer.
       </p>
     </div>
   {/if}

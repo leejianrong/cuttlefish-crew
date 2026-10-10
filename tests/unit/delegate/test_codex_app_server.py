@@ -94,7 +94,7 @@ async def test_an_allowed_command_is_accepted_and_a_refused_one_declined(fake: F
     assert [c.answer for c in outcome.consent_decisions] == ["allow", "deny", "deny"]
     assert outcome.consent_decisions[1].rule != ""
     assert [t.status for t in outcome.tool_calls] == ["ok", "denied", "denied"]
-    assert outcome.kind == "refused"
+    assert outcome.kind == "completed"
     assert outcome.tokens == 120
 
 
@@ -138,6 +138,12 @@ async def test_an_edit_is_reported_relative_to_the_root(fake: Fake) -> None:
     assert outcome.kind == "completed"
     assert outcome.edited_paths == ["a/b.py"]
     assert outcome.tool_calls[0].tool == "file_change"
+
+
+async def test_a_round_whose_every_command_was_declined_is_refused(fake: Fake) -> None:
+    backend = fake.script({"steps": [{"command": bash("make build"), "cwd": str(fake.root)}]})
+    outcome = await fake.run(backend)
+    assert outcome.kind == "refused"
 
 
 async def test_an_edit_inside_the_root_is_accepted_and_one_outside_declined(

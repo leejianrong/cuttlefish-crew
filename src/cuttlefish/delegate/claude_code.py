@@ -153,7 +153,10 @@ def build_claude_code_argv(
 
 
 def classify_stream(
-    events: Iterable[Mapping[str, Any]], *, root: str | None = None
+    events: Iterable[Mapping[str, Any]],
+    *,
+    root: str | None = None,
+    denied_ids: frozenset[str] | None = None,
 ) -> DelegationOutcome:
     """Reduce an already-parsed sequence of stream-json event lines to one outcome.
 
@@ -180,7 +183,14 @@ def classify_stream(
     ``permission_denials`` is upgraded to ``"denied"`` in a second pass, once
     that event is known — the per-call ``is_error`` flag alone can't tell a
     permission denial apart from a genuine execution failure.
+
+    ``denied_ids`` (V4-K) is given for a live session, and is the calls its host answered ``deny``
+    to. A live host's denials also appear in the result's ``permission_denials``, so there a
+    denial no longer makes the round ``"refused"`` by itself: only a round with a denial, no edit
+    and no call that succeeded is. Denied calls are ``"denied"`` and never an edit.
     """
+    live = denied_ids is not None
+    denied_ids = denied_ids or frozenset()
     edited_paths: list[str] = []
     result_event: Mapping[str, Any] | None = None
     pending_tool_calls: dict[str, tuple[str, str]] = {}
@@ -195,6 +205,8 @@ def classify_stream(
             if isinstance(content, list):
                 for block in content:
                     path = _edited_path_from_block(block)
+                    if isinstance(block, Mapping) and block.get("id") in denied_ids:
+                        path = None
                     if path is not None:
                         if root is not None:
                             path = _relativize(path, root)
@@ -232,7 +244,7 @@ def classify_stream(
     tokens, cost_usd = _usage_from_result(result_event)
 
     denials = result_event.get("permission_denials")
-    denied_ids = (
+    result_denied = (
         {
             denial.get("tool_use_id")
             for denial in denials
@@ -241,12 +253,13 @@ def classify_stream(
         if isinstance(denials, list)
         else set()
     )
+    all_denied = denied_ids | result_denied
     tool_calls = [
-        dataclasses.replace(record, status="denied") if call_id in denied_ids else record
+        dataclasses.replace(record, status="denied") if call_id in all_denied else record
         for call_id, record in zip(tool_call_ids, tool_calls, strict=True)
     ]
 
-    if isinstance(denials, list) and denials:
+    if not live and isinstance(denials, list) and denials:
         reasons = [
             f"{denial.get('tool_name', 'unknown tool')} denied"
             for denial in denials
@@ -278,6 +291,15 @@ def classify_stream(
         if isinstance(result_text, str) and result_text
         else f"Claude Code finished ({subtype})"
     )
+    if all_denied and live and not edited_paths and not any(c.status == "ok" for c in tool_calls):
+        return DelegationOutcome(
+            kind="refused",
+            summary="Claude Code's tool calls were declined and no file changed",
+            reason=f"{len(all_denied)} tool call(s) were not allowed",
+            tokens=tokens,
+            cost_usd=cost_usd,
+            tool_calls=tool_calls,
+        )
     if edited_paths:
         return DelegationOutcome(
             kind="completed",

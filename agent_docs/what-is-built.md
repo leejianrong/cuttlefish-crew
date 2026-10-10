@@ -518,3 +518,15 @@ command and no edit). `CUTTLEFISH_CODEX_TRANSPORT=exec` and a sandbox provider k
 `tests/unit/delegate/test_codex_app_server.py` against `fake_codex_app_server.py`; checked live on codex-cli 0.155.1 (an in-root edit and
 `ls` accepted, `touch /tmp/...` denied and absent). Not built: Codex `ask` questions, the final message in the journal, thread resume,
 usage limits (the data is there in `thread/tokenUsage/updated`).
+
+V4-K (Claude Code live prompts, `docs/research/claude-code-stream-json-spike.md`): `delegate/claude_code_live.py` keeps one `claude` process
+open per round (`-p --input-format stream-json --output-format stream-json --permission-mode acceptEdits --permission-prompts host
+--permission-prompt-tool stdio`) and answers each `can_use_tool` control request: a `Bash` command through the same `ConsentPolicy` or
+`AskingDecider` (`agents/deciders.py`, now shared with Codex), a file tool allowed only inside the root (never in a read-only role), `AskUserQuestion`
+through `ShellAsker.ask_person` (the person's words go back as `answers`), any other tool refused. No `Bash(...)` allow patterns are passed; the
+never-allowed prefixes stay as `--disallowedTools`. The outcome comes from `claude_code.classify_stream(..., denied_ids=...)`: found live, a
+host's denials are also listed in the result's `permission_denials`, so on this path a denial makes a round `refused` only when no edit landed and
+no call succeeded (the Codex path now follows the same rule). A timeout or a cancel sends an `interrupt` control request. `CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`
+and a sandbox provider keep `claude -p`. Tests: `tests/unit/delegate/test_claude_code_live.py` against `fake_claude_stream.py`; checked live on
+`claude` 2.1.296 (an in-root Write, `uv run pytest` asked and allowed, `touch /tmp/...` and `make build` denied, the model reported the blocks).
+Not built: resuming a session inside one process, turn/token/context limits (the result carries usage), the permission suggestions as Always allow.
