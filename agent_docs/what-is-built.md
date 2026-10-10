@@ -535,3 +535,8 @@ V4-K fix (exploratory CLI pass, 2026-10-10): the live Claude Code argv used `--p
 shell command that writes into the project, and in Auto any command at all, never prompted and the never-allowed list was never consulted (`touch
 /tmp/x` ran and the file existed). It is now `manual` with no `--allowedTools`: only what Claude Code treats as read-only runs unasked. A refused round's
 `reason` names what was refused and the rule (`agents.outcome.describe_refusals`), for Codex and Claude Code alike.
+
+never-allowed spellings (exploratory pass, 2026-10-10): the browser pass found Codex asked about `/usr/bin/touch /tmp/x` where `touch /tmp/x` was refused, because
+`never_allowed_reason` compared the literal first word. It now reads each command through wrappers (`env`, `nohup`, `timeout N`, `xargs`, `command`, leading
+`VAR=value`) and reduces the program to its name (`/usr/bin/sudo`), reads `bash -c '<script>'` as that script (up to four levels), and `curl ... | /bin/sh` is a
+pipe to a shell. Still text, not containment: a script, an alias or a name built at run time is not seen. Applies to every backend and mode.

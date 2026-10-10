@@ -245,3 +245,17 @@ def test_a_granted_rule_still_loses_to_the_never_allowed_list() -> None:
     assert policy.decide("run_shell", SH + "git push origin main").answer == "allow"
     forced = policy.decide("run_shell", SH + "git push --force origin main")
     assert forced.answer == "deny" and not forced.askable
+
+
+@pytest.mark.parametrize(
+    "line", ["/usr/bin/touch /tmp/x", "env touch /tmp/x", "bash -c 'sudo ls'", "/usr/bin/sudo ls"]
+)
+@pytest.mark.parametrize("policy_args", [{}, {"auto": True}])
+def test_another_spelling_of_a_never_allowed_command_is_denied_and_never_askable(
+    line: str, policy_args: dict[str, bool]
+) -> None:
+    decision = ConsentPolicy([], **policy_args).decide("run_shell", f"/bin/sh -c {line}")
+    assert decision.answer == "deny"
+    assert not decision.askable
+    if policy_args:  # Auto names the rule; with nothing allowed the answer is the generic denial
+        assert decision.rule.startswith("never_allowed:")

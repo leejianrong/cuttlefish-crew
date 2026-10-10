@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from pathlib import Path
 
 #: A command that gains privileges. Never approved, whatever it wraps.
 _PRIVILEGE_ESCALATION = frozenset({"sudo", "su", "doas"})
@@ -29,8 +30,21 @@ _SEGMENT_SPLIT = re.compile(r"[;&|\n`]|\$\(")
 
 #: ``curl ... | sh`` and its kin: a download whose output is fed to a shell.
 _PIPE_TO_SHELL = re.compile(
-    r"\b(?:curl|wget|fetch)\b[^|;&\n]*\|\s*(?:sudo\s+)?(?:env\s+)?(?:ba|z|da|k)?sh\b"
+    r"\b(?:curl|wget|fetch)\b[^|;&\n]*\|\s*(?:sudo\s+)?(?:(?:\S*/)?env\s+)?(?:\S*/)?(?:ba|z|da|k)?sh\b"
 )
+
+#: Programs that run the command they are given. ``env touch /tmp/x`` is ``touch /tmp/x``, so
+#: the rules below look through these to the command that actually runs.
+_WRAPPERS = frozenset(
+    {
+        "env", "command", "builtin", "exec", "nohup", "nice", "ionice", "time", "timeout",
+        "xargs", "stdbuf", "setsid", "unbuffer",
+    }
+)  # fmt: skip
+_SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh"})
+_ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
+_DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
+_MAX_DEPTH = 4
 
 #: Commands that change or delete the paths they are given. In ``auto`` mode no allow list
 #: stands between the model and these, so a path that leaves the project root is refused
@@ -70,6 +84,40 @@ UNSAFE_FLAGS: Mapping[tuple[str, ...], frozenset[str]] = {
 }
 
 
+def _effective_words(words: list[str]) -> list[str]:
+    """``words`` as the command that really runs: leading ``VAR=value`` assignments and wrapper
+    programs (``env``, ``nohup``, ``timeout 5``, ``xargs``...) with their own flags dropped, and
+    the program's path reduced to its name, so ``/usr/bin/touch`` and ``env -i touch`` are
+    ``touch``."""
+    words = list(words)
+    while words:
+        if _ASSIGNMENT.match(words[0]):
+            words.pop(0)
+        elif Path(words[0]).name in _WRAPPERS:
+            words.pop(0)
+            while words and (
+                words[0].startswith("-")
+                or _ASSIGNMENT.match(words[0])
+                or _DURATION.fullmatch(words[0])
+            ):
+                words.pop(0)
+        else:
+            break
+    if words:
+        words[0] = Path(words[0]).name
+    return words
+
+
+def _nested_shell_line(words: list[str]) -> str | None:
+    """The script in ``bash -c '<script>'`` (also ``-lc``, ``-ec``), or ``None``."""
+    if not words or words[0] not in _SHELLS:
+        return None
+    for index, word in enumerate(words[1:], start=1):
+        if word.startswith("-") and not word.startswith("--") and "c" in word:
+            return " ".join(words[index + 1 :]).strip("'\" ")
+    return None
+
+
 def _leaves_root(argument: str) -> bool:
     """Whether a path argument reaches outside the working tree: absolute, home-relative,
     with a ``..`` segment, or built from a variable or substitution."""
@@ -89,8 +137,13 @@ def _writes_outside_root(words: list[str], *, dynamic: bool) -> bool:
     return False
 
 
-def never_allowed_reason(line: str) -> str | None:
-    """Why `line` may never be approved, or ``None`` when no never-allowed rule applies."""
+def never_allowed_reason(line: str, _depth: int = 0) -> str | None:
+    """Why `line` may never be approved, or ``None`` when no never-allowed rule applies.
+
+    A command is read through its wrappers and its path (``/usr/bin/sudo``, ``env sudo``) and a
+    ``bash -c '<script>'`` is read as the script it runs, up to a few levels deep. Best effort on
+    text, like the rest of this module: a script, an alias or a name built at run time is not
+    seen."""
     if _PIPE_TO_SHELL.search(line):
         return "never_allowed:pipe_to_shell"
     for match in _REDIRECT.finditer(line):
@@ -99,9 +152,12 @@ def never_allowed_reason(line: str) -> str | None:
             return "never_allowed:write_outside_root"
     dynamic = "$" in line or "`" in line
     for segment in _SEGMENT_SPLIT.split(line):
-        words = segment.split()
+        words = _effective_words(segment.split())
         if not words:
             continue
+        script = _nested_shell_line(words)
+        if script and _depth < _MAX_DEPTH and (inner := never_allowed_reason(script, _depth + 1)):
+            return inner
         if words[0] in _PRIVILEGE_ESCALATION:
             return "never_allowed:privilege_escalation"
         if words[0] == "git" and "push" in words[1:]:
