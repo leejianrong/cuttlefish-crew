@@ -163,3 +163,10 @@ and this folder disagree after a slice lands, update this folder.
   ("Or write your own answer"); one click sends that choice. When nothing is running and the last run ended, Overview opens with a card
   "The last run finished / failed / was stopped" with files changed, minutes, tokens and cost (cost left out when no backend reported one),
   and a failed role's reason; it sits above Start a team. Neutral surface, an error-coloured edge only when it failed. Not in the mockups.
+
+- **Project Secrets tab shipped (CUT-80, 2026-10-10).** A fifth project tab, after Team. Two cards of sealed rows (a lock, the name in mono, twelve
+  dots whatever the value's length, an "Agent key" tag where a backend runs on it, a line saying whether its commands can see it), Replace and Remove
+  as text buttons, Add secret as the one filled button. Add and Replace are a modal `<dialog>` with outlined fields (the value is a password field
+  and is cleared whenever the dialog closes); Remove asks first. Key not set shows the three steps instead of a form. Teal and neutral surfaces,
+  no coral. Differences from the proposal: no "Who can use it" switch in the dialog (shared secrets get their own screen, CUT-81, so a shared key
+  is never changed from inside one project), and the saved/removed message is a line in the tab, not a snackbar.

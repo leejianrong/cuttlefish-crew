@@ -254,6 +254,10 @@ cloud names first; `cuttlefish doctor --all-env` lists them all).
 
 ## Secrets in the dashboard
 
+A project's **Secrets** tab lists its secrets (a lock, the name and a fixed run of dots: values are never shown), adds and replaces
+one in a dialog, and removes one after a confirmation. Secrets shared with every project show read-only below. An agent key is
+marked, with a line saying who can see it. With no secrets key the tab explains how to turn secrets on and offers no form.
+
 Secrets set through the daemon are stored encrypted in `~/.cuttlefish/secrets.db`, one file for every project, under
 the daemon's `CUTTLEFISH_SECRETS_KEY`. A team start hands the agents every secret its project can use (its own and the
 shared ones) as environment variables; a change applies to the next start. A secret in the project folder's own

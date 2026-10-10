@@ -23,6 +23,7 @@
   import OfficeScene from "./OfficeScene.svelte";
   import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
+  import SecretsTab from "./SecretsTab.svelte";
   import Tabs from "./Tabs.svelte";
   import TeamTab from "./TeamTab.svelte";
 
@@ -102,6 +103,7 @@
     { id: "needs-you", label: "Needs you", badge: pending.length },
     { id: "permissions", label: "Permissions" },
     { id: "team", label: "Team" },
+    { id: "secrets", label: "Secrets" },
   ]);
 
   // A starting point for a blank task box; picking one fills the first role's task.
@@ -443,6 +445,10 @@
 
     <div id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden={tab !== "team"}>
       <TeamTab {client} {project} onChanged={refresh} onDirtyChange={(dirty) => (teamDirty = dirty)} />
+    </div>
+
+    <div id="panel-secrets" role="tabpanel" aria-labelledby="tab-secrets" hidden={tab !== "secrets"}>
+      <SecretsTab {client} {project} active={tab === "secrets"} />
     </div>
   {:else if !unreachable && !missing}
     <p class="muted" role="status">Loading…</p>

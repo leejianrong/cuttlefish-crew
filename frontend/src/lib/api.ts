@@ -321,6 +321,20 @@ export async function login(baseUrl: string, password: string): Promise<string> 
   return ((await response.json()) as { token: string }).token;
 }
 
+/** One secret's name and what it is: an agent `credential` (a backend runs on it) or a project
+ * `secret`. The value is never sent. */
+export interface SecretRow {
+  name: string;
+  kind: "credential" | "secret";
+}
+
+export interface ProjectSecrets {
+  /** false when the daemon has no secrets key: nothing can be stored. */
+  enabled: boolean;
+  project: SecretRow[];
+  shared: SecretRow[];
+}
+
 export class FleetClient {
   constructor(
     public readonly baseUrl: string,
@@ -458,6 +472,24 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/budget`, {
       method: "PATCH",
       body: JSON.stringify({ max_tokens: maxTokens, max_cost_usd: maxCostUsd }),
+    });
+  }
+
+  listProjectSecrets(id: string): Promise<ProjectSecrets> {
+    return this.request(`/api/projects/${id}/secrets`);
+  }
+
+  /** Stores `value` under `name` for this project, replacing any value. Never returned. */
+  setProjectSecret(id: string, name: string, value: string): Promise<{ name: string }> {
+    return this.request(`/api/projects/${id}/secrets/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  deleteProjectSecret(id: string, name: string): Promise<{ name: string }> {
+    return this.request(`/api/projects/${id}/secrets/${encodeURIComponent(name)}`, {
+      method: "DELETE",
     });
   }
 
