@@ -145,10 +145,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   agents editing one uncommitted working tree at once, not a bug). Unaffected
   by the fleet daemon (every role in one project's team still shares that
   project's one `root`). `docs/QUESTIONS.md` Q44, Q54.
-- Secrets are injected directly, never brokered — the agent process itself
-  still holds every secret it's given in the clear, inside its own sandbox
-  or subprocess. A credential-broker/proxy is real future work, deliberately
-  deferred. `docs/QUESTIONS.md` Q34, ADR-0006.
+- Secrets are injected directly: the agent process itself holds every project secret it's given in
+  the clear. A project's secret is the code's own, so there is nothing to broker. The agent's own model
+  API key *can* be brokered (`CUTTLEFISH_CREDENTIAL_BROKER=1`, ADR-0031). `docs/QUESTIONS.md` Q34, ADR-0006.
 - `KopicodeBackend`'s `DelegationOutcome.cost_usd` is the figure kopicode reports in a turn's `usage`
   (v0.4.0, seen live: about $0.66 for two rounds), which kopicode gives only when every request reported
   a cost. An older kopicode, a round cut off by a wall-clock timeout (no turn result) and a route that
@@ -294,5 +293,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **An agent's commands can read its harness's login file, and Claude Code's commands can see its API key** (CUT-78). All three
   harnesses keep a login in a file of mode 600 owned by the same OS user, which any command they run can read; Claude Code's
   `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1` hides the key but also every project secret and needs `bwrap` and `socat` (it failed on WSL),
-  so it is not used. Only a sandbox provider, a container, a separate user or a credential broker (ADR-0006, deferred) closes this.
+  so it is not used. A sandbox provider, a container or a separate user closes the login-file part. The credential broker (ADR-0031,
+  off unless `CUTTLEFISH_CREDENTIAL_BROKER=1`) closes the key part for Claude Code and for a Codex key set in Secrets. It is the daemon
+  only (`cuttlefish run` is not covered), not used inside a sandbox provider, not for kopicode, and `CLAUDE_*` is still passed through, so a
+  `CLAUDE_CODE_OAUTH_TOKEN` in the daemon's environment still reaches Claude Code's commands. A running agent can still spend through its lease.
   `docs/research/harness-credentials-spike.md`.

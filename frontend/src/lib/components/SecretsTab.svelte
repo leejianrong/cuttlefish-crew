@@ -151,7 +151,7 @@
                   {#if overrides(row)}<span class="tag">Wins over the shared one</span>{/if}
                 </span>
                 {#if row.kind === "credential"}
-                  <span class="body-small muted">{credentialNote(row.name)}</span>
+                  <span class="body-small muted">{credentialNote(row.name, data?.broker)}</span>
                 {/if}
               </div>
               <div class="acts">
@@ -180,7 +180,7 @@
                     {#if row.kind === "credential"}<span class="tag primary">Agent key</span>{/if}
                   </span>
                   {#if row.kind === "credential"}
-                    <span class="body-small muted">{credentialNote(row.name)}</span>
+                    <span class="body-small muted">{credentialNote(row.name, data?.broker)}</span>
                   {/if}
                 </div>
               </li>

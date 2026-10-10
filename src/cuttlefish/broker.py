@@ -27,7 +27,7 @@ import contextlib
 import logging
 import secrets
 import socket
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
 from typing import Final, NamedTuple
 
@@ -39,6 +39,10 @@ from starlette.responses import PlainTextResponse, Response, StreamingResponse
 from starlette.routing import Route
 
 _LOG = logging.getLogger(__name__)
+
+#: ``CUTTLEFISH_CREDENTIAL_BROKER=1`` makes ``cuttlefish serve`` hold each agent's model API key
+#: itself and lease the agent a token instead.
+CREDENTIAL_BROKER_ENV: Final = "CUTTLEFISH_CREDENTIAL_BROKER"
 
 LOOPBACK: Final = "127.0.0.1"
 TOKEN_PREFIX: Final = "cfb_"
@@ -71,6 +75,11 @@ _METHODS: Final = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"]
 _TIMEOUT: Final = httpx.Timeout(30.0, read=600.0)
 
 
+def broker_requested(environ: Mapping[str, str]) -> bool:
+    """Whether `environ` switches the credential broker on."""
+    return environ.get(CREDENTIAL_BROKER_ENV, "").strip().lower() in ("1", "true", "on", "yes")
+
+
 class BrokerRoute(NamedTuple):
     """How a backend's own key is brokered: which upstream it talks to, the environment variable its
     key is read from (the lease's token takes that place), and the one its base URL is read from."""
@@ -78,6 +87,10 @@ class BrokerRoute(NamedTuple):
     upstream: str
     key_env: str
     base_env: str
+    #: Whether a key in the daemon's own environment counts. A backend that does not use such a key
+    #: today (Codex ignores ``OPENAI_API_KEY`` under a ChatGPT login) is brokered only for one set
+    #: on purpose in Secrets, so the broker never moves it onto a metered key it was not using.
+    ambient: bool = True
 
 
 @dataclass(frozen=True)

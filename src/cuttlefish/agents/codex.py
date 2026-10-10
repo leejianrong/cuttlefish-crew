@@ -19,7 +19,9 @@ from typing import ClassVar, Literal
 
 from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.broker import BrokerRoute, Lease
 from cuttlefish.delegate.codex import (
+    BROKER_TOKEN_ENV,
     ENV_PASSTHROUGH,
     codex_model_settings,
     run_codex,
@@ -56,6 +58,16 @@ def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
     return resolved
 
 
+def _env(secrets: Mapping[str, str], lease: Lease | None) -> dict[str, str]:
+    """What Codex's process is given: its declared credentials and, when a lease is held
+    (ADR-0031), the broker's token for the provider that points at it."""
+    env = _credential_envs(secrets)
+    if lease is not None:
+        env.pop("OPENAI_API_KEY", None)
+        env[BROKER_TOKEN_ENV] = lease.token
+    return env
+
+
 class CodexBackend:
     """Wraps headless Codex behind the pluggable backend seam.
 
@@ -68,6 +80,11 @@ class CodexBackend:
 
     NAME: ClassVar[str] = "codex"
     CREDENTIAL_ENV_VARS: ClassVar[tuple[str, ...]] = _CREDENTIAL_ENV_VARS
+    #: Its key can be held by the credential broker (ADR-0031), but only one set in Secrets: under a
+    #: ChatGPT login Codex ignores an `OPENAI_API_KEY` in the environment.
+    BROKER_ROUTE: ClassVar[BrokerRoute] = BrokerRoute(
+        "openai", "OPENAI_API_KEY", "OPENAI_BASE_URL", ambient=False
+    )
 
     def __init__(
         self, binary: str = "codex", *, transport: Literal["app-server", "exec"] | None = None
@@ -88,8 +105,11 @@ class CodexBackend:
         mode: str = "standard",
         asker: ShellAsker | None = None,
         limits: Mapping[str, int] | None = None,
+        lease: Lease | None = None,
     ) -> DelegationOutcome:
-        """``asker`` (ADR-0028) lets a command nothing approves be put to a person; only the
+        """``lease`` (ADR-0031) is the broker's stand-in for the key, taken by a delegation that
+        runs on the host; a sandbox cannot reach the daemon's loopback and is given none.
+        ``asker`` (ADR-0028) lets a command nothing approves be put to a person; only the
         ``app-server`` transport can hold one open. ``limits`` carries the round's time limit; the
         other limits have no control on Codex."""
         if sandbox_provider is None and self._transport == "app-server":
@@ -102,9 +122,10 @@ class CodexBackend:
                 sandbox="read-only" if mode == "read-only" else "workspace-write",
                 model=model,
                 effort=effort,
-                env=_credential_envs(secrets),
+                env=_env(secrets, lease),
                 env_passthrough=ENV_PASSTHROUGH,
                 timeout=round_timeout_for(limits),
+                lease=lease,
             )
         if sandbox_provider is None:
             return await run_codex(
@@ -113,7 +134,8 @@ class CodexBackend:
                 root=root,
                 allow=allow,
                 mode=mode,
-                env=_credential_envs(secrets),
+                env=_env(secrets, lease),
+                lease=lease,
             )
         return await self._delegate_inside_sandbox(
             sandbox_provider,

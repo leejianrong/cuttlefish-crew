@@ -15,7 +15,8 @@ import pytest
 from fake_upstream import Upstream
 
 from cuttlefish import runtime
-from cuttlefish.fleet.daemon import CREDENTIAL_BROKER_ENV, FleetDaemon
+from cuttlefish.broker import CREDENTIAL_BROKER_ENV
+from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.projects.store import ProjectStore
 
 FAKE = Path(__file__).parents[1] / "unit" / "delegate" / "fake_claude_stream.py"

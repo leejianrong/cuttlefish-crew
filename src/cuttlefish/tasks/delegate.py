@@ -114,12 +114,13 @@ async def delegate_to_agent_backend(
     lease: Lease | None = None
     route: BrokerRoute | None = getattr(backend, "BROKER_ROUTE", None)
     if runtime_.broker is not None and runtime_.sandbox_provider is None and route is not None:
-        key = resolved_secrets.get(route.key_env) or os.environ.get(route.key_env)
+        ambient = os.environ if route.ambient else {}
+        key = resolved_secrets.get(route.key_env) or ambient.get(route.key_env)
         if key:
             lease = runtime_.broker.lease(
                 route.upstream,
                 key,
-                base=resolved_secrets.get(route.base_env) or os.environ.get(route.base_env),
+                base=resolved_secrets.get(route.base_env) or ambient.get(route.base_env),
                 project=requests.project_id if requests is not None else project,
             )
             resolved_secrets = {k: v for k, v in resolved_secrets.items() if k != route.key_env}

@@ -44,14 +44,18 @@ export function suggestedNames(project: ProjectSummary, alreadySet: readonly str
 
 /** What an agent credential's row says about who can see it, per what was checked
  * (docs/research/harness-credentials-spike.md). */
-export function credentialNote(name: string): string {
+export function credentialNote(name: string, brokered = false): string {
   switch (name) {
     case "OPENROUTER_API_KEY":
       return "Powers kopicode. Kept out of the commands it runs.";
     case "OPENAI_API_KEY":
-      return "Powers Codex. Kept out of the commands it runs.";
+      return brokered
+        ? "Powers Codex. Held by cuttlefish: its commands see only a short-lived token."
+        : "Powers Codex. Kept out of the commands it runs.";
     case "ANTHROPIC_API_KEY":
-      return "Powers Claude Code. Its commands can see this key.";
+      return brokered
+        ? "Powers Claude Code. Held by cuttlefish: its commands see only a short-lived token."
+        : "Powers Claude Code. Its commands can see this key.";
     default:
       return "Powers an agent.";
   }

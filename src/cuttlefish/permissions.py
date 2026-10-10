@@ -68,8 +68,7 @@ BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
         "Every command that prompts is decided as it is asked, like kopicode; what Claude Code "
         "itself treats as read-only (ls) never prompts. Never-allowed prefixes are also denied "
         "to it as tool rules. Its own questions are put to you too. Auto refuses curl and wget "
-        "outright. Read-only roles cannot edit files. Its commands can see the API key it runs "
-        "with, and its login file. Over a sandbox provider, or with "
+        "outright. Read-only roles cannot edit files. {key} Over a sandbox provider, or with "
         "CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print, it cannot pause and refuses a command nothing "
         "approves.",
     ),
@@ -79,9 +78,34 @@ BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
         "Every command is decided as it is asked, like kopicode, and edits are accepted only "
         "inside the project folder. A command it accepts runs outside Codex's own sandbox, so "
         "the blocked list and your command list are the only guard. Read-only roles get the "
-        "read-only sandbox. Its commands cannot see its API key but can read its login file. Its "
+        "read-only sandbox. {key} Its "
         "own questions are not asked live yet. Over a sandbox provider, "
         "or with CUTTLEFISH_CODEX_TRANSPORT=exec, it is coarse: two sandboxes, your command "
         "list not enforced, and it cannot pause.",
     ),
 )
+
+
+#: What each backend's note says about its own API key: ``(broker off, broker on)`` (ADR-0031).
+_KEY_SENTENCES: dict[str, tuple[str, str]] = {
+    "claude-code": (
+        "Its commands can see the API key it runs with, and its login file.",
+        "Its API key is held by cuttlefish, so its commands see only a short-lived token for a "
+        "local proxy; they can still read its login file.",
+    ),
+    "codex": (
+        "Its commands cannot see its API key but can read its login file.",
+        "Its commands cannot see its API key, and one set under Secrets is held by cuttlefish "
+        "too; they can still read its login file.",
+    ),
+}
+
+
+def backend_notes(*, broker: bool = False) -> tuple[tuple[str, str, str], ...]:
+    """`BACKEND_NOTES` with each API-key sentence matching whether the credential broker is on."""
+    return tuple(
+        (name, when, summary.replace("{key}", sentences[1 if broker else 0]))
+        if (sentences := _KEY_SENTENCES.get(name))
+        else (name, when, summary)
+        for name, when, summary in BACKEND_NOTES
+    )

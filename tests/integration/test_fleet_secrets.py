@@ -57,13 +57,15 @@ def test_without_a_key_the_list_says_off_and_a_write_is_409_with_how_to_fix_it(
     client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("CUTTLEFISH_SECRETS_KEY", raising=False)
+    monkeypatch.delenv("CUTTLEFISH_CREDENTIAL_BROKER", raising=False)
     project = _project(client, tmp_path)
     assert client.get(f"/api/projects/{project}/secrets").json() == {
         "enabled": False,
+        "broker": False,
         "project": [],
         "shared": [],
     }
-    assert client.get("/api/secrets").json() == {"enabled": False, "shared": []}
+    assert client.get("/api/secrets").json() == {"enabled": False, "broker": False, "shared": []}
     put = client.put(f"/api/projects/{project}/secrets/GITHUB_TOKEN", json={"value": VALUE})
     assert put.status_code == 409
     assert "cuttlefish secrets generate-key" in put.json()["detail"]
@@ -77,6 +79,7 @@ def test_a_value_goes_in_and_never_comes_back(client: TestClient, tmp_path: Path
     listed = client.get(f"/api/projects/{project}/secrets")
     assert listed.json() == {
         "enabled": True,
+        "broker": False,
         "project": [{"name": "GITHUB_TOKEN", "kind": "secret"}],
         "shared": [],
     }
@@ -277,3 +280,22 @@ def test_a_shared_secret_says_which_projects_override_it_and_which_would_lose_it
     assert row["overridden_in"] == ["demo"]
     assert row["lost_by"] == ["other"]
     assert VALUE not in str(row)
+
+
+def test_the_lists_and_the_permissions_notes_say_whether_the_broker_is_on(
+    client: TestClient, tmp_path: Path, key: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = _project(client, tmp_path)
+
+    def notes() -> dict[str, str]:
+        return {b["name"]: b["summary"] for b in client.get("/api/permissions").json()["backends"]}
+
+    monkeypatch.delenv("CUTTLEFISH_CREDENTIAL_BROKER", raising=False)
+    assert client.get("/api/secrets").json()["broker"] is False
+    assert "can see the API key it runs with" in notes()["claude-code"]
+    monkeypatch.setenv("CUTTLEFISH_CREDENTIAL_BROKER", "1")
+    assert client.get("/api/secrets").json()["broker"] is True
+    assert client.get(f"/api/projects/{project}/secrets").json()["broker"] is True
+    assert "held by cuttlefish" in notes()["claude-code"]
+    assert "can see the API key" not in notes()["claude-code"]
+    assert "{key}" not in "".join(notes().values())

@@ -331,6 +331,8 @@ export interface SecretRow {
 export interface ProjectSecrets {
   /** false when the daemon has no secrets key: nothing can be stored. */
   enabled: boolean;
+  /** true when the daemon holds each agent's API key itself (the credential broker). */
+  broker: boolean;
   project: SecretRow[];
   shared: SecretRow[];
 }
@@ -345,6 +347,7 @@ export interface SharedSecretRow extends SecretRow {
 
 export interface SharedSecrets {
   enabled: boolean;
+  broker: boolean;
   shared: SharedSecretRow[];
 }
 

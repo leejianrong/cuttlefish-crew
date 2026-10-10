@@ -47,7 +47,8 @@ from cuttlefish.agents.outcome import (
     ToolCallRecord,
     describe_refusals,
 )
-from cuttlefish.delegate.codex import codex_shell_policy_args
+from cuttlefish.broker import Lease
+from cuttlefish.delegate.codex import codex_provider_args, codex_shell_policy_args
 from cuttlefish.delegate.consent import ConsentDecision
 from cuttlefish.delegate.kopicode_serve import Decider
 from cuttlefish.delegate.subprocess_env import merge_env
@@ -443,8 +444,11 @@ async def run_codex_app_server(
     env: Mapping[str, str] | None = None,
     env_passthrough: tuple[str, ...] = (),
     timeout: float | None = None,
+    lease: Lease | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as one thread and one turn, and classify what it did.
+
+    ``lease`` (ADR-0031) points Codex at the credential broker through a provider of its own.
 
     ``decide`` is asked about every command (``approvalPolicy: "untrusted"``) as ``("run_shell",
     "/bin/sh -c <line>")``, and may ask a person; it should return a
@@ -457,7 +461,8 @@ async def run_codex_app_server(
     try:
         process = await asyncio.create_subprocess_exec(
             binary,
-            *codex_shell_policy_args(),
+            *codex_shell_policy_args(lease),
+            *codex_provider_args(lease),
             "app-server",
             cwd=root,
             stdin=asyncio.subprocess.PIPE,

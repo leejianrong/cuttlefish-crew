@@ -138,7 +138,7 @@
                   {/if}
                 </span>
                 {#if row.kind === "credential"}
-                  <span class="body-small muted">{credentialNote(row.name)}</span>
+                  <span class="body-small muted">{credentialNote(row.name, data?.broker)}</span>
                 {/if}
               </div>
               <div class="acts">

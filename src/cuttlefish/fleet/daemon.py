@@ -34,7 +34,7 @@ from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
 from cuttlefish import environment, envprep, logsetup, runtime
-from cuttlefish.broker import Broker
+from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
@@ -254,11 +254,6 @@ class ResumeAttempt:
     error: str | None
 
 
-#: ``CUTTLEFISH_CREDENTIAL_BROKER=1`` makes the daemon hold each agent's model API key itself and
-#: lease the agent a token instead (ADR-0031).
-CREDENTIAL_BROKER_ENV = "CUTTLEFISH_CREDENTIAL_BROKER"
-
-
 class FleetDaemon:
     """Owns the `Project` registry and every currently-running team."""
 
@@ -287,12 +282,7 @@ class FleetDaemon:
         self._broker: Broker | None = None
 
     def broker_enabled(self) -> bool:
-        return os.environ.get(CREDENTIAL_BROKER_ENV, "").strip().lower() in (
-            "1",
-            "true",
-            "on",
-            "yes",
-        )
+        return broker_requested(os.environ)
 
     async def ensure_broker(self) -> Broker | None:
         """The running broker when the setting is on (started now if need be), else None. A broker
@@ -346,13 +336,16 @@ class FleetDaemon:
 
     def list_secrets(self, project_id: str) -> dict[str, object]:
         """The names set for a project and shared with every project, each marked ``credential``
-        (a backend runs on it) or ``secret`` (the project's own). Never a value."""
+        (a backend runs on it) or ``secret`` (the project's own). Never a value. ``broker`` says
+        whether the credential broker (ADR-0031) is on, so a row can say who can see a key."""
         project = self._projects.get(project_id)
+        broker = self.broker_enabled()
         if not self.secrets_enabled():
-            return {"enabled": False, "project": [], "shared": []}
+            return {"enabled": False, "broker": broker, "project": [], "shared": []}
         with self._secrets() as store:
             return {
                 "enabled": True,
+                "broker": broker,
                 "project": _secret_rows(store.list_names(project.secrets_scope)),
                 "shared": _secret_rows(store.list_names(SHARED_SCOPE)),
             }
@@ -361,8 +354,9 @@ class FleetDaemon:
         """The secrets shared with every project. Each row also says which projects have their
         own value of that name (``overridden_in``, they keep it) and which would lose the name if
         it were removed (``lost_by``), by project name."""
+        broker = self.broker_enabled()
         if not self.secrets_enabled():
-            return {"enabled": False, "shared": []}
+            return {"enabled": False, "broker": broker, "shared": []}
         with self._secrets() as store:
             own = {
                 project.name: set(store.list_names(project.secrets_scope))
@@ -371,6 +365,7 @@ class FleetDaemon:
             rows = _secret_rows(store.list_names(SHARED_SCOPE))
         return {
             "enabled": True,
+            "broker": broker,
             "shared": [
                 {
                     **row,
