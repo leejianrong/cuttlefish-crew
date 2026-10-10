@@ -256,7 +256,7 @@ class ToolCallRecorded:
     (KAN-1714, ADR-0019) — copied verbatim off the
     :class:`~cuttlefish.agents.outcome.ToolCallRecord` list every
     ``DelegationOutcome`` now carries, journaled once per entry, in order,
-    right after that round's own ``DelegationCompleted``/``DelegationRefused``/
+    just before that round's own ``DelegationCompleted``/``DelegationRefused``/
     ``DelegationFailed``. Never a replacement for those three -- this is the
     per-call detail underneath one round's own single verdict, not a second
     account of the round itself (ADR-0004's "no parallel transcript" applies

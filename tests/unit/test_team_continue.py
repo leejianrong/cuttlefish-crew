@@ -227,6 +227,44 @@ async def test_a_held_role_raises_a_card_that_says_nothing_is_waiting(tmp_path: 
     store.close()
 
 
+async def test_a_role_held_after_refusals_gets_a_card_that_says_what_was_refused(
+    tmp_path: Path,
+) -> None:
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    broker = RequestBroker(store.append)
+    binary = _script(
+        tmp_path, [s for _ in range(5) for s in _round("completed", 0, refused="rm -rf /")]
+    )
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary=binary,
+            requests=RequestContext(broker, "p1", "t", 600.0),
+        )
+    )
+    root = tmp_path / "root"
+    root.mkdir()
+    await start(
+        run_team,
+        {"team_id": "t", "root": str(root), "roles": [{"name": "builder", "text": "go"}]},
+        run_id="t",
+        store=SQLiteStore.open(":memory:"),
+    ).result()
+    (card,) = broker.pending()
+    assert card.record.title == "{who} keeps being refused".format(who="builder")
+    assert "circles" not in card.record.detail + card.record.why
+    assert "rm -rf /" in card.record.detail
+    store.close()
+
+
+async def test_a_rounds_tool_calls_are_journaled_before_its_verdict(tmp_path: Path) -> None:
+    binary = _script(tmp_path, [*_round("completed", 0, refused="make build")])
+    _, payloads = await _run(tmp_path, binary, max_continuations=0)
+    order = [type(p).__name__ for p in payloads]
+    assert order.index("ToolCallRecorded") < order.index("DelegationRefused")
+
+
 async def test_a_refused_command_does_not_end_the_role_and_the_next_round_is_told_which(
     tmp_path: Path,
 ) -> None:

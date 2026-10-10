@@ -63,6 +63,9 @@ every backend's own `classify_stream` alongside (never instead of) its
 existing `edited_paths`/`summary` reduction — the exact same per-call data
 each backend was already parsing and discarding.
 
+> Amended 2026-10-10: the tool calls and consent decisions are journaled just *before* the round's verdict, not after. Read
+> after the verdict, the activity log showed a round as finished before the work it did. Nothing else about the event changed.
+
 **`ToolCallRecorded` (`cuttlefish.episodic.events`) is one new episodic
 event type**, copied verbatim off each `ToolCallRecord`, journaled once per
 entry, in order, immediately after that round's own

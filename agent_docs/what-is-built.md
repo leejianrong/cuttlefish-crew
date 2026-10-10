@@ -548,3 +548,8 @@ already uses (`check_root_free`, resolved paths; `run` and `run-team` are not ch
 question buttons and last-run card (exploratory pass, 2026-10-10): `RequestRaised` gains `options` (default empty; clipped to six labels of 80 characters), set by
 `ask_person(..., options=)` and passed from Claude Code's `AskUserQuestion` (single-select only); the question card shows them as buttons that send the label as the
 answer. The Overview shows `lib/lastrun.ts`'s card above Start a team once every role is done, failed or stopped. kopicode's `ask` carries no options today.
+
+refusal card and log order (exploratory pass, 2026-10-10): a role held after rounds that ended on refusals now gets "{who} keeps being refused" naming the
+refused commands (`raise_no_progress_card(..., refused=...)`), not "has gone round in circles", which stays for rounds that ran out of room. A round's
+`ToolCallRecorded` and `ConsentDecided` events are journaled just before its `DelegationCompleted`/`Refused`/`Failed`, not after (ADR-0019 amended), in
+`workflow.run_task` and `team.run_team`. A run that is mid-round when cuttlefish is upgraded replays its journal tasks in the old order.

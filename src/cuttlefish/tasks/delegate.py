@@ -137,14 +137,38 @@ async def delegate_to_agent_backend(
 
 
 @satay.task(side_effect=True)
-async def raise_no_progress_card(team_id: str, role: str, backend: str, rounds: int) -> bool:
+async def raise_no_progress_card(
+    team_id: str, role: str, backend: str, rounds: int, refused: str | None = None
+) -> bool:
     """Say, where a person looks, that a role was held because several rounds changed nothing
     (ADR-0030). A durable task, not a call in the workflow body: a workflow is replayed, and a
     card raised there would be raised again on every replay. Nothing waits on the card: it ends
-    when the role is steered or the team ends. ``False`` when there is no inbox to put it in."""
+    when the role is steered or the team ends. ``False`` when there is no inbox to put it in.
+
+    ``refused`` is what the last round was refused (``'sudo x' (never_allowed:...)``) when the
+    rounds ended on a refusal, not on running out of room: the card then says what was refused,
+    not that the agent went round in circles."""
     requests = runtime.current().requests
     if requests is None or requests.broker.is_closed(team_id):
         return False
+    if refused is not None:
+        requests.broker.raise_blocked(
+            project_id=requests.project_id,
+            team_id=team_id,
+            role=role,
+            backend=backend,
+            title="{who} keeps being refused",
+            detail=f"{rounds} rounds in a row ended on a refused command and changed no file. "
+            f"Refused: {refused}",
+            why=(
+                "The mode or the blocked list said no each time. Change the project's mode or "
+                "command list if the command is fine, or steer it to do the work another way."
+            ),
+        )
+        _LOG.warning(
+            "role %s held after %d rounds in a row that were refused: %s", role, rounds, refused
+        )
+        return True
     requests.broker.raise_blocked(
         project_id=requests.project_id,
         team_id=team_id,

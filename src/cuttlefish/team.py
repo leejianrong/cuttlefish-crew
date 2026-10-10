@@ -171,11 +171,16 @@ def _checkpoint_reason(outcome: DelegationOutcome) -> str | None:
     return None
 
 
+def _refused_which(outcome: DelegationOutcome) -> str:
+    """The first few commands a refused round was refused, as the agent and the card name them."""
+    denied = [call.detail for call in outcome.tool_calls if call.status == "denied"][:3]
+    return "; ".join(denied) if denied else (outcome.reason or "a command")
+
+
 def _continue_text(outcome: DelegationOutcome, why: str) -> str:
     if why != "refused":
         return CONTINUE_TEXT[why]
-    denied = [call.detail for call in outcome.tool_calls if call.status == "denied"][:3]
-    which = "; ".join(denied) if denied else "a command"
+    which = _refused_which(outcome)
     return (
         f"your previous round ended after this was refused: {which}. Do not try it again as it "
         "stands: do the work another way, with your file tools or a plain command from the "
@@ -377,6 +382,28 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 continue
 
             assert isinstance(outcome, DelegationOutcome)
+            # KAN-1714/ADR-0019: see run_task's identical block -- every
+            # individual tool call this role's own round made, journaled
+            # just before that round's single verdict, so the log reads in the order it happened.
+            for call in outcome.tool_calls:
+                await journal(
+                    team_id,
+                    ToolCallRecorded(
+                        tool=call.tool, detail=call.detail, status=call.status, role=name
+                    ),
+                )
+            # KAN-1792/ADR-0021: the live consent decisions behind those calls.
+            for decision in outcome.consent_decisions:
+                await journal(
+                    team_id,
+                    ConsentDecided(
+                        kind=decision.kind,
+                        detail=decision.detail,
+                        answer=decision.answer,
+                        rule=decision.rule,
+                        role=name,
+                    ),
+                )
             if outcome.kind == "completed":
                 await journal(
                     team_id,
@@ -412,29 +439,6 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                     ),
                 )
             final_outcome[name] = outcome
-
-            # KAN-1714/ADR-0019: see run_task's identical block -- every
-            # individual tool call this role's own round made, journaled
-            # right after that round's single verdict.
-            for call in outcome.tool_calls:
-                await journal(
-                    team_id,
-                    ToolCallRecorded(
-                        tool=call.tool, detail=call.detail, status=call.status, role=name
-                    ),
-                )
-            # KAN-1792/ADR-0021: the live consent decisions behind those calls.
-            for decision in outcome.consent_decisions:
-                await journal(
-                    team_id,
-                    ConsentDecided(
-                        kind=decision.kind,
-                        detail=decision.detail,
-                        answer=decision.answer,
-                        rule=decision.rule,
-                        role=name,
-                    ),
-                )
 
             # ADR-0010/KAN-1704: checked every round, per role, not only at a
             # role's own start and end -- see run_task's identical fix for why.
@@ -486,7 +490,11 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             )
             if no_progress:
                 await raise_no_progress_card(
-                    team_id, name, backend_by_name[name], idle_rounds[name]
+                    team_id,
+                    name,
+                    backend_by_name[name],
+                    idle_rounds[name],
+                    refused=_refused_which(outcome) if why_continue == "refused" else None,
                 )
             if auto_continue:
                 continuations[name] += 1

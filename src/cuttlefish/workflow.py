@@ -182,6 +182,25 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
             await journal(task_id, TaskFailed(error=reason))
             return {"status": "failed", "error": reason}
 
+        # KAN-1714/ADR-0019: every individual tool call this round made,
+        # journaled just before that round's own single verdict -- never a
+        # replacement for it, the per-call detail underneath one outcome.
+        for call in outcome.tool_calls:
+            await journal(
+                task_id, ToolCallRecorded(tool=call.tool, detail=call.detail, status=call.status)
+            )
+        # KAN-1792/ADR-0021: the live consent decisions behind those calls.
+        for decision in outcome.consent_decisions:
+            await journal(
+                task_id,
+                ConsentDecided(
+                    kind=decision.kind,
+                    detail=decision.detail,
+                    answer=decision.answer,
+                    rule=decision.rule,
+                ),
+            )
+
         if outcome.kind == "completed":
             await journal(
                 task_id,
@@ -211,25 +230,6 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
                     failure_kind=outcome.failure_kind,
                     record=outcome.record,
                     detail=outcome.detail,
-                ),
-            )
-
-        # KAN-1714/ADR-0019: every individual tool call this round made,
-        # journaled right after that round's own single verdict -- never a
-        # replacement for it, the per-call detail underneath one outcome.
-        for call in outcome.tool_calls:
-            await journal(
-                task_id, ToolCallRecorded(tool=call.tool, detail=call.detail, status=call.status)
-            )
-        # KAN-1792/ADR-0021: the live consent decisions behind those calls.
-        for decision in outcome.consent_decisions:
-            await journal(
-                task_id,
-                ConsentDecided(
-                    kind=decision.kind,
-                    detail=decision.detail,
-                    answer=decision.answer,
-                    rule=decision.rule,
                 ),
             )
 
