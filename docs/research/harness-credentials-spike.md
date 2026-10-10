@@ -63,7 +63,8 @@ switch on for every user, and on macOS there is no `bwrap`.
 - Split the two kinds in the model: a name in a backend's `CREDENTIAL_ENV_VARS` is an **agent credential**;
   any other name is a **project secret**.
 - kopicode: forward only `OPENROUTER_API_KEY` (and `KOPICODE_PROVIDER_API_KEY` when set).
-- Codex: pass `shell_environment_policy.exclude` for its credential names. Not yet verified over
-  `codex app-server`, the default transport; check before relying on it there.
+- Codex: pass `shell_environment_policy.exclude` for its credential names. Verified over `codex app-server` (the
+  default transport) through cuttlefish's own driver, with one catch: `-c` must come **before** the `app-server`
+  subcommand. After it the setting was ignored and the key was still visible.
 - Claude Code: no enforcement. The Permissions tab and the Secrets screen say its commands can see its key.
 - Not decided here: a credential broker.
