@@ -54,7 +54,13 @@ from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError,
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
 from cuttlefish.limits import LIMIT_SPECS, validate_limits
 from cuttlefish.permissions import DEFAULT_MODE, MODES
-from cuttlefish.projects.store import Project, ProjectStore, RoleDefinition
+from cuttlefish.projects.store import (
+    Project,
+    ProjectRootError,
+    ProjectStore,
+    RoleDefinition,
+    check_root,
+)
 from cuttlefish.roles import BUILTIN_ROLES, UnknownTemplateError, role_definition, template_roles
 from cuttlefish.secrets.store import (
     SHARED_SCOPE,
@@ -151,6 +157,16 @@ def _resolve_root_and_project(args: argparse.Namespace) -> tuple[str, str]:
     return root, project
 
 
+def _root_error(root: str) -> str | None:
+    """What is wrong with ``--root``, or ``None``. Checked before anything else so a missing
+    folder is not reported as a missing backend binary."""
+    try:
+        check_root(root)
+    except ProjectRootError as exc:
+        return str(exc)
+    return None
+
+
 async def _resolve_run_id(args: argparse.Namespace, command: str) -> tuple[str | None, int]:
     """The id this run uses (KAN-1806): the `--resume` id if it names an unfinished
     run, else a fresh one -- warning first when unfinished runs already exist, so a
@@ -187,6 +203,9 @@ async def _run(args: argparse.Namespace) -> int:
     if task_id is None:
         return early_exit
     root, project = _resolve_root_and_project(args)
+    if (error := _root_error(root)) is not None:
+        print(f"cuttlefish: {error}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
     secret_names = sorted(set(args.secret or []))
 
     try:
@@ -284,6 +303,9 @@ async def _run_team(args: argparse.Namespace) -> int:
     if team_id is None:
         return early_exit
     root, project = _resolve_root_and_project(args)
+    if (error := _root_error(root)) is not None:
+        print(f"cuttlefish: {error}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
     secret_names = sorted(set(args.secret or []))
 
     try:
@@ -702,6 +724,9 @@ def _projects(args: argparse.Namespace) -> int:
                 print(f"cuttlefish: {exc}", file=sys.stderr)
                 return EXIT_CONFIG_ERROR
             allow = tuple(tuple(command) for command in _parse_allow(args.allow))
+            if (error := _root_error(str(Path(args.root).resolve()))) is not None:
+                print(f"cuttlefish: {error}", file=sys.stderr)
+                return EXIT_CONFIG_ERROR
             project = store.register(
                 name=args.name,
                 root=str(Path(args.root).resolve()),
@@ -817,7 +842,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--root",
         default=None,
-        help="The repository or scratch checkout to delegate against (default: CWD)",
+        help="The repository or scratch checkout to delegate against (default: CWD). A one-shot "
+        "run has no Needs-you inbox: a command nothing approves is refused, not asked (use "
+        "`serve` to be asked)",
     )
     run_parser.add_argument(
         "--token-budget",

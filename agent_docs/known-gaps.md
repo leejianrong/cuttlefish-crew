@@ -272,6 +272,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **Codex reports no cost, so a project's cost ceiling (`max_cost_usd`) cannot stop it.** `cost_usd` is always `None` on a ChatGPT
+  login (only tokens are known), so the budget check has nothing to add up; the token ceiling and the round time limit still apply.
+  The dashboard shows "cost unknown" but does not say the ceiling is inert for Codex.
 - **Codex over `codex exec` is a one-shot, sandbox-only backend, and does not fit the long-run loop** (spike 2026-10-08, `gpt-5.6-luna` at low effort on a
   ChatGPT login, small team on a six-module project). Seen: a round is the whole task and runs to its end (nine modules in one round: 57 s,
   454k tokens, 45 of 45 tests); concurrent roles on one root work; a read-only role stays read-only; steering works at the round boundary

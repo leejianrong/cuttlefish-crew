@@ -189,7 +189,8 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
     async def set_project_mode(project_id: str, mode: str) -> dict[str, Any]:
         """Set project_id's permission mode: ask-first, standard or auto. Applies the
         next time the team starts, not to one already running. Auto lets every command
-        run except the never-allowed list."""
+        run except the never-allowed list. A backend that can pause (kopicode, and Codex and
+        Claude Code in the daemon) asks you in ask-first and standard; see `get_permissions`."""
         return await asyncio.to_thread(
             _request, base_url, token, "PATCH", f"/api/projects/{project_id}/mode", {"mode": mode}
         )
@@ -199,7 +200,8 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
         """Replace project_id's whole role list. Each role is {"name", "persona", "access"}
         (access: ask-first, standard, auto or read-only; unset inherits the project's
         mode; "backend" may also be given). Roles left out are removed. Applies the next
-        time the team starts. read-only does not stop edits on kopicode."""
+        time the team starts. read-only stops edits on Claude Code and Codex but not on
+        kopicode."""
         return await asyncio.to_thread(
             _request,
             base_url,
@@ -267,14 +269,18 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
 
     @server.tool()
     async def list_requests(project_id: str | None = None) -> dict[str, Any]:
-        """The commands waiting for a person. With no project_id: every pending request
-        across the fleet. With one: that project's `pending` requests, then its last 50
-        `resolved`. Each pending request has request_id, role, detail (the command), why
+        """What is waiting for a person: a command an agent asked to run (kind `permission`), a
+        question it asked (kind `question`; kopicode and Claude Code), or a stuck agent (kind
+        `blocked`). Any backend raises them in the fleet daemon, except Codex or Claude Code run
+        inside a sandbox provider or on their one-shot transports. With no project_id: every
+        pending request across the fleet. With one: that project's `pending` requests, then its
+        last 50 `resolved`. Each pending request has request_id, role, detail (the command), why
         it stopped, the answers allowed, a suggested_rule and expires_in_s: it denies on
         its own when that runs out. A request of kind `blocked` has no answers and no
         expires_in_s: the agent was stopped because it kept failing on the project's
         environment (detail is its last failing output); fix that, then steer the role
-        (`steer_project`) and the request ends. Only kopicode agents raise requests."""
+        (`steer_project`) and the request ends. `answer_request` takes the answer, plus `rule`
+        (a list of words) for Always allow and `text` for a question."""
         path = "/api/requests" if project_id is None else f"/api/projects/{project_id}/requests"
         return await asyncio.to_thread(_request, base_url, token, "GET", path)
 

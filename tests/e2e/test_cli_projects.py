@@ -19,6 +19,27 @@ def _isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     `Path.home()` at a throwaway location so this test never touches the real
     operator's registry."""
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    (tmp_path / "demo").mkdir()  # a registered root must exist
+
+
+def test_add_with_a_root_that_is_missing_says_so_and_registers_nothing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = cli.main(["projects", "add", "--name", "x", "--root", str(tmp_path / "nope")])
+    assert exit_code == cli.EXIT_CONFIG_ERROR
+    assert "does not exist" in capsys.readouterr().err
+    cli.main(["projects", "list"])
+    assert "x" not in capsys.readouterr().out
+
+
+def test_run_with_a_root_that_is_missing_says_so_not_a_missing_binary(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    exit_code = cli.main(["run", "do it", "--root", str(tmp_path / "nope")])
+    assert exit_code == cli.EXIT_CONFIG_ERROR
+    err = capsys.readouterr().err
+    assert "does not exist" in err
+    assert "binary" not in err
 
 
 def test_add_then_list_round_trips(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -92,7 +113,7 @@ def test_remove_a_registered_project_leaves_its_root_untouched(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     root = tmp_path / "demo"
-    root.mkdir()
+    root.mkdir(exist_ok=True)
     (root / "marker.txt").write_text("still here")
 
     cli.main(["projects", "add", "--name", "demo", "--root", str(root)])

@@ -147,6 +147,17 @@ async def test_a_round_whose_every_command_was_declined_is_refused(fake: Fake) -
     assert "make build" in (outcome.reason or "")
 
 
+async def test_the_agents_own_reply_is_in_the_summary(fake: Fake) -> None:
+    backend = fake.script(
+        {
+            "steps": [{"file_change": str(fake.root / "a.py")}],
+            "final": "Wrote a.py;\n  uname was declined.",
+        }
+    )
+    outcome = await fake.run(backend)
+    assert outcome.summary == "Codex edited 1 file(s): Wrote a.py; uname was declined."
+
+
 async def test_an_edit_inside_the_root_is_accepted_and_one_outside_declined(
     fake: Fake, tmp_path: Path
 ) -> None:

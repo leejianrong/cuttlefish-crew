@@ -51,6 +51,26 @@ describe("commandText", () => {
 });
 
 describe("summarize", () => {
+  it("calls a file edit an edit, not a command, and names the file", () => {
+    const allowed = summarize(
+      event("ConsentDecided", {
+        kind: "file_change",
+        detail: "/p/src/a.py",
+        answer: "allow",
+        rule: "in_root_edit",
+      }),
+    );
+    expect(allowed).toBe("Allowed edit of /p/src/a.py");
+    const refused = summarize(
+      event("ConsentDecided", {
+        kind: "file_change",
+        detail: "/elsewhere/x.txt",
+        answer: "deny",
+        rule: "edit_outside_root",
+      }),
+    );
+    expect(refused).toBe("Refused edit of /elsewhere/x.txt. It writes outside the project folder.");
+  });
   it("says a refusal and why, without the wrapper or the rule id", () => {
     const text = summarize(
       event("ConsentDecided", {
