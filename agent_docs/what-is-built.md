@@ -572,3 +572,11 @@ secrets, slice 3 and the summariser fallback (CUT-81, CUT-82, 2026-10-10): the n
 one). cuttlefish's own summarising provider reads the daemon's environment first and the *shared* `OPENROUTER_API_KEY` secret second (`config.shared_openrouter_key`,
 `OpenRouterLlmProvider(fallback_key=)`); a project's own value of that name is the agent's and is not used. The journal redactor also covers it. `prepare_run` now builds the secrets
 store before the LLM provider. README and the reference no longer say kopicode takes `ANTHROPIC_API_KEY` (it never read it).
+
+credential broker (CUT-83..86, 2026-10-10, ADR-0031): `cuttlefish.broker.Broker`, a loopback uvicorn listener in the daemon (an OS-chosen port, never the dashboard's) that
+swaps a lease token for the real key and forwards to the lease's one upstream, streaming. `delegate_to_agent_backend` takes a lease when `Runtime.broker` is set, the backend declares
+a `BROKER_ROUTE`, the run is not in a sandbox provider and a key resolves (Codex: only from Secrets, since it ignores an ambient `OPENAI_API_KEY` under a ChatGPT login); the
+real key is removed from the secrets given to the backend and the lease is revoked in a `finally`. Claude Code gets `ANTHROPIC_BASE_URL` plus the token as its key; Codex gets a
+`-c model_provider` pointing at the lease and `CUTTLEFISH_BROKER_TOKEN` (the `-c` flags still precede `app-server`). `CUTTLEFISH_CREDENTIAL_BROKER=1` turns it on (`FleetDaemon.ensure_broker`,
+closed with `FleetDaemon.close`); `cuttlefish doctor`, `GET /api/permissions` and the secrets payloads (`broker`) say which way it is set, and the credential rows say "Held by cuttlefish".
+Checked with the real `claude` and `codex` binaries against a scripted upstream. Found on the way: `run_codex` left stdin inherited, so `codex exec` hung on a pipe that never closes.

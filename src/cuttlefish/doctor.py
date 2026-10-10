@@ -19,6 +19,7 @@ from typing import Literal
 from cryptography.fernet import Fernet
 
 from cuttlefish import environment
+from cuttlefish.broker import CREDENTIAL_BROKER_ENV, broker_requested
 from cuttlefish.config import (
     CLAUDE_CODE_BIN_ENV,
     CODEX_BIN_ENV,
@@ -124,6 +125,25 @@ def check_credentials(environ: Mapping[str, str]) -> list[Check]:
         else:
             checks.append(Check("ok", name, "set"))
     return checks
+
+
+def check_broker(environ: Mapping[str, str]) -> list[Check]:
+    """Whether `cuttlefish serve` would hold each agent's API key itself (ADR-0031)."""
+    if broker_requested(environ):
+        return [
+            Check(
+                "ok",
+                CREDENTIAL_BROKER_ENV,
+                "on: Claude Code and Codex are leased a token, not their API key",
+            )
+        ]
+    return [
+        Check(
+            "ok",
+            CREDENTIAL_BROKER_ENV,
+            "off: an agent's commands can see its API key (set to 1 to hold it in cuttlefish)",
+        )
+    ]
 
 
 def check_path(environ: Mapping[str, str], *, prefix: str | None = None) -> list[Check]:
@@ -243,6 +263,7 @@ def run_checks(
     return [
         *check_backends(environ),
         *check_credentials(environ),
+        *check_broker(environ),
         *check_path(environ),
         *check_agent_environment(environ, show_all=show_all_env),
         *check_log(log_path),

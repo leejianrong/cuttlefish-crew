@@ -58,6 +58,13 @@ describe("credentialNote", () => {
     expect(credentialNote("OPENAI_API_KEY")).toContain("Kept out");
     expect(credentialNote("ANTHROPIC_API_KEY")).toContain("can see this key");
   });
+
+  it("says a held key is held, not kept out, when the broker is on", () => {
+    expect(credentialNote("ANTHROPIC_API_KEY", true)).toContain("Held by cuttlefish");
+    expect(credentialNote("ANTHROPIC_API_KEY", true)).not.toContain("can see this key");
+    expect(credentialNote("OPENAI_API_KEY", true)).toContain("Held by cuttlefish");
+    expect(credentialNote("OPENROUTER_API_KEY", true)).toContain("Kept out");
+  });
 });
 
 describe("secretFailure", () => {

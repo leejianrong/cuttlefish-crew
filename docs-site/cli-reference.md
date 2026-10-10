@@ -182,7 +182,7 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_CODEX_MODEL`, `CUTTLEFISH_CODEX_EFFORT` | unset | The model (`--model`) and reasoning effort (`minimal`, `low`, `medium`, `high`) for the Codex backend, so a team can use a small model on your ChatGPT subscription without editing `~/.codex/config.toml`. Unset leaves Codex's own configuration alone. A daemon run as another HOME also needs `CODEX_HOME` pointing at the Codex login, named in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
 | `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` | unset | Names (comma-separated, `*` ends a prefix) to pass to agents on top of the allowlist (see What an agent's environment is). |
-| `CUTTLEFISH_CREDENTIAL_BROKER` | unset | `1` makes `cuttlefish serve` keep each agent's model API key itself and lease the agent a short-lived token for a loopback proxy instead, so a command the agent runs finds no real key. Claude Code only so far, and only with an API key (a login file is not a key); a sandbox run is unchanged. A key from the environment or a Secrets screen is both used. |
+| `CUTTLEFISH_CREDENTIAL_BROKER` | unset | `1` makes `cuttlefish serve` keep each agent's model API key itself and lease the agent a short-lived token for a loopback proxy instead, so a command the agent runs finds no real key. Claude Code (a key from the environment or Secrets) and Codex (only an `OPENAI_API_KEY` set in Secrets, because Codex ignores one in the environment under a ChatGPT login); a login file is not a key and is not brokered. A sandbox run is unchanged. |
 | `CUTTLEFISH_KEEP_WINDOWS_PATH` | unset | `1` keeps WSL's `/mnt/...` entries on an agent's `PATH`; they are dropped by default. |
 | `CUTTLEFISH_PREPARE_TIMEOUT` | `900` | Seconds one dependency-install step may run before it is killed (see Installing dependencies). |
 | `CUTTLEFISH_LOG_LEVEL` | `INFO` | Log level for `cuttlefish serve`: the terminal and `~/.cuttlefish/logs/cuttlefish.log` (rotating, 5 MB x 5). `DEBUG` adds every tool call and permission decision; an unrecognised value falls back to `INFO` and says so. |
@@ -252,6 +252,16 @@ loaded from `.env` and everything `uv run` added are not passed. `PATH` has cutt
 A variable an agent needs and does not get (for example `SSH_AUTH_SOCK` for `git` over SSH, or `AWS_*` for Claude
 Code on Bedrock) goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. `cuttlefish doctor` lists the names that are withheld from this shell's environment, never the values (credentials, SSH and
 cloud names first; `cuttlefish doctor --all-env` lists them all).
+
+### The credential broker
+
+With `CUTTLEFISH_CREDENTIAL_BROKER=1`, `cuttlefish serve` keeps an agent's own model API key itself. The agent is given
+a base URL for a proxy on `127.0.0.1` and a random token in place of the key; the proxy adds the real key and forwards
+the call. A command the agent runs then finds no real key, and a leaked token works only on this machine, only until the
+round ends. Claude Code is brokered for a key from the environment or Secrets, Codex only for an `OPENAI_API_KEY` set under
+Secrets (it ignores one in the environment under a ChatGPT login). Not covered: a login file, a run inside a sandbox
+provider, kopicode (it already keeps its key from its shell), `cuttlefish run`, and `CLAUDE_*` variables passed through to
+Claude Code. `cuttlefish doctor` shows whether it is on.
 
 ## Secrets in the dashboard
 

@@ -67,10 +67,10 @@ from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRoo
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
     ACCESS_LEVELS,
-    BACKEND_NOTES,
     DEFAULT_MODE,
     MODE_INFO,
     MODES,
+    backend_notes,
 )
 from cuttlefish.projects.store import (
     Project,
@@ -494,7 +494,7 @@ def create_app(
             ],
             "backends": [
                 {"name": name, "when": when, "summary": summary}
-                for name, when, summary in BACKEND_NOTES
+                for name, when, summary in backend_notes(broker=daemon.broker_enabled())
             ],
         }
 

@@ -15,6 +15,7 @@ import pytest
 
 from cuttlefish.agents.codex import CodexBackend
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.broker import Lease
 from cuttlefish.delegate.codex_app_server import consent_detail, shell_line
 from cuttlefish.episodic.events import EventPayload, RequestResolved
 from cuttlefish.episodic.store import EpisodicEvent
@@ -44,6 +45,10 @@ class Fake:
     def sent(self, method: str) -> list[dict[str, Any]]:
         lines = [json.loads(line) for line in self.log.read_text().splitlines()]
         return [m for m in lines if m.get("method") == method]
+
+    def env(self) -> dict[str, str]:
+        lines = [json.loads(line) for line in self.log.read_text().splitlines()]
+        return next(m["env"] for m in lines if "env" in m)
 
     def argv(self) -> list[str]:
         lines = [json.loads(line) for line in self.log.read_text().splitlines()]
@@ -288,3 +293,71 @@ async def test_codex_is_started_with_its_own_credential_hidden_from_its_commands
         'shell_environment_policy.exclude=["OPENAI_API_KEY"]',
         "app-server",
     ]
+
+
+async def test_a_lease_points_codex_at_the_broker_and_keeps_the_key_out_of_reach(
+    tmp_path: Path,
+) -> None:
+    fake = Fake(tmp_path)
+    lease = Lease(
+        token="cfb_placeholder",
+        upstream="openai",
+        base="https://example.invalid/v1",
+        header="authorization",
+        url="http://127.0.0.1:1/openai/cfb_placeholder",
+        key="real-key-never-given",
+    )
+    await fake.script({"steps": []}).delegate(
+        task_text="do it",
+        root=str(fake.root),
+        allow=ALLOW,
+        secrets={"OPENAI_API_KEY": "real-key-never-given"},
+        sandbox_provider=None,
+        lease=lease,
+    )
+    argv = fake.argv()
+    assert argv[-1] == "app-server"  # the settings still come before the subcommand
+    assert argv[:2] == [
+        "-c",
+        'shell_environment_policy.exclude=["OPENAI_API_KEY", "CUTTLEFISH_BROKER_TOKEN"]',
+    ]
+    assert 'model_provider="cuttlefish_broker"' in argv
+    table = next(a for a in argv if a.startswith("model_providers.cuttlefish_broker="))
+    assert 'base_url="http://127.0.0.1:1/openai/cfb_placeholder"' in table
+    assert 'env_key="CUTTLEFISH_BROKER_TOKEN"' in table
+    assert 'wire_api="responses"' in table
+    assert fake.env()["CUTTLEFISH_BROKER_TOKEN"] == "cfb_placeholder"
+    assert "real-key-never-given" not in fake.log.read_text()
+
+
+def test_the_exec_transport_gets_the_same_broker_settings() -> None:
+    from cuttlefish.delegate.codex import build_codex_argv
+
+    lease = Lease(
+        token="cfb_t",
+        upstream="openai",
+        base="b",
+        header="authorization",
+        url="http://127.0.0.1:1/openai/cfb_t",
+    )
+    argv = build_codex_argv("codex", "task", allow=ALLOW, lease=lease)
+    assert 'model_provider="cuttlefish_broker"' in argv
+    assert argv[-1] == "task"
+    assert "model_provider" not in " ".join(build_codex_argv("codex", "task", allow=ALLOW))
+
+
+async def test_codex_exec_is_not_left_reading_the_daemons_stdin(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from cuttlefish.delegate import codex as codex_module
+
+    seen: dict[str, Any] = {}
+
+    async def spawn(*args: str, **kwargs: Any) -> Any:
+        seen.update(kwargs)
+        raise FileNotFoundError
+
+    monkeypatch.setattr(codex_module.asyncio, "create_subprocess_exec", spawn)
+    with pytest.raises(DelegationError):
+        await codex_module.run_codex(binary="codex", task_text="x", root=str(tmp_path))
+    assert seen["stdin"] == asyncio.subprocess.DEVNULL

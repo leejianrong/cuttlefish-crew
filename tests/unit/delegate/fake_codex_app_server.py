@@ -21,6 +21,7 @@ from pathlib import Path
 scenario = json.loads(Path(sys.argv[-2]).read_text())
 log = Path(sys.argv[-1]).open("a", buffering=1)  # noqa: SIM115
 log.write(json.dumps({"argv": sys.argv[1:-2]}) + "\n")
+log.write(json.dumps({"env": dict(__import__("os").environ)}) + "\n")
 next_id = 1000
 
 

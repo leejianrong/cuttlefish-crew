@@ -478,3 +478,41 @@ async def test_no_lease_is_taken_without_a_broker_a_key_or_on_the_host(
     )
     assert broker.leased == []
     assert "lease" not in backend.kwargs
+
+
+class _AmbientOffBackend(_BrokeredBackend):
+    NAME = "codex"
+    CREDENTIAL_ENV_VARS: tuple[str, ...] = ("OPENAI_API_KEY",)
+    BROKER_ROUTE = BrokerRoute("openai", "OPENAI_API_KEY", "OPENAI_BASE_URL", ambient=False)
+
+
+@pytest.mark.parametrize(
+    ("in_secrets", "in_env", "leased"), [(True, False, True), (False, True, False)]
+)
+async def test_a_key_the_backend_does_not_use_from_the_environment_is_not_brokered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, in_secrets: bool, in_env: bool, leased: bool
+) -> None:
+    """Codex ignores `OPENAI_API_KEY` under a ChatGPT login: leasing an ambient one would move a
+    subscription user onto a metered key. Only a key set on purpose in Secrets is brokered."""
+    backend, broker = _AmbientOffBackend(), _FakeBroker()
+    monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    if in_env:
+        monkeypatch.setenv("OPENAI_API_KEY", "ambient-key")
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    secrets_store = SecretsStore.open(tmp_path / "secrets.db", key=generate_key())
+    if in_secrets:
+        secrets_store.set("default", "OPENAI_API_KEY", "stored-key")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary="kopicode",
+            secrets_store=secrets_store,
+            broker=broker,  # type: ignore[arg-type]
+        )
+    )
+    await delegate_to_agent_backend("do it", str(tmp_path))
+    store.close()
+    secrets_store.close()
+    assert [lease["key"] for lease in broker.leased] == (["stored-key"] if leased else [])

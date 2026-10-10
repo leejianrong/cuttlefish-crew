@@ -175,3 +175,4 @@ and this folder disagree after a slice lands, update this folder.
   with Replace and Remove, **Add shared secret** as the one filled button, an "Overridden in N projects: a and b" tag where projects keep their own value, and the
   same key-not-set steps as the project tab. Remove names how many projects lose it. Add and Replace use the same dialog as the project tab (`SecretDialog.svelte`).
   Add project's Advanced options ends with a line pointing at both places, with a link to this screen that opens in a new tab so the form is not lost.
+- **Credential rows say who can see the key (CUT-86, 2026-10-10).** An agent-credential row's note follows the daemon's `broker` flag (in the secrets payloads): with `CUTTLEFISH_CREDENTIAL_BROKER=1` Claude Code's and Codex's rows read "Held by cuttlefish: its commands see only a short-lived token"; with it off, Claude Code's reads "Its commands can see this key". The Permissions tab's backend notes follow the same flag.

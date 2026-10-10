@@ -83,6 +83,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCallRecord
+from cuttlefish.broker import Lease
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
 
@@ -109,6 +110,7 @@ def build_codex_argv(
     *,
     allow: list[list[str]] | None = None,
     mode: str = "standard",
+    lease: Lease | None = None,
 ) -> list[str]:
     """The argv for one ``binary exec --json task_text`` invocation.
 
@@ -133,7 +135,8 @@ def build_codex_argv(
         "--sandbox",
         sandbox_mode,
         *codex_model_args(),
-        *codex_shell_policy_args(),
+        *codex_shell_policy_args(lease),
+        *codex_provider_args(lease),
         task_text,
     ]
 
@@ -162,11 +165,36 @@ def codex_model_settings(
 AGENT_CREDENTIALS: tuple[str, ...] = ("OPENAI_API_KEY",)
 
 
-def codex_shell_policy_args() -> list[str]:
+#: Where a lease's token goes for Codex: the broker provider's ``env_key`` (ADR-0031).
+BROKER_TOKEN_ENV = "CUTTLEFISH_BROKER_TOKEN"
+_BROKER_PROVIDER = "cuttlefish_broker"
+
+
+def codex_shell_policy_args(lease: Lease | None = None) -> list[str]:
     """``-c shell_environment_policy.exclude=[...]``: Codex keeps its own credential out of the
-    commands it runs, and leaves every other variable (a project's secrets) in."""
-    names = ", ".join(f'"{name}"' for name in AGENT_CREDENTIALS)
-    return ["-c", f"shell_environment_policy.exclude=[{names}]"]
+    commands it runs, and leaves every other variable (a project's secrets) in. A lease's token
+    is kept out too: it is no key, but a command has no use for it."""
+    names = (*AGENT_CREDENTIALS, *((BROKER_TOKEN_ENV,) if lease is not None else ()))
+    listed = ", ".join(f'"{name}"' for name in names)
+    return ["-c", f"shell_environment_policy.exclude=[{listed}]"]
+
+
+def codex_provider_args(lease: Lease | None) -> list[str]:
+    """A model provider pointing Codex at the broker, its token read from ``BROKER_TOKEN_ENV``
+    (ADR-0031). Nothing here is a key: the base URL carries the lease's token, which opens only
+    the daemon's loopback listener. Empty when there is no lease."""
+    if lease is None:
+        return []
+    table = (
+        f'{{name="cuttlefish broker", base_url="{lease.url}", env_key="{BROKER_TOKEN_ENV}", '
+        'wire_api="responses"}'
+    )
+    return [
+        "-c",
+        f'model_provider="{_BROKER_PROVIDER}"',
+        "-c",
+        f"model_providers.{_BROKER_PROVIDER}={table}",
+    ]
 
 
 def codex_model_args(environ: Mapping[str, str] | None = None) -> list[str]:
@@ -343,6 +371,7 @@ async def run_codex(
     mode: str = "standard",
     env: Mapping[str, str] | None = None,
     timeout: float | None = None,
+    lease: Lease | None = None,
 ) -> DelegationOutcome:
     """Run ``binary exec --json task_text ...`` in `root` and classify what it did.
 
@@ -350,12 +379,15 @@ async def run_codex(
     the binary missing, a non-JSON line, or a stream with no
     `turn.completed`/`turn.failed` event.
     """
-    args = build_codex_argv(binary, task_text, allow=allow, mode=mode)
+    args = build_codex_argv(binary, task_text, allow=allow, mode=mode, lease=lease)
 
     try:
         process = await asyncio.create_subprocess_exec(
             *args,
             cwd=root,
+            # `codex exec` reads extra input from stdin until it closes; an inherited pipe that
+            # never closes (a service manager, `docker run -i`) hung it before its first call.
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=merge_env(env, root=root, passthrough=ENV_PASSTHROUGH),

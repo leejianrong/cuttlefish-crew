@@ -197,3 +197,12 @@ def test_doctor_all_env_flag_reaches_the_check(
     cli.main(["doctor", "--all-env"])
 
     assert "ZZZ_PLAIN_19" in capsys.readouterr().out
+
+
+def test_the_doctor_says_whether_agents_hold_their_own_keys() -> None:
+    off = _by_name(doctor.check_broker({}), "CUTTLEFISH_CREDENTIAL_BROKER")
+    on = _by_name(
+        doctor.check_broker({"CUTTLEFISH_CREDENTIAL_BROKER": "1"}), "CUTTLEFISH_CREDENTIAL_BROKER"
+    )
+    assert off.status == "ok" and "can see its API key" in off.detail
+    assert on.status == "ok" and "leased a token" in on.detail

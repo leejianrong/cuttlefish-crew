@@ -153,6 +153,9 @@ exposure, only makes which secrets reach which project's agent an explicit,
 per-project decision instead of an ambient accident. Closing that exposure is
 exactly what the deferred broker/proxy is for.
 
+> Amended 2026-10-10 (broker): the agent's own model API key can now be held by a loopback broker instead of injected
+> (ADR-0031, `CUTTLEFISH_CREDENTIAL_BROKER=1`); a project's own secrets are still injected.
+
 > Amended 2026-10-10: the fleet daemon keeps its secrets in one central `~/.cuttlefish/secrets.db`, not one file per
 > project folder, because a "shared" secret in a per-folder file is shared with nothing. It reads the folder's own
 > `.cuttlefish/secrets.db` after it, when there is one. A daemon-started team now declares every secret its project can
