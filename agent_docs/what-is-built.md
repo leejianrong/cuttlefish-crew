@@ -273,7 +273,7 @@ project. Stop resolves the team's requests `cancelled`, because satay's cancel o
 round ends and a round held open for a person does not end. The window is
 `CUTTLEFISH_REQUEST_WINDOW` (default 10 minutes), passed to kopicode as `--consent-timeout` when
 `serve --help` lists it (v0.3.0 and later), else 45 seconds under kopicode's fixed 60. Claude Code
-and Codex cannot pause, so they still refuse; `ask` questions became live with kopicode v0.4.0
+cannot pause, so it still refuses (Codex became live with V4-M, below); `ask` questions became live with kopicode v0.4.0
 (see V5-ask below). Real-kopicode checks are in `tests/integration/delegate/`; the live-model ones need a key.
 
 V5-E0 and E1 (ADR-0029, #89 to #91, plus the failed-round UI): **what the daemon says when something
@@ -506,3 +506,15 @@ keyed by project in `App.svelte`, so switching by the URL cannot carry one proje
 Not changed: the pixel sprite and the elapsed-time counter still mutate the DOM every second (about 56 records per second on a running
 project and on the Projects list), unrelated to polling.
 
+V4-M (Codex live prompts, `docs/research/codex-app-server-spike.md`): `delegate/codex_app_server.py` drives `codex app-server`
+(JSON-RPC over stdio) as one thread and one turn per round, `approvalPolicy: "untrusted"`, sandbox `workspace-write` (`read-only` for a
+read-only role). Every `item/commandExecution/requestApproval` is unwrapped (`/bin/bash -lc '<line>'` to `/bin/sh -c <line>`) and decided
+by the same `ConsentPolicy`, or `AskingDecider` when a person can be asked (`CodexBackend._decider`, `tasks/delegate.py` hands Codex an
+`asker` as it does kopicode); a command whose cwd is outside the root is declined whatever the policy says. A file-change approval names
+no paths, so they come from that item's `item/started`; all inside the root is accepted (found live: `untrusted` asks about edits too,
+which the spike had not seen), anything else declined. Permissions and MCP elicitation requests are declined. A round ends on
+`turn/completed`; `turn/interrupt` implements the round time limit (`round_timeout`) and a cancelled call. `refused` is now exact (a declined
+command and no edit). `CUTTLEFISH_CODEX_TRANSPORT=exec` and a sandbox provider keep the old `codex exec` path. Tests:
+`tests/unit/delegate/test_codex_app_server.py` against `fake_codex_app_server.py`; checked live on codex-cli 0.155.1 (an in-root edit and
+`ls` accepted, `touch /tmp/...` denied and absent). Not built: Codex `ask` questions, the final message in the journal, thread resume,
+usage limits (the data is there in `thread/tokenUsage/updated`).

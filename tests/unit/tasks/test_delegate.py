@@ -292,3 +292,48 @@ async def test_a_stopped_team_raises_no_request(
 ) -> None:
     broker = await _stuck_round(tmp_path, monkeypatch, "environment_stuck", closed=True)
     assert broker.pending() == []
+
+
+class _AskerBackend:
+    CREDENTIAL_ENV_VARS: tuple[str, ...] = ()
+
+    def __init__(self, name: str) -> None:
+        self.NAME = name
+        self.kwargs: dict[str, object] = {}
+
+    async def delegate(self, **kwargs: object) -> DelegationOutcome:
+        self.kwargs = kwargs
+        return DelegationOutcome(kind="completed", summary="s")
+
+
+@pytest.mark.parametrize(
+    ("name", "access", "gets_asker"),
+    [
+        ("kopicode", None, True),
+        ("codex", None, True),
+        ("codex", "ask-first", True),
+        ("codex", "auto", False),
+        ("codex", "read-only", False),
+        ("claude-code", None, False),
+    ],
+)
+async def test_only_a_backend_that_can_pause_is_given_someone_to_ask(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str, access: str | None, gets_asker: bool
+) -> None:
+    backend = _AskerBackend(name)
+    monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    broker = RequestBroker(lambda team, payload: store.append(team, payload))
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([]),
+            kopicode_binary="kopicode",
+            requests=RequestContext(broker, "p1", "t1", 60.0),
+        )
+    )
+    await delegate_to_agent_backend(
+        "do it", str(tmp_path), **({"access": access} if access else {})
+    )
+    store.close()
+    assert ("asker" in backend.kwargs) is gets_asker

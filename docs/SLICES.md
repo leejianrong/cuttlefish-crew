@@ -804,7 +804,7 @@ Claude Code and Codex are real but unverified, so each gets a spike before its b
 12. **V4-L: Codex spike (done 2026-10-08, `docs/research/codex-app-server-spike.md`: approvals, interrupt, resume, usage all work over `app-server`).** Install `codex`, drive `codex app-server`, record the
     approval and user-input requests (note open Codex issues #14192 and #21982). No
     product code.
-13. **V4-M: Codex live prompts**, only if V4-L works.
+13. **V4-M: Codex live prompts** (done 2026-10-10): `codex app-server` is Codex's default transport, with command and edit approvals decided by the shared policy or put to a person; `exec` stays as `CUTTLEFISH_CODEX_TRANSPORT=exec`. Left for follow-ups: `requestUserInput`, the final message in the journal, thread resume, token and context limits.
 
 **Demo:** register a folder with two clicks and a template; the builder runs tests and
 commits unattended; the reviewer is read-only; a command off the list shows up under

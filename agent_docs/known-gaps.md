@@ -45,14 +45,23 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Code (edit tools denied) or Codex (read-only sandbox), but can on kopicode: its
   gate treats in-root edits as implicit and `serve` offers no way to refuse one. There
   the role's prompt is the only guard.
-- **Only kopicode can ask** (ADR-0028). In Ask first and Standard a command that is not
+- **Only kopicode and Codex can ask** (ADR-0028, V4-M). In Ask first and Standard a command that is not
   allowed stops a kopicode agent and waits under Needs you, for the request window (default 10
   minutes, `CUTTLEFISH_REQUEST_WINDOW`; 45 seconds on a kopicode before v0.3.0, which has no
   `--consent-timeout`).
-  Claude Code and Codex cannot pause mid-run, so there the command is refused (V4-I adds a
-  blocked-action card, V4-J to V4-M the live prompts). On Codex Ask first also cannot edit,
-  since the only sandbox without commands is read-only. `cuttlefish run` and `run-team` have no
-  inbox and refuse as before.
+  Codex asks the same way over `codex app-server` (the default; `CUTTLEFISH_CODEX_TRANSPORT=exec`
+  and a sandbox provider fall back to `codex exec`, which cannot pause). Claude Code cannot pause
+  mid-run, so there the command is refused (V4-I adds a blocked-action card, V4-J and V4-K the live
+  prompts). `cuttlefish run` and `run-team` have no inbox and refuse as before.
+- **A command Codex is allowed to run is not sandboxed** (V4-M; seen in the spike: an accepted
+  `touch /tmp/x` created it). Over `app-server` the never-allowed list, the allowed commands and a
+  working-directory-inside-the-root check are the only guard, and the text-matching gap named for
+  Auto applies to every mode. Codex's `ask`-style user questions (`item/tool/requestUserInput`, behind
+  an unfinished feature flag) are not wired: it never receives the tool. A file edit is accepted
+  when every path is inside the root, and declined otherwise; `turn/steer` is not used, so steering
+  is still at the round boundary. The protocol is experimental, written against codex-cli 0.155.1 to
+  0.161.0. The unanswered-approval wait on Codex's side was not measured; the round time limit
+  (`turn/interrupt`) is the backstop for a stalled turn (openai/codex#21982).
 - **A kopicode `ask` question is live only on kopicode v0.4.0 or later**, and only where a person can
   be asked (not Auto, not a read-only role, not `cuttlefish run`/`run-team`, and only when the
   binary has `--consent-timeout`). Everywhere else the model gets its fixed "no human is present"
@@ -229,7 +238,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   the other direction leaked `CUTTLEFISH_SECRETS_KEY` and the daemon's `.env` to every agent. The allowlist applies to the
   host spawns of kopicode, Claude Code and Codex; a command run inside a sandbox provider takes its environment from that
   provider. WSL's `/mnt/...` is dropped for every project or none (`CUTTLEFISH_KEEP_WINDOWS_PATH`), not per project.
-- **The stuck-agent detector covers kopicode on the host only** (V5-E5, ADR-0029). Claude Code and Codex run one-shot and hand back
+- **The stuck-agent detector covers kopicode on the host only** (V5-E5, ADR-0029). Claude Code and Codex run one-shot (Codex's commands are seen one by one over `app-server`, but not watched) and hand back
   their output at the end, so there is nothing to stop early. A kopicode in a sandbox keeps its record inside the container, so
   it is not watched. Detection needs the signature list to know the failure: a toolchain it does not name (add a regular
   expression to `cuttlefish.stuck.SIGNATURES`) runs to `max_turns` as before. N is consecutive failures, so an agent that
@@ -253,7 +262,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
-- **Codex is a one-shot, sandbox-only backend, and does not fit the long-run loop** (spike 2026-10-08, `gpt-5.6-luna` at low effort on a
+- **Codex over `codex exec` is a one-shot, sandbox-only backend, and does not fit the long-run loop** (spike 2026-10-08, `gpt-5.6-luna` at low effort on a
   ChatGPT login, small team on a six-module project). Seen: a round is the whole task and runs to its end (nine modules in one round: 57 s,
   454k tokens, 45 of 45 tests); concurrent roles on one root work; a read-only role stays read-only; steering works at the round boundary
   with only a one-line summary of the last round; the tool-call journal and edited files are recorded. Not working or not applicable:
@@ -264,4 +273,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   whole round** (the process is not killed); a resume reruns the round from scratch; tokens appear only after the round, cost never
   (`cost_usd` null). The UI wording that said Codex "refuses" a command was wrong and is corrected. Making Codex first-class would need:
   journalling its final message, an external round timeout and kill, a commit path, and resuming its session.
-  V4-L (`docs/research/codex-app-server-spike.md`) found `codex app-server` answers each of those; V4-M would build them.
+  V4-L (`docs/research/codex-app-server-spike.md`) found `codex app-server` answers each of those. V4-M built the
+  command list, the Needs-you cards, the refusal signal, the round time limit and Stop-by-interrupt on it (the default
+  transport now); still open on Codex: the final message is not journaled, resume of its thread, the turn, token and
+  context limits, and the handover.

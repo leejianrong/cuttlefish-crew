@@ -18,7 +18,7 @@ flowchart LR
     Workflow -->|delegates| Backend{AgentBackend}
     Backend -->|kopicode| Kopicode["kopicode run --print"]
     Backend -->|claude-code| Claude["claude -p --output-format stream-json"]
-    Backend -->|codex| Codex["codex exec --json"]
+    Backend -->|codex| Codex["codex app-server"]
     Kopicode -.->|optional| Sandbox[("sandbox<br/>container / E2B")]
     Claude -.->|optional| Sandbox
     Codex -.->|optional| Sandbox
@@ -57,7 +57,7 @@ it delegates to. Each `AgentBackend`
 ([ADR-0005](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0005-agent-backend-becomes-a-pluggable-protocol.md))
 wraps its own tool's existing headless surface exactly as it exists —
 kopicode's `run --print`, Claude Code's `claude -p --output-format
-stream-json`, Codex's `codex exec --json` — and cuttlefish normalizes the
+stream-json`, Codex's `codex app-server` (or `codex exec --json`) — and cuttlefish normalizes the
 result on its own side (`DelegationOutcome`), never the other way around.
 `CUTTLEFISH_AGENT_BACKEND` selects one per process; see
 [ADR-0018](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0018-codex-is-a-third-agentbackend-with-its-own-honestly-named-gaps.md)
