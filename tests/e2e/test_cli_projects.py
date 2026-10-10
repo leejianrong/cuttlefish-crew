@@ -175,3 +175,14 @@ def test_add_rejects_an_unknown_template(
     args = ["projects", "add", "--name", "demo", "--root", str(tmp_path / "demo")]
     assert cli.main([*args, "--template", "nope"]) == cli.EXIT_CONFIG_ERROR
     assert "solo-builder" in capsys.readouterr().err
+
+
+def test_add_refuses_a_root_another_project_already_uses(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = str(tmp_path / "demo")
+    assert cli.main(["projects", "add", "--name", "one", "--root", root]) == cli.EXIT_OK
+    capsys.readouterr()
+    exit_code = cli.main(["projects", "add", "--name", "two", "--root", root])
+    assert exit_code == cli.EXIT_CONFIG_ERROR
+    assert "already used by project 'one'" in capsys.readouterr().err

@@ -746,3 +746,30 @@ def test_a_roles_own_limits_round_trip_and_a_bad_one_is_400(
         json={"roles": [{"name": "builder", "limits": {"max_continuations": -1}}]},
     )
     assert bad.status_code == 400
+
+
+def test_a_second_project_on_the_same_root_is_400_and_names_the_first(
+    client: TestClient, tmp_path: Path
+) -> None:
+    first = client.post("/api/projects", json={"name": "one", "root": str(tmp_path / "a")})
+    assert first.status_code == 201
+    again = client.post("/api/projects", json={"name": "two", "root": str(tmp_path / "a" / ".")})
+    assert again.status_code == 400
+    assert "already used by project 'one'" in again.json()["detail"]
+    assert len(client.get("/api/projects").json()["projects"]) == 1
+
+
+def test_starting_a_role_the_project_never_registered_is_400_and_lists_its_roles(
+    client: TestClient, tmp_path: Path
+) -> None:
+    created = client.post(
+        "/api/projects",
+        json={"name": "demo", "root": str(tmp_path / "demo"), "roles": [{"name": "builder"}]},
+    )
+    response = client.post(
+        f"/api/projects/{created.json()['id']}/start",
+        json={"roles": [{"name": "ghost", "text": "do it"}]},
+    )
+    assert response.status_code == 400
+    assert "'ghost'" in response.json()["detail"]
+    assert "builder" in response.json()["detail"]

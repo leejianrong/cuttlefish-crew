@@ -151,13 +151,15 @@ dashboard directly.
 uv run cuttlefish mcp --base-url http://127.0.0.1:8420 --token <token>
 ```
 
-Sixteen tools. Run and watch: `list_projects`, `get_project`, `register_project` (also takes
+Seventeen tools. Run and watch: `list_projects`, `get_project`, `register_project` (also takes
 `mode` and `template`), `start_project`, `stop_project`, `steer_project`, `approve_project`,
 `get_events`. Environment: `get_project_environment` (what the project's files say it needs:
 ecosystem, package tool, version, whether its own install is present; nothing is run). Permissions: `get_permissions` (modes, command groups, the never-allowed list and the
 per-backend notes), `list_builtin_roles`, `list_templates`, `set_project_mode` and `update_roles`
 (which replaces the whole role list, including each role's `access`); both apply the next time the
-team starts. Needs you: `list_requests` (the fleet, or one project) and `answer_request`
+team starts. Spend: `set_project_budget` (`max_tokens` and/or `max_cost_usd`; a field left out is
+unset). `start_project` refuses a role the project never registered (a 400 that lists its roles), and
+`register_project` and `projects add` refuse a root another project already uses. Needs you: `list_requests` (the fleet, or one project) and `answer_request`
 (`allow_once`, `allow_always` with a `rule`, or `deny`; `answer` with `text`, or `decline`, for a
 question), which wrap the
 [request routes](#needs-you-requests-over-http) and keep their behaviour: the same answer twice is

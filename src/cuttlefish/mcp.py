@@ -196,6 +196,24 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
         )
 
     @server.tool()
+    async def set_project_budget(
+        project_id: str,
+        max_tokens: int | None = None,
+        max_cost_usd: float | None = None,
+    ) -> dict[str, Any]:
+        """Set project_id's spending ceiling: `max_tokens` and/or `max_cost_usd`. A field left
+        out is unset (no ceiling), so both left out clears the budget. A team that reaches it
+        stops at the next round. Codex reports no cost, so only `max_tokens` stops it."""
+        body: dict[str, Any] = {}
+        if max_tokens is not None:
+            body["max_tokens"] = max_tokens
+        if max_cost_usd is not None:
+            body["max_cost_usd"] = max_cost_usd
+        return await asyncio.to_thread(
+            _request, base_url, token, "PATCH", f"/api/projects/{project_id}/budget", body
+        )
+
+    @server.tool()
     async def update_roles(project_id: str, roles: list[dict[str, str]]) -> dict[str, Any]:
         """Replace project_id's whole role list. Each role is {"name", "persona", "access"}
         (access: ask-first, standard, auto or read-only; unset inherits the project's

@@ -57,9 +57,11 @@ from cuttlefish.permissions import DEFAULT_MODE, MODES
 from cuttlefish.projects.store import (
     Project,
     ProjectRootError,
+    ProjectRootInUseError,
     ProjectStore,
     RoleDefinition,
     check_root,
+    check_root_free,
 )
 from cuttlefish.roles import BUILTIN_ROLES, UnknownTemplateError, role_definition, template_roles
 from cuttlefish.secrets.store import (
@@ -726,6 +728,11 @@ def _projects(args: argparse.Namespace) -> int:
             allow = tuple(tuple(command) for command in _parse_allow(args.allow))
             if (error := _root_error(str(Path(args.root).resolve()))) is not None:
                 print(f"cuttlefish: {error}", file=sys.stderr)
+                return EXIT_CONFIG_ERROR
+            try:
+                check_root_free(args.root, store.list())
+            except ProjectRootInUseError as exc:
+                print(f"cuttlefish: {exc}", file=sys.stderr)
                 return EXIT_CONFIG_ERROR
             project = store.register(
                 name=args.name,
