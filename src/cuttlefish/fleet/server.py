@@ -56,7 +56,7 @@ from cuttlefish.delegate.presets import (
 )
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
-from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart
+from cuttlefish.fleet.daemon import FleetDaemon, FleetError, RoleStart, UnknownRoleError
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
@@ -70,8 +70,10 @@ from cuttlefish.projects.store import (
     Project,
     ProjectNotFoundError,
     ProjectRootError,
+    ProjectRootInUseError,
     RoleDefinition,
     check_root,
+    check_root_free,
 )
 from cuttlefish.requests import (
     AlreadyResolvedError,
@@ -552,6 +554,7 @@ def create_app(
         max_tokens, max_cost_usd = _budget_from_body(body)
         try:
             check_root(root)
+            check_root_free(root, daemon.projects.list())
             project = daemon.projects.register(
                 name=name,
                 root=root,
@@ -565,7 +568,7 @@ def create_app(
                 mode=_mode_from(body.get("mode")),
                 presets=_presets_from(body.get("presets")),
             )
-        except ProjectRootError as exc:
+        except (ProjectRootError, ProjectRootInUseError) as exc:
             raise HTTPException(400, str(exc)) from exc
         return _project_json(daemon, project.id)
 
@@ -705,6 +708,8 @@ def create_app(
             )
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+        except UnknownRoleError as exc:
+            raise HTTPException(400, str(exc)) from exc
         except FleetError as exc:
             raise HTTPException(409, str(exc)) from exc
         return {"team_id": team_id}

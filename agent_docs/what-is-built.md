@@ -540,3 +540,7 @@ never-allowed spellings (exploratory pass, 2026-10-10): the browser pass found C
 `never_allowed_reason` compared the literal first word. It now reads each command through wrappers (`env`, `nohup`, `timeout N`, `xargs`, `command`, leading
 `VAR=value`) and reduces the program to its name (`/usr/bin/sudo`), reads `bash -c '<script>'` as that script (up to four levels), and `curl ... | /bin/sh` is a
 pipe to a shell. Still text, not containment: a script, an alias or a name built at run time is not seen. Applies to every backend and mode.
+
+open items, small (exploratory pass, 2026-10-10): `start_project` now refuses a role name the project never registered when the project has registered roles
+(`UnknownRoleError`, a 400 listing the roles; it used to run with no persona and spend credit); `register` over HTTP and `projects add` refuse a root another project
+already uses (`check_root_free`, resolved paths; `run` and `run-team` are not checked); the MCP server has `set_project_budget` over the existing budget route.

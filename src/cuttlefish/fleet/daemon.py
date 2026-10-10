@@ -72,6 +72,10 @@ from cuttlefish.team import RoleInput, TeamInput, run_team
 logger = logging.getLogger(__name__)
 
 
+class UnknownRoleError(ValueError):
+    """A start named a role the project never registered."""
+
+
 class FleetError(Exception):
     """A fleet-daemon-level operation failed, distinctly from a workflow's own
     failure (e.g. starting a project that already has a team running)."""
@@ -389,6 +393,13 @@ class FleetDaemon:
         project = self._projects.get(project_id)
         if self.is_running(project_id):
             raise FleetError(f"project {project_id!r} already has a running team")
+        known = [r.name for r in project.roles]
+        unknown = [r["name"] for r in roles if known and r["name"] not in known]
+        if unknown:
+            raise UnknownRoleError(
+                f"unknown role {', '.join(repr(n) for n in unknown)}; "
+                f"this project's roles are: {', '.join(known)}"
+            )
 
         spec = await asyncio.to_thread(environment.detect, project.root)
         steps = await self._environment_steps(project, prepare, spec)

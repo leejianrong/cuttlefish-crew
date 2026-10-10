@@ -197,8 +197,8 @@ class Project:
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
-        never declared one — a start request naming an unregistered role still runs,
-        just with no persona prefix (a graceful default, not a rejected request)."""
+        never declared one. The daemon refuses to start an unregistered role when the project
+        has registered roles (`FleetDaemon.start`)."""
         for candidate in self.roles:
             if candidate.name == name:
                 return candidate
@@ -216,6 +216,21 @@ def check_root(root: str) -> None:
         raise ProjectRootError(f"project root {root!r} does not exist")
     if not path.is_dir():
         raise ProjectRootError(f"project root {root!r} is not a directory")
+
+
+class ProjectRootInUseError(ValueError):
+    """Another project is already registered on this root."""
+
+
+def check_root_free(root: str, projects: list[Project]) -> None:
+    """Raise :class:`ProjectRootInUseError` naming the project already on ``root``. Two projects
+    on one folder share its ``.cuttlefish/`` and ``.satay/`` and the kopicode lock."""
+    wanted = Path(root).resolve()
+    for project in projects:
+        if Path(project.root).resolve() == wanted:
+            raise ProjectRootInUseError(
+                f"project root {root!r} is already used by project {project.name!r} ({project.id})"
+            )
 
 
 class ProjectNotFoundError(LookupError):

@@ -40,6 +40,7 @@ async def test_list_tools_exposes_exactly_the_expected_surface(server: Any) -> N
         "list_builtin_roles",
         "list_templates",
         "set_project_mode",
+        "set_project_budget",
         "update_roles",
         "list_requests",
         "answer_request",
@@ -302,4 +303,20 @@ async def test_get_project_environment_reads_the_environment_route(
 
     assert calls == [
         ("http://127.0.0.1:9999", "test-token", "GET", "/api/projects/abc/environment", None)
+    ]
+
+
+async def test_set_project_budget_patches_only_the_given_fields(
+    server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _stub_request(monkeypatch, {"id": "abc"})
+    await server.call_tool("set_project_budget", {"project_id": "abc", "max_cost_usd": 2.5})
+    assert calls == [
+        (
+            "http://127.0.0.1:9999",
+            "test-token",
+            "PATCH",
+            "/api/projects/abc/budget",
+            {"max_cost_usd": 2.5},
+        )
     ]
