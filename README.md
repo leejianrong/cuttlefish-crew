@@ -47,7 +47,7 @@ continues it.
 |---|---|
 | Python 3.12+ and [uv](https://docs.astral.sh/uv/) | everything |
 | Node.js and npm | the dashboard (`make demo` builds it once) |
-| One coding-agent CLI on `PATH`, logged in or keyed: [`kopicode`](https://github.com/leejianrong/kopicode#readme) (the default; v0.3.0 or later, needs `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY`), `claude`, or `codex` (after `codex login`) | delegating work |
+| One coding-agent CLI on `PATH`, logged in or keyed: [`kopicode`](https://github.com/leejianrong/kopicode#readme) (the default; v0.3.0 or later, needs `OPENROUTER_API_KEY`), `claude`, or `codex` (after `codex login`) | delegating work |
 | `OPENROUTER_API_KEY` (optional) | cuttlefish's own summarising calls; see below |
 | Docker | only for `CUTTLEFISH_SANDBOX=container` |
 
@@ -60,7 +60,7 @@ cuttlefish's own model calls are used for one thing, summarising a role's
 working memory when it crosses its token budget. By default they go through
 OpenRouter, but only when a summary is actually due, so a run that never
 reaches its budget needs no key. If a summary is due and `OPENROUTER_API_KEY` is
-unset, the run fails with a message saying so; `CUTTLEFISH_LLM_PROVIDER=replay`
+unset (in the environment, and as a shared secret under Secrets in the dashboard), the run fails with a message saying so; `CUTTLEFISH_LLM_PROVIDER=replay`
 makes those summaries a placeholder instead.
 
 ## Try it: two projects, one dashboard

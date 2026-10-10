@@ -4,9 +4,12 @@ import { describe, expect, it } from "vitest";
 import { FleetApiError, type ProjectSummary } from "./api";
 import {
   credentialNote,
+  listNames,
+  overrideTag,
   secretFailure,
   secretNameProblem,
   secretValueProblem,
+  sharedRemovalNote,
   suggestedNames,
 } from "./secrets";
 
@@ -65,5 +68,27 @@ describe("secretFailure", () => {
   it("says what to do when it is gone or unreachable", () => {
     expect(secretFailure(new FleetApiError(404, "x"))).toContain("no longer there");
     expect(secretFailure(new Error("network"))).toContain("Couldn't reach");
+  });
+});
+
+describe("shared secret wording", () => {
+  it("lists names with commas and an and", () => {
+    expect(listNames([])).toBe("");
+    expect(listNames(["a"])).toBe("a");
+    expect(listNames(["a", "b"])).toBe("a and b");
+    expect(listNames(["a", "b", "c"])).toBe("a, b and c");
+  });
+  it("says how many projects lose a removed shared secret, and which", () => {
+    expect(sharedRemovalNote(["alpha"])).toContain("1 project loses it");
+    const many = sharedRemovalNote(["alpha", "beta", "gamma"]);
+    expect(many).toContain("3 projects lose it");
+    expect(many).toContain("alpha, beta and gamma");
+    expect(many).toContain("keep it");
+    expect(sharedRemovalNote([])).toContain("No project is using it");
+  });
+  it("tags a shared secret that projects override", () => {
+    expect(overrideTag([])).toBeNull();
+    expect(overrideTag(["demo-app"])).toBe("Overridden in 1 project: demo-app");
+    expect(overrideTag(["a", "b"])).toBe("Overridden in 2 projects: a and b");
   });
 });

@@ -3,6 +3,7 @@
   import AddProject from "./lib/components/AddProject.svelte";
   import ConnectScreen from "./lib/components/ConnectScreen.svelte";
   import RolesLibrary from "./lib/components/RolesLibrary.svelte";
+  import SharedSecretsScreen from "./lib/components/SharedSecretsScreen.svelte";
   import NeedsYouScreen from "./lib/components/NeedsYouScreen.svelte";
   import Portfolio from "./lib/components/Portfolio.svelte";
   import ProjectDetail from "./lib/components/ProjectDetail.svelte";
@@ -24,6 +25,7 @@
   const projectTab = $derived<ProjectTab>(route.view === "project" ? route.tab : "overview");
   const showGallery = $derived(route.view === "sprites");
   const showRoles = $derived(route.view === "roles");
+  const showSecrets = $derived(route.view === "secrets");
   const showNeedsYou = $derived(route.view === "needs-you");
   const adding = $derived(route.view === "add");
 
@@ -66,7 +68,15 @@
   let theme = $state<ThemePreference>(storedTheme);
 
   const active = $derived(
-    showGallery ? "sprites" : showRoles ? "roles" : showNeedsYou ? "needs-you" : "projects",
+    showGallery
+      ? "sprites"
+      : showRoles
+        ? "roles"
+        : showSecrets
+          ? "secrets"
+          : showNeedsYou
+            ? "needs-you"
+            : "projects",
   );
   const navItems = $derived(
     NAV_ITEMS.map((item) =>
@@ -111,9 +121,11 @@
         ? { view: "sprites" }
         : id === "roles"
           ? { view: "roles" }
-          : id === "needs-you"
-            ? { view: "needs-you" }
-            : HOME,
+          : id === "secrets"
+            ? { view: "secrets" }
+            : id === "needs-you"
+              ? { view: "needs-you" }
+              : HOME,
     );
   }
 </script>
@@ -137,6 +149,8 @@
       <SpriteGallery onBack={() => go(HOME)} />
     {:else if showRoles}
       <RolesLibrary {client} />
+    {:else if showSecrets}
+      <SharedSecretsScreen {client} />
     {:else if showNeedsYou}
       <NeedsYouScreen
         {client}

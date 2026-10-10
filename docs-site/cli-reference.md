@@ -198,8 +198,8 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |
 
 A real run also needs a model credential for whichever LLM provider and
-agent backend are selected: `OPENROUTER_API_KEY` or `ANTHROPIC_API_KEY` for
-kopicode and the reasoning provider, Claude Code's own login or
+agent backend are selected: `OPENROUTER_API_KEY` for kopicode and the default
+reasoning provider (`ANTHROPIC_API_KEY` for `CUTTLEFISH_LLM_PROVIDER=claude`), Claude Code's own login or
 `ANTHROPIC_API_KEY`, and `codex login` for Codex (`codex exec` ignores an
 ambient `OPENAI_API_KEY`, ADR-0018).
 
@@ -254,6 +254,10 @@ cloud names first; `cuttlefish doctor --all-env` lists them all).
 
 ## Secrets in the dashboard
 
+The side bar's **Secrets** screen manages the secrets shared with every project (add, replace, remove; the remove dialog says how
+many projects lose it). With no `OPENROUTER_API_KEY` in the daemon's environment, a shared `OPENROUTER_API_KEY` secret is also the key
+cuttlefish's own handover summaries use; a project's own secret of that name is the agent's and is never used for them.
+
 A project's **Secrets** tab lists its secrets (a lock, the name and a fixed run of dots: values are never shown), adds and replaces
 one in a dialog, and removes one after a confirmation. Secrets shared with every project show read-only below. An agent key is
 marked, with a line saying who can see it. With no secrets key the tab explains how to turn secrets on and offers no form.
@@ -268,7 +272,7 @@ shared ones) as environment variables; a change applies to the next start. A sec
 | `GET /api/projects/{id}/secrets` | `{"enabled", "project": [{"name", "kind"}], "shared": [...]}`. `kind` is `credential` when a backend runs on that name (`OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`), else `secret`. Names only. |
 | `PUT /api/projects/{id}/secrets/{name}` | Body `{"value": "..."}`. Replaces any value. The name is capitals, digits and underscores (400 otherwise). |
 | `DELETE /api/projects/{id}/secrets/{name}` | Removes it (404 when not set). |
-| `GET /api/secrets`, `PUT`/`DELETE /api/secrets/{name}` | The same for secrets shared with every project. |
+| `GET /api/secrets`, `PUT`/`DELETE /api/secrets/{name}` | The same for secrets shared with every project. Each row of the list also has `overridden_in` (projects with their own value, which keep it) and `lost_by` (projects that would lose the name if it were removed), by project name. |
 
 A value is never in a response, the journal or a log line (the journal scrubs every secret a team was handed). With no
 key every write is a 409 saying how to make one. There are deliberately no secret tools over MCP.
