@@ -29,6 +29,7 @@ was never told to look for).
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import satay
@@ -36,6 +37,7 @@ import satay
 from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.agents.registry import resolve_backend
+from cuttlefish.broker import BrokerRoute, Lease
 from cuttlefish.delegate.presets import read_only_allow, resolve_allow
 from cuttlefish.permissions import READ_ONLY
 from cuttlefish.secrets.store import DEFAULT_PROJECT
@@ -107,14 +109,33 @@ async def delegate_to_agent_backend(
         )
     if limits and backend.NAME in ("kopicode", "codex", "claude-code"):
         mode_kwargs["limits"] = limits
-    outcome = await backend.delegate(
-        task_text=task_text,
-        root=root,
-        allow=effective_allow,
-        secrets=resolved_secrets,
-        sandbox_provider=runtime_.sandbox_provider,
-        **mode_kwargs,
-    )
+    # ADR-0031: when the daemon runs a broker, the agent is leased its model key instead of
+    # holding it. The lease is closed with the round, whatever the round does.
+    lease: Lease | None = None
+    route: BrokerRoute | None = getattr(backend, "BROKER_ROUTE", None)
+    if runtime_.broker is not None and runtime_.sandbox_provider is None and route is not None:
+        key = resolved_secrets.get(route.key_env) or os.environ.get(route.key_env)
+        if key:
+            lease = runtime_.broker.lease(
+                route.upstream,
+                key,
+                base=resolved_secrets.get(route.base_env) or os.environ.get(route.base_env),
+                project=requests.project_id if requests is not None else project,
+            )
+            resolved_secrets = {k: v for k, v in resolved_secrets.items() if k != route.key_env}
+            mode_kwargs["lease"] = lease
+    try:
+        outcome = await backend.delegate(
+            task_text=task_text,
+            root=root,
+            allow=effective_allow,
+            secrets=resolved_secrets,
+            sandbox_provider=runtime_.sandbox_provider,
+            **mode_kwargs,
+        )
+    finally:
+        if lease is not None and runtime_.broker is not None:
+            runtime_.broker.revoke(lease)
     if (
         requests is not None
         and outcome.kind == "failed"
