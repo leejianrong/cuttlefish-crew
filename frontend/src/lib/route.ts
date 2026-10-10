@@ -8,6 +8,7 @@ export type Route =
   | { view: "add" }
   | { view: "project"; id: string; tab: ProjectTab }
   | { view: "needs-you" }
+  | { view: "secrets" }
   | { view: "roles" }
   | { view: "sprites" };
 
@@ -38,6 +39,8 @@ export function parseHash(hash: string): Route {
       return { view: "add" };
     case "needs-you":
       return { view: "needs-you" };
+    case "secrets":
+      return { view: "secrets" };
     case "roles":
       return { view: "roles" };
     case "sprites":

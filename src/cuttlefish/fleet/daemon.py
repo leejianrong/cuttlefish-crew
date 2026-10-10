@@ -326,10 +326,32 @@ class FleetDaemon:
             }
 
     def list_shared_secrets(self) -> dict[str, object]:
+        """The secrets shared with every project. Each row also says which projects have their
+        own value of that name (``overridden_in``, they keep it) and which would lose the name if
+        it were removed (``lost_by``), by project name."""
         if not self.secrets_enabled():
             return {"enabled": False, "shared": []}
         with self._secrets() as store:
-            return {"enabled": True, "shared": _secret_rows(store.list_names(SHARED_SCOPE))}
+            own = {
+                project.name: set(store.list_names(project.secrets_scope))
+                for project in self._projects.list()
+            }
+            rows = _secret_rows(store.list_names(SHARED_SCOPE))
+        return {
+            "enabled": True,
+            "shared": [
+                {
+                    **row,
+                    "overridden_in": sorted(
+                        name for name, names in own.items() if row["name"] in names
+                    ),
+                    "lost_by": sorted(
+                        name for name, names in own.items() if row["name"] not in names
+                    ),
+                }
+                for row in rows
+            ],
+        }
 
     def set_secret(self, project_id: str | None, name: str, value: str) -> None:
         """Store `value` under `name` for `project_id`, or for every project when it is ``None``.

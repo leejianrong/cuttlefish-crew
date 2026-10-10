@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 
 import openai
 
@@ -40,12 +41,23 @@ class MissingApiKeyError(RuntimeError):
 class OpenRouterLlmProvider:
     """One prompt in, one response out, over OpenRouter's OpenAI-compatible API."""
 
-    def __init__(self, *, model: str | None = None, max_tokens: int = DEFAULT_MAX_TOKENS) -> None:
-        api_key = os.environ.get(OPENROUTER_API_KEY_ENV)
+    def __init__(
+        self,
+        *,
+        model: str | None = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        fallback_key: Callable[[], str | None] | None = None,
+    ) -> None:
+        # The environment wins, so an operator's explicit setting is never overridden; a shared
+        # secret (`fallback_key`, the dashboard's) is what is left when it has none.
+        api_key = os.environ.get(OPENROUTER_API_KEY_ENV) or (
+            fallback_key() if fallback_key is not None else None
+        )
         if not api_key:
             raise MissingApiKeyError(
                 f"{OPENROUTER_API_KEY_ENV} is not set. cuttlefish needs it only for its own "
-                "handover summaries (the coding agent has its own credential): set it, or set "
+                "handover summaries (the coding agent has its own credential): set it, add a "
+                f"shared {OPENROUTER_API_KEY_ENV} under Secrets in the dashboard, or set "
                 "CUTTLEFISH_LLM_PROVIDER=replay for placeholder summaries."
             )
         self._client = openai.AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)

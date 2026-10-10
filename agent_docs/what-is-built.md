@@ -566,3 +566,9 @@ secrets, slice 2 (CUT-80, 2026-10-10): the project Secrets tab (`SecretsTab.svel
 `GET /api/projects/{id}/secrets` each time it opens, saves with `PUT`, removes with `DELETE`; the name rule is checked in the browser first and the daemon's own words are
 shown for a 400 or 409. Driven in a real browser (Playwright against a scratch `cuttlefish serve`, with and without a key): add, refuse a bad name, replace, Escape, remove,
 suggestion chip, the value absent from the page, light, dark and 390px, no console errors. No shared-secret editing yet (CUT-81).
+
+secrets, slice 3 and the summariser fallback (CUT-81, CUT-82, 2026-10-10): the nav-rail **Secrets** screen (`SharedSecretsScreen.svelte`, `#/secrets`) over `/api/secrets`, whose rows now carry
+`overridden_in` and `lost_by` (`FleetDaemon.list_shared_secrets`); the dialog is shared with the project tab (`SecretDialog.svelte`, mounted fresh per opening so a value never survives
+one). cuttlefish's own summarising provider reads the daemon's environment first and the *shared* `OPENROUTER_API_KEY` secret second (`config.shared_openrouter_key`,
+`OpenRouterLlmProvider(fallback_key=)`); a project's own value of that name is the agent's and is not used. The journal redactor also covers it. `prepare_run` now builds the secrets
+store before the LLM provider. README and the reference no longer say kopicode takes `ANTHROPIC_API_KEY` (it never read it).

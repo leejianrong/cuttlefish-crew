@@ -1,57 +1,40 @@
 <script lang="ts">
-  import type { FleetClient, ProjectSecrets, ProjectSummary, SecretRow } from "../api";
-  import { credentialNote, suggestedNames } from "../secrets";
+  import type { FleetClient, SharedSecrets } from "../api";
+  import {
+    CREDENTIAL_NAMES,
+    credentialNote,
+    overrideTag,
+    sharedRemovalNote,
+  } from "../secrets";
   import Icon from "./Icon.svelte";
   import SecretDialog, { type SecretDialogState } from "./SecretDialog.svelte";
 
-  let {
-    client,
-    project,
-    active,
-  }: {
-    client: FleetClient;
-    project: ProjectSummary;
-    /** Whether this tab is showing: it reads again each time it opens. */
-    active: boolean;
-  } = $props();
+  let { client }: { client: FleetClient } = $props();
 
-  let data = $state<ProjectSecrets | null>(null);
+  let data = $state<SharedSecrets | null>(null);
   let failed = $state(false);
   let status = $state<string | null>(null);
-
-  // Which dialog is open; the dialog itself (and what is typed in it) is SecretDialog's.
   let dialog = $state<SecretDialogState | null>(null);
   let copied = $state(false);
 
   const KEY_COMMAND = "cuttlefish secrets generate-key";
 
   async function load() {
-    const id = project.id;
     try {
-      const next = await client.listProjectSecrets(id);
-      if (id === project.id) {
-        data = next;
-        failed = false;
-      }
+      data = await client.listSharedSecrets();
+      failed = false;
     } catch {
-      if (id === project.id) failed = true;
+      failed = true;
     }
   }
 
   $effect(() => {
-    void project.id;
-    if (active) load();
+    load();
   });
 
-  const own = $derived(data?.project ?? []);
-  // A shared secret the project overrides is shown once, as the project's own.
-  const shared = $derived(
-    (data?.shared ?? []).filter((row) => !own.some((mine) => mine.name === row.name)),
-  );
-  const suggestions = $derived(
-    suggestedNames(project, [...own, ...(data?.shared ?? [])].map((row) => row.name)),
-  );
-  const overrides = (row: SecretRow) => (data?.shared ?? []).some((s) => s.name === row.name);
+  const rows = $derived(data?.shared ?? []);
+  const suggestions = $derived(CREDENTIAL_NAMES.filter((name) => !rows.some((r) => r.name === name)));
+  const removing = $derived(rows.find((row) => row.name === dialog?.name));
 
   function open(kind: SecretDialogState["kind"], name = "") {
     dialog = { kind, name };
@@ -59,15 +42,15 @@
   }
 
   async function save(name: string, value: string) {
-    const replacing = own.some((row) => row.name === name);
-    await client.setProjectSecret(project.id, name, value);
-    status = `${replacing ? "Replaced" : "Saved"} ${name}. It applies the next time the team starts.`;
+    const replacing = rows.some((row) => row.name === name);
+    await client.setSharedSecret(name, value);
+    status = `${replacing ? "Replaced" : "Saved"} ${name} for every project. It applies the next time a team starts.`;
     await load();
   }
 
   async function remove(name: string) {
-    await client.deleteProjectSecret(project.id, name);
-    status = `Removed ${name}. Agents lose it the next time the team starts.`;
+    await client.deleteSharedSecret(name);
+    status = `Removed ${name}. Projects without their own value lose it the next time their team starts.`;
     await load();
   }
 
@@ -81,7 +64,22 @@
   }
 </script>
 
-<section class="secrets" aria-labelledby="secrets-heading">
+<div class="page">
+  <header class="head">
+    <div>
+      <h1 class="headline-medium">Secrets</h1>
+      <p class="body-large muted">
+        Shared with every project. Values can be replaced, never shown. A project's own secret of
+        the same name wins over the shared one.
+      </p>
+    </div>
+    {#if data?.enabled}
+      <button class="btn btn-filled" type="button" onclick={() => open("add")}>
+        <Icon name="plus" size={18} />Add shared secret
+      </button>
+    {/if}
+  </header>
+
   {#if failed}
     <p class="body-medium muted" role="status">Couldn't read the secrets. Check that the daemon is still running.</p>
   {:else if data === null}
@@ -92,7 +90,7 @@
       The daemon has no secrets key, so nothing can be stored yet.
     </div>
     <div class="card filled panel">
-      <h2 id="secrets-heading" class="title-medium">Turn secrets on</h2>
+      <h2 class="title-medium">Turn secrets on</h2>
       <ol class="steps body-medium">
         <li>
           Make a key. It prints once:
@@ -111,36 +109,23 @@
       </p>
     </div>
   {:else}
-    <div class="head">
-      <h2 id="secrets-heading" class="title-medium">Secrets for {project.name}</h2>
-      <button class="btn btn-filled" type="button" onclick={() => open("add")}>
-        <Icon name="plus" size={18} />Add secret
-      </button>
-    </div>
-    <p class="body-medium muted info">
-      Secrets reach every role in this project as environment variables. Values can be replaced,
-      never shown. Changes apply the next time the team starts.
-    </p>
     {#if status}<p class="status body-medium" role="status">{status}</p>{/if}
-
-    {#if own.length === 0 && shared.length === 0}
-      <div class="card filled panel empty">
-        <h3 class="title-medium">No secrets for {project.name} yet</h3>
+    {#if rows.length === 0}
+      <div class="card filled panel">
+        <h2 class="title-medium">No shared secrets yet</h2>
         <p class="body-medium muted">
-          Add the credentials its agents need, such as an API key.
+          Add a key every project may use, such as a personal OpenRouter key. A single project's own
+          secrets are on that project's Secrets tab.
         </p>
       </div>
     {:else}
       <div class="card filled list">
         <div class="list-head">
-          <span class="title-small">This project</span>
-          <span class="label-medium muted">{own.length} set</span>
+          <span class="title-small">Shared with every project</span>
+          <span class="label-medium muted">{rows.length} set</span>
         </div>
-        {#if own.length === 0}
-          <p class="row body-medium muted">This project has none of its own.</p>
-        {/if}
         <ul>
-          {#each own as row (row.name)}
+          {#each rows as row (row.name)}
             <li class="row">
               <span class="lock"><Icon name="lock" size={20} /></span>
               <div class="what">
@@ -148,7 +133,9 @@
                 <span class="sub">
                   <span class="sealed" role="img" aria-label="Value hidden">••••••••••••</span>
                   {#if row.kind === "credential"}<span class="tag primary">Agent key</span>{/if}
-                  {#if overrides(row)}<span class="tag">Wins over the shared one</span>{/if}
+                  {#if overrideTag(row.overridden_in)}
+                    <span class="tag">{overrideTag(row.overridden_in)}</span>
+                  {/if}
                 </span>
                 {#if row.kind === "credential"}
                   <span class="body-small muted">{credentialNote(row.name)}</span>
@@ -162,42 +149,21 @@
           {/each}
         </ul>
       </div>
-      {#if shared.length > 0}
-        <div class="card filled list">
-          <div class="list-head">
-            <span class="title-small">Shared with every project</span>
-            <span class="label-medium muted">read-only here</span>
-          </div>
-          <ul>
-            {#each shared as row (row.name)}
-              <li class="row">
-                <span class="lock"><Icon name="lock" size={20} /></span>
-                <div class="what">
-                  <span class="name mono">{row.name}</span>
-                  <span class="sub">
-                    <span class="sealed" role="img" aria-label="Value hidden">••••••••••••</span>
-                    <span class="tag">Shared</span>
-                    {#if row.kind === "credential"}<span class="tag primary">Agent key</span>{/if}
-                  </span>
-                  {#if row.kind === "credential"}
-                    <span class="body-small muted">{credentialNote(row.name)}</span>
-                  {/if}
-                </div>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
+      <p class="body-small muted">
+        Removing a shared secret takes it from every project that does not have its own. The dialog
+        says how many that is before you confirm.
+      </p>
     {/if}
   {/if}
-</section>
+</div>
 
 {#if dialog}
   <SecretDialog
     {dialog}
-    existing={own.map((row) => row.name)}
-    suggestions={suggestions}
-    removeNote="Agents lose it the next time the team starts. This cannot be undone, and the value cannot be shown again."
+    existing={rows.map((row) => row.name)}
+    {suggestions}
+    nameHelp="Capital letters, digits and underscores. Shared with every project that has no secret of the same name."
+    removeNote={sharedRemovalNote(removing?.lost_by ?? [])}
     onSave={save}
     onRemove={remove}
     onClose={() => (dialog = null)}
@@ -205,29 +171,32 @@
 {/if}
 
 <style>
-  .secrets {
+  .page {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    max-width: 56rem;
+    gap: 1rem;
   }
 
   .head {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
     gap: 12px;
   }
 
+  h1,
   h2,
-  h3,
   p {
     margin: 0;
   }
 
-  .info {
+  .head p {
     max-width: 65ch;
+    margin-top: 4px;
   }
 
   .status {
@@ -250,6 +219,7 @@
     flex-direction: column;
     gap: 12px;
     align-items: flex-start;
+    max-width: 56rem;
   }
 
   .steps {
@@ -279,6 +249,7 @@
 
   .list {
     overflow: hidden;
+    max-width: 56rem;
   }
 
   .list-head {
@@ -302,10 +273,6 @@
     align-items: center;
     padding: 8px 8px 8px 16px;
     border-top: 1px solid var(--md-sys-color-outline-variant);
-  }
-
-  p.row {
-    display: block;
   }
 
   .lock {

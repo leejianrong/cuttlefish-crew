@@ -79,7 +79,9 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **`OPENROUTER_API_KEY` is only needed once a handover summary is due**
   (the provider is built lazily, KAN-1807); without it that call fails, unless
   `CUTTLEFISH_LLM_PROVIDER=replay` (placeholder summaries). It is cuttlefish's
-  own summarising provider, not the coding agent's credential.
+  own summarising provider, not the coding agent's credential. With no key in the
+  environment it reads the *shared* `OPENROUTER_API_KEY` secret (set under Secrets in
+  the dashboard), never a project's own.
 - **An agent gets an allowlisted environment, not the daemon's** (`delegate/subprocess_env.merge_env`). A variable an agent
   or a test double needs and does not get goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` (tests set it for `FAKE_KOPICODE_*`
   in `conftest.py`); never go back to inheriting everything. ADR-0029.

@@ -145,7 +145,14 @@ def test_shared_secrets_are_listed_under_every_project_and_scoped_apart(
         shared = client.get(f"/api/projects/{project}/secrets").json()["shared"]
         assert shared == [{"name": "OPENROUTER_API_KEY", "kind": "credential"}]
     assert client.get(f"/api/projects/{two}/secrets").json()["project"] == []
-    assert client.get("/api/secrets").json()["shared"] == shared
+    assert client.get("/api/secrets").json()["shared"] == [
+        {
+            "name": "OPENROUTER_API_KEY",
+            "kind": "credential",
+            "overridden_in": [],
+            "lost_by": ["demo", "other"],
+        }
+    ]
     assert client.delete("/api/secrets/OPENROUTER_API_KEY").status_code == 200
     assert client.delete("/api/secrets/OPENROUTER_API_KEY").status_code == 404
 
@@ -257,3 +264,16 @@ async def test_a_started_team_gets_the_projects_and_shared_secrets_as_environmen
     journal = (tmp_path / "demo" / ".cuttlefish" / "episodic.db").read_bytes()
     assert VALUE.encode() not in journal
     assert not (tmp_path / "demo" / ".cuttlefish" / "secrets.db").exists()
+
+
+def test_a_shared_secret_says_which_projects_override_it_and_which_would_lose_it(
+    client: TestClient, tmp_path: Path, key: str
+) -> None:
+    one = _project(client, tmp_path, "demo")
+    _project(client, tmp_path, "other")
+    client.put("/api/secrets/NPM_TOKEN", json={"value": VALUE})
+    client.put(f"/api/projects/{one}/secrets/NPM_TOKEN", json={"value": VALUE})
+    (row,) = client.get("/api/secrets").json()["shared"]
+    assert row["overridden_in"] == ["demo"]
+    assert row["lost_by"] == ["other"]
+    assert VALUE not in str(row)

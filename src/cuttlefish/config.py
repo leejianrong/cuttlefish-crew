@@ -30,6 +30,7 @@ from cuttlefish.llm.provider import LlmProvider
 from cuttlefish.sandbox.provider import SandboxProvider
 from cuttlefish.secrets.store import (
     SECRETS_KEY_ENV,
+    SHARED_SCOPE,
     InvalidSecretsKeyError,
     LayeredSecrets,
     SecretsResolver,
@@ -117,7 +118,20 @@ def check_binary_on_path(binary: str, *, env_hint: str) -> None:
         raise ConfigError(f"{binary!r} is not on PATH. Install it, or set {env_hint} to its path.")
 
 
-def resolve_llm_provider() -> LlmProvider:
+#: Named here, not imported from ``cuttlefish.llm.openrouter``, which would load the OpenAI SDK for
+#: every command; the provider module keeps its own copy.
+OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
+
+
+def shared_openrouter_key(secrets_store: SecretsResolver | None) -> str | None:
+    """The shared ``OPENROUTER_API_KEY`` secret, or ``None``: what cuttlefish's own summaries
+    use when the environment has no key."""
+    if secrets_store is None:
+        return None
+    return secrets_store.resolve(SHARED_SCOPE, [OPENROUTER_API_KEY_ENV]).get(OPENROUTER_API_KEY_ENV)
+
+
+def resolve_llm_provider(secrets_store: SecretsResolver | None = None) -> LlmProvider:
     """cuttlefish's own reasoning provider (QUESTIONS.md Q11).
 
     "replay" is a test/debug escape hatch, not a documented operator choice: it
@@ -126,7 +140,9 @@ def resolve_llm_provider() -> LlmProvider:
     key over an OpenAI-compatible endpoint reaches many upstream models, rather than
     locking cuttlefish to a single vendor SDK. "claude" remains available for a
     direct Anthropic credential. The openrouter provider is built lazily, so a
-    missing key surfaces (with an actionable message) only if a handover needs it.
+    missing key surfaces (with an actionable message) only if a handover needs it. With no
+    ``OPENROUTER_API_KEY`` in the environment it reads the *shared* ``OPENROUTER_API_KEY`` secret
+    from ``secrets_store`` (never a project's own: this is cuttlefish's key, not the agent's).
     """
     choice = os.environ.get(LLM_PROVIDER_ENV, DEFAULT_LLM_PROVIDER)
     if choice == "openrouter":
@@ -134,7 +150,9 @@ def resolve_llm_provider() -> LlmProvider:
         from cuttlefish.llm.openrouter import OpenRouterLlmProvider
 
         # Lazy (KAN-1807): the key is only needed once a handover summary is due.
-        return LazyLlmProvider(OpenRouterLlmProvider)
+        return LazyLlmProvider(
+            lambda: OpenRouterLlmProvider(fallback_key=lambda: shared_openrouter_key(secrets_store))
+        )
     if choice == "claude":
         from cuttlefish.llm.claude import ClaudeLlmProvider
 
@@ -330,9 +348,9 @@ def prepare_run(
             claude_code_binary=claude_code_binary,
             codex_binary=codex_binary,
         )
-        llm_provider = resolve_llm_provider()
-        sandbox_provider = resolve_sandbox_provider()
         secrets_store = resolve_secrets_store(resolved_base_dir, central_db=central_secrets_db)
+        llm_provider = resolve_llm_provider(secrets_store)
+        sandbox_provider = resolve_sandbox_provider()
         resolved_secrets = resolve_project_secrets(
             backend=backend,
             secrets_store=secrets_store,
@@ -347,7 +365,10 @@ def prepare_run(
     from cuttlefish.episodic.redact import DEFAULT_SECRET_ENV_VARS, Redactor
 
     def _redaction_lookup(name: str) -> str | None:
-        return resolved_secrets.get(name) or os.environ.get(name)
+        found = resolved_secrets.get(name) or os.environ.get(name)
+        if found is None and name == OPENROUTER_API_KEY_ENV:
+            found = shared_openrouter_key(secrets_store)  # the summaries may be using it
+        return found
 
     # Every secret this run can hand an agent is scrubbed from the journal, not only the
     # backend's own credential: a project secret's value must never be written either.

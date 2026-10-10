@@ -335,6 +335,19 @@ export interface ProjectSecrets {
   shared: SecretRow[];
 }
 
+/** A secret shared with every project, and what removing it would do (project names). */
+export interface SharedSecretRow extends SecretRow {
+  /** Projects with their own value of this name: they keep it. */
+  overridden_in: string[];
+  /** Projects that would lose the name if it were removed. */
+  lost_by: string[];
+}
+
+export interface SharedSecrets {
+  enabled: boolean;
+  shared: SharedSecretRow[];
+}
+
 export class FleetClient {
   constructor(
     public readonly baseUrl: string,
@@ -473,6 +486,21 @@ export class FleetClient {
       method: "PATCH",
       body: JSON.stringify({ max_tokens: maxTokens, max_cost_usd: maxCostUsd }),
     });
+  }
+
+  listSharedSecrets(): Promise<SharedSecrets> {
+    return this.request("/api/secrets");
+  }
+
+  setSharedSecret(name: string, value: string): Promise<{ name: string }> {
+    return this.request(`/api/secrets/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  deleteSharedSecret(name: string): Promise<{ name: string }> {
+    return this.request(`/api/secrets/${encodeURIComponent(name)}`, { method: "DELETE" });
   }
 
   listProjectSecrets(id: string): Promise<ProjectSecrets> {

@@ -170,3 +170,8 @@ and this folder disagree after a slice lands, update this folder.
   and is cleared whenever the dialog closes); Remove asks first. Key not set shows the three steps instead of a form. Teal and neutral surfaces,
   no coral. Differences from the proposal: no "Who can use it" switch in the dialog (shared secrets get their own screen, CUT-81, so a shared key
   is never changed from inside one project), and the saved/removed message is a line in the tab, not a snackbar.
+
+- **Shared Secrets screen shipped (CUT-81, 2026-10-10).** A **Secrets** destination in the nav rail (lock icon, after Roles), `#/secrets`. One card of sealed rows
+  with Replace and Remove, **Add shared secret** as the one filled button, an "Overridden in N projects: a and b" tag where projects keep their own value, and the
+  same key-not-set steps as the project tab. Remove names how many projects lose it. Add and Replace use the same dialog as the project tab (`SecretDialog.svelte`).
+  Add project's Advanced options ends with a line pointing at both places, with a link to this screen that opens in a new tab so the form is not lost.

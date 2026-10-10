@@ -65,3 +65,29 @@ export function secretFailure(error: unknown): string {
   }
   return "Couldn't reach the daemon. Check that it is still running.";
 }
+
+/** Every variable a backend runs on, for the shared screen's suggestions. */
+export const CREDENTIAL_NAMES: readonly string[] = Object.values(CREDENTIAL_OF);
+
+/** `a, b and c` / `a and b` / `a`. */
+export function listNames(names: readonly string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** What the Remove dialog says removing a shared secret does. */
+export function sharedRemovalNote(lostBy: readonly string[]): string {
+  const cannotUndo = "This cannot be undone, and the value cannot be shown again.";
+  if (lostBy.length === 0) {
+    return `No project is using it without a value of its own. ${cannotUndo}`;
+  }
+  const count = lostBy.length === 1 ? "1 project loses it" : `${lostBy.length} projects lose it`;
+  return `${count} the next time its team starts: ${listNames(lostBy)}. Projects with their own value of this name keep it. ${cannotUndo}`;
+}
+
+/** The tag on a shared secret that some projects override. */
+export function overrideTag(overriddenIn: readonly string[]): string | null {
+  if (overriddenIn.length === 0) return null;
+  const where = overriddenIn.length === 1 ? "1 project" : `${overriddenIn.length} projects`;
+  return `Overridden in ${where}: ${listNames(overriddenIn)}`;
+}

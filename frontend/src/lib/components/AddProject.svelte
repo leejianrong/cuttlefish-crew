@@ -282,6 +282,12 @@
               <span class="field-label">Max cost per role (USD)</span>
               <input inputmode="decimal" bind:value={maxCostText} placeholder="No limit" />
             </label>
+            <p class="body-small muted wide secrets-note">
+              API keys and other secrets are added once the project exists, on its Secrets tab. A key
+              every project may use is set under
+              <a href="#/secrets" target="_blank" rel="noopener">Secrets</a>
+              in the side bar (opens in a new tab, so nothing here is lost).
+            </p>
           </div>
         {/if}
       </section>
@@ -483,6 +489,14 @@
 
   .advanced .wide {
     grid-column: 1 / -1;
+  }
+
+  .secrets-note {
+    margin: 0;
+  }
+
+  .secrets-note a {
+    color: var(--md-sys-color-primary);
   }
 
   .advanced :global(.field-label) {
