@@ -144,6 +144,7 @@ async def test_a_round_whose_every_command_was_declined_is_refused(fake: Fake) -
     backend = fake.script({"steps": [{"command": bash("make build"), "cwd": str(fake.root)}]})
     outcome = await fake.run(backend)
     assert outcome.kind == "refused"
+    assert "make build" in (outcome.reason or "")
 
 
 async def test_an_edit_inside_the_root_is_accepted_and_one_outside_declined(

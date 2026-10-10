@@ -45,6 +45,7 @@ from cuttlefish.agents.outcome import (
     DelegationError,
     DelegationOutcome,
     ToolCallRecord,
+    describe_refusals,
 )
 from cuttlefish.delegate.consent import ConsentDecision
 from cuttlefish.delegate.kopicode_serve import Decider
@@ -171,7 +172,8 @@ class _Round:
                 return DelegationOutcome(
                     kind="refused",
                     summary="Codex's commands were declined and no file changed",
-                    reason=f"{self.declined} command(s) were not allowed",
+                    reason=describe_refusals(self.consents)
+                    or f"{self.declined} command(s) were not allowed",
                     **common,
                 )
             return DelegationOutcome(

@@ -520,7 +520,7 @@ command and no edit). `CUTTLEFISH_CODEX_TRANSPORT=exec` and a sandbox provider k
 usage limits (the data is there in `thread/tokenUsage/updated`).
 
 V4-K (Claude Code live prompts, `docs/research/claude-code-stream-json-spike.md`): `delegate/claude_code_live.py` keeps one `claude` process
-open per round (`-p --input-format stream-json --output-format stream-json --permission-mode acceptEdits --permission-prompts host
+open per round (`-p --input-format stream-json --output-format stream-json --permission-mode manual --permission-prompts host
 --permission-prompt-tool stdio`) and answers each `can_use_tool` control request: a `Bash` command through the same `ConsentPolicy` or
 `AskingDecider` (`agents/deciders.py`, now shared with Codex), a file tool allowed only inside the root (never in a read-only role), `AskUserQuestion`
 through `ShellAsker.ask_person` (the person's words go back as `answers`), any other tool refused. No `Bash(...)` allow patterns are passed; the
@@ -530,3 +530,8 @@ no call succeeded (the Codex path now follows the same rule). A timeout or a can
 and a sandbox provider keep `claude -p`. Tests: `tests/unit/delegate/test_claude_code_live.py` against `fake_claude_stream.py`; checked live on
 `claude` 2.1.296 (an in-root Write, `uv run pytest` asked and allowed, `touch /tmp/...` and `make build` denied, the model reported the blocks).
 Not built: resuming a session inside one process, turn/token/context limits (the result carries usage), the permission suggestions as Always allow.
+
+V4-K fix (exploratory CLI pass, 2026-10-10): the live Claude Code argv used `--permission-mode acceptEdits` and, in Auto, `--allowedTools Bash`, so a
+shell command that writes into the project, and in Auto any command at all, never prompted and the never-allowed list was never consulted (`touch
+/tmp/x` ran and the file existed). It is now `manual` with no `--allowedTools`: only what Claude Code treats as read-only runs unasked. A refused round's
+`reason` names what was refused and the rule (`agents.outcome.describe_refusals`), for Codex and Claude Code alike.
