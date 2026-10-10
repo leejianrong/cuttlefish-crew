@@ -90,15 +90,20 @@ async def delegate_to_agent_backend(
     else:
         effective_allow = resolve_allow(allow, presets)
     mode_kwargs: dict[str, Any] = {"mode": access} if access in ("auto", READ_ONLY) else {}
-    # A person can be asked (ADR-0028) only inside the fleet daemon, only of kopicode (the one
-    # backend that can pause for a consent), and never for Auto or a read-only role. It rides
-    # the runtime, not the task arguments, so recorded calls and replay are unchanged.
+    # A person can be asked (ADR-0028) only inside the fleet daemon, only of a backend that can
+    # pause for a consent (kopicode, and Codex over app-server, V4-M), and never for Auto or a
+    # read-only role. It rides the runtime, not the task arguments, so recorded calls and replay
+    # are unchanged.
     requests = runtime_.requests
-    if requests is not None and backend.NAME == "kopicode" and access not in ("auto", READ_ONLY):
+    if (
+        requests is not None
+        and backend.NAME in ("kopicode", "codex")
+        and access not in ("auto", READ_ONLY)
+    ):
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
-    if limits and backend.NAME == "kopicode":
+    if limits and backend.NAME in ("kopicode", "codex"):
         mode_kwargs["limits"] = limits
     outcome = await backend.delegate(
         task_text=task_text,

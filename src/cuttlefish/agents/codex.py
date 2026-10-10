@@ -14,12 +14,25 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Mapping
-from typing import ClassVar
+from collections.abc import Mapping, Sequence
+from typing import ClassVar, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
-from cuttlefish.delegate.codex import run_codex, run_codex_in_sandbox
+from cuttlefish.delegate.codex import (
+    ENV_PASSTHROUGH,
+    codex_model_settings,
+    run_codex,
+    run_codex_in_sandbox,
+)
+from cuttlefish.delegate.codex_app_server import run_codex_app_server
+from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
+from cuttlefish.delegate.kopicode_serve import Decider
+from cuttlefish.limits import round_timeout_for
+from cuttlefish.requests import AskingDecider, ShellAsker
 from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
+
+#: ``CUTTLEFISH_CODEX_TRANSPORT=exec`` runs ``codex exec`` as before (V4-M).
+TRANSPORT_ENV = "CUTTLEFISH_CODEX_TRANSPORT"
 
 _SANDBOX_CODEX_BINARY = "/usr/local/bin/codex"
 
@@ -44,14 +57,38 @@ def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
     return resolved
 
 
+def _decider(allow: Sequence[Sequence[str]] | None, mode: str, asker: ShellAsker | None) -> Decider:
+    """Who answers Codex's command approvals: the role's policy, and a person for a command no
+    rule approves when ``asker`` is given (never in Auto or for a read-only role)."""
+    try:
+        policy = ConsentPolicy(allow, auto=mode == "auto")
+    except ConsentPolicyError as exc:
+        raise DelegationError(f"unusable shell allowlist: {exc}") from exc
+    if asker is None or mode in ("auto", "read-only"):
+        return policy.decide
+    return AskingDecider(allow, asker, window_s=asker.window_s)
+
+
 class CodexBackend:
-    """Wraps headless Codex (``codex exec``) behind the pluggable backend seam."""
+    """Wraps headless Codex behind the pluggable backend seam.
+
+    ``transport="app-server"`` (the default, V4-M) drives ``codex app-server`` and answers every
+    command's approval from the role's ``allow`` list, asking a person when one can be asked
+    (``cuttlefish.delegate.codex_app_server``). ``transport="exec"`` is the one-shot
+    ``codex exec`` with its coarse sandbox tier; it is also what runs inside a sandbox, since
+    ``app-server`` needs a process that streams.
+    """
 
     NAME: ClassVar[str] = "codex"
     CREDENTIAL_ENV_VARS: ClassVar[tuple[str, ...]] = _CREDENTIAL_ENV_VARS
 
-    def __init__(self, binary: str = "codex") -> None:
+    def __init__(
+        self, binary: str = "codex", *, transport: Literal["app-server", "exec"] | None = None
+    ) -> None:
         self._binary = binary
+        self._transport = transport or (
+            "exec" if os.environ.get(TRANSPORT_ENV, "").strip().lower() == "exec" else "app-server"
+        )
 
     async def delegate(
         self,
@@ -62,7 +99,26 @@ class CodexBackend:
         secrets: Mapping[str, str],
         sandbox_provider: SandboxProvider | None,
         mode: str = "standard",
+        asker: ShellAsker | None = None,
+        limits: Mapping[str, int] | None = None,
     ) -> DelegationOutcome:
+        """``asker`` (ADR-0028) lets a command nothing approves be put to a person; only the
+        ``app-server`` transport can hold one open. ``limits`` carries the round's time limit; the
+        other limits have no control on Codex."""
+        if sandbox_provider is None and self._transport == "app-server":
+            model, effort = codex_model_settings()
+            return await run_codex_app_server(
+                binary=self._binary,
+                task_text=task_text,
+                root=root,
+                decide=_decider(allow, mode, asker),
+                sandbox="read-only" if mode == "read-only" else "workspace-write",
+                model=model,
+                effort=effort,
+                env=_credential_envs(secrets),
+                env_passthrough=ENV_PASSTHROUGH,
+                timeout=round_timeout_for(limits),
+            )
         if sandbox_provider is None:
             return await run_codex(
                 binary=self._binary,

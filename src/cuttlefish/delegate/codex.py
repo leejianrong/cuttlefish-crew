@@ -142,19 +142,27 @@ EFFORT_ENV = "CUTTLEFISH_CODEX_EFFORT"
 EFFORTS = ("minimal", "low", "medium", "high")
 
 
-def codex_model_args(environ: Mapping[str, str] | None = None) -> list[str]:
-    """``--model`` and the reasoning effort from ``CUTTLEFISH_CODEX_MODEL`` and
-    ``CUTTLEFISH_CODEX_EFFORT``, so a team can use a small, cheap model on a subscription without
-    editing the operator's own ``~/.codex/config.toml``. Unset leaves Codex's own configuration
-    alone. An effort that is not one of ``minimal``, ``low``, ``medium``, ``high`` is ignored
-    rather than passed on to fail a round."""
+def codex_model_settings(
+    environ: Mapping[str, str] | None = None,
+) -> tuple[str | None, str | None]:
+    """The model and reasoning effort from ``CUTTLEFISH_CODEX_MODEL`` and
+    ``CUTTLEFISH_CODEX_EFFORT``, so a team can use a small, cheap model on a subscription
+    without editing the operator's own ``~/.codex/config.toml``. Unset is ``None``, which leaves
+    Codex's own configuration alone. An effort that is not one of ``minimal``, ``low``,
+    ``medium``, ``high`` is ignored rather than passed on to fail a round."""
     env = environ if environ is not None else os.environ
+    model = env.get(MODEL_ENV, "").strip() or None
+    effort = env.get(EFFORT_ENV, "").strip().lower()
+    return model, effort if effort in EFFORTS else None
+
+
+def codex_model_args(environ: Mapping[str, str] | None = None) -> list[str]:
+    """``codex_model_settings`` as ``codex exec`` flags."""
+    model, effort = codex_model_settings(environ)
     args: list[str] = []
-    model = env.get(MODEL_ENV, "").strip()
     if model:
         args += ["--model", model]
-    effort = env.get(EFFORT_ENV, "").strip().lower()
-    if effort in EFFORTS:
+    if effort:
         args += ["-c", f'model_reasoning_effort="{effort}"']
     return args
 

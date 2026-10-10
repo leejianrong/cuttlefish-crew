@@ -4,11 +4,11 @@ A project has one **mode**; a role may override it with an **access** level. The
 access of a delegation is the role's own, else the project's, else ``standard``.
 
 - ``ask-first``: files can be read and edited; no shell command runs on its own. On kopicode
-  inside the fleet daemon a command stops the agent and waits for a person (ADR-0028); on
-  Claude Code, which cannot pause, it is refused, and Codex gets a read-only sandbox.
+  inside the fleet daemon a command stops the agent and waits for a person (ADR-0028), and so it
+  does on Codex over ``app-server`` (V4-M); on Claude Code, which cannot pause, it is refused.
 - ``standard``: the built-in dev presets plus anything declared (ADR-0023); on kopicode a
-  command off the list is asked about, as in ask-first. Codex does not filter commands (it
-  runs in a folder sandbox), so the list is not enforced there.
+  command off the list is asked about, as in ask-first, on Codex too (over ``app-server``; over
+  ``codex exec`` the list is not enforced, it only has a folder sandbox).
 - ``auto``: any shell command runs, except the never-allowed list (``never_allowed``).
 - ``read-only`` (a role access, not a project mode): inspection-only shell, and no file
   edits where the backend can stop them.
@@ -37,16 +37,13 @@ MODE_INFO: dict[str, tuple[str, str]] = {
     "ask-first": (
         "Ask first",
         "Agents can read and edit files. No command runs on its own. With kopicode, each "
-        "command stops the agent until you allow or deny it. Claude Code cannot pause, so "
-        "there a command is refused. Codex cannot pause either and runs in a read-only "
-        "sandbox, so it can read but not edit.",
+        "command stops the agent until you allow or deny it, and so does Codex. Claude Code "
+        "cannot pause, so there a command is refused.",
     ),
     "standard": (
         "Standard",
         "Everyday dev commands run on their own. With kopicode, anything off the list stops "
-        "the agent until you allow or deny it. Claude Code refuses it. Codex does not filter "
-        "commands: it runs in a sandbox that lets it edit the project folder and /tmp, so a "
-        "command off the list can still run (seen live: docker and curl ran).",
+        "the agent until you allow or deny it, and so does Codex. Claude Code refuses it.",
     ),
     "auto": (
         "Auto",
