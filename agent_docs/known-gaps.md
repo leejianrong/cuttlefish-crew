@@ -45,14 +45,22 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Code (edit tools denied) or Codex (read-only sandbox), but can on kopicode: its
   gate treats in-root edits as implicit and `serve` offers no way to refuse one. There
   the role's prompt is the only guard.
-- **Only kopicode and Codex can ask** (ADR-0028, V4-M). In Ask first and Standard a command that is not
+- **Every backend can ask on its live transport** (ADR-0028, V4-M, V4-K). In Ask first and Standard a command that is not
   allowed stops a kopicode agent and waits under Needs you, for the request window (default 10
   minutes, `CUTTLEFISH_REQUEST_WINDOW`; 45 seconds on a kopicode before v0.3.0, which has no
   `--consent-timeout`).
   Codex asks the same way over `codex app-server` (the default; `CUTTLEFISH_CODEX_TRANSPORT=exec`
-  and a sandbox provider fall back to `codex exec`, which cannot pause). Claude Code cannot pause
-  mid-run, so there the command is refused (V4-I adds a blocked-action card, V4-J and V4-K the live
-  prompts). `cuttlefish run` and `run-team` have no inbox and refuse as before.
+  and a sandbox provider fall back to `codex exec`, which cannot pause). Claude Code asks over
+  stream-json with `--permission-prompt-tool stdio` (the default; `CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`
+  and a sandbox provider fall back to `claude -p`, which refuses). `cuttlefish run` and `run-team` have
+  no inbox and refuse as before (V4-I would add a blocked-action card for those paths).
+- **Claude Code's live path decides only what Claude Code asks about** (V4-K). What it treats as
+  read-only (`ls`) never prompts, edits inside the project run under `acceptEdits`, and the never-allowed
+  prefixes are also passed as `--disallowedTools` for anything that does not prompt. No `Bash(...)` allow
+  patterns are passed, so a command it would have allowed on its own reading of a pattern now asks, under
+  our stricter plain-word rule. Another tool that prompts (`WebFetch`, `Task`, MCP) is refused. The
+  flag combination is undocumented beyond one `--help` line, written against `claude` 2.1.296, and
+  resuming a session inside one stream-json process is untried (one process per round).
 - **A command Codex is allowed to run is not sandboxed** (V4-M; seen in the spike: an accepted
   `touch /tmp/x` created it). Over `app-server` the never-allowed list, the allowed commands and a
   working-directory-inside-the-root check are the only guard, and the text-matching gap named for

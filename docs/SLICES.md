@@ -800,7 +800,7 @@ Claude Code and Codex are real but unverified, so each gets a spike before its b
     plus `canUseTool` or `--permission-prompt-tool`; record the actual permission and
     `AskUserQuestion` message shapes and the answer round trip in a research note. No
     product code.
-11. **V4-K: Claude Code live prompts**, unblocked by V4-J, on the shapes it recorded.
+11. **V4-K: Claude Code live prompts** (done 2026-10-10): `claude` over stream-json with `--permission-prompt-tool stdio` is the default transport; command and edit requests are decided by the shared policy or put to a person, and `AskUserQuestion` becomes a live question card. `claude -p` stays as `CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print` and inside a sandbox provider.
 12. **V4-L: Codex spike (done 2026-10-08, `docs/research/codex-app-server-spike.md`: approvals, interrupt, resume, usage all work over `app-server`).** Install `codex`, drive `codex app-server`, record the
     approval and user-input requests (note open Codex issues #14192 and #21982). No
     product code.

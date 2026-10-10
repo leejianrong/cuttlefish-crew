@@ -28,13 +28,13 @@
       id: "ask-first",
       label: "Ask first",
       icon: "chat",
-      text: "Agents can edit files, but no command runs on its own. With kopicode or Codex each command pauses the agent until you allow or deny it; Claude Code can't pause, so there it is refused.",
+      text: "Agents can edit files, but no command runs on its own. Each command pauses the agent until you allow or deny it.",
     },
     {
       id: "standard",
       label: "Standard",
       icon: "check",
-      text: "Agents run everyday dev commands on their own: tests, linters, builds, installs, and git add or commit. With kopicode or Codex anything else pauses the agent until you answer; Claude Code refuses it.",
+      text: "Agents run everyday dev commands on their own: tests, linters, builds, installs, and git add or commit. Anything else pauses the agent until you answer.",
     },
     {
       id: "auto",

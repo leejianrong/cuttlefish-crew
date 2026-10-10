@@ -172,6 +172,7 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
 | `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
 | `CUTTLEFISH_LLM_MODEL` | `qwen/qwen3-30b-a3b-instruct-2507` | The OpenRouter model for cuttlefish's own summaries (handovers). A small non-reasoning model on purpose (about $0.003 a summary, and it cannot spend its output cap thinking); any OpenRouter model id works. The provider reports each call's cost, shown on the Summary rows of the activity log. |
+| `CUTTLEFISH_CLAUDE_CODE_TRANSPORT` | `stdio` | `print` runs Claude Code as the one-shot `claude -p` (allow patterns, nothing to ask a person) instead of keeping a stream-json session open. |
 | `CUTTLEFISH_CODEX_TRANSPORT` | `app-server` | `exec` runs Codex as the one-shot `codex exec` (coarse sandbox, nothing to ask a person) instead of `codex app-server`. |
 | `CUTTLEFISH_CODEX_MODEL`, `CUTTLEFISH_CODEX_EFFORT` | unset | The model (`--model`) and reasoning effort (`minimal`, `low`, `medium`, `high`) for the Codex backend, so a team can use a small model on your ChatGPT subscription without editing `~/.codex/config.toml`. Unset leaves Codex's own configuration alone. A daemon run as another HOME also needs `CODEX_HOME` pointing at the Codex login, named in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. |
 | `CUTTLEFISH_SANDBOX` | `none` | Real containment for the delegation: `none`, `container` (local Docker), or `e2b`. |
@@ -262,9 +263,10 @@ download piped into a shell (`curl ... | sh`), and arguments that reach outside 
 
 Matching is by argv prefix on a plain word list, so a chained or quoted command line
 (`a && b`, `$(...)`) is denied. The one exception is `git commit -m '<message>'`.
-kopicode and Codex (over `codex app-server`) check this live, command by command; for Claude Code
-the same list is passed as `--allowedTools` (plus deny patterns for the never-allowed prefixes).
-Over `codex exec` (`CUTTLEFISH_CODEX_TRANSPORT=exec`, and inside a sandbox provider) the list only
+kopicode, Codex (over `codex app-server`) and Claude Code (over stream-json) check this live,
+command by command. Over `claude -p` (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, and inside a sandbox
+provider) the list is passed as `--allowedTools` patterns, plus deny patterns for the never-allowed
+prefixes. Over `codex exec` (`CUTTLEFISH_CODEX_TRANSPORT=exec`, and inside a sandbox provider) the list only
 switches the sandbox to `workspace-write` -- see the known gaps. The `print` transport's exact-match
 policy file cannot express prefixes, so it sees the presets but matches almost nothing.
 
@@ -342,7 +344,7 @@ or `read-only`), and the role's own setting wins.
 
 | Mode | Shell commands | File edits |
 | --- | --- | --- |
-| `ask-first` | None run on their own. On kopicode and Codex a command stops the agent and appears under **Needs you** for you to allow or deny; Claude Code cannot pause, so there it is refused. | Yes |
+| `ask-first` | None run on their own. A command stops the agent and appears under **Needs you** for you to allow or deny (on Codex and Claude Code over their live transports, the defaults). | Yes |
 | `standard` | The built-in presets plus `--allow`. On kopicode a command off that list appears under **Needs you** instead of being refused; elsewhere it is refused. | Yes |
 | `auto` | Any command except the never-allowed list | Yes |
 | `read-only` (a role) | Inspection only (`ls`, `grep`, `git diff`, ...) | No on Claude Code and Codex; **yes on kopicode** |
@@ -356,7 +358,8 @@ Only a team started from the dashboard (`cuttlefish serve`) can ask you: `run` a
 
 How each agent receives a mode: kopicode answers every command live, so Auto allows
 everything that is not never-allowed and needs `kopicode serve` (not the `print` transport).
-Claude Code gets tool allow and deny patterns; in Auto it also refuses `curl` and `wget`.
+Claude Code over stream-json answers every command that prompts itself, like kopicode; in Auto it also
+refuses `curl` and `wget`. Over `claude -p` it gets tool allow and deny patterns instead.
 Codex over `codex app-server` answers every command's approval itself, so Ask first, Standard and
 Auto work as on kopicode, and a read-only role gets the read-only sandbox. A command it accepts runs
 outside Codex's own sandbox, so the never-allowed list and the working-directory check are the

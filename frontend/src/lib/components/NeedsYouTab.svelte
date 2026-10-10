@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { FleetClient, NeedsYouRequest, ProjectSummary } from "../api";
   import { commandText, formatWhen } from "../events";
-  import { backendLabel, outcomeLabel } from "../requests";
+  import { outcomeLabel } from "../requests";
   import RequestCard from "./RequestCard.svelte";
 
   let {
@@ -20,32 +20,15 @@
     onAnswered: () => void;
   } = $props();
 
-  // Roles on an explicit backend other than kopicode or Codex cannot pause to ask, so the page
-  // says so rather than imply every agent can.
-  const otherBackends = $derived(
-    [
-      ...new Set(
-        project.roles
-          .map((role) => role.backend ?? project.backend)
-          .filter((backend): backend is string => !!backend && backend !== "kopicode" && backend !== "codex"),
-      ),
-    ].sort(),
-  );
 </script>
 
 <section class="stack" aria-labelledby="needs-heading">
   <h2 id="needs-heading" class="title-large">Waiting on you</h2>
   <p class="body-medium muted">
-    A kopicode or Codex agent that wants to run a command it isn't allowed to pauses here until you answer, and so does a
-    kopicode agent with a question for you.
+    An agent that wants to run a command it isn't allowed to pauses here until you answer, and so does an agent with a
+    question for you (kopicode and Claude Code; a Codex question is not asked live yet).
     An agent that kept failing on the project's environment shows as Stuck: it was stopped, so there is nothing to
     answer.
-    {#if otherBackends.length > 0}
-      {otherBackends.map(backendLabel).join(" and ")} can't pause mid-run, so nothing is asked here. Claude Code refuses a
-      command it isn't allowed.
-    {:else}
-      Claude Code can't pause mid-run, so nothing is asked for it here.
-    {/if}
   </p>
 
   {#if pending.length === 0}

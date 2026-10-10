@@ -100,9 +100,9 @@ When an agent asks you a question with kopicode's `ask` tool (kopicode v0.4.0 or
 **Question** card with a text box: **Send answer** gives the agent your words, **Decline** (or no
 answer in time) tells it nobody is there and it carries on.
 
-kopicode and Codex can pause (Codex when it runs over `codex app-server`, the default; with
-`CUTTLEFISH_CODEX_TRANSPORT=exec` it cannot). Claude Code refuses the command and says so in the
-activity log, and a team started with `cuttlefish run` or `run-team` has no inbox, so it refuses too. The same
+every backend can pause in the daemon: Codex over `codex app-server` and Claude Code over stream-json
+(the defaults; with `CUTTLEFISH_CODEX_TRANSPORT=exec`, `CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, or inside
+a sandbox provider they refuse the command and say so in the activity log). A team started with `cuttlefish run` or `run-team` has no inbox, so it refuses too. The same
 requests are available over HTTP (see the [CLI reference](cli-reference.md)).
 
 A **Stuck** card is different: it has no buttons. A kopicode agent whose shell commands fail five

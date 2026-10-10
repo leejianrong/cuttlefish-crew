@@ -167,7 +167,7 @@ class _Round:
                     edited_paths=self.edited_paths,
                     **common,
                 )
-            if self.declined:
+            if self.declined and not any(c.status == "ok" for c in self.tool_calls):
                 return DelegationOutcome(
                     kind="refused",
                     summary="Codex's commands were declined and no file changed",

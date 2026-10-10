@@ -23,13 +23,20 @@ from __future__ import annotations
 import os
 import shutil
 from collections.abc import Mapping
-from typing import ClassVar
+from typing import ClassVar, Literal
 
+from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.delegate.claude_code import run_claude_code, run_claude_code_in_sandbox
+from cuttlefish.delegate.claude_code_live import QuestionHandler, run_claude_code_live
+from cuttlefish.limits import round_timeout_for
+from cuttlefish.requests import ShellAsker
 from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
 
 _SANDBOX_CLAUDE_CODE_BINARY = "/usr/local/bin/claude"
+
+#: ``CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`` runs ``claude -p`` as before (V4-K).
+TRANSPORT_ENV = "CUTTLEFISH_CLAUDE_CODE_TRANSPORT"
 
 _CREDENTIAL_ENV_VARS = ("ANTHROPIC_API_KEY",)
 
@@ -47,14 +54,38 @@ def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
     return resolved
 
 
+def _question_handler(asker: ShellAsker | None, mode: str) -> QuestionHandler | None:
+    """A live answer for the model's own questions, when a person can be asked."""
+    if asker is None or mode in ("auto", "read-only"):
+        return None
+    window = asker.window_s
+
+    async def ask(question: str, context: str) -> str | None:
+        return await asker.ask_person(question, context, window_s=window)
+
+    return ask
+
+
 class ClaudeCodeBackend:
-    """Wraps headless Claude Code (``claude -p``) behind the pluggable backend seam."""
+    """Wraps headless Claude Code behind the pluggable backend seam.
+
+    ``transport="stdio"`` (the default, V4-K) keeps one ``claude`` process open per round and
+    answers its permission requests from the role's ``allow`` list, asking a person when one can
+    be asked (``cuttlefish.delegate.claude_code_live``). ``transport="print"`` is the one-shot
+    ``claude -p`` with ``--allowedTools`` patterns; it is also what runs inside a sandbox, which
+    cannot hold a request open.
+    """
 
     NAME: ClassVar[str] = "claude-code"
     CREDENTIAL_ENV_VARS: ClassVar[tuple[str, ...]] = _CREDENTIAL_ENV_VARS
 
-    def __init__(self, binary: str = "claude") -> None:
+    def __init__(
+        self, binary: str = "claude", *, transport: Literal["stdio", "print"] | None = None
+    ) -> None:
         self._binary = binary
+        self._transport = transport or (
+            "print" if os.environ.get(TRANSPORT_ENV, "").strip().lower() == "print" else "stdio"
+        )
 
     async def delegate(
         self,
@@ -65,7 +96,23 @@ class ClaudeCodeBackend:
         secrets: Mapping[str, str],
         sandbox_provider: SandboxProvider | None,
         mode: str = "standard",
+        asker: ShellAsker | None = None,
+        limits: Mapping[str, int] | None = None,
     ) -> DelegationOutcome:
+        """``asker`` (ADR-0028) lets a command nothing approves, and the model's own questions, be
+        put to a person; only the ``stdio`` transport can hold a request open. ``limits`` carries
+        the round's time limit; the other limits have no control on Claude Code."""
+        if sandbox_provider is None and self._transport == "stdio":
+            return await run_claude_code_live(
+                binary=self._binary,
+                task_text=task_text,
+                root=root,
+                decide=command_decider(allow, mode, asker),
+                mode=mode,
+                ask=_question_handler(asker, mode),
+                env=_credential_envs(secrets),
+                timeout=round_timeout_for(limits),
+            )
         if sandbox_provider is None:
             return await run_claude_code(
                 binary=self._binary,

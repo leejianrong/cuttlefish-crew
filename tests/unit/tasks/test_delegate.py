@@ -314,7 +314,9 @@ class _AskerBackend:
         ("codex", "ask-first", True),
         ("codex", "auto", False),
         ("codex", "read-only", False),
-        ("claude-code", None, False),
+        ("claude-code", None, True),
+        ("claude-code", "ask-first", True),
+        ("claude-code", "read-only", False),
     ],
 )
 async def test_only_a_backend_that_can_pause_is_given_someone_to_ask(

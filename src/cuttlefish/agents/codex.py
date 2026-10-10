@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import ClassVar, Literal
 
+from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.delegate.codex import (
     ENV_PASSTHROUGH,
@@ -25,10 +26,8 @@ from cuttlefish.delegate.codex import (
     run_codex_in_sandbox,
 )
 from cuttlefish.delegate.codex_app_server import run_codex_app_server
-from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
-from cuttlefish.delegate.kopicode_serve import Decider
 from cuttlefish.limits import round_timeout_for
-from cuttlefish.requests import AskingDecider, ShellAsker
+from cuttlefish.requests import ShellAsker
 from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
 
 #: ``CUTTLEFISH_CODEX_TRANSPORT=exec`` runs ``codex exec`` as before (V4-M).
@@ -55,18 +54,6 @@ def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
     }
     resolved.update({name: value for name, value in secrets.items() if name not in resolved})
     return resolved
-
-
-def _decider(allow: Sequence[Sequence[str]] | None, mode: str, asker: ShellAsker | None) -> Decider:
-    """Who answers Codex's command approvals: the role's policy, and a person for a command no
-    rule approves when ``asker`` is given (never in Auto or for a read-only role)."""
-    try:
-        policy = ConsentPolicy(allow, auto=mode == "auto")
-    except ConsentPolicyError as exc:
-        raise DelegationError(f"unusable shell allowlist: {exc}") from exc
-    if asker is None or mode in ("auto", "read-only"):
-        return policy.decide
-    return AskingDecider(allow, asker, window_s=asker.window_s)
 
 
 class CodexBackend:
@@ -111,7 +98,7 @@ class CodexBackend:
                 binary=self._binary,
                 task_text=task_text,
                 root=root,
-                decide=_decider(allow, mode, asker),
+                decide=command_decider(allow, mode, asker),
                 sandbox="read-only" if mode == "read-only" else "workspace-write",
                 model=model,
                 effort=effort,
