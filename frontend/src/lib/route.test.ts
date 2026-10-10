@@ -9,6 +9,7 @@ const ROUTES: Route[] = [
   { view: "sprites" },
   { view: "project", id: "abc123", tab: "overview" },
   { view: "project", id: "abc123", tab: "team" },
+  { view: "project", id: "abc123", tab: "secrets" },
   { view: "project", id: "a b/c", tab: "needs-you" },
 ];
 

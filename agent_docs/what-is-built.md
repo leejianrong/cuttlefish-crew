@@ -561,3 +561,8 @@ start passes every name its project can use to `prepare_run` (the daemon also re
 so a declared secret's value was written to it; it now scrubs every resolved secret. The credential split (docs/research/harness-credentials-spike.md): kopicode forwards
 only `OPENROUTER_API_KEY` (it never read `ANTHROPIC_API_KEY`), Codex gets `-c shell_environment_policy.exclude=["OPENAI_API_KEY"]` before the subcommand (after `app-server`
 it is ignored: found live), Claude Code is not enforced. No MCP secret tools. The screens are slices 2 and 3.
+
+secrets, slice 2 (CUT-80, 2026-10-10): the project Secrets tab (`SecretsTab.svelte`, route `#/projects/<id>/secrets`, helpers and tests in `lib/secrets.ts`). It reads
+`GET /api/projects/{id}/secrets` each time it opens, saves with `PUT`, removes with `DELETE`; the name rule is checked in the browser first and the daemon's own words are
+shown for a 400 or 409. Driven in a real browser (Playwright against a scratch `cuttlefish serve`, with and without a key): add, refuse a bad name, replace, Escape, remove,
+suggestion chip, the value absent from the page, light, dark and 390px, no console errors. No shared-secret editing yet (CUT-81).
