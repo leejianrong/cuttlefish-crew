@@ -20,6 +20,8 @@ from cuttlefish.projects.store import ProjectStore
 
 @pytest.fixture
 def client(tmp_path: Path) -> TestClient:
+    for name in ("demo", "a", "b", "d"):
+        (tmp_path / name).mkdir()  # a registered root must exist
     daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"))
     security = satay.control.SecurityPolicy(token="test-token")
     app = create_app(daemon, security=security)
@@ -42,6 +44,19 @@ def test_wrong_token_is_rejected(tmp_path: Path) -> None:
         "/api/projects"
     )
     assert response.status_code == 401
+
+
+def test_registering_a_root_that_is_missing_or_a_file_is_400_and_says_which(
+    client: TestClient, tmp_path: Path
+) -> None:
+    missing = client.post("/api/projects", json={"name": "x", "root": str(tmp_path / "nope")})
+    assert missing.status_code == 400
+    assert "does not exist" in missing.json()["detail"]
+    (tmp_path / "afile").write_text("x")
+    a_file = client.post("/api/projects", json={"name": "x", "root": str(tmp_path / "afile")})
+    assert a_file.status_code == 400
+    assert "is not a directory" in a_file.json()["detail"]
+    assert client.get("/api/projects").json()["projects"] == []
 
 
 def test_register_then_list_round_trips(client: TestClient, tmp_path: Path) -> None:
@@ -646,7 +661,7 @@ def test_patching_presets_validates_and_404s(client: TestClient, tmp_path: Path)
 
 def test_environment_route_reads_the_projects_files(client: TestClient, tmp_path: Path) -> None:
     root = tmp_path / "demo"
-    root.mkdir()
+    root.mkdir(exist_ok=True)
     (root / "pyproject.toml").write_text('[project]\nname = "demo"\n')
     (root / "uv.lock").write_text("")
     project = client.post("/api/projects", json={"name": "demo", "root": str(root)}).json()
@@ -668,7 +683,7 @@ def test_environment_route_says_when_the_project_folder_is_gone(
     client: TestClient, tmp_path: Path
 ) -> None:
     root = tmp_path / "demo"
-    root.mkdir()
+    root.mkdir(exist_ok=True)
     project = client.post("/api/projects", json={"name": "demo", "root": str(root)}).json()
     root.rmdir()
 

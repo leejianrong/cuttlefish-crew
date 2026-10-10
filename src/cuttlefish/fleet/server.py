@@ -66,7 +66,13 @@ from cuttlefish.permissions import (
     MODE_INFO,
     MODES,
 )
-from cuttlefish.projects.store import Project, ProjectNotFoundError, RoleDefinition
+from cuttlefish.projects.store import (
+    Project,
+    ProjectNotFoundError,
+    ProjectRootError,
+    RoleDefinition,
+    check_root,
+)
 from cuttlefish.requests import (
     AlreadyResolvedError,
     HistoryEntry,
@@ -544,19 +550,23 @@ def create_app(
         if not name or not root:
             raise HTTPException(400, "'name' and 'root' are required")
         max_tokens, max_cost_usd = _budget_from_body(body)
-        project = daemon.projects.register(
-            name=name,
-            root=root,
-            secrets_scope=body.get("secrets_scope"),
-            roles=_roles_from_body(body)
-            or (() if "roles" in body else template_roles(DEFAULT_TEMPLATE)),
-            allow=_allow_from_body(body),
-            max_tokens=max_tokens,
-            max_cost_usd=max_cost_usd,
-            backend=_backend_from(body.get("backend")),
-            mode=_mode_from(body.get("mode")),
-            presets=_presets_from(body.get("presets")),
-        )
+        try:
+            check_root(root)
+            project = daemon.projects.register(
+                name=name,
+                root=root,
+                secrets_scope=body.get("secrets_scope"),
+                roles=_roles_from_body(body)
+                or (() if "roles" in body else template_roles(DEFAULT_TEMPLATE)),
+                allow=_allow_from_body(body),
+                max_tokens=max_tokens,
+                max_cost_usd=max_cost_usd,
+                backend=_backend_from(body.get("backend")),
+                mode=_mode_from(body.get("mode")),
+                presets=_presets_from(body.get("presets")),
+            )
+        except ProjectRootError as exc:
+            raise HTTPException(400, str(exc)) from exc
         return _project_json(daemon, project.id)
 
     @app.get("/api/projects/{project_id}")

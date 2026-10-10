@@ -205,6 +205,19 @@ class Project:
         return None
 
 
+class ProjectRootError(ValueError):
+    """A project's root is not a directory that exists."""
+
+
+def check_root(root: str) -> None:
+    """Raise :class:`ProjectRootError` saying what is wrong with ``root``, or return."""
+    path = Path(root)
+    if not path.exists():
+        raise ProjectRootError(f"project root {root!r} does not exist")
+    if not path.is_dir():
+        raise ProjectRootError(f"project root {root!r} is not a directory")
+
+
 class ProjectNotFoundError(LookupError):
     """No project with the given id is registered."""
 
@@ -368,7 +381,8 @@ class ProjectStore:
         mode: str = DEFAULT_MODE,
         presets: tuple[str, ...] | None = None,
     ) -> Project:
-        """Register a new project. `secrets_scope` defaults to `name` (Q38)."""
+        """Register a new project. `secrets_scope` defaults to `name` (Q38). Does not check that
+        `root` exists (`check_root` is for the CLI and HTTP routes a person types it into)."""
         project = Project(
             id=uuid.uuid4().hex,
             name=name,
