@@ -320,3 +320,13 @@ export function formatWhen(ts: string, now: Date = new Date()): string {
     ? time
     : `${when.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
 }
+
+/** Whether a scrolled list is at (or within `slack` px of) its bottom, so it should keep following new rows. */
+export function isPinnedToBottom(
+  scrollTop: number,
+  clientHeight: number,
+  scrollHeight: number,
+  slack = 24,
+): boolean {
+  return scrollHeight - (scrollTop + clientHeight) <= slack;
+}

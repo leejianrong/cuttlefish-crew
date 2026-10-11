@@ -10,6 +10,7 @@ import {
   failureText,
   installOutput,
   formatWhen,
+  isPinnedToBottom,
   isRefusedCommand,
   latestRound,
   refusalReason,
@@ -358,5 +359,23 @@ describe("the summariser's call", () => {
     });
     expect(eventLabel("LlmCallCompleted")).toBe("Summary");
     expect(summarize(call)).toBe("Wrote the checkpoint with m (12,345 tokens in, ? out, $0.0031).");
+  });
+});
+
+describe("isPinnedToBottom", () => {
+  it("follows when the reader is at the bottom", () => {
+    expect(isPinnedToBottom(400, 300, 700)).toBe(true);
+  });
+
+  it("follows when the reader is within a few pixels of the bottom", () => {
+    expect(isPinnedToBottom(390, 300, 700)).toBe(true);
+  });
+
+  it("stops following once the reader scrolls up", () => {
+    expect(isPinnedToBottom(100, 300, 700)).toBe(false);
+  });
+
+  it("follows a list too short to scroll", () => {
+    expect(isPinnedToBottom(0, 300, 200)).toBe(true);
   });
 });

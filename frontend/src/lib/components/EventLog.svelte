@@ -1,10 +1,12 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type { EpisodicEventView } from "../api";
   import {
     checkpointedRounds,
     eventLabelFor,
     formatWhen,
     installOutput,
+    isPinnedToBottom,
     isRefusedCommand,
     LONG_TEXT,
     summarize,
@@ -16,9 +18,33 @@
   }: { events: EpisodicEventView[]; onOpenPermissions?: () => void } = $props();
 
   const checkpointed = $derived(checkpointedRounds(events));
+
+  // Newest-last, like a chat: stay pinned to the bottom while the reader is there, stop following
+  // once they scroll up to read, and offer a way back down.
+  let log = $state<HTMLDivElement>();
+  let pinned = $state(true);
+  let seenCount = 0;
+
+  function onScroll() {
+    if (!log) return;
+    pinned = isPinnedToBottom(log.scrollTop, log.clientHeight, log.scrollHeight);
+  }
+
+  async function jumpToLatest() {
+    await tick();
+    if (log) log.scrollTop = log.scrollHeight;
+    pinned = true;
+  }
+
+  $effect(() => {
+    const count = events.length;
+    if (count !== seenCount && pinned) void jumpToLatest();
+    seenCount = count;
+  });
 </script>
 
-<div class="log">
+<div class="log-wrap">
+<div class="log" bind:this={log} onscroll={onScroll}>
   {#if events.length === 0}
     <p class="empty">Nothing has happened yet.</p>
   {/if}
@@ -70,8 +96,36 @@
     {/if}
   {/each}
 </div>
+{#if !pinned}
+  <button type="button" class="jump" onclick={jumpToLatest}>Jump to latest</button>
+{/if}
+</div>
 
 <style>
+  .log-wrap {
+    position: relative;
+  }
+
+  .jump {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    padding: 0.35rem 0.8rem;
+    border: 0;
+    border-radius: var(--md-sys-shape-corner-full, 999px);
+    background: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+    box-shadow: var(--md-sys-elevation-level2, 0 2px 6px rgb(0 0 0 / 0.25));
+  }
+
+  .jump:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 2px;
+  }
+
   .log {
     display: flex;
     flex-direction: column;
