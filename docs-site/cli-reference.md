@@ -308,8 +308,12 @@ Never approved, whatever is declared: `sudo`/`su`/`doas`, a forced `git push`, a
 download piped into a shell (`curl ... | sh`), and arguments that reach outside `--root`.
 `find -delete`/`-exec`, `rg --pre` and `git commit --no-verify` are refused too.
 
-Matching is by argv prefix on a plain word list, so a chained or quoted command line
-(`a && b`, `$(...)`) is denied. The one exception is `git commit -m '<message>'`.
+Matching is by argv prefix on a plain word list. A line that chains commands (`a && b`, `a | b`,
+`a; b`, one command a line, `cmd || true`) is read one command at a time and runs when every
+command in it is allowed. Quoted arguments are fine (single quotes are literal; double quotes may not
+hold `$`, a backtick, `\` or `!`), and so are `2>&1`, `2>/dev/null` and `>/dev/null`. Anything else
+(a redirect to a file, `$(...)`, a backtick, a glob, a lone `&`) is not matched and waits for you.
+Inside a chain, `git commit` is allowed only as `git commit -m '<message>'`.
 kopicode, Codex (over `codex app-server`) and Claude Code (over stream-json) check this live,
 command by command. Over `claude -p` (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, and inside a sandbox
 provider) the list is passed as `--allowedTools` patterns, plus deny patterns for the never-allowed

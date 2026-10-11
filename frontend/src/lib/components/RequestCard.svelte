@@ -185,7 +185,7 @@
     </p>
   {:else}
     <p class="body-small muted">
-      This command chains or quotes other commands, so it can only be allowed once.
+      This command uses shell syntax (a redirect, variable or substitution), or has a part that is not on the list, so it can only be allowed once.
     </p>
   {/if}
 

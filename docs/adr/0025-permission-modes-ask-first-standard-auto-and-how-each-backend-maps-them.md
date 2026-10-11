@@ -54,3 +54,16 @@ Codex has one coarse sandbox dial (ADR-0018).
   (known-gaps.md).
 - Approving commands in Auto is a decision, not containment (ADR-0002): an approved
   `make test` still runs repository code as this user.
+
+## Amendment (2026-10-11, CUT-90): a chained line is decided command by command
+
+A live Standard-mode Codex run asked nine times for one small task, because coding agents chain
+(`pwd && rg ... && git status`, a command per line, `cmd || true`) and a chained line could not be matched
+to the list, so it could only be allowed once. `ConsentPolicy` now reads `&&`, `||`, `;`, `|` and newline as
+separators and allows the line when every command in it is on the list, after the whole line has passed the
+never-allowed check and each command has passed it again. Quoted arguments are accepted (single quotes
+are literal), as are `2>&1`, `2>/dev/null` and `>/dev/null`, `true`/`false`, and `command -v <name>`. A
+redirect to a file, `$`, a backtick, parentheses, a glob, a lone `&`, stray spaces or an unclosed quote
+still leave the line unmatched, so it waits for a person. Inside a chain a bare `git commit` entry opens
+only `git commit [-a] -m '<message>'`. Result: the same task asked six times, and every remaining prompt
+was a command not on the list (`git config`, `rm`, a heredoc `git apply`).

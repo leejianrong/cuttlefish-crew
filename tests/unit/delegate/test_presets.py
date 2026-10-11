@@ -102,7 +102,7 @@ def test_everyday_dev_commands_run_under_the_default_policy(line: str) -> None:
         ("cat ../secret", "argument_escapes_root"),
         ("docker compose up -d", "no_matching_allow_entry"),
         ("uv run python -c x", "no_matching_allow_entry"),
-        ("ls && rm x", "not_a_plain_word_list"),
+        ("ls && rm x", "no_matching_allow_entry"),
     ],
 )
 def test_dangerous_or_off_list_commands_are_denied_under_the_default_policy(

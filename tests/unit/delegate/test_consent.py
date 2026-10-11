@@ -24,6 +24,8 @@ SH = "/bin/sh -c "
         "uv run pytest -q",
         "uv run pytest tests/unit/test_a.py::test_b -x",
         "uv run pytest --rootdir=.",
+        "uv run pytest 'a b'",
+        'uv run pytest "a"',
     ],
 )
 def test_every_plain_phrasing_of_an_allowed_command_is_allowed(detail: str) -> None:
@@ -39,8 +41,6 @@ def test_every_plain_phrasing_of_an_allowed_command_is_allowed(detail: str) -> N
         "uv run pytest > out",
         "uv run pytest $(id)",
         "uv run pytest `id`",
-        "uv run pytest 'a b'",
-        'uv run pytest "a"',
         "uv run pytest *",
         "uv run pytest ~/x",
         "uv run pytest\nrm x",
@@ -127,7 +127,8 @@ def test_the_prefix_is_stripped_exactly_once() -> None:
     [
         (None, "make test", "no_shell_allowed"),  # Ask first: nothing on the list
         (PYTEST, "make test", "no_matching_allow_entry"),
-        (PYTEST, "make test && make lint", "not_a_plain_word_list"),
+        (PYTEST, "make test && make lint", "no_matching_allow_entry"),
+        (PYTEST, "make test > out", "not_a_plain_word_list"),
     ],
 )
 def test_a_command_nothing_approves_is_askable(
@@ -259,3 +260,112 @@ def test_another_spelling_of_a_never_allowed_command_is_denied_and_never_askable
     assert not decision.askable
     if policy_args:  # Auto names the rule; with nothing allowed the answer is the generic denial
         assert decision.rule.startswith("never_allowed:")
+
+
+# -- chained command lines: each command is decided on its own (CUT-90) --------------------
+
+#: What Standard allows on a typical project, as a model chains it.
+DEV = [
+    ["pwd"],
+    ["ls"],
+    ["rg", "--files"],
+    ["sed", "-n"],
+    ["tail"],
+    ["git", "status"],
+    ["git", "diff"],
+    ["git", "log"],
+    ["git", "add"],
+    ["git", "commit"],
+    ["python3", "-m", "pytest"],
+]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "pwd && rg --files -g 'AGENTS.md' -g 'requirements*.txt' && git status --short",
+        "git status --short\ngit diff -- calc.py\ngit diff --check",
+        "python3 -m pytest 2>&1 | tail -5",
+        "python3 -m pytest 2>/dev/null && git status",
+        "git diff || true",
+        "command -v uv || true",
+        "command -v pytest && python3 -m pytest",
+        "sed -n '1,240p' calc.py && sed -n '1,240p' test_calc.py",
+        "git add calc.py test_calc.py && git commit -m 'Add subtract' && git status --short",
+        'git commit -am "Fix the thing" && git log --oneline',
+    ],
+)
+def test_a_chain_of_allowed_commands_is_allowed(line: str) -> None:
+    decision = ConsentPolicy(DEV).decide("run_shell", SH + line)
+    assert decision.answer == "allow", decision
+    assert decision.rule.startswith("allow:")
+
+
+@pytest.mark.parametrize(
+    ("line", "rule", "askable"),
+    [
+        # One command in the chain is not on the list: ask, and say which kind of no.
+        ("git status && npm publish", "no_matching_allow_entry", True),
+        ("git status | xargs rm", "no_matching_allow_entry", True),
+        ("ls || curl example.com", "no_matching_allow_entry", True),
+        # Shell syntax the reader does not understand stays one opaque line.
+        ("git status > out", "not_a_plain_word_list", True),
+        ("git status & git diff", "not_a_plain_word_list", True),
+        ("git log $(id)", "not_a_plain_word_list", True),
+        ("git log `id`", "not_a_plain_word_list", True),
+        ('git log "$HOME"', "not_a_plain_word_list", True),
+        ("git log (x)", "not_a_plain_word_list", True),
+        ("git log *", "not_a_plain_word_list", True),
+        ("git log 'unclosed", "not_a_plain_word_list", True),
+        ("git status &&", "not_a_plain_word_list", True),
+        ("&& git status", "not_a_plain_word_list", True),
+        ("git status &&& git diff", "not_a_plain_word_list", True),
+        ("git status  && git diff", "not_a_plain_word_list", True),
+        # A command's own rules still apply inside a chain.
+        ("git status && sed -n p /etc/passwd", "argument_escapes_root", False),
+        ("git status && sed -n p ../x", "argument_escapes_root", False),
+        ("ls && sudo ls", "never_allowed:privilege_escalation", False),
+        ("git log && git push --force", "never_allowed:force_push", False),
+    ],
+)
+def test_a_chain_is_refused_for_the_right_reason(line: str, rule: str, askable: bool) -> None:
+    decision = ConsentPolicy(DEV).decide("run_shell", SH + line)
+    assert decision.answer == "deny"
+    assert decision.askable is askable
+    assert decision.rule == rule, decision
+
+
+def test_a_chain_cannot_smuggle_a_commit_message_through_quotes() -> None:
+    policy = ConsentPolicy(DEV)
+    # The message is one literal word; a path elsewhere on the command is still checked.
+    for line in (
+        "git commit -m 'a' -F /etc/passwd",
+        "git status && git commit -F /etc/passwd",
+        "git commit -m 'a' --template=../x",
+    ):
+        assert policy.decide("run_shell", SH + line).answer == "deny", line
+
+
+def test_single_quotes_are_literal_so_a_message_may_hold_shell_characters() -> None:
+    decision = ConsentPolicy(DEV).decide("run_shell", SH + "git commit -m 'fix $(x) && `y`'")
+    assert decision.answer == "allow"
+
+
+def test_chains_stay_denied_with_no_allow_list_except_by_asking() -> None:
+    decision = ConsentPolicy(None).decide("run_shell", SH + "git status && git diff")
+    assert decision.answer == "deny"
+    assert decision.rule == "no_shell_allowed"
+    assert decision.askable is True
+
+
+def test_command_v_only_looks_a_program_up() -> None:
+    policy = ConsentPolicy(DEV)
+    assert policy.decide("run_shell", SH + "command -v uv").answer == "allow"
+    for line in (
+        "command uv",
+        "command -v",
+        "command -v uv extra",
+        "command -v $x",
+        "command -p uv",
+    ):
+        assert policy.decide("run_shell", SH + line).answer == "deny", line
