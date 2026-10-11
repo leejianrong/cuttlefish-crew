@@ -18,6 +18,7 @@
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
+  import RequestCard from "./RequestCard.svelte";
   import PrepareConfirm from "./PrepareConfirm.svelte";
   import { awaitingDecision, isFinishing } from "../roles";
   import OfficeScene from "./OfficeScene.svelte";
@@ -266,6 +267,21 @@
             ? ` (${resumedEvents.length} times)`
             : ""}. Recent activity below shows where each pickup happened.
         </p>
+      {/if}
+
+      {#if pending.length > 0}
+        <section class="waiting" aria-labelledby="waiting-heading">
+          <h2 id="waiting-heading" class="title-medium">Waiting on you</h2>
+          {#each pending as request (request.id)}
+            <RequestCard
+              {client}
+              {request}
+              fetchedAt={requestsFetchedAt}
+              onAnswered={refresh}
+              idPrefix="overview-req"
+            />
+          {/each}
+        </section>
       {/if}
 
       {#if project.running && installing}
@@ -642,6 +658,18 @@
     color: var(--danger);
     font-size: 0.85rem;
     margin: 0;
+  }
+
+  .waiting {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .waiting h2 {
+    margin: 0;
+    color: var(--md-sys-color-attention, inherit);
   }
 
   .events {
