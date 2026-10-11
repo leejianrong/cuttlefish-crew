@@ -926,7 +926,7 @@ async def test_a_streaming_sandbox_runs_serve_inside_it_and_destroys_it_after(
     assert not any("policy" in target for target in mounts.values())  # consent is live
     assert [(d.answer, d.rule) for d in outcome.consent_decisions] == [
         ("allow", outcome.consent_decisions[0].rule),
-        ("deny", "not_a_plain_word_list"),
+        ("deny", "no_matching_allow_entry"),
     ]
 
 

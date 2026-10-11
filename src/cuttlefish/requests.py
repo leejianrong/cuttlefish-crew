@@ -55,7 +55,10 @@ CHILD_EXITED = "child_exited"
 WHY = {
     "no_shell_allowed": "Every command waits for you in Ask first.",
     "no_matching_allow_entry": "It is not on this project's command list.",
-    "not_a_plain_word_list": "It chains or quotes commands, so it cannot be matched to the list.",
+    "not_a_plain_word_list": (
+        "It uses shell syntax (a redirect, a variable or a substitution), "
+        "so it cannot be matched to the list."
+    ),
 }
 
 #: A request nobody holds open (``blocked``) has no deadline; this only fills the field.

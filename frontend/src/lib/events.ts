@@ -79,7 +79,7 @@ export function refusalReason(rule: string): string {
   const reasons: Record<string, string> = {
     no_shell_allowed: "this mode runs no commands on its own",
     no_matching_allow_entry: "it is not on the allowed list",
-    not_a_plain_word_list: "chained or quoted commands are not allowed in Standard",
+    not_a_plain_word_list: "it uses shell syntax that cannot be matched to the allowed list",
     not_a_sh_c_command: "it was not a plain shell command",
     argument_escapes_root: "an argument points outside the project folder",
     command_length: "the command line was empty or too long",
