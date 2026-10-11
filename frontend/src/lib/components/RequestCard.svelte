@@ -17,6 +17,7 @@
     fetchedAt,
     onAnswered,
     showProject = false,
+    idPrefix = "req",
   }: {
     client: FleetClient;
     request: NeedsYouRequest;
@@ -24,6 +25,8 @@
     fetchedAt: number;
     onAnswered: () => void;
     showProject?: boolean;
+    /** Distinguishes the heading id when the same request is on screen twice (Overview and Needs you). */
+    idPrefix?: string;
   } = $props();
 
   let now = $state(Date.now());
@@ -80,7 +83,7 @@
   }
 </script>
 
-<article class="card filled request" aria-labelledby="req-{request.id}">
+<article class="card filled request" aria-labelledby="{idPrefix}-{request.id}">
   <div class="meta">
     <span class="tag attn">{blocked ? "Stuck" : question ? "Question" : "Permission"}</span>
     {#if request.role}<span class="label-large who">{request.role}</span>{/if}
@@ -91,7 +94,7 @@
     </span>
   </div>
 
-  <h3 id="req-{request.id}" class="title-medium">{request.title}</h3>
+  <h3 id="{idPrefix}-{request.id}" class="title-medium">{request.title}</h3>
   {#if question}
     <p class="asked body-large" aria-label="The question">{request.detail}</p>
     <p class="body-medium muted why">{request.why}</p>

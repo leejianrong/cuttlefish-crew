@@ -176,3 +176,6 @@ and this folder disagree after a slice lands, update this folder.
   same key-not-set steps as the project tab. Remove names how many projects lose it. Add and Replace use the same dialog as the project tab (`SecretDialog.svelte`).
   Add project's Advanced options ends with a line pointing at both places, with a link to this screen that opens in a new tab so the form is not lost.
 - **Credential rows say who can see the key (CUT-86, 2026-10-10).** An agent-credential row's note follows the daemon's `broker` flag (in the secrets payloads): with `CUTTLEFISH_CREDENTIAL_BROKER=1` Claude Code's and Codex's rows read "Held by cuttlefish: its commands see only a short-lived token"; with it off, Claude Code's reads "Its commands can see this key". The Permissions tab's backend notes follow the same flag.
+- **Inline approvals (CUT-88, 2026-10-11).** A pending request is also shown at the top of the project's
+  Overview, as the same card the Needs you tab uses, so answering does not mean changing tab. The tab
+  stays for history and for the fleet-wide Needs you screen.
