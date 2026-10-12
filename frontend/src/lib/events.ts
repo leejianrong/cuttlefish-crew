@@ -11,6 +11,7 @@ const LABELS: Record<string, string> = {
   DelegationRefused: "Refused",
   DelegationFailed: "Round failed",
   SteeringMessage: "You",
+  SteeringQueued: "You",
   HandoverWritten: "Checkpoint",
   LlmCallCompleted: "Summary",
   TaskCompleted: "Finished",
@@ -219,6 +220,7 @@ export function summarize(event: EpisodicEventView): string {
     case "DelegationFailed":
       return failureText(p.failure_kind, String(p.reason));
     case "SteeringMessage":
+    case "SteeringQueued":
       return String(p.text);
     case "HandoverWritten":
       return String(p.summary);
@@ -330,3 +332,38 @@ export function isPinnedToBottom(
 ): boolean {
   return scrollHeight - (scrollTop + clientHeight) <= slack;
 }
+
+export type SteerFate = "waiting" | "applied" | "dropped";
+
+/** What became of each message a person sent (`SteeringQueued`, by seq), read from the journal:
+ * `applied` once the same role journals the same text as `SteeringMessage`, `dropped` when the
+ * team stopped or that role's task ended first, else still `waiting` for the round to end. */
+export function steerFates(events: readonly EpisodicEventView[]): Map<number, SteerFate> {
+  const fates = new Map<number, SteerFate>();
+  events.forEach((event, index) => {
+    if (event.event_type !== "SteeringQueued") return;
+    let fate: SteerFate = "waiting";
+    for (const later of events.slice(index + 1)) {
+      const sameRole = later.payload.role === event.payload.role;
+      if (later.event_type === "SteeringMessage" && sameRole && later.payload.text === event.payload.text) {
+        fate = "applied";
+        break;
+      }
+      if (
+        later.event_type === "TeamStopped" ||
+        ((later.event_type === "TaskCompleted" || later.event_type === "TaskFailed") && sameRole)
+      ) {
+        fate = "dropped";
+        break;
+      }
+    }
+    fates.set(event.seq, fate);
+  });
+  return fates;
+}
+
+export const STEER_FATE_TEXT: Record<SteerFate, string> = {
+  waiting: "sent; applies when the round ends",
+  applied: "applied at the round boundary",
+  dropped: "not applied: the run ended first",
+};

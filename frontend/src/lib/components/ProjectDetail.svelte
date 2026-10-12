@@ -20,7 +20,7 @@
   import NeedsYouTab from "./NeedsYouTab.svelte";
   import RequestCard from "./RequestCard.svelte";
   import PrepareConfirm from "./PrepareConfirm.svelte";
-  import { awaitingDecision, isFinishing } from "../roles";
+  import { awaitingDecision, isFinishing, waitsForYou } from "../roles";
   import OfficeScene from "./OfficeScene.svelte";
   import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
@@ -309,6 +309,7 @@
               requireApproval={project.require_approval}
               lastRound={latestRound(events, role)}
               held={pending.some((r) => r.kind === "blocked" && r.role === role)}
+              waiting={waitsForYou(status, pending, role)}
             />
           {/each}
         </section>
@@ -320,7 +321,7 @@
         {:else if confirmingStop}
           <div class="confirm" role="alert">
             <span class="body-medium">
-              Stop the team? Its roles stop, and starting again begins a new run.
+              Stop the team? Its roles stop, steering messages not yet applied are dropped, and starting again begins a new run.
             </span>
             <button class="btn btn-danger" disabled={stopping} onclick={stop}>Stop team</button>
             <button class="btn btn-text" onclick={() => (confirmingStop = false)}>Keep running</button>

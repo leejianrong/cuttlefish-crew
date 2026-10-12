@@ -27,3 +27,14 @@ export function isFinishing(
 ): boolean {
   return status === "blocked" && !awaiting && !held && lastRound?.kind === "completed";
 }
+
+/** A role the daemon still reports as working while a request for a person (a command to approve
+ * or a question) holds it: it is paused for you, not busy. `blocked` requests are the stuck case,
+ * which already has its own wording. */
+export function waitsForYou(
+  status: RoleStatus,
+  requests: readonly { kind: string; role: string | null }[],
+  role: string,
+): boolean {
+  return status === "working" && requests.some((r) => r.role === role && r.kind !== "blocked");
+}

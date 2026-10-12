@@ -43,6 +43,7 @@ from cuttlefish.episodic.events import (
     EnvironmentPrepareStarted,
     EventPayload,
     RequestResolved,
+    SteeringQueued,
     TaskFailed,
     TeamResumed,
     TeamStopped,
@@ -893,6 +894,8 @@ class FleetDaemon:
             )
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc
+        if running.team_id in self._team_stores:
+            self._append_for_team(running.team_id, SteeringQueued(text=text, role=role))
         self.requests.supersede(running.team_id, role)
 
     async def approve(

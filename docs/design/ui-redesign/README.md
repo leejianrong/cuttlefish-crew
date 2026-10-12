@@ -180,3 +180,9 @@ and this folder disagree after a slice lands, update this folder.
 - **Inline approvals (CUT-88, 2026-10-11).** A pending request is also shown at the top of the project's
   Overview, as the same card the Needs you tab uses, so answering does not mean changing tab. The tab
   stays for history and for the fleet-wide Needs you screen.
+- **A role waiting on a request, and steering in the log (CUT-66, 2026-10-12).** A role the daemon still
+  reports as working while a command or question holds it shows a "waiting for you" chip (the existing
+  blocked colour) and a one-line note pointing to Needs you. The steer box keeps a permanent hint under it
+  (applies at the end of the round, stopping first drops it) instead of a placeholder that vanishes. A sent
+  steer is journaled at once as `SteeringQueued` and shows in the activity log as "You" with what became of
+  it: sent, applied at the round boundary, or not applied because the run ended first.
