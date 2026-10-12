@@ -300,3 +300,20 @@ def test_a_role_is_found_by_the_text_it_was_dispatched_with() -> None:
     assert context.role_for("build it") == "builder"
     assert context.role_for("review it") is None
     assert context.role_for("other") is None
+
+
+async def test_always_allow_on_a_chain_saves_the_unlisted_command_and_the_chain_runs_unasked(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    chain = "uv run pytest && make lint"
+    broker, journal, decider = asking()
+    binary = fake([{"start": True}, consent("c-1", chain), consent("c-2", chain), *finish()])
+    task = run(binary, tmp_path, decider)
+    request = await pending_one(broker)
+    assert request.record.suggested_rule == ["make", "lint"]
+    assert "allow_always" in request.record.answers
+    broker.answer(request.id, "allow_always")
+    await task
+    assert reply_to(tmp_path, "c-1") == "allow" and reply_to(tmp_path, "c-2") == "allow"
+    assert journal.kinds() == ["RequestRaised", "RequestResolved"]  # asked once
+    assert broker.grants("t1") == [("make", "lint")]

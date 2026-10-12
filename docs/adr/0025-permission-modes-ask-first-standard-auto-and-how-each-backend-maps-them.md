@@ -67,3 +67,11 @@ redirect to a file, `$`, a backtick, parentheses, a glob, a lone `&`, stray spac
 still leave the line unmatched, so it waits for a person. Inside a chain a bare `git commit` entry opens
 only `git commit [-a] -m '<message>'`. Result: the same task asked six times, and every remaining prompt
 was a command not on the list (`git config`, `rm`, a heredoc `git apply`).
+
+### Follow-up (CUT-99): Always allow on a chain
+
+A chain that waits on one unlisted command now offers **Always allow** for the start of the first
+command nothing allows (`ConsentPolicy.suggest_rule`); `validate_always_rule` accepts a rule that is the
+word-prefix of any command in a chain `split_chain` reads, and still refuses a launcher alone, a
+never-allowed command, a line with a redirect or substitution, and a rule that names no command in the line.
+A chain with several unlisted commands asks once per command.

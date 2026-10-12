@@ -155,10 +155,10 @@ class PendingRequest:
         return self.record.request_id
 
 
-def permission_answers(line: str | None) -> list[str]:
-    """What a person may answer a command request with: Always allow only for a plain word list
-    that a narrow-enough rule can be proposed for."""
-    if line is not None and suggest_rule(line) is not None:
+def permission_answers(suggestion: Sequence[str] | None) -> list[str]:
+    """What a person may answer a command request with: Always allow only when a narrow-enough
+    rule can be proposed for the command."""
+    if suggestion:
         return ["allow_once", "allow_always", "deny"]
     return ["allow_once", "deny"]
 
@@ -197,9 +197,14 @@ class RequestBroker:
         line: str,
         why: str,
         window_s: float,
+        suggestion: Sequence[str] | None = None,
     ) -> PendingRequest:
-        """A shell command nothing approves yet: journal it and return it to be held."""
-        suggestion = suggest_rule(line)
+        """A shell command nothing approves yet: journal it and return it to be held.
+
+        ``suggestion`` is the Always allow rule to offer (the policy names the unmatched command
+        of a chain); without one, a plain word list proposes its own start."""
+        if suggestion is None:
+            suggestion = suggest_rule(line)
         who = role or "An agent"
         return self._raise(
             project_id,
@@ -211,7 +216,7 @@ class RequestBroker:
                 title=f"{who} wants to run a command that isn't on the list",
                 detail=line,
                 why=why,
-                answers=permission_answers(line),
+                answers=permission_answers(suggestion),
                 expires_at=(self._now() + timedelta(seconds=window_s)).isoformat(),
                 suggested_rule=list(suggestion) if suggestion else None,
                 role=role,
@@ -589,7 +594,9 @@ class ShellAsker:
         outcome = await self.context.broker.hold(request)
         return outcome.text if outcome.resolution == "answered" else None
 
-    async def __call__(self, line: str, why: str, *, window_s: float) -> Outcome:
+    async def __call__(
+        self, line: str, why: str, *, window_s: float, suggestion: Sequence[str] | None = None
+    ) -> Outcome:
         if self.context.broker.is_closed(self.context.team_id):
             # The operator stopped this team; do not raise a card nobody will see in time.
             return Outcome("", "cancelled", "system")
@@ -601,6 +608,7 @@ class ShellAsker:
             line=line,
             why=why,
             window_s=window_s,
+            suggestion=suggestion,
         )
         return await self.context.broker.hold(request)
 
@@ -635,7 +643,10 @@ class AskingDecider:
         if decision.answer == "allow" or not decision.askable or line is None:
             return decision
         outcome = await self._asker(
-            line, WHY.get(decision.rule, decision.rule), window_s=self._window_s
+            line,
+            WHY.get(decision.rule, decision.rule),
+            window_s=self._window_s,
+            suggestion=policy.suggest_rule(line),
         )
         return ConsentDecision(
             "allow" if outcome.allows else "deny", f"asked:{outcome.resolution}", asked=True
