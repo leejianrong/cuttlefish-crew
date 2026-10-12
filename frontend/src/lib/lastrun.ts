@@ -15,6 +15,9 @@ export interface LastRun {
   cost_usd: number | null;
   /** Why each failed role failed, from the journal. */
   failures: { role: string; error: string }[];
+  /** What each role said when its last delegation completed (its `DelegationCompleted.summary`),
+   * in the order roles first finished. Empty for a role that never completed. */
+  answers: { role: string; text: string }[];
 }
 
 /** The run that just ended, or null while nothing has run yet or a role is still working or
@@ -30,10 +33,15 @@ export function lastRun(
 
   const paths = new Set<string>();
   const errors = new Map<string, string>();
+  const said = new Map<string, string>();
   for (const event of events) {
     if (event.event_type === "DelegationCompleted") {
       const edited = event.payload.edited_paths;
       if (Array.isArray(edited)) for (const path of edited) paths.add(String(path));
+      const { role, summary } = event.payload;
+      if (typeof role === "string" && typeof summary === "string" && summary.trim() !== "") {
+        said.set(role, summary.trim());
+      }
     }
     if (event.event_type === "TaskFailed") {
       const role = event.payload.role;
@@ -65,6 +73,7 @@ export function lastRun(
     tokens: totals.reduce((sum, u) => sum + u.tokens, 0),
     cost_usd: costs.length > 0 ? costs.reduce((sum, c) => sum + c, 0) : null,
     failures,
+    answers: [...said].map(([role, text]) => ({ role, text })),
   };
 }
 
