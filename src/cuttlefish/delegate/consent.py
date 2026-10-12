@@ -163,17 +163,12 @@ def _is_flag_or_path(word: str) -> bool:
     return word.startswith(("-", ".")) or "/" in word or "=" in word
 
 
-def suggest_rule(line: str) -> tuple[str, ...] | None:
-    """The rule "Always allow" proposes for ``line``: its leading words up to the first flag or
-    path-like word, at most three (``docker compose up -d postgres`` -> ``docker compose up``).
-    ``None`` when the line is not a plain word list or nothing narrow enough can be proposed."""
-    words = _plain_words(line)
-    if words is None or never_allowed_reason(line) is not None:
-        return None
+def _suggest_words(words: Sequence[str]) -> tuple[str, ...] | None:
+    """The leading words of one command up to its first flag or path-like word, at most three."""
     for stop in (_is_flag_or_path, lambda word: word.startswith("-")):
         rule: list[str] = []
         for word in words[:3]:
-            if stop(word):
+            if stop(word) or not _WORD.fullmatch(word):
                 break
             rule.append(word)
         if rule and not _too_broad(rule):
@@ -181,19 +176,31 @@ def suggest_rule(line: str) -> tuple[str, ...] | None:
     return None
 
 
+def suggest_rule(line: str) -> tuple[str, ...] | None:
+    """The rule "Always allow" proposes for ``line``: its leading words up to the first flag or
+    path-like word, at most three (``docker compose up -d postgres`` -> ``docker compose up``).
+    ``None`` when the line is not a plain word list or nothing narrow enough can be proposed."""
+    words = _plain_words(line)
+    if words is None or never_allowed_reason(line) is not None:
+        return None
+    return _suggest_words(words)
+
+
 def validate_always_rule(line: str, rule: Sequence[str]) -> tuple[str, ...]:
     """The rule a person may "Always allow" for ``line``, or :class:`ConsentPolicyError`.
 
-    It must be a word-prefix of this very line (a person cannot grant what the agent did not
-    ask for), the line a plain word list, the entry valid as if hand-typed, and not so broad it
-    would approve any script. Never-allowed always wins afterwards, because the rule is applied
-    through :class:`ConsentPolicy`, whose ``decide`` checks that list first.
+    It must be a word-prefix of a command in this very line (a person cannot grant what the
+    agent did not ask for): the line itself when it is a plain word list, or one command of a
+    chain :func:`split_chain` reads. The entry must be valid as if hand-typed and not so broad
+    it would approve any script. Never-allowed always wins afterwards, because the rule is
+    applied through :class:`ConsentPolicy`, whose ``decide`` checks that list first.
     """
     words = _plain_words(line)
-    if words is None:
+    commands = [words] if words is not None else split_chain(line)
+    if commands is None:
         raise ConsentPolicyError("this command has shell syntax, so it can only be allowed once")
     pattern = validate_allow_entry(rule)
-    if tuple(words[: len(pattern)]) != pattern:
+    if not any(tuple(command[: len(pattern)]) == pattern for command in commands):
         raise ConsentPolicyError("the rule must be the start of the command the agent asked to run")
     return pattern
 
@@ -389,6 +396,24 @@ class ConsentPolicy:
                 return _deny("argument_escapes_root")
             return ConsentDecision("allow", "allow:" + " ".join(pattern))
         return _deny("no_matching_allow_entry", askable=True)
+
+    def suggest_rule(self, line: str) -> tuple[str, ...] | None:
+        """The rule "Always allow" proposes for a line this policy denied: for a plain word list
+        its own start, for a chain the start of the first command nothing allows (CUT-99), so the
+        same chain runs unasked next time. ``None`` when nothing narrow and safe can be named."""
+        if never_allowed_reason(line) is not None:
+            return None
+        if _plain_words(line) is not None:
+            return suggest_rule(line)
+        commands = split_chain(line)
+        for words in commands or ():
+            if tuple(words) in {(name,) for name in _STATUS_ONLY}:
+                continue
+            if never_allowed_reason(" ".join(words)) is not None:
+                return None
+            if isinstance(self._match_words(words), ConsentDecision):
+                return _suggest_words(words)
+        return None
 
     def _decide_chain(self, line: str) -> ConsentDecision:
         """A line that is more than one plain word list: allowed when every command in it is.

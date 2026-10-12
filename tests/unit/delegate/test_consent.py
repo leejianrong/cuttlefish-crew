@@ -232,7 +232,9 @@ def test_a_suggested_rule_is_always_acceptable() -> None:
         ("make test", ["make", "test", "x"], "start of the command"),
         ("python x.py", ["python"], "too broad"),
         ("bash run.sh", ["bash"], "too broad"),
-        ("make test && ls", ["make"], "shell syntax"),
+        ("make test && ls", ["cat"], "start of the command"),
+        ("make test > out.txt", ["make"], "shell syntax"),
+        ("make test && $(ls)", ["make"], "shell syntax"),
         ("sudo make", ["sudo"], "never allowed"),
     ],
 )
@@ -369,3 +371,33 @@ def test_command_v_only_looks_a_program_up() -> None:
         "command -p uv",
     ):
         assert policy.decide("run_shell", SH + line).answer == "deny", line
+
+
+CHAIN = "pwd && git config user.name 'Ada Lovelace' && make test"
+BASE = [["pwd"], ["make", "test"]]
+
+
+def test_a_chain_stopped_on_one_unlisted_command_suggests_that_command() -> None:
+    policy = ConsentPolicy(BASE)
+    assert policy.decide("run_shell", SH + CHAIN).askable
+    assert policy.suggest_rule(CHAIN) == ("git", "config", "user.name")
+
+
+def test_the_suggested_chain_rule_lets_the_same_chain_run_unasked() -> None:
+    rule = ConsentPolicy(BASE).suggest_rule(CHAIN)
+    assert rule is not None
+    assert validate_always_rule(CHAIN, rule) == rule
+    allowed = ConsentPolicy([*BASE, list(rule)])
+    assert allowed.decide("run_shell", SH + CHAIN).answer == "allow"
+
+
+def test_a_chain_with_nothing_safe_to_suggest_offers_nothing() -> None:
+    policy = ConsentPolicy(BASE)
+    assert policy.suggest_rule("make test && bash") is None  # a launcher alone is too broad
+    assert policy.suggest_rule("make test && sudo ls") is None  # never allowed
+    assert policy.suggest_rule("make test && ls > /etc/x") is None  # a redirect: once only
+
+
+def test_a_chain_rule_for_a_command_not_in_the_line_is_refused() -> None:
+    with pytest.raises(ConsentPolicyError, match="start of the command"):
+        validate_always_rule("make test && ls", ["rm"])
