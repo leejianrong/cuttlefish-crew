@@ -24,12 +24,16 @@ export function ruleText(rule: string[] | null | undefined): string {
   return (rule ?? []).join(" ");
 }
 
-/** Whether the edited rule is still a start of the command, so Always allow can be offered
- * without a round trip. The daemon checks it again; this only avoids an obvious mistake. */
+/** Whether the edited rule is still the start of the command, or of one command in a chain
+ * (`a && b`, `a | b`, `a; b`, one per line), so Always allow can be offered without a round trip.
+ * Chains are split naively here, ignoring quotes; the daemon reads them properly and checks again,
+ * so this only avoids an obvious mistake. */
 export function isStartOfCommand(rule: string[], command: string): boolean {
   if (rule.length === 0) return false;
-  const words = command.split(" ");
-  return rule.length <= words.length && rule.every((word, i) => words[i] === word);
+  return command.split(/&&|\|\||;|\||\n/).some((part) => {
+    const words = part.trim().split(" ");
+    return rule.length <= words.length && rule.every((word, i) => words[i] === word);
+  });
 }
 
 /** When an answer reaches the agent, as the card's tag says it. */
