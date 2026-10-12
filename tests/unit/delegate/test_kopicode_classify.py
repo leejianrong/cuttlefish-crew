@@ -253,3 +253,39 @@ def test_multiple_tool_calls_are_recorded_in_order() -> None:
     )
     assert [tc.tool for tc in outcome.tool_calls] == ["write_file", "run_shell"]
     assert [tc.status for tc in outcome.tool_calls] == ["ok", "denied"]
+
+
+def test_the_models_last_message_follows_the_summary() -> None:
+    outcome = classify_stream(
+        [
+            {"kind": "assistant_message", "text": "working on it"},
+            {"kind": "edit_applied", "path": "a.py"},
+            {"kind": "assistant_message", "text": "I fixed the bug\nin a.py and all tests pass."},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert outcome.summary == (
+        "kopicode edited 1 file(s) (completed): I fixed the bug in a.py and all tests pass."
+    )
+
+
+def test_a_run_with_no_edit_still_reports_what_the_model_said() -> None:
+    outcome = classify_stream(
+        [
+            {"kind": "assistant_message", "text": "Linux box 6.1"},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert outcome.summary == "kopicode finished with no edit needed (completed): Linux box 6.1"
+
+
+def test_a_long_message_is_cut_and_a_missing_one_changes_nothing() -> None:
+    cut = classify_stream(
+        [
+            {"kind": "assistant_message", "text": "x" * 5000},
+            {"kind": "session_ended", "reason": "completed", "exit_code": 0},
+        ]
+    )
+    assert len(cut.summary) < 700
+    quiet = classify_stream([{"kind": "session_ended", "reason": "completed", "exit_code": 0}])
+    assert quiet.summary == "kopicode finished with no edit needed (completed)"

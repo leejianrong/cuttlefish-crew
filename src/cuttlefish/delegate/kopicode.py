@@ -34,6 +34,10 @@ _KIND_EDIT_APPLIED = "edit_applied"
 _KIND_TOOL_CALL_PARSED = "tool_call_parsed"
 _KIND_TOOL_RESULT = "tool_result"
 _KIND_SESSION_ENDED = "session_ended"
+_KIND_ASSISTANT_MESSAGE = "assistant_message"
+
+#: The most of the model's last message kept in a delegation summary (Codex keeps the same).
+_REPLY_CHARS = 600
 #: kopicode's own `internal/engine/event.go` copies `journal.ProviderResponse.Tokens
 #: .Total` alone into this kind's `size` field (KAN-1712/ADR-0017, verified directly
 #: against kopicode's source) -- the prompt/completion split its own journal holds
@@ -98,10 +102,17 @@ def classify_stream(
     # `reason` (kopicode's ErrorKind), which alone can't distinguish "denied"
     # from a genuine execution error.
     last_denied = False
+    # What the model said last (``assistant_message``'s ``text``), so a person reads the answer
+    # and not only how many files changed (CUT-63).
+    reply = ""
 
     for event in events:
         kind = event.get("kind")
-        if kind == _KIND_EDIT_APPLIED:
+        if kind == _KIND_ASSISTANT_MESSAGE:
+            text = event.get("text")
+            if isinstance(text, str) and text.strip():
+                reply = " ".join(text.split())[:_REPLY_CHARS]
+        elif kind == _KIND_EDIT_APPLIED:
             path = event.get("path")
             if isinstance(path, str) and path:
                 edited_paths.append(path)
@@ -156,7 +167,7 @@ def classify_stream(
     if edited_paths:
         return DelegationOutcome(
             kind="completed",
-            summary=f"kopicode edited {len(edited_paths)} file(s) ({stop_reason})",
+            summary=_said(f"kopicode edited {len(edited_paths)} file(s) ({stop_reason})", reply),
             edited_paths=edited_paths,
             tokens=total_tokens,
             tool_calls=tool_calls,
@@ -172,7 +183,7 @@ def classify_stream(
     if exit_code == _EXIT_CODE_SUCCESS:
         return DelegationOutcome(
             kind="completed",
-            summary=f"kopicode finished with no edit needed ({stop_reason})",
+            summary=_said(f"kopicode finished with no edit needed ({stop_reason})", reply),
             tokens=total_tokens,
             tool_calls=tool_calls,
         )
@@ -186,6 +197,11 @@ def classify_stream(
         tokens=total_tokens,
         tool_calls=tool_calls,
     )
+
+
+def _said(summary: str, reply: str) -> str:
+    """``summary`` followed by the model's last message, when it said anything."""
+    return f"{summary}: {reply}" if reply else summary
 
 
 def build_kopicode_argv(
