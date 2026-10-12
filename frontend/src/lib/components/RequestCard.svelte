@@ -18,6 +18,7 @@
     onAnswered,
     showProject = false,
     idPrefix = "req",
+    offline = false,
   }: {
     client: FleetClient;
     request: NeedsYouRequest;
@@ -27,6 +28,8 @@
     showProject?: boolean;
     /** Distinguishes the heading id when the same request is on screen twice (Overview and Needs you). */
     idPrefix?: string;
+    /** The daemon cannot be reached: answers would not arrive, and the countdown is not trusted. */
+    offline?: boolean;
   } = $props();
 
   let now = $state(Date.now());
@@ -37,13 +40,17 @@
   let busy = $state<RequestAnswer | null>(null);
   let problem = $state<string | null>(null);
 
+  // The countdown stops while the daemon is out of reach: its clock, not ours, decides the expiry.
   $effect(() => {
+    if (offline) return;
+    now = Date.now();
     const tick = setInterval(() => (now = Date.now()), 1000);
     return () => clearInterval(tick);
   });
 
   const left = $derived(secondsLeft(request, fetchedAt, now));
-  const expired = $derived(left <= 0);
+  const expired = $derived(left <= 0 && !offline);
+  const locked = $derived(busy !== null || expired || offline);
   const urgent = $derived(left > 0 && left <= 30);
   const canAlways = $derived(request.answers.includes("allow_always"));
   const ruleWords = $derived(parseRule(rule));
@@ -109,7 +116,7 @@
         {#each options as option (option)}
           <button
             class="btn btn-tonal"
-            disabled={busy !== null || expired}
+            disabled={locked}
             onclick={() => answer("answer", option)}
           >
             {option}
@@ -123,23 +130,23 @@
         bind:value={reply}
         rows="3"
         maxlength="4000"
-        disabled={busy !== null || expired}
+        disabled={locked}
       ></textarea>
     </label>
     <div class="actions">
       <button
         class="btn btn-filled"
-        disabled={busy !== null || expired || !replyOk}
+        disabled={locked || !replyOk}
         onclick={() => answer("answer")}
       >
         {busy === "answer" ? "Sending…" : "Send answer"}
       </button>
-      <button class="btn btn-outlined" disabled={busy !== null || expired} onclick={() => answer("decline")}>
+      <button class="btn btn-outlined" disabled={locked} onclick={() => answer("decline")}>
         {busy === "decline" ? "Declining…" : "Decline"}
       </button>
       <span class="timer label-medium" class:urgent aria-hidden="true">
         <Icon name="clock" size={16} />
-        {expired ? "Moving on…" : `Goes unanswered in ${formatRemaining(left)}`}
+        {offline ? "Countdown paused" : expired ? "Moving on…" : `Goes unanswered in ${formatRemaining(left)}`}
       </span>
     </div>
     <p class="body-small muted">
@@ -153,15 +160,15 @@
     </p>
   {:else}
   <div class="actions">
-    <button class="btn btn-filled" disabled={busy !== null || expired} onclick={() => answer("allow_once")}>
+    <button class="btn btn-filled" disabled={locked} onclick={() => answer("allow_once")}>
       {busy === "allow_once" ? "Allowing…" : "Allow once"}
     </button>
-    <button class="btn btn-outlined" disabled={busy !== null || expired} onclick={() => answer("deny")}>
+    <button class="btn btn-outlined" disabled={locked} onclick={() => answer("deny")}>
       {busy === "deny" ? "Denying…" : "Deny"}
     </button>
     <span class="timer label-medium" class:urgent aria-hidden="true">
       <Icon name="clock" size={16} />
-      {expired ? "Denying…" : `Denies on its own in ${formatRemaining(left)}`}
+      {offline ? "Countdown paused" : expired ? "Denying…" : `Denies on its own in ${formatRemaining(left)}`}
     </span>
   </div>
 
@@ -173,7 +180,7 @@
       </label>
       <button
         class="btn btn-tonal"
-        disabled={busy !== null || expired || !ruleOk}
+        disabled={locked || !ruleOk}
         onclick={() => answer("allow_always")}
       >
         {busy === "allow_always" ? "Saving…" : "Always allow"}
@@ -191,10 +198,23 @@
 
   {/if}
 
+  {#if offline && !blocked}
+    <p class="body-small offline-note" role="status">
+      Can't reach the daemon, so you can't answer now. If it is down, restart <code class="mono">cuttlefish serve</code>.
+      A request still open when the daemon stops is abandoned and cannot be answered afterwards; the team resumes
+      on its own and the agent's round starts again.
+    </p>
+  {/if}
+
   {#if problem}<p class="error" role="alert">{problem}</p>{/if}
 </article>
 
 <style>
+  .offline-note {
+    margin: 0;
+    color: var(--md-sys-color-error);
+  }
+
   .request {
     display: flex;
     flex-direction: column;

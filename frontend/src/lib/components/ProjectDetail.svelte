@@ -278,6 +278,7 @@
               {request}
               fetchedAt={requestsFetchedAt}
               onAnswered={refresh}
+              offline={unreachable}
               idPrefix="overview-req"
             />
           {/each}
@@ -453,6 +454,7 @@
         {resolved}
         fetchedAt={requestsFetchedAt}
         onAnswered={refresh}
+        offline={unreachable}
       />
     </div>
 

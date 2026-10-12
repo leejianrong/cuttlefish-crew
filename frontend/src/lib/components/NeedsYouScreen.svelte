@@ -59,7 +59,7 @@
         <button class="btn btn-text" onclick={() => onOpenProject(group.id)}>Open project</button>
       </div>
       {#each group.items as request (request.id)}
-        <RequestCard {client} {request} {fetchedAt} {onAnswered} />
+        <RequestCard {client} {request} {fetchedAt} {onAnswered} offline={unreachable} />
       {/each}
     </section>
   {/each}

@@ -180,6 +180,9 @@ and this folder disagree after a slice lands, update this folder.
 - **Inline approvals (CUT-88, 2026-10-11).** A pending request is also shown at the top of the project's
   Overview, as the same card the Needs you tab uses, so answering does not mean changing tab. The tab
   stays for history and for the fleet-wide Needs you screen.
+- **Connection lost (CUT-67, 2026-10-12).** While the daemon cannot be reached, every request card's buttons are
+  disabled, its countdown stops ("Countdown paused") and a note says to restart `cuttlefish serve` and that a request
+  open at a restart is abandoned (ADR-0028).
 - **A role waiting on a request, and steering in the log (CUT-66, 2026-10-12).** A role the daemon still
   reports as working while a command or question holds it shows a "waiting for you" chip (the existing
   blocked colour) and a one-line note pointing to Needs you. The steer box keeps a permanent hint under it
