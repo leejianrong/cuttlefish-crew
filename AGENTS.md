@@ -60,9 +60,12 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   `curl ... | sh`, writes outside the root). One shared constant, never
   duplicated per backend, never overridable by a rule or an answer. V4 in
   `docs/SLICES.md`.
-- **Never imply a live prompt where there is none.** Only kopicode can pause
-  for a permission today; Claude Code and Codex run one-shot, so the dashboard
-  must say when their answer lands until their live-prompt slices ship.
+- **Never imply a live prompt where there is none.** kopicode (`serve`), Claude
+  Code (stream-json) and Codex (`app-server`) pause for a permission on their
+  default transports (V4-H, V4-K, V4-M). The one-shot transports
+  (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, `CUTTLEFISH_CODEX_TRANSPORT=exec`,
+  and any sandbox provider) do not, and the dashboard must say when their
+  answer lands.
 
 ## Gotchas that have already cost a session
 

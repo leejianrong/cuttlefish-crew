@@ -67,6 +67,15 @@ describe("rules", () => {
     expect(isStartOfCommand([], command)).toBe(false);
     expect(isStartOfCommand([...command.split(" "), "x"], command)).toBe(false);
   });
+
+  it("accepts the start of any one command in a chain, not a rule spanning two", () => {
+    const chain = "pwd && make deploy --prod | tee out.txt";
+    expect(isStartOfCommand(["make", "deploy"], chain)).toBe(true);
+    expect(isStartOfCommand(["pwd"], chain)).toBe(true);
+    expect(isStartOfCommand(["tee"], chain)).toBe(true);
+    expect(isStartOfCommand(["make", "lint"], chain)).toBe(false);
+    expect(isStartOfCommand(["pwd", "make"], chain)).toBe(false);
+  });
 });
 
 describe("labels", () => {
