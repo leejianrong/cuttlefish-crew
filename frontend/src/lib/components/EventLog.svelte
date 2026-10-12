@@ -9,6 +9,8 @@
     isPinnedToBottom,
     isRefusedCommand,
     LONG_TEXT,
+    STEER_FATE_TEXT,
+    steerFates,
     summarize,
   } from "../events";
 
@@ -18,6 +20,7 @@
   }: { events: EpisodicEventView[]; onOpenPermissions?: () => void } = $props();
 
   const checkpointed = $derived(checkpointedRounds(events));
+  const steerFate = $derived(steerFates(events));
 
   // Newest-last, like a chat: stay pinned to the bottom while the reader is there, stop following
   // once they scroll up to read, and offer a way back down.
@@ -78,6 +81,9 @@
             </details>
           {:else}
             {summarize(event)}
+          {/if}
+          {#if event.event_type === "SteeringQueued"}
+            <span class="record">({STEER_FATE_TEXT[steerFate.get(event.seq) ?? "waiting"]})</span>
           {/if}
           {#if onOpenPermissions && isRefusedCommand(event)}
             <button type="button" class="link" onclick={onOpenPermissions}>Change permissions</button>

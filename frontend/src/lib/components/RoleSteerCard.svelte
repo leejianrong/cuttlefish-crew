@@ -15,6 +15,7 @@
     requireApproval = false,
     lastRound = null,
     held = false,
+    waiting = false,
   }: {
     client: FleetClient;
     projectId: string;
@@ -35,6 +36,8 @@
     /** A stopped-for-a-person card (ADR-0029, ADR-0030) is open for this role, so it waits for a
      * steer with no timeout instead of ending in a few seconds. */
     held?: boolean;
+    /** The role is paused on a command or question for a person (its status still says working). */
+    waiting?: boolean;
   } = $props();
 
   const tokensOverBudget = $derived(
@@ -100,7 +103,9 @@
 <div class="card filled role-card">
   <div class="role-head">
     <span class="role-name">{role}</span>
-    {#if finishing}
+    {#if waiting}
+      <StatusChip {status} tone="blocked" label="waiting for you" />
+    {:else if finishing}
       <StatusChip {status} tone="done" label="finishing" />
     {:else}
       <StatusChip {status} />
@@ -118,17 +123,27 @@
       &middot; cost unknown
     {/if}
   </p>
+  {#if waiting}
+    <p class="round-note" role="status">
+      {role} is paused until you answer its request: see Needs you.
+    </p>
+  {/if}
   <div class="steer">
     <textarea
       bind:value={message}
       onkeydown={onKeydown}
-      placeholder="Redirect {role}'s work… (takes effect at the next round boundary)"
+      aria-describedby="steer-hint-{role}"
+      placeholder="Redirect {role}'s work…"
       rows="2"
     ></textarea>
     <button class="btn btn-filled" onclick={send} disabled={sending || !message.trim()}>
       {sent ? "Sent" : sending ? "Sending…" : "Send"}
     </button>
   </div>
+  <p id="steer-hint-{role}" class="body-small muted steer-hint">
+    Takes effect at the end of {role}'s current round, and appears in the activity log as you send it.
+    Stopping the team first drops it.
+  </p>
 
   {#if status === "blocked" && awaiting}
     <div class="approval">

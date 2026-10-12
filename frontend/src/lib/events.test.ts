@@ -14,6 +14,7 @@ import {
   isRefusedCommand,
   latestRound,
   refusalReason,
+  steerFates,
   summarize,
 } from "./events";
 
@@ -377,5 +378,30 @@ describe("isPinnedToBottom", () => {
 
   it("follows a list too short to scroll", () => {
     expect(isPinnedToBottom(0, 300, 200)).toBe(true);
+  });
+});
+
+describe("steerFates", () => {
+  const at = (seq: number, event_type: string, payload: Record<string, unknown>): EpisodicEventView =>
+    ({ seq, ts: "2026-10-06T10:00:00Z", event_type, payload }) as EpisodicEventView;
+  const queued = at(1, "SteeringQueued", { text: "use tabs", role: "builder" });
+
+  it("waits until the same role journals the same text, then it was applied", () => {
+    expect(steerFates([queued]).get(1)).toBe("waiting");
+    const applied = at(2, "SteeringMessage", { text: "use tabs", role: "builder" });
+    expect(steerFates([queued, applied]).get(1)).toBe("applied");
+  });
+
+  it("is dropped when the team stopped or the role's task ended first", () => {
+    expect(steerFates([queued, at(2, "TeamStopped", {})]).get(1)).toBe("dropped");
+    expect(steerFates([queued, at(2, "TaskCompleted", { role: "builder" })]).get(1)).toBe("dropped");
+  });
+
+  it("is not settled by another role's message or end", () => {
+    const other = [
+      at(2, "SteeringMessage", { text: "use tabs", role: "reviewer" }),
+      at(3, "TaskCompleted", { role: "reviewer" }),
+    ];
+    expect(steerFates([queued, ...other]).get(1)).toBe("waiting");
   });
 });

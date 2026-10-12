@@ -225,6 +225,22 @@ class SteeringMessage:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class SteeringQueued:
+    """The daemon accepted an operator's steering message for a running role (CUT-66).
+
+    The message itself is journaled as :class:`SteeringMessage` only when the role's round ends and
+    applies it, which can be minutes later, or never (a stop, or the task finishing first). This
+    records the send, so the activity log shows it at once; the dashboard compares it with the
+    later ``SteeringMessage`` to say whether it was applied or dropped.
+    """
+
+    EVENT_TYPE: ClassVar[str] = "SteeringQueued"
+
+    text: str
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class ApprovalDecision:
     """An operator's approve/reject-with-comment decision on a just-finished
     delegation round (KAN-1711) -- the round-boundary review gate Paperclip's own
@@ -454,6 +470,7 @@ EventPayload = (
     | TaskCompleted
     | TaskFailed
     | SteeringMessage
+    | SteeringQueued
     | ApprovalDecision
     | ToolCallRecorded
     | ConsentDecided
@@ -482,6 +499,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         TaskCompleted,
         TaskFailed,
         SteeringMessage,
+        SteeringQueued,
         ApprovalDecision,
         ToolCallRecorded,
         ConsentDecided,

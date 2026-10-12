@@ -15,13 +15,16 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
-from cuttlefish.episodic.events import DelegationCompleted, DelegationRefused
+from cuttlefish.episodic.events import DelegationCompleted, DelegationRefused, SteeringQueued
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError
 from cuttlefish.projects.store import ProjectStore, RoleDefinition
+from cuttlefish.steering import SteeringDeliveryError
 
 
 @pytest.fixture(autouse=True)
@@ -156,6 +159,49 @@ async def test_steer_with_no_running_team_raises(tmp_path: Path) -> None:
     project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
     with pytest.raises(FleetError):
         await daemon.steer(project.id, "builder", "hello")
+
+
+async def test_a_delivered_steer_is_journaled_at_once_as_queued(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The message is journaled as applied only at the round boundary; the send is recorded now."""
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    daemon._team_stores["team-1"] = store
+    running = SimpleNamespace(team_id="team-1", base_url="http://x", token="t")
+    monkeypatch.setattr(daemon, "running", lambda _project_id: running)
+    delivered: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "cuttlefish.fleet.daemon.send_steering_message", lambda **kwargs: delivered.append(kwargs)
+    )
+
+    await daemon.steer(project.id, "builder", "use tabs")
+
+    assert delivered[0]["text"] == "use tabs"
+    queued = [e.payload for e in store.read("team-1") if isinstance(e.payload, SteeringQueued)]
+    assert queued == [SteeringQueued(text="use tabs", role="builder")]
+    store.close()
+
+
+async def test_a_steer_that_fails_to_deliver_is_not_journaled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    daemon._team_stores["team-1"] = store
+    running = SimpleNamespace(team_id="team-1", base_url="http://x", token="t")
+    monkeypatch.setattr(daemon, "running", lambda _project_id: running)
+
+    def refuse(**_kwargs: Any) -> None:
+        raise SteeringDeliveryError("no such task")
+
+    monkeypatch.setattr("cuttlefish.fleet.daemon.send_steering_message", refuse)
+    with pytest.raises(FleetError):
+        await daemon.steer(project.id, "builder", "use tabs")
+    assert list(store.read("team-1")) == []
+    store.close()
 
 
 async def test_approve_with_no_running_team_raises(tmp_path: Path) -> None:
