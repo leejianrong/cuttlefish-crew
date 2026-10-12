@@ -199,10 +199,13 @@ Binary paths, serve/MCP settings and the rest are in the
 A `Dockerfile` and `fly.toml.example` exist for Fly.io hosting; they have been
 built and run locally but never deployed (ADR-0015).
 
-Known limits worth knowing before you spend money: the dashboard shows tokens but
-not dollars for kopicode (kopicode reports no cost yet, so a dollar limit cannot
-stop it, while a token limit does), and **Stop** takes effect when the current
-round ends, which can be minutes.
+Known limits worth knowing before you spend money: the dashboard shows dollars
+for a backend that reports a cost (kopicode since v0.4.0, Claude Code) and
+"cost unknown" for one that does not (Codex), so a dollar limit stops the first
+two and only a token limit stops Codex. Cost is never estimated. **Stop** takes
+effect when the current round ends, which can be minutes. Live tests spend real
+credit: `make test-live` asks first, and one 100-turn kopicode run cost about
+$0.71 (`agent_docs/model-costs.md`).
 
 ## Documentation
 

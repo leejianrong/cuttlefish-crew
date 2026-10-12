@@ -95,6 +95,9 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 
 - `main` is PR-only. Branch per slice part: `git switch -c feat/<slice>-<part>`
   off `origin/main`, then open a PR. `make ci` green before merging.
+- **Every slice PR names a board card** (`CUT-<n>` in the title or body; open one first if none
+  fits), and the card moves to `done` when the PR merges. Run `git fetch` and read
+  `git log origin/main` before planning from the board: it once lagged main by a week.
 - Never add a `Co-Authored-By` (or any attribution) trailer to commits or PR
   bodies.
 - `make check` (lint + `mypy --strict`), `make test` (fast, unit-only),
