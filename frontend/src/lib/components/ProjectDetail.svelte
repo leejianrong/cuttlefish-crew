@@ -321,7 +321,7 @@
         {:else if confirmingStop}
           <div class="confirm" role="alert">
             <span class="body-medium">
-              Stop the team? Its roles stop, and starting again begins a new run.
+              Stop the team? Its roles stop, steering messages not yet applied are dropped, and starting again begins a new run.
             </span>
             <button class="btn btn-danger" disabled={stopping} onclick={stop}>Stop team</button>
             <button class="btn btn-text" onclick={() => (confirmingStop = false)}>Keep running</button>
