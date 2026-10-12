@@ -11,6 +11,7 @@
     resolved,
     fetchedAt,
     onAnswered,
+    offline = false,
   }: {
     client: FleetClient;
     project: ProjectSummary;
@@ -18,6 +19,7 @@
     resolved: NeedsYouRequest[];
     fetchedAt: number;
     onAnswered: () => void;
+    offline?: boolean;
   } = $props();
 
 </script>
@@ -41,7 +43,7 @@
     </div>
   {:else}
     {#each pending as request (request.id)}
-      <RequestCard {client} {request} {fetchedAt} {onAnswered} />
+      <RequestCard {client} {request} {fetchedAt} {onAnswered} {offline} />
     {/each}
   {/if}
 
