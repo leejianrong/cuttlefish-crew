@@ -29,6 +29,17 @@ describe("lastRun", () => {
     expect(runFigures(run!)).toBe("2 files changed · 12 min · 42k tokens · $0.05");
   });
 
+  it("carries what each role said last, from its completed delegation", () => {
+    const said = [
+      event("2026-10-10T10:00:00Z", "TaskSubmitted"),
+      event("2026-10-10T10:03:00Z", "DelegationCompleted", { role: "builder", summary: "first try" }),
+      event("2026-10-10T10:06:00Z", "DelegationCompleted", { role: "builder", summary: " Linux box 6.1 " }),
+      event("2026-10-10T10:07:00Z", "DelegationCompleted", { role: "reviewer", summary: "" }),
+    ];
+    const run = lastRun(said, { builder: "done", reviewer: "done" }, usage);
+    expect(run?.answers).toEqual([{ role: "builder", text: "Linux box 6.1" }]);
+  });
+
   it("is failed when any role failed, and carries its reason", () => {
     const failed = [...events, event("2026-10-10T10:13:00Z", "TaskFailed", { role: "reviewer", error: "boom" })];
     const run = lastRun(failed, { builder: "done", reviewer: "failed" }, usage);

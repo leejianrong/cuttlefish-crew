@@ -339,6 +339,12 @@
             {#each ended.failures as failure (failure.role)}
               <p class="body-medium"><strong>{failure.role}</strong>{failure.error ? `: ${failure.error}` : ""}</p>
             {/each}
+            {#each ended.answers as answer (answer.role)}
+              <div class="answer">
+                <p class="label-medium muted">{answer.role} said</p>
+                <p class="body-medium answer-text">{answer.text}</p>
+              </div>
+            {/each}
           </section>
         {/if}
         <section class="card filled start-form" aria-labelledby="start-heading">
@@ -518,6 +524,18 @@
   .last-run p {
     margin: 0;
     overflow-wrap: anywhere;
+  }
+
+  .last-run .answer {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+  }
+
+  .last-run .answer-text {
+    white-space: pre-wrap;
+    max-height: 12lh;
+    overflow-y: auto;
   }
 
   .last-run.bad {
