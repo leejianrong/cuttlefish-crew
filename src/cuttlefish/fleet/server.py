@@ -64,6 +64,7 @@ from cuttlefish.fleet.daemon import (
     UnknownRoleError,
 )
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
+from cuttlefish.fleet.serve_token import load_or_create_token
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
     ACCESS_LEVELS,
@@ -950,12 +951,14 @@ async def run_daemon(
     cors_origins: Collection[str] = (),
     dashboard_dir: Path | None = None,
     browse_roots: Sequence[Path] = (),
+    token_file: Path | None = None,
 ) -> None:
     """Serve `daemon`'s HTTP surface until cancelled (`cuttlefish serve`).
 
-    Loopback `host` (the default): unchanged from before ADR-0011 -- a fresh
-    static token, printed once to stdout, the only place it's ever shown, the
-    same posture `cuttlefish run --steerable` already holds for its own token.
+    Loopback `host` (the default): a static token, printed to stdout at start. With
+    `token_file` (what `cuttlefish serve` passes, CUT-106) the token is read from that file,
+    created with mode 0600 the first time, so a restart keeps it and an open dashboard
+    carries on; without one, a fresh token per start, as `cuttlefish run --steerable` does.
 
     Non-loopback `host` (ADR-0011, KAN-1706): `password` (from
     `CUTTLEFISH_SERVE_PASSWORD`, the CLI's own job to read -- never accepted
@@ -985,7 +988,11 @@ async def run_daemon(
     dashboard_note = "  (serving the dashboard build too)" if dashboard_dir is not None else ""
     if satay.control.is_loopback_host(host):
         satay.control.ensure_loopback_bind(host)
-        token = satay.control.generate_token()
+        token = (
+            load_or_create_token(token_file)
+            if token_file is not None
+            else satay.control.generate_token()
+        )
         security = satay.control.SecurityPolicy(token=token)
         # flush=True: a long-running daemon's stdout is commonly redirected to a
         # log file rather than a TTY, where Python fully buffers by default -- an

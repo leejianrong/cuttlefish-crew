@@ -595,3 +595,10 @@ events and read `queued` for good, and `lastRun` waited for every role to be ter
 not started (`notRun`, `notRunText` in `frontend/src/lib/lastrun.ts`); the project card's sprite for such a role reads "not run". Found by reading the code; the e2e run itself was not reproduced, so if
 the other roles were given tasks and still did not run, that is a separate bug. Whether the planner's refusal ended the team was not checked: the sequential dispatch in `team._dispatch_round` runs every
 role in the round whatever the first one's outcome.
+
+stable loopback token (CUT-106, 2026-10-14): `cuttlefish serve` on a loopback bind used to issue a fresh token per start, so an open dashboard got 401 on every poll after a restart and only Disconnect and
+a re-paste recovered it. `cuttlefish.fleet.serve_token.load_or_create_token` now keeps it in `~/.cuttlefish/serve-token` (mode 0600, created exclusively, a malformed file replaced, delete it to rotate);
+`run_daemon(token_file=)` takes it and the CLI passes `default_serve_token_path()` (without `token_file`, as for `run --steerable`, the token is still fresh per start). The Connect screen now starts at
+the origin that served the page (`defaultBaseUrl` in `session.ts`; the dev server and non-http origins fall back to `127.0.0.1:8420`), so Disconnect no longer points at a port a live daemon may not use.
+Checked live: two starts under a scratch HOME gave the same token, 200 with it and 401 without. Not covered, by choice: password mode's sessions are HMAC-signed with a per-start secret, so a restart still
+ends them (CUT-112 re-authenticates automatically).

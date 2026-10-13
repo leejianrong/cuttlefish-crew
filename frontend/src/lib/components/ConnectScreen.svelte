@@ -7,6 +7,7 @@
     login as loginRequest,
     type AuthMode,
   } from "../api";
+  import { FALLBACK_BASE_URL, defaultBaseUrl } from "../session";
 
   let {
     onConnected,
@@ -19,7 +20,7 @@
   // so the form never has to guess which one to ask for.
   let step = $state<"url" | "credential">("url");
   let mode = $state<AuthMode | null>(null);
-  let baseUrl = $state("http://127.0.0.1:8420");
+  let baseUrl = $state(defaultBaseUrl());
   let credential = $state("");
   let connecting = $state(false);
   let error = $state<string | null>(null);
@@ -85,7 +86,7 @@
 
       <label>
         Base URL
-        <input type="text" bind:value={baseUrl} placeholder="http://127.0.0.1:8420" required />
+        <input type="text" bind:value={baseUrl} placeholder={FALLBACK_BASE_URL} required />
       </label>
 
       {#if error}
