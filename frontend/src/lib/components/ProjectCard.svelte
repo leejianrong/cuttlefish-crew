@@ -15,6 +15,8 @@
   } = $props();
 
   const roleEntries = $derived(Object.entries(project.status));
+  // Some role has started: a "queued" one beside it, in a team that is no longer running, never will.
+  const hasRun = $derived(roleEntries.some(([, status]) => status !== "queued"));
   let confirming = $state<"stop" | "remove" | null>(null);
 </script>
 
@@ -31,7 +33,11 @@
     <div class="roles">
       {#each roleEntries as [role, status] (role)}
         <div class="role-row">
-          <RoleSprite {status} size={2.5} />
+          <RoleSprite
+            {status}
+            size={2.5}
+            label={status === "queued" && !project.running && hasRun ? "not run" : undefined}
+          />
           <span class="role-name">{role}</span>
         </div>
       {/each}

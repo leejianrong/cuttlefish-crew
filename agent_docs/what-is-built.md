@@ -588,4 +588,10 @@ Always allow is offered for the first unlisted command of a chain (`suggest_rule
 stays enabled for that case (CUT-99, #143 and #147); the Overview shows what each role said when the last run ended, which for kopicode needed the delegation summary to carry the model's last message
 (CUT-63); a role waiting on a request says so, a steer is logged when sent and again when applied or dropped, and the Stop confirmation says unapplied steering is dropped (CUT-66); while the daemon
 is unreachable the Needs-you cards are disabled, their countdown stops and a note says how to recover (CUT-67). Open from the same pass: CUT-106 (a daemon restart changes the token, so the dashboard
-stays on Lost connection), CUT-107 (a queued steer starts a new round after Stop), CUT-108 (after the planner is refused, the full crew template runs nothing further and shows no last-run card).
+stays on Lost connection), CUT-107 (a queued steer starts a new round after Stop).
+
+CUT-108 (2026-10-14): the roles that "never ran" after a refused planner were never started. `FleetDaemon.start` runs only the roles it is given (`RoleStart`), so the rest of a template's roles have no
+events and read `queued` for good, and `lastRun` waited for every role to be terminal, so the Overview showed no last-run card. It now ignores `queued` roles once nothing is running and says which were
+not started (`notRun`, `notRunText` in `frontend/src/lib/lastrun.ts`); the project card's sprite for such a role reads "not run". Found by reading the code; the e2e run itself was not reproduced, so if
+the other roles were given tasks and still did not run, that is a separate bug. Whether the planner's refusal ended the team was not checked: the sequential dispatch in `team._dispatch_round` runs every
+role in the round whatever the first one's outcome.

@@ -18,6 +18,8 @@ export interface LastRun {
   /** What each role said when its last delegation completed (its `DelegationCompleted.summary`),
    * in the order roles first finished. Empty for a role that never completed. */
   answers: { role: string; text: string }[];
+  /** Roles that were never given a task in this run, in the order the daemon lists them. */
+  notRun: string[];
 }
 
 /** The run that just ended, or null while nothing has run yet or a role is still working or
@@ -27,7 +29,13 @@ export function lastRun(
   status: Record<string, RoleStatus>,
   usage: Record<string, RoleUsage>,
 ): LastRun | null {
-  const states = Object.values(status);
+  // A role that was never given a task has no events and reads "queued" for good: the daemon
+  // starts only the roles named in a start. Once nothing is running it will not run, so it
+  // neither holds the run open nor counts toward how it ended.
+  const notRun = Object.entries(status)
+    .filter(([, s]) => s === "queued")
+    .map(([role]) => role);
+  const states = Object.values(status).filter((s) => s !== "queued");
   if (events.length === 0 || states.length === 0) return null;
   if (!states.every((s) => s === "done" || s === "failed" || s === "stopped")) return null;
 
@@ -74,7 +82,19 @@ export function lastRun(
     cost_usd: costs.length > 0 ? costs.reduce((sum, c) => sum + c, 0) : null,
     failures,
     answers: [...said].map(([role, text]) => ({ role, text })),
+    notRun,
   };
+}
+
+/** `builder was not started`, `builder and tester were not started`, or null when every role ran. */
+export function notRunText(run: LastRun): string | null {
+  const names = run.notRun;
+  if (names.length === 0) return null;
+  const list =
+    names.length === 1
+      ? names[0]
+      : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `${list} ${names.length === 1 ? "was" : "were"} not started: a start runs only the roles given a task.`;
 }
 
 /** `41,200` tokens as `41k`, small counts as they are. */

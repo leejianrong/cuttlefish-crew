@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { EpisodicEventView } from "./api";
-import { lastRun, runFigures, runHeading } from "./lastrun";
+import { lastRun, notRunText, runFigures, runHeading } from "./lastrun";
 
 function event(
   ts: string,
@@ -55,6 +55,27 @@ describe("lastRun", () => {
     expect(lastRun(events, { builder: "done", reviewer: "working" }, usage)).toBeNull();
     expect(lastRun(events, { builder: "done", reviewer: "blocked" }, usage)).toBeNull();
     expect(lastRun([], { builder: "queued" }, usage)).toBeNull();
+  });
+
+  it("describes a run whose other roles were never given a task, instead of staying silent (CUT-108)", () => {
+    const run = lastRun(
+      events,
+      { planner: "failed", builder: "queued", tester: "queued", reviewer: "queued" },
+      usage,
+    );
+    expect(run?.outcome).toBe("failed");
+    expect(run?.notRun).toEqual(["builder", "tester", "reviewer"]);
+    expect(notRunText(run!)).toBe(
+      "builder, tester and reviewer were not started: a start runs only the roles given a task.",
+    );
+    expect(notRunText(lastRun(events, { builder: "done", tester: "queued" }, usage)!)).toBe(
+      "tester was not started: a start runs only the roles given a task.",
+    );
+  });
+
+  it("has nothing to say about roles when every role ran, or when none has started", () => {
+    expect(notRunText(lastRun(events, { builder: "done", reviewer: "done" }, usage)!)).toBeNull();
+    expect(lastRun(events, { builder: "queued", reviewer: "queued" }, usage)).toBeNull();
   });
 
   it("leaves out a cost no role reported", () => {
