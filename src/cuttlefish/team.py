@@ -41,6 +41,7 @@ from cuttlefish.episodic.events import (
     DelegationStarted,
     RoundContinued,
     SteeringMessage,
+    StopRequested,
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
@@ -462,6 +463,14 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             decoded_payloads = [
                 decode_payload(raw["event_type"], raw["data"]) for raw in raw_events
             ]
+            stop_requested = any(isinstance(payload, StopRequested) for payload in decoded_payloads)
+            if stop_requested:
+                # CUT-107: Stop was pressed while this round ran. satay's cancel only lands once
+                # a round ends, and a steer already queued would be consumed right here, starting
+                # one more round. End the role as it is, before any steer, approval wait or
+                # continuation, so the queued message is never applied (the log reads "not
+                # applied: the run ended first").
+                continue
             usage_totals = cumulative_usage(decoded_payloads, role=name)
             budget_hit = budget_exceeded(
                 usage_totals, max_tokens=max_tokens, max_cost_usd=max_cost_usd

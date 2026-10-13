@@ -602,3 +602,9 @@ a re-paste recovered it. `cuttlefish.fleet.serve_token.load_or_create_token` now
 the origin that served the page (`defaultBaseUrl` in `session.ts`; the dev server and non-http origins fall back to `127.0.0.1:8420`), so Disconnect no longer points at a port a live daemon may not use.
 Checked live: two starts under a scratch HOME gave the same token, 200 with it and 401 without. Not covered, by choice: password mode's sessions are HMAC-signed with a per-start secret, so a restart still
 ends them (CUT-112 re-authenticates automatically).
+
+stop drops a queued steer (CUT-107, 2026-10-14): satay's cancel only lands when the running round ends, and at that boundary the team workflow consumed a steer already queued and started one more round
+before the cancel was seen, so the log never said "not applied". `FleetDaemon.stop` now journals `StopRequested` (`episodic/events.py`) once satay accepts the cancel, and `run_team` reads it with the
+episodic events it already fetches at each boundary (no new durable task, so replay of a run in flight is unchanged) and ends the role before any steer, approval wait or continuation. The unapplied steer
+then reads "not applied: the run ended first". A failed Stop journals nothing. Covered by `tests/unit/test_team_stop_drops_steer.py` (a control without the event still runs the second round) and the two
+daemon tests in `tests/integration/test_fleet_daemon.py`. Not reproduced against real kopicode; the fake `kopicode serve` stands in. Stop is still team-wide and still waits for the running round.
