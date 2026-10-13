@@ -898,3 +898,20 @@ a deliberately broken dependency ends the round under Needs you in seconds, and
 **Rests on assumptions:** `.env` values reach the agent's shell today (read from `merge_env`,
 not yet checked end to end; V5-E0 adds the test); an install step for a typical project fits
 inside a start the operator is willing to wait for.
+
+## V6: One continuous agent session per project (ADR-0032, decided, not started)
+
+**Why:** the first hands-on run (`docs/feedback/2026-10-11-first-demo-run.md`) found the product shaped
+around rounds, not a conversation. ADR-0032 makes a project's long-lived agent session the primary
+object, with the dashboard as a view onto it; the team and round workflow stays as an optional mode.
+
+**Cards (board CUT):** CUT-91 spike to confirm session control on Claude Code, Codex and kopicode; then
+CUT-92, 93 and 94 to continue the same Codex, Claude Code and kopicode conversation across prompts;
+CUT-102 Codex `thread/resume` with the final answer and token usage journaled; CUT-95 tmux plus resume
+after a reboot; CUT-96 the agent terminal in the dashboard; CUT-97 render `.cuttlefish/artifacts/`;
+CUT-98 the project view on a phone over the private network; CUT-103 import externally started
+`claude --bg` sessions as read-only rows. CUT-89 (an always-allow rule per project from any approval)
+and the approval slices already shipped (CUT-87, 88, 90, 99) are the first part of it.
+
+**Open:** whether a session-first path is still a satay workflow (ADR-0001 holds for the paths that use
+the workflow; ADR-0032 leaves this open).

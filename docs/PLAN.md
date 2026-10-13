@@ -71,6 +71,11 @@ interface to prove the abstraction is real rather than aspirational -
 directly motivated by the fact that Claude Code, not kopicode, is the agent
 the operator actually babysits today.
 
+Direction since: a hands-on run on 2026-10-11 showed the product is shaped around a workflow of
+rounds rather than a conversation. [ADR-0032](adr/0032-one-continuous-agent-session-per-project-is-the-primary-object.md)
+makes one long-lived agent session per project the primary object; the team and round workflow stays
+as an optional mode. It is decided, not built: the build order is V6 in [`SLICES.md`](SLICES.md).
+
 ## Users and actors
 
 - **The operator** (primary). Runs cuttlefish-crew, configures which

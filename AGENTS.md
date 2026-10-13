@@ -66,6 +66,11 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, `CUTTLEFISH_CODEX_TRANSPORT=exec`,
   and any sandbox provider) do not, and the dashboard must say when their
   answer lands.
+- **With `CUTTLEFISH_CREDENTIAL_BROKER=1` an agent never holds its model key.**
+  The daemon's broker keeps it and leases a short-lived token; the real key is
+  removed from the secrets handed to the backend, and the lease is revoked in a
+  `finally`. Do not add a path that passes the real key to a brokered backend.
+  ADR-0031.
 
 ## Gotchas that have already cost a session
 
@@ -139,7 +144,10 @@ own doc comment all beat a paragraph). Start reading at
 - [`agent_docs/what-is-built.md`](agent_docs/what-is-built.md) — the history
   and rationale of each shipped slice.
 - [`docs/PLAN.md`](docs/PLAN.md) — the current problem, scope and shape.
-- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made.
+- [`docs/adr/`](docs/adr/) — why each load-bearing decision was made. The
+  newest, ADR-0032, makes one long-lived agent session per project the primary
+  object (decided, not built; V6 in `docs/SLICES.md`), so read it before
+  changing how a round or a delegation starts.
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed; [`docs/SLICES.md`](docs/SLICES.md) — the build order.
 - [`docs/research/`](docs/research/) — the hands-on Paperclip comparison.

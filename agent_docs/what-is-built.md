@@ -580,3 +580,12 @@ real key is removed from the secrets given to the backend and the lease is revok
 `-c model_provider` pointing at the lease and `CUTTLEFISH_BROKER_TOKEN` (the `-c` flags still precede `app-server`). `CUTTLEFISH_CREDENTIAL_BROKER=1` turns it on (`FleetDaemon.ensure_broker`,
 closed with `FleetDaemon.close`); `cuttlefish doctor`, `GET /api/permissions` and the secrets payloads (`broker`) say which way it is set, and the credential rows say "Held by cuttlefish".
 Checked with the real `claude` and `codex` binaries against a scripted upstream. Found on the way: `run_codex` left stdin inherited, so `codex exec` hung on a pipe that never closes.
+
+approval UX after the first hands-on run (CUT-87, 88, 90, 99, 63, 66, 67, 2026-10-11 to 2026-10-12, PRs #139-#147; the run is `docs/feedback/2026-10-11-first-demo-run.md`, the decision it led to is
+ADR-0032): the activity feed follows new events and stops following when you scroll up (CUT-87); an agent's request is answered on the project Overview without switching to the Needs-you tab
+(CUT-88); a chained command line (`a && b`) is decided command by command, so the default mode asks only about the risky one and Codex stops asking about every `&&` (CUT-90, `delegate/consent.py`);
+Always allow is offered for the first unlisted command of a chain (`suggest_rule`, `validate_always_rule` accept one command of the line), so the same chain runs unasked next time, and the button
+stays enabled for that case (CUT-99, #143 and #147); the Overview shows what each role said when the last run ended, which for kopicode needed the delegation summary to carry the model's last message
+(CUT-63); a role waiting on a request says so, a steer is logged when sent and again when applied or dropped, and the Stop confirmation says unapplied steering is dropped (CUT-66); while the daemon
+is unreachable the Needs-you cards are disabled, their countdown stops and a note says how to recover (CUT-67). Open from the same pass: CUT-106 (a daemon restart changes the token, so the dashboard
+stays on Lost connection), CUT-107 (a queued steer starts a new round after Stop), CUT-108 (after the planner is refused, the full crew template runs nothing further and shows no last-run card).
