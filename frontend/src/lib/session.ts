@@ -40,3 +40,16 @@ export function clearConnection(): void {
     // See saveConnection.
   }
 }
+
+/** Where the daemon most likely is: the origin that served this page, because a built
+ * dashboard is served by the daemon itself (ADR-0012). Under `npm run dev`, or from a file or
+ * any other scheme, the page's own origin is not the daemon, so fall back to its default port. */
+export const FALLBACK_BASE_URL = "http://127.0.0.1:8420";
+
+export function defaultBaseUrl(
+  origin: string | undefined = typeof window === "undefined" ? undefined : window.location.origin,
+  dev: boolean = import.meta.env.DEV,
+): string {
+  if (dev || !origin || !/^https?:\/\//.test(origin)) return FALLBACK_BASE_URL;
+  return origin;
+}

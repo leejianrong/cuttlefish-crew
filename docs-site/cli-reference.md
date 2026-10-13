@@ -123,7 +123,10 @@ uv run cuttlefish projects add \
 ## `cuttlefish serve`
 
 Start the fleet daemon: launches and owns every registered project's team
-concurrently, in one process.
+concurrently, in one process. On a loopback bind it prints a URL and a token. The token is
+saved in `~/.cuttlefish/serve-token` (mode 0600) and reused on every start, so a restart does not
+sign an open dashboard out; delete the file to rotate it. A non-loopback bind uses the password
+instead, and its sessions do not survive a restart.
 
 | Flag | What it does |
 |---|---|

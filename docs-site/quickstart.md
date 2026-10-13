@@ -16,7 +16,9 @@ make demo
 
 This builds the dashboard once, then starts `cuttlefish serve` — one
 process serving both the JSON API and the dashboard itself, same origin.
-It prints a URL and a token; open the URL and paste in the token. Ctrl-C stops
+It prints a URL and a token; open the URL and paste in the token. The token is
+kept in `~/.cuttlefish/serve-token` (mode 0600) and reused on every start, so a
+restart does not sign an open dashboard out; delete the file to rotate it. Ctrl-C stops
 it cleanly. The daemon's log goes to this terminal and always to
 `~/.cuttlefish/logs/cuttlefish.log` (rotating; `CUTTLEFISH_LOG_LEVEL=DEBUG` adds
 every tool call). Each line names its project, team and role, and a failed team

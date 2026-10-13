@@ -51,6 +51,7 @@ from cuttlefish.config import (
 )
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
+from cuttlefish.fleet.serve_token import default_serve_token_path
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
 from cuttlefish.limits import LIMIT_SPECS, validate_limits
 from cuttlefish.permissions import DEFAULT_MODE, MODES
@@ -806,6 +807,7 @@ async def _serve(args: argparse.Namespace) -> int:
                 cors_origins=args.allow_origin or (),
                 dashboard_dir=_resolve_dashboard_dir(args.dashboard_dir),
                 browse_roots=[Path(root) for root in args.browse_root or ()],
+                token_file=default_serve_token_path(),
             )
         except (ValueError, WeakPasswordError) as exc:
             print(f"cuttlefish serve: {exc}", file=sys.stderr)

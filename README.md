@@ -92,8 +92,10 @@ make demo
 
 This builds the dashboard once, then runs `cuttlefish serve`: one process
 serving the API and the UI. It prints a URL and a token. Open the URL, check
-that the address box on the Connect screen matches it (it starts as
-`http://127.0.0.1:8420`), and paste the token. No daemon yet? The Connect
+that the address box on the Connect screen matches it (it starts as the address
+the page was served from), and paste the token. The token is kept in
+`~/.cuttlefish/serve-token` (readable only by you), so restarting the daemon
+does not sign an open dashboard out; delete the file to get a new one. No daemon yet? The Connect
 screen also links to a sprite gallery that needs no connection. The daemon's
 log prints in this terminal and is always written to
 `~/.cuttlefish/logs/cuttlefish.log`; `make demo LOG=1` also copies it to
