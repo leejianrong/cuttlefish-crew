@@ -124,6 +124,17 @@ a count. A command that is not on the project's list pauses that agent until you
 choose **Allow once**, **Always allow** (the start of the command, saved to the
 project's commands), or **Deny**. Left alone, it denies itself after ten minutes. With
 kopicode v0.4.0 or later, a question the agent asks you shows up here too, with a box for your answer.
+You can answer from the project's Overview as well, without switching tabs. A line
+that chains commands (`a && b`) is decided command by command, and Always allow
+offers a rule for the first command that is not on the list.
+
+How much asks you is the project's permission mode: **Ask first** (every shell
+command waits for you), **Standard** (the default: a list of safe commands runs,
+others ask) or **Auto** (anything but the never-allowed list, which is `sudo`, a
+forced `git push`, a download piped into a shell and writes outside the project
+root, in every mode). A role can also be read-only. A mode applies the next time
+the team starts; details per backend are in the
+[CLI reference](https://leejianrong.github.io/cuttlefish-crew/docs/cli-reference/#permission-modes).
 
 **6. Steer, review, stop.** While a role is running you can send it a
 redirect; it lands at the next round boundary, not mid-flight. Turn on **Approve
