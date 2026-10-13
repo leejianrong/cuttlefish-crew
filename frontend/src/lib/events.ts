@@ -18,6 +18,7 @@ const LABELS: Record<string, string> = {
   TaskFailed: "Task failed",
   TeamResumed: "Resumed",
   RoundContinued: "Continued",
+  StopRequested: "Stop asked",
   TeamStopped: "Stopped",
   EnvironmentPrepareStarted: "Installing",
   EnvironmentPrepared: "Install done",
@@ -244,6 +245,8 @@ export function summarize(event: EpisodicEventView): string {
       return preparedText(p);
     case "RoundContinued":
       return `${CONTINUED_WHY[String(p.reason)] ?? "The round ran out of room"} and was not stuck, so a fresh round started from the latest handover (${p.count} of ${p.limit}).`;
+    case "StopRequested":
+      return "You asked to stop. The team ends when the current round does, and a message you sent that was not applied yet is dropped.";
     case "TeamStopped":
       return "You stopped the team. Roles that had not finished are stopped; starting again begins a new run.";
     case "TeamResumed":

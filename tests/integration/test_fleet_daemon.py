@@ -20,7 +20,12 @@ from typing import Any
 
 import pytest
 
-from cuttlefish.episodic.events import DelegationCompleted, DelegationRefused, SteeringQueued
+from cuttlefish.episodic.events import (
+    DelegationCompleted,
+    DelegationRefused,
+    SteeringQueued,
+    StopRequested,
+)
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon, FleetError
 from cuttlefish.projects.store import ProjectStore, RoleDefinition
@@ -216,3 +221,41 @@ async def test_stop_with_no_running_team_raises(tmp_path: Path) -> None:
     project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
     with pytest.raises(FleetError):
         await daemon.stop(project.id)
+
+
+async def test_stop_journals_that_it_was_asked_once_the_cancel_is_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The team workflow reads this at the round boundary to drop a queued steer (CUT-107)."""
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    daemon._team_stores["team-1"] = store
+    running = SimpleNamespace(team_id="team-1", base_url="http://x", token="t")
+    monkeypatch.setattr(daemon, "running", lambda _project_id: running)
+    monkeypatch.setattr("cuttlefish.fleet.daemon.cancel_run", lambda **_kwargs: None)
+
+    await daemon.stop(project.id)
+
+    assert [e.payload for e in store.read("team-1")] == [StopRequested()]
+    store.close()
+
+
+async def test_a_stop_that_fails_to_deliver_is_not_journaled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    daemon._team_stores["team-1"] = store
+    running = SimpleNamespace(team_id="team-1", base_url="http://x", token="t")
+    monkeypatch.setattr(daemon, "running", lambda _project_id: running)
+
+    def refuse(**_kwargs: Any) -> None:
+        raise SteeringDeliveryError("no such run")
+
+    monkeypatch.setattr("cuttlefish.fleet.daemon.cancel_run", refuse)
+    with pytest.raises(FleetError):
+        await daemon.stop(project.id)
+    assert list(store.read("team-1")) == []
+    store.close()

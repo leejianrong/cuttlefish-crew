@@ -44,6 +44,7 @@ from cuttlefish.episodic.events import (
     EventPayload,
     RequestResolved,
     SteeringQueued,
+    StopRequested,
     TaskFailed,
     TeamResumed,
     TeamStopped,
@@ -869,6 +870,11 @@ class FleetDaemon:
             )
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc
+        # Only once the cancel was accepted, so a failed Stop leaves the team as it was. The
+        # workflow reads this at its next round boundary and drops a steer still queued instead
+        # of starting one more round before satay's cancel is seen (CUT-107).
+        if running.team_id in self._team_stores:
+            self._append_for_team(running.team_id, StopRequested())
         # satay's cancel only lands when the round ends, and a round held open for a person
         # would not end. Tell the waiting agent no, and every later request no too, so it can
         # (ADR-0028); `is_stopping` lets the dashboard say "stopping" at once, not "working".

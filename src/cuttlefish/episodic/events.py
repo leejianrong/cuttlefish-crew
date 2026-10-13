@@ -387,6 +387,18 @@ class TeamStopped:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class StopRequested:
+    """The operator pressed Stop on a running team (CUT-107). Written straight to the store by the
+    daemon at that moment. satay's cancel only lands once the running round ends, and a steering
+    message already queued is consumed by the workflow right at that boundary, so without this the
+    workflow started one more round before the cancel was seen. The team workflow reads it at each
+    round boundary and ends the role instead of applying a steer. It changes no role's status:
+    ``TeamStopped`` still says the team has ended."""
+
+    EVENT_TYPE: ClassVar[str] = "StopRequested"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamResumed:
     """A daemon restart found this run still non-terminal and re-drove it via
     satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
@@ -479,6 +491,7 @@ EventPayload = (
     | TeamResumed
     | RoundContinued
     | TeamStopped
+    | StopRequested
     | EnvironmentPrepareStarted
     | EnvironmentPrepared
     | UnknownPayload
@@ -508,6 +521,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         TeamResumed,
         RoundContinued,
         TeamStopped,
+        StopRequested,
         EnvironmentPrepareStarted,
         EnvironmentPrepared,
     )
