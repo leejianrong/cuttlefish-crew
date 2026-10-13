@@ -103,7 +103,7 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   `git log origin/main` before planning from the board: it once lagged main by a week.
 - Never add a `Co-Authored-By` (or any attribution) trailer to commits or PR
   bodies.
-- `make check` (lint + `mypy --strict`), `make test` (fast, unit-only),
+- `make check` (lint + `mypy --strict`), `make test` (unit-only, no infra; still about six minutes for ~1100 tests),
   `make ci` (the full suite `make test-all`, plus `frontend-check`/
   `frontend-test`/`frontend-build`, gates on). CI additionally builds
   kopicode from source so the delegation's integration tests run against
@@ -149,4 +149,4 @@ own doc comment all beat a paragraph). Start reading at
   Read it before any `frontend/` work and follow it; use the `frontend-design`
   and `material-design-3` skills. Update it when a slice changes the design.
 - `docs/assets/` — the README's screenshots; retake them when the dashboard's look changes.
-- Pandan board `cuttlefish-agent` (key `CUT`) — build-plan progress.
+- Pandan board `cuttlefish-crew` (id 23, key `CUT`; pass `--board 23`) — build-plan progress.
