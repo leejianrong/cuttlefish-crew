@@ -10,7 +10,7 @@
   } from "../api";
   import { installProgress } from "../environment";
   import { latestRound } from "../events";
-  import { lastRun, runFigures, runHeading } from "../lastrun";
+  import { lastRun, notRunText, runFigures, runHeading } from "../lastrun";
   import type { ProjectTab } from "../route";
   import { keepIfSame } from "../same";
   import { modeLabel, startFailure } from "../team";
@@ -338,6 +338,9 @@
           <section class="card filled last-run" class:bad={ended.outcome === "failed"} aria-labelledby="last-run-heading">
             <h2 id="last-run-heading" class="title-medium">{runHeading(ended)}</h2>
             <p class="body-medium muted">{runFigures(ended)}</p>
+            {#if notRunText(ended)}
+              <p class="body-medium muted">{notRunText(ended)}</p>
+            {/if}
             {#each ended.failures as failure (failure.role)}
               <p class="body-medium"><strong>{failure.role}</strong>{failure.error ? `: ${failure.error}` : ""}</p>
             {/each}

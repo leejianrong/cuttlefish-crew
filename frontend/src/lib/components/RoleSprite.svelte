@@ -3,7 +3,11 @@
   import { CUTTLEFISH_FRAMES, STATUS_GLYPH, paletteFor } from "../pixel/cuttlefish";
   import PixelGrid from "../pixel/PixelGrid.svelte";
 
-  let { status, size = 4 }: { status: RoleStatus; size?: number } = $props();
+  let {
+    status,
+    size = 4,
+    label,
+  }: { status: RoleStatus; size?: number; label?: string } = $props();
 
   let frameKey = $state<"a" | "b">("a");
 
@@ -26,7 +30,7 @@
   const glyph = $derived(STATUS_GLYPH[status]);
 </script>
 
-<div class="sprite" class:working={status === "working"} role="img" aria-label="{status}">
+<div class="sprite" class:working={status === "working"} role="img" aria-label={label ?? status}>
   {#if glyph}
     <span class="glyph glyph-{status}">{glyph}</span>
   {/if}
