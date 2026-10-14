@@ -8,6 +8,18 @@ export function sameSet(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((item) => b.includes(item));
 }
 
+/** The draft's own commands once the saved ones changed from outside the tab (an Always allow
+ * answered on Needs you): the draft keeps what was typed and gains what is newly saved, so the
+ * rule shows without a reload and the tab does not call it an unsaved edit. */
+export function withNewlySaved(
+  draft: readonly string[],
+  before: readonly string[],
+  now: readonly string[],
+): string[] {
+  const added = now.filter((line) => !before.includes(line) && !draft.includes(line));
+  return added.length === 0 ? [...draft] : [...draft, ...added];
+}
+
 /** `enabled` with `name` switched on or off, kept in the catalogue's order. */
 export function togglePreset(
   enabled: readonly string[],

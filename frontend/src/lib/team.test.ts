@@ -23,6 +23,7 @@ import {
   saveFailure,
   startFailure,
   togglePreset,
+  withNewlySaved,
 } from "./team";
 
 const builtins: BuiltinRole[] = [
@@ -30,6 +31,28 @@ const builtins: BuiltinRole[] = [
   { name: "reviewer", summary: "r", prompt: "Review it.", access: "read-only" },
   { name: "tester", summary: "t", prompt: "Test it.", access: "standard" },
 ];
+
+describe("withNewlySaved (CUT-109)", () => {
+  it("adds a rule saved from outside the tab, keeping what was typed", () => {
+    expect(withNewlySaved(["make test"], ["make test"], ["make test", "git status"])).toEqual([
+      "make test",
+      "git status",
+    ]);
+    expect(withNewlySaved(["make test", "npm ci"], ["make test"], ["make test", "git status"])).toEqual([
+      "make test",
+      "npm ci",
+      "git status",
+    ]);
+  });
+
+  it("does not repeat a rule the draft already has, as after this tab's own save", () => {
+    expect(withNewlySaved(["a", "b"], ["a"], ["a", "b"])).toEqual(["a", "b"]);
+  });
+
+  it("changes nothing when nothing new was saved", () => {
+    expect(withNewlySaved(["a"], ["a", "b"], ["a"])).toEqual(["a"]);
+  });
+});
 
 describe("sameSet", () => {
   it("ignores order and compares membership", () => {

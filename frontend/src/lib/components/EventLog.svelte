@@ -4,14 +4,17 @@
   import {
     checkpointedRounds,
     eventLabelFor,
+    eventRole,
     formatWhen,
     installOutput,
     isPinnedToBottom,
     isRefusedCommand,
     LONG_TEXT,
+    raisedRequests,
     STEER_FATE_TEXT,
     steerFates,
     summarize,
+    summarizeWith,
   } from "../events";
 
   let {
@@ -21,6 +24,7 @@
 
   const checkpointed = $derived(checkpointedRounds(events));
   const steerFate = $derived(steerFates(events));
+  const raised = $derived(raisedRequests(events));
 
   // Newest-last, like a chat: stay pinned to the bottom while the reader is there, stop following
   // once they scroll up to read, and offer a way back down.
@@ -70,7 +74,7 @@
       >
         <span class="ts mono" title={event.ts}>{formatWhen(event.ts)}</span>
         <!-- Always a cell, so a row with no role keeps the label and text in their own columns. -->
-        <span class="role mono">{event.payload.role ?? ""}</span>
+        <span class="role mono">{eventRole(event, raised)}</span>
         <span class="type" title="{event.event_type}, #{event.seq}">{checkpointed.has(event.seq) ? "Round ended" : eventLabelFor(event)}</span>
         <span class="text">
           {#if event.event_type === "DelegationStarted" && summarize(event).length > LONG_TEXT}
@@ -80,7 +84,7 @@
               <pre class="mono">{summarize(event)}</pre>
             </details>
           {:else}
-            {summarize(event)}
+            {summarizeWith(event, raised)}
           {/if}
           {#if event.event_type === "SteeringQueued"}
             <span class="record">({STEER_FATE_TEXT[steerFate.get(event.seq) ?? "waiting"]})</span>

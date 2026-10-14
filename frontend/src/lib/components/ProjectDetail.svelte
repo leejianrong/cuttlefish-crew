@@ -346,7 +346,9 @@
             {/each}
             {#each ended.answers as answer (answer.role)}
               <div class="answer">
-                <p class="label-medium muted">{answer.role} said</p>
+                <p class="label-medium muted">
+                  {answer.role} said{ended.outcome === "stopped" ? " (in its last round before you stopped it)" : ""}
+                </p>
                 <p class="body-medium answer-text">{answer.text}</p>
               </div>
             {/each}

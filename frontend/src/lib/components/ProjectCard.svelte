@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ProjectSummary } from "../api";
+  import type { ProjectSummary, RoleStatus } from "../api";
   import RoleSprite from "./RoleSprite.svelte";
 
   let {
@@ -17,6 +17,9 @@
   const roleEntries = $derived(Object.entries(project.status));
   // Some role has started: a "queued" one beside it, in a team that is no longer running, never will.
   const hasRun = $derived(roleEntries.some(([, status]) => status !== "queued"));
+  // The pose alone says nothing to a screen reader, or to someone who cannot tell the colours apart.
+  const statusWord = (status: RoleStatus): string =>
+    status === "queued" && !project.running && hasRun ? "not run" : status;
   let confirming = $state<"stop" | "remove" | null>(null);
 </script>
 
@@ -33,12 +36,10 @@
     <div class="roles">
       {#each roleEntries as [role, status] (role)}
         <div class="role-row">
-          <RoleSprite
-            {status}
-            size={2.5}
-            label={status === "queued" && !project.running && hasRun ? "not run" : undefined}
-          />
+          <RoleSprite {status} size={2.5} label={statusWord(status)} />
           <span class="role-name">{role}</span>
+          <span class="role-status">{status === "queued" && !project.running && hasRun ? "not run" : status}</span>
+          <span class="role-status">{statusWord(status)}</span>
         </div>
       {/each}
     </div>
@@ -142,6 +143,16 @@
     font-size: 0.7rem;
     font-family: var(--font-mono);
     color: var(--text-muted);
+  }
+
+  .role-status {
+    font-size: 0.7rem;
+    color: var(--text-faint);
+  }
+
+  .role-status {
+    font-size: 0.68rem;
+    color: var(--text-faint);
   }
 
   .empty {
