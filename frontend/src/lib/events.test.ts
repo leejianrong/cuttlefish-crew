@@ -7,15 +7,18 @@ import {
   commandText,
   eventLabel,
   eventLabelFor,
+  eventRole,
   failureText,
   installOutput,
   formatWhen,
   isPinnedToBottom,
   isRefusedCommand,
   latestRound,
+  raisedRequests,
   refusalReason,
   steerFates,
   summarize,
+  summarizeWith,
 } from "./events";
 
 function event(event_type: string, payload: Record<string, unknown>): EpisodicEventView {
@@ -111,6 +114,34 @@ describe("summarize", () => {
   });
   it("shows an unknown event as JSON instead of dropping it", () => {
     expect(summarize(event("Mystery", { a: 1 }))).toBe('{"a":1}');
+  });
+});
+
+describe("an answered request names its role and what it was about (CUT-109)", () => {
+  const raised = event("RequestRaised", {
+    request_id: "r1",
+    role: "builder",
+    title: "Run a command?",
+    detail: "/bin/sh -c git status",
+  });
+  const resolved = event("RequestResolved", { request_id: "r1", resolution: "allowed_once" });
+
+  it("takes the role and the command from the request it closed", () => {
+    const byId = raisedRequests([raised, resolved]);
+    expect(eventRole(resolved, byId)).toBe("builder");
+    expect(summarizeWith(resolved, byId)).toBe("Allowed once: git status");
+  });
+
+  it("falls back to the bare outcome when the request is not in the journal", () => {
+    const byId = raisedRequests([resolved]);
+    expect(eventRole(resolved, byId)).toBe("");
+    expect(summarizeWith(resolved, byId)).toBe("Allowed once");
+  });
+
+  it("leaves every other row as it was", () => {
+    const byId = raisedRequests([raised]);
+    expect(eventRole(event("DelegationStarted", { role: "reviewer" }), byId)).toBe("reviewer");
+    expect(summarizeWith(event("TeamStopped", {}), byId)).toBe(summarize(event("TeamStopped", {})));
   });
 });
 

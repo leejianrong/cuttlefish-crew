@@ -22,6 +22,21 @@ export interface LastRun {
   notRun: string[];
 }
 
+// What the delegations put in front of the model's own words ("kopicode finished with no edit
+// needed (completed): <words>", "Codex edited 2 file(s): <words>"). Claude Code's summary is
+// the model's words alone, apart from its bare "Claude Code finished (success)" fallback.
+const STATUS_HEAD =
+  /^(?:kopicode (?:edited \d+ file\(s\)|finished with no edit needed)(?: \([^)]*\))?|Codex (?:edited \d+ file\(s\)|finished with no edit needed)|Claude Code finished \([^)]*\))/;
+
+/** The model's own words from a delegation summary, without the status string in front of them;
+ * "" when the summary is only that status string (the model said nothing). */
+export function modelWords(summary: string): string {
+  const head = STATUS_HEAD.exec(summary);
+  if (head === null) return summary.trim();
+  const rest = summary.slice(head[0].length);
+  return rest.startsWith(": ") ? rest.slice(2).trim() : "";
+}
+
 /** The run that just ended, or null while nothing has run yet or a role is still working or
  * waiting (a run that is not running but not over either is not described as over). */
 export function lastRun(
@@ -47,9 +62,8 @@ export function lastRun(
       const edited = event.payload.edited_paths;
       if (Array.isArray(edited)) for (const path of edited) paths.add(String(path));
       const { role, summary } = event.payload;
-      if (typeof role === "string" && typeof summary === "string" && summary.trim() !== "") {
-        said.set(role, summary.trim());
-      }
+      const words = typeof summary === "string" ? modelWords(summary) : "";
+      if (typeof role === "string" && words !== "") said.set(role, words);
     }
     if (event.event_type === "TaskFailed") {
       const role = event.payload.role;

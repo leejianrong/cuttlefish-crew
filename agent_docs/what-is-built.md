@@ -608,3 +608,9 @@ before the cancel was seen, so the log never said "not applied". `FleetDaemon.st
 episodic events it already fetches at each boundary (no new durable task, so replay of a run in flight is unchanged) and ends the role before any steer, approval wait or continuation. The unapplied steer
 then reads "not applied: the run ended first". A failed Stop journals nothing. Covered by `tests/unit/test_team_stop_drops_steer.py` (a control without the event still runs the second round) and the two
 daemon tests in `tests/integration/test_fleet_daemon.py`. Not reproduced against real kopicode; the fake `kopicode serve` stands in. Stop is still team-wide and still waits for the running round.
+
+small UI batch (CUT-109, 2026-10-14), frontend only: a rule saved from Needs you joins the Permissions draft at once (`withNewlySaved` in `team.ts`; the draft used to keep the old list, so the rule showed only
+after a reload); the Always-allow input has an `aria-label`; an Answered row in the activity log names the request's role and command, read from its `RequestRaised` (`raisedRequests`, `eventRole`,
+`summarizeWith` in `events.ts`); the Overview's "said" block shows the model's words without kopicode's or Codex's status string in front (`modelWords` in `lastrun.ts`; none shown when the model said nothing)
+and says when the run was stopped; portfolio cards print each role's status beside its sprite. Checked with unit tests, `npm run check` and the build; the phone-width and keyboard pass the card asks for was not
+repeated in a browser, and the unnamed-input finding was not reproduced (the input sits inside a `<label>`), so the `aria-label` is a belt-and-braces fix.

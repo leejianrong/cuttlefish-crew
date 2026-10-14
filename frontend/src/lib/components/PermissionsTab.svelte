@@ -12,7 +12,9 @@
     sameSet,
     saveFailure,
     togglePreset,
+    withNewlySaved,
   } from "../team";
+  import { untrack } from "svelte";
   import Icon from "./Icon.svelte";
 
   let {
@@ -51,6 +53,15 @@
   let saved = $state(false);
 
   const savedExtras = $derived(allowToLines(project.allow));
+  // A rule saved from outside this tab (Always allow on Needs you) joins the draft at once.
+  let previousSaved = allowToLines(saved0().allow);
+  $effect(() => {
+    const now = savedExtras;
+    untrack(() => {
+      if (!sameSet(now, previousSaved)) extras = withNewlySaved(extras, previousSaved, now);
+      previousSaved = now;
+    });
+  });
   const dirty = $derived(
     mode !== project.mode ||
       !sameSet(presets, project.presets) ||

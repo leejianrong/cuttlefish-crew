@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { EpisodicEventView } from "./api";
-import { lastRun, notRunText, runFigures, runHeading } from "./lastrun";
+import { lastRun, modelWords, notRunText, runFigures, runHeading } from "./lastrun";
 
 function event(
   ts: string,
@@ -38,6 +38,28 @@ describe("lastRun", () => {
     ];
     const run = lastRun(said, { builder: "done", reviewer: "done" }, usage);
     expect(run?.answers).toEqual([{ role: "builder", text: "Linux box 6.1" }]);
+  });
+
+  it("shows the model's words without the delegation's status string in front (CUT-109)", () => {
+    expect(modelWords("kopicode finished with no edit needed (completed): Linux box 6.1")).toBe("Linux box 6.1");
+    expect(modelWords("kopicode edited 2 file(s) (completed): added remove(): done: yes")).toBe("added remove(): done: yes");
+    expect(modelWords("Codex edited 3 file(s): fixed it")).toBe("fixed it");
+    expect(modelWords("Claude Code said this: and that")).toBe("Claude Code said this: and that");
+    expect(modelWords("I ran uname: Linux")).toBe("I ran uname: Linux");
+  });
+
+  it("has no words to show when the summary is only the status string", () => {
+    expect(modelWords("kopicode finished with no edit needed (completed)")).toBe("");
+    expect(modelWords("Codex finished with no edit needed")).toBe("");
+    expect(modelWords("Claude Code finished (success)")).toBe("");
+    const bare = [
+      event("2026-10-10T10:00:00Z", "TaskSubmitted"),
+      event("2026-10-10T10:03:00Z", "DelegationCompleted", {
+        role: "builder",
+        summary: "kopicode finished with no edit needed (completed)",
+      }),
+    ];
+    expect(lastRun(bare, { builder: "done" }, usage)?.answers).toEqual([]);
   });
 
   it("is failed when any role failed, and carries its reason", () => {

@@ -207,6 +207,39 @@ export function isRefusedCommand(event: EpisodicEventView): boolean {
   return event.event_type === "ConsentDecided" && event.payload.answer === "deny";
 }
 
+/** The request each `RequestRaised` opened, by id: what a later `RequestResolved` row needs to say
+ * whose request it was and what it was about (the resolved event itself carries only the id). */
+export function raisedRequests(events: readonly EpisodicEventView[]): Map<string, EpisodicEventView> {
+  const found = new Map<string, EpisodicEventView>();
+  for (const event of events) {
+    if (event.event_type === "RequestRaised") found.set(String(event.payload.request_id), event);
+  }
+  return found;
+}
+
+/** The role a row belongs to: its own, or for an answer the role of the request it closed. */
+export function eventRole(
+  event: EpisodicEventView,
+  raised: ReadonlyMap<string, EpisodicEventView>,
+): string {
+  const own = event.payload.role;
+  if (typeof own === "string") return own;
+  if (event.event_type !== "RequestResolved") return "";
+  const role = raised.get(String(event.payload.request_id))?.payload.role;
+  return typeof role === "string" ? role : "";
+}
+
+/** How a request ended, with the command or question it was about when the journal still has it. */
+export function summarizeWith(
+  event: EpisodicEventView,
+  raised: ReadonlyMap<string, EpisodicEventView>,
+): string {
+  const text = summarize(event);
+  if (event.event_type !== "RequestResolved") return text;
+  const detail = raised.get(String(event.payload.request_id))?.payload.detail;
+  return typeof detail === "string" && detail !== "" ? `${text}: ${commandText(detail)}` : text;
+}
+
 export function summarize(event: EpisodicEventView): string {
   const p = event.payload;
   switch (event.event_type) {

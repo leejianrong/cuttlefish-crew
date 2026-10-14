@@ -176,7 +176,13 @@
     <div class="always">
       <label class="field rule">
         <span class="field-label">Always allow commands that start with</span>
-        <input class="mono" bind:value={rule} spellcheck="false" autocomplete="off" />
+        <input
+          class="mono"
+          bind:value={rule}
+          spellcheck="false"
+          autocomplete="off"
+          aria-label="Always allow commands that start with"
+        />
       </label>
       <button
         class="btn btn-tonal"
