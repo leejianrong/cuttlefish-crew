@@ -422,3 +422,31 @@ def test_forget_drops_only_that_key(tmp_path: Path) -> None:
     assert codex_threads.recall(root, "a") is None
     assert codex_threads.recall(root, "b") == "2"
     codex_threads.forget(root, "missing")
+
+
+async def test_a_running_turn_takes_a_steer_at_once(fake: Fake) -> None:
+    from cuttlefish.delegate import codex_live
+
+    backend = fake.script({"steps": [{"steer": True}], "final": "steered"})
+    root = str(fake.root)
+    task = asyncio.create_task(fake.run(backend, live_role="dev"))
+    for _ in range(200):
+        if codex_live.is_live(root, "dev"):
+            break
+        await asyncio.sleep(0.05)
+    assert codex_live.is_live(root, "dev")
+    assert await codex_live.steer(root, "dev", "use tabs") is True
+    outcome = await task
+    assert outcome.kind == "completed"
+    sent = fake.sent("turn/steer")[0]["params"]
+    assert sent["threadId"] == "th1" and sent["expectedTurnId"] == "tu1"
+    assert sent["input"] == [{"type": "text", "text": "use tabs"}]
+    assert not codex_live.is_live(root, "dev")
+
+
+async def test_a_steer_with_no_running_turn_is_not_taken(fake: Fake) -> None:
+    from cuttlefish.delegate import codex_live
+
+    assert await codex_live.steer(str(fake.root), "dev", "hello") is False
+    await fake.run(fake.script({}), live_role="dev")
+    assert await codex_live.steer(str(fake.root), "dev", "late") is False

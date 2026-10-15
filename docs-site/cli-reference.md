@@ -65,7 +65,7 @@ written. `TASK_ID` is the id `run`/`run-team` printed at start.
 
 Redirect a still-running `--steerable` task or team role. `--role` is
 required for a team (which role to steer), omitted for a plain `run` task.
-Takes effect at the next round boundary, not mid-flight.
+Takes effect at the next round boundary, not mid-flight. (The dashboard's steer is different for a Codex role: it goes into the turn that is running, [ADR-0033](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0033-a-codex-turn-in-flight-takes-a-steer-through-turn-steer.md).)
 
 ## `cuttlefish approve TASK_ID [--role ROLE] [--reject COMMENT]`
 

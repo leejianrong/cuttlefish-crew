@@ -22,9 +22,12 @@ A file edit is asked about too (``item/fileChange/requestApproval``, verified li
 in-root ``apply_patch`` ran unasked, but under ``untrusted`` it does not). It names no paths, so
 they are read from the item's own ``item/started``; an edit with every path in the root is accepted.
 
+A person steering mid-round is ``turn/steer`` (CUT-92, ADR-0033; see
+``cuttlefish.delegate.codex_live``).
+
 Out of scope here: ``item/tool/requestUserInput`` (behind a feature flag Codex lists as under
-development, so it is never enabled and never arrives), a person steering mid-round
-(``turn/steer``), and a file edit that asks for a wider grant.
+development, so it is never enabled and never arrives), and a file edit that asks for a wider
+grant.
 """
 
 from __future__ import annotations
@@ -48,7 +51,7 @@ from cuttlefish.agents.outcome import (
     describe_refusals,
 )
 from cuttlefish.broker import Lease
-from cuttlefish.delegate import codex_threads
+from cuttlefish.delegate import codex_live, codex_threads
 from cuttlefish.delegate.codex import codex_provider_args, codex_shell_policy_args
 from cuttlefish.delegate.consent import ConsentDecision
 from cuttlefish.delegate.kopicode_serve import Decider
@@ -447,12 +450,16 @@ async def run_codex_app_server(
     timeout: float | None = None,
     lease: Lease | None = None,
     thread_key: str | None = None,
+    live_role: str | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as one turn on one thread, and classify what it did.
 
     ``thread_key`` (CUT-92) names the conversation to continue: when ``root`` remembers a thread
     for it, the turn runs on that thread (``thread/resume``); otherwise, or when Codex no longer
     has it, a new one is started and remembered. ``None`` always starts a new thread.
+
+    ``live_role`` (CUT-92, ADR-0033) makes the running turn steerable by that role's name
+    (``cuttlefish.delegate.codex_live``).
 
     ``lease`` (ADR-0031) points Codex at the credential broker through a provider of its own.
 
@@ -484,6 +491,7 @@ async def run_codex_app_server(
     thread_id: str | None = None
     turn_id: str | None = None
     timed_out = False
+    live: codex_live.LiveTurn | None = None
     try:
         await connection.request(
             "initialize", {"clientInfo": {"name": "cuttlefish-crew", "version": "0"}}
@@ -527,6 +535,8 @@ async def run_codex_app_server(
         )
         started_turn = turn.get("turn")
         turn_id = started_turn.get("id") if isinstance(started_turn, Mapping) else None
+        if live_role and isinstance(turn_id, str):
+            live = _register_live(connection, root, live_role, thread_id, turn_id)
         try:
             await asyncio.wait_for(asyncio.shield(connection.turn_done), timeout)
         except TimeoutError:
@@ -541,6 +551,8 @@ async def run_codex_app_server(
             process.kill()
         raise DelegationError(f"{exc}; stderr: {tail or '<empty>'}" if tail else str(exc)) from exc
     finally:
+        if live is not None and live_role:
+            codex_live.unregister(root, live_role, live)
         await asyncio.shield(connection.close())
 
     outcome = round_.outcome()
@@ -554,6 +566,24 @@ async def run_codex_app_server(
             failure_kind="round_timeout",
         )
     return outcome
+
+
+def _register_live(
+    connection: _Connection, root: str, role: str, thread_id: str, turn_id: str
+) -> codex_live.LiveTurn:
+    async def send(text: str) -> object:
+        return await connection.request(
+            "turn/steer",
+            {
+                "threadId": thread_id,
+                "expectedTurnId": turn_id,
+                "input": [{"type": "text", "text": text}],
+            },
+        )
+
+    live = codex_live.LiveTurn(send=send, loop=asyncio.get_running_loop())
+    codex_live.register(root, role, live)
+    return live
 
 
 async def _interrupt(connection: _Connection, thread_id: str | None, turn_id: str | None) -> None:

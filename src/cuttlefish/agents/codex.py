@@ -108,10 +108,12 @@ class CodexBackend:
         limits: Mapping[str, int] | None = None,
         lease: Lease | None = None,
         session: str | None = None,
+        live_role: str | None = None,
     ) -> DelegationOutcome:
         """``session`` (CUT-92) is the conversation to continue, normally the role's name; it takes
         effect only with ``CUTTLEFISH_CODEX_RESUME=1`` and only over ``app-server``, and the
         thread id is kept in the project root (``cuttlefish.delegate.codex_threads``).
+        ``live_role`` (ADR-0033) names the role whose running turn the fleet daemon may steer.
         ``lease`` (ADR-0031) is the broker's stand-in for the key, taken by a delegation that
         runs on the host; a sandbox cannot reach the daemon's loopback and is given none.
         ``asker`` (ADR-0028) lets a command nothing approves be put to a person; only the
@@ -134,6 +136,7 @@ class CodexBackend:
                 thread_key=(session or codex_threads.DEFAULT_KEY)
                 if codex_threads.resume_enabled()
                 else None,
+                live_role=live_role,
             )
         if sandbox_provider is None:
             return await run_codex(

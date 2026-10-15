@@ -23,6 +23,7 @@ import pytest
 from cuttlefish.episodic.events import (
     DelegationCompleted,
     DelegationRefused,
+    SteeringMessage,
     SteeringQueued,
     StopRequested,
 )
@@ -186,6 +187,40 @@ async def test_a_delivered_steer_is_journaled_at_once_as_queued(
     assert delivered[0]["text"] == "use tabs"
     queued = [e.payload for e in store.read("team-1") if isinstance(e.payload, SteeringQueued)]
     assert queued == [SteeringQueued(text="use tabs", role="builder")]
+    store.close()
+
+
+async def test_a_steer_into_a_running_codex_turn_is_applied_at_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADR-0033: no queued message and no round boundary; both journal lines are written now."""
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    daemon._team_stores["team-1"] = store
+    running = SimpleNamespace(team_id="team-1", base_url="http://x", token="t")
+    monkeypatch.setattr(daemon, "running", lambda _project_id: running)
+    taken: list[tuple[str, str, str]] = []
+
+    async def live(root: str, role: str, text: str) -> bool:
+        taken.append((root, role, text))
+        return True
+
+    monkeypatch.setattr("cuttlefish.fleet.daemon.codex_live.steer", live)
+
+    def never(**_kwargs: Any) -> None:
+        raise AssertionError("a live steer must not also be queued")
+
+    monkeypatch.setattr("cuttlefish.fleet.daemon.send_steering_message", never)
+
+    await daemon.steer(project.id, "builder", "use tabs")
+
+    assert taken == [(project.root, "builder", "use tabs")]
+    payloads = [e.payload for e in store.read("team-1")]
+    assert payloads == [
+        SteeringQueued(text="use tabs", role="builder"),
+        SteeringMessage(text="use tabs", role="builder"),
+    ]
     store.close()
 
 

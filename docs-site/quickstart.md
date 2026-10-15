@@ -75,7 +75,10 @@ uv run cuttlefish steer <task-id> "actually use .dockerignore instead" --role bu
 
 A steering message takes effect at the boundary between delegation rounds,
 not mid-flight — it waits for whatever round is currently running to
-finish first. This is a deliberate limit
+finish first. The exception is a Codex role steered from the dashboard: the
+message goes into its running turn at once
+([ADR-0033](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0033-a-codex-turn-in-flight-takes-a-steer-through-turn-steer.md)).
+Otherwise this is a deliberate limit
 ([ADR-0008](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0008-steering-is-a-round-boundary-redirect-not-a-mid-flight-interrupt.md)),
 not a missing feature.
 

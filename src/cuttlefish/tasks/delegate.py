@@ -108,10 +108,15 @@ async def delegate_to_agent_backend(
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
-    if codex_threads.resume_enabled() and getattr(backend, "NAME", None) == "codex":
-        # CUT-92: the conversation this round continues. Not a task argument, so recorded calls
-        # and replay are unchanged, and passed only when continuity is on.
-        mode_kwargs["session"] = (requests.role_for(task_text) if requests else None) or None
+    if getattr(backend, "NAME", None) == "codex":
+        # CUT-92: the role this round belongs to. Not a task argument, so recorded calls and
+        # replay are unchanged. `session` (the conversation to continue) only when continuity is
+        # on; `live_role` (who can steer the running turn, ADR-0033) only inside the daemon.
+        role = requests.role_for(task_text) if requests else None
+        if codex_threads.resume_enabled():
+            mode_kwargs["session"] = role
+        if role:
+            mode_kwargs["live_role"] = role
     if limits and backend.NAME in ("kopicode", "codex", "claude-code"):
         mode_kwargs["limits"] = limits
     # ADR-0031: when the daemon runs a broker, the agent is leased its model key instead of

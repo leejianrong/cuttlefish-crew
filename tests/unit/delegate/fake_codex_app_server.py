@@ -10,6 +10,7 @@ is appended to ``<log>``. The scenario is a JSON object:
   ``{"file_approval": [<paths>], "grant_root": <dir>?}`` starts a ``fileChange`` item and sends
   ``item/fileChange/requestApproval`` for it, completing it if the reply accepts;
   ``{"request": "<method>", "params": {...}}`` sends that server request and waits for the reply;
+  ``{"steer": true}`` waits for ``turn/steer`` and answers it with the turn's id;
   ``{"hang": true}`` waits for ``turn/interrupt``, answers it and ends the turn ``interrupted``.
 ``resume_fails``: answer ``thread/resume`` with an error, then expect ``thread/start``.
 ``final``: the final answer text (default ``done``). ``crash``: exit at once after the handshake.
@@ -130,6 +131,8 @@ for step in scenario.get("steps", []):
             send({"method": "item/completed", "params": {"item": {**item, "status": "completed"}}})
     elif "request" in step:
         ask(step["request"], step.get("params", {}))
+    elif step.get("steer"):
+        answer(read_until(lambda m: m.get("method") == "turn/steer"), {"turnId": "tu1"})
     elif step.get("hang"):
         interrupt = read_until(lambda m: m.get("method") == "turn/interrupt")
         answer(interrupt, {})

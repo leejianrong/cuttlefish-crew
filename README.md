@@ -139,7 +139,7 @@ the team starts; details per backend are in the
 [CLI reference](https://leejianrong.github.io/cuttlefish-crew/docs/cli-reference/#permission-modes).
 
 **6. Steer, review, stop.** While a role is running you can send it a
-redirect; it lands at the next round boundary, not mid-flight. Turn on **Approve
+redirect; a Codex role takes it at once, any other role at the next round boundary. Turn on **Approve
 each round before it ends** before starting to review a round first. **Stop team**
 asks the agent to finish its current step and stop. When it is done, see what the
 crew did:

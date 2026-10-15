@@ -37,12 +37,14 @@ from cuttlefish import environment, envprep, logsetup, runtime
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run
+from cuttlefish.delegate import codex_live
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import (
     EnvironmentPrepared,
     EnvironmentPrepareStarted,
     EventPayload,
     RequestResolved,
+    SteeringMessage,
     SteeringQueued,
     StopRequested,
     TaskFailed,
@@ -889,6 +891,14 @@ class FleetDaemon:
         running = self.running(project_id)
         if running is None:
             raise FleetError(f"project {project_id!r} has no running team to steer")
+        # A Codex role mid-turn takes the message at once (ADR-0033); anything else, or a turn
+        # that has just ended, is queued for the round boundary as before.
+        if await codex_live.steer(self._projects.get(project_id).root, role, text):
+            if running.team_id in self._team_stores:
+                self._append_for_team(running.team_id, SteeringQueued(text=text, role=role))
+                self._append_for_team(running.team_id, SteeringMessage(text=text, role=role))
+            self.requests.supersede(running.team_id, role)
+            return
         try:
             await asyncio.to_thread(
                 send_steering_message,

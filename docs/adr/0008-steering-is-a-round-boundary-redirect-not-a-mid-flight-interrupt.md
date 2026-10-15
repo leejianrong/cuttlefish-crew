@@ -1,6 +1,6 @@
 # ADR-0008: Steering redirects at a delegation round's boundary, not mid-flight; delivered over satay's control API
 
-- Status: Accepted
+- Status: Accepted. Partly superseded by [ADR-0033](0033-a-codex-turn-in-flight-takes-a-steer-through-turn-steer.md) for a Codex turn steered through the fleet daemon
 - Date: 2026-09-21
 - Deciders: Jian
 

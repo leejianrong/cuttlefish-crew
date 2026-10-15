@@ -188,4 +188,4 @@ and this folder disagree after a slice lands, update this folder.
   blocked colour) and a one-line note pointing to Needs you. The steer box keeps a permanent hint under it
   (applies at the end of the round, stopping first drops it) instead of a placeholder that vanishes. A sent
   steer is journaled at once as `SteeringQueued` and shows in the activity log as "You" with what became of
-  it: sent, applied at the round boundary, or not applied because the run ended first.
+  it: sent, applied (at once for a Codex role, else at the round boundary), or not applied because the run ended first.

@@ -400,6 +400,6 @@ export function steerFates(events: readonly EpisodicEventView[]): Map<number, St
 
 export const STEER_FATE_TEXT: Record<SteerFate, string> = {
   waiting: "sent; applies when the round ends",
-  applied: "applied at the round boundary",
+  applied: "applied",
   dropped: "not applied: the run ended first",
 };
