@@ -537,8 +537,9 @@ async def test_a_codex_round_is_given_its_session_only_when_resume_is_on(
     backend = _NamedRecordingBackend()
     monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
     if switch:
-        monkeypatch.setenv("CUTTLEFISH_CODEX_RESUME", switch)
+        monkeypatch.setenv("CUTTLEFISH_RESUME", switch)
     else:
+        monkeypatch.delenv("CUTTLEFISH_RESUME", raising=False)
         monkeypatch.delenv("CUTTLEFISH_CODEX_RESUME", raising=False)
     store = EpisodicStore.open(tmp_path / "episodic.db")
     runtime.configure(

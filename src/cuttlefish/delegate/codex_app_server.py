@@ -51,7 +51,7 @@ from cuttlefish.agents.outcome import (
     describe_refusals,
 )
 from cuttlefish.broker import Lease
-from cuttlefish.delegate import codex_live, codex_threads
+from cuttlefish.delegate import codex_live, conversations
 from cuttlefish.delegate.codex import codex_provider_args, codex_shell_policy_args
 from cuttlefish.delegate.consent import ConsentDecision
 from cuttlefish.delegate.kopicode_serve import Decider
@@ -504,7 +504,7 @@ async def run_codex_app_server(
             **({"model": model} if model else {}),
         }
         started: Mapping[str, Any] | None = None
-        remembered = codex_threads.recall(root, thread_key) if thread_key else None
+        remembered = conversations.recall(root, "codex", thread_key) if thread_key else None
         if remembered:
             try:
                 started = await connection.request(
@@ -516,7 +516,7 @@ async def run_codex_app_server(
                 _LOG.warning(
                     "codex thread %s could not be resumed (%s); starting a new one", remembered, exc
                 )
-                codex_threads.forget(root, thread_key or "")
+                conversations.forget(root, "codex", thread_key or "")
         if started is None:
             started = await connection.request("thread/start", thread_params)
         thread = started.get("thread")
@@ -524,7 +524,7 @@ async def run_codex_app_server(
         if not isinstance(thread_id, str):
             raise DelegationError("Codex app-server's thread/start returned no thread id")
         if thread_key:
-            codex_threads.remember(root, thread_key, thread_id)
+            conversations.remember(root, "codex", thread_key, thread_id)
         turn = await connection.request(
             "turn/start",
             {

@@ -38,7 +38,7 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.agents.registry import resolve_backend
 from cuttlefish.broker import BrokerRoute, Lease
-from cuttlefish.delegate import codex_threads
+from cuttlefish.delegate import conversations
 from cuttlefish.delegate.presets import read_only_allow, resolve_allow
 from cuttlefish.permissions import READ_ONLY
 from cuttlefish.secrets.store import DEFAULT_PROJECT
@@ -108,14 +108,16 @@ async def delegate_to_agent_backend(
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
-    if getattr(backend, "NAME", None) == "codex":
-        # CUT-92: the role this round belongs to. Not a task argument, so recorded calls and
-        # replay are unchanged. `session` (the conversation to continue) only when continuity is
-        # on; `live_role` (who can steer the running turn, ADR-0033) only inside the daemon.
+    backend_name = getattr(backend, "NAME", None)
+    if backend_name in ("codex", "claude-code"):
+        # CUT-92, CUT-93: the role this round belongs to. Not a task argument, so recorded calls
+        # and replay are unchanged. `session` (the conversation to continue) only when continuity
+        # is on; `live_role` (who can steer the running turn, ADR-0033) only for Codex, inside
+        # the daemon.
         role = requests.role_for(task_text) if requests else None
-        if codex_threads.resume_enabled():
+        if conversations.resume_enabled(backend_name):
             mode_kwargs["session"] = role
-        if role:
+        if backend_name == "codex" and role:
             mode_kwargs["live_role"] = role
     if limits and backend.NAME in ("kopicode", "codex", "claude-code"):
         mode_kwargs["limits"] = limits
