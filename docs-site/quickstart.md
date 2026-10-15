@@ -130,6 +130,11 @@ The **Agent session** card on a project's Overview (also the MCP tools `get_agen
 - **Stop session** ends it on purpose and it is not brought back at the next start; **Resume
   session** picks the same conversation up.
 
+The project's **Terminal** tab is that tmux session in the browser: type to the agent, answer its permission
+prompts, watch it work. It uses the same sign-in as the rest of the dashboard (the token on loopback, the
+password session otherwise), has a key row for a phone keyboard (Esc, Tab, Ctrl-C, arrows, Enter), and closing
+it leaves the agent running. With no session running it offers to start one.
+
 A tmux-hosted agent asks for permission in its own terminal. Needs you covers the team workflow
 ([ADR-0034](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0034-the-project-agent-runs-in-tmux-and-is-relaunched-with-its-own-resume-command.md)).
 

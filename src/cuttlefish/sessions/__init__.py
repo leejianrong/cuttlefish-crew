@@ -7,6 +7,15 @@ from cuttlefish.sessions.manager import (
     agent_env,
     default_socket,
 )
+from cuttlefish.sessions.terminal import PtyAttach
 from cuttlefish.sessions.tmux import Tmux
 
-__all__ = ["SessionError", "SessionInfo", "SessionManager", "Tmux", "agent_env", "default_socket"]
+__all__ = [
+    "PtyAttach",
+    "SessionError",
+    "SessionInfo",
+    "SessionManager",
+    "Tmux",
+    "agent_env",
+    "default_socket",
+]

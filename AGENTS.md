@@ -96,7 +96,8 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **The agent in tmux (CUT-95, ADR-0034) lives on its own tmux socket**, `~/.cuttlefish/tmux.sock` (a short
   hashed path under `/tmp` when `HOME` is deep), never your own tmux. Tests and scratch runs get a separate server
   from a scratch `HOME`. It asks for permission in its own terminal, not in Needs you. Kill a scratch one with
-  `tmux -S <socket> kill-server`, never `pkill`.
+  `tmux -S <socket> kill-server`, never `pkill`. The Terminal tab (ADR-0035) is a websocket whose first message
+  carries the token; it is typed access to an agent, so keep a non-loopback bind's password.
 - **`cuttlefish run` writes `.cuttlefish/` and `.satay/` into the current
   directory**, and the daemon writes them into each project's `--root`.
 - **The code beats prose.** Check a claim against the code before repeating

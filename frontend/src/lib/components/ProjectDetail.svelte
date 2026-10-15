@@ -27,6 +27,7 @@
   import RoleSteerCard from "./RoleSteerCard.svelte";
   import SecretsTab from "./SecretsTab.svelte";
   import Tabs from "./Tabs.svelte";
+  import TerminalView from "./TerminalView.svelte";
   import TeamTab from "./TeamTab.svelte";
 
   let {
@@ -102,6 +103,7 @@
 
   const TABS = $derived([
     { id: "overview", label: "Overview" },
+    { id: "terminal", label: "Terminal" },
     { id: "needs-you", label: "Needs you", badge: pending.length },
     { id: "permissions", label: "Permissions" },
     { id: "team", label: "Team" },
@@ -464,6 +466,10 @@
         onAnswered={refresh}
         offline={unreachable}
       />
+    </div>
+
+    <div id="panel-terminal" role="tabpanel" aria-labelledby="tab-terminal" hidden={tab !== "terminal"}>
+      <TerminalView {client} {projectId} active={tab === "terminal"} />
     </div>
 
     <div id="panel-permissions" role="tabpanel" aria-labelledby="tab-permissions" hidden={tab !== "permissions"}>
