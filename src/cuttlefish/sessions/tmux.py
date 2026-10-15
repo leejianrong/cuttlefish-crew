@@ -29,20 +29,20 @@ def session_name(project_id: str) -> str:
 class Tmux:
     def __init__(self, socket: Path, binary: str = "tmux") -> None:
         self.socket = socket
-        self._binary = binary
+        self.binary = binary
 
     def available(self) -> bool:
-        return shutil.which(self._binary) is not None
+        return shutil.which(self.binary) is not None
 
     def _run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
         if not self.available():
             raise TmuxError(
-                f"{self._binary!r} is not installed; the agent session needs tmux"
+                f"{self.binary!r} is not installed; the agent session needs tmux"
                 " (for example: apt install tmux)"
             )
         self.socket.parent.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
-            [self._binary, "-S", str(self.socket), *args],
+            [self.binary, "-S", str(self.socket), *args],
             capture_output=True,
             text=True,
             check=False,
@@ -74,14 +74,9 @@ class Tmux:
             "new-session", "-d", "-s", name, "-c", cwd, "-x", str(width), "-y", str(height),
             *command,
         )  # fmt: skip
+        # The dashboard's terminal view is the status line's only audience, and it has its own.
+        # (`set-option` takes a plain session name; the `=` exact-match form is refused.)
+        self._run("set-option", "-t", name, "status", "off")
 
     def kill_session(self, name: str) -> None:
         self._run("kill-session", "-t", f"={name}", check=False)
-
-    def send_keys(self, name: str, text: str, *, enter: bool = True) -> None:
-        self._run("send-keys", "-t", f"={name}", "-l", text)
-        if enter:
-            self._run("send-keys", "-t", f"={name}", "Enter")
-
-    def capture(self, name: str) -> str:
-        return self._run("capture-pane", "-t", f"={name}", "-p").stdout

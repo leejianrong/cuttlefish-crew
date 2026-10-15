@@ -3,15 +3,18 @@ daemon reattaching to, or relaunching, what the first left behind."""
 
 from __future__ import annotations
 
+import json
 import shutil
 import stat
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import satay.control
 from starlette.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
@@ -111,3 +114,95 @@ async def test_a_session_that_was_stopped_is_not_brought_back(rig: Rig) -> None:
     await daemon.stop_agent_session(project.id)
     assert await rig.daemon().reconcile_agent_sessions() == []
     assert (await rig.daemon().agent_session(project.id)).state == "stopped"
+
+
+# -- the terminal websocket (CUT-96) ---------------------------------------------------------------
+
+
+def _echoer(rig: Rig) -> None:
+    """Make the fake `claude` an interactive thing a terminal can talk to."""
+    tool = rig.bin / "claude"
+    tool.write_text(
+        f'#!/bin/sh\necho "claude $@" >> {rig.log}\necho READY\n'
+        'while IFS= read -r line; do echo "pong: $line"; done\n'
+    )
+
+
+def _read_until(ws: Any, needle: bytes, tries: int = 60) -> bytes:
+    seen = b""
+    for _ in range(tries):
+        message = ws.receive()
+        if message.get("bytes"):
+            seen += message["bytes"]
+            if needle in seen:
+                return seen
+    raise AssertionError(f"never saw {needle!r}; got {seen[-200:]!r}")
+
+
+def _connect(client: TestClient, path: str, **headers: str) -> Any:
+    """A websocket as a loopback browser would open it (the test client's own host is not)."""
+    return client.websocket_connect(path, headers={"host": "127.0.0.1", **headers})
+
+
+def _auth(ws: Any, token: str = "t", **extra: Any) -> None:
+    ws.send_text(json.dumps({"type": "auth", "token": token, **extra}))
+
+
+def test_the_terminal_needs_the_token_first(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    with _connect(client, f"/api/projects/{project.id}/terminal") as ws:
+        _auth(ws, token="wrong")
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+        assert closed.value.code == 4401
+    with _connect(client, f"/api/projects/{project.id}/terminal") as ws:
+        ws.send_text("hello")
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+        assert closed.value.code == 4400
+
+
+def test_a_foreign_origin_is_refused_even_with_the_right_token(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    with _connect(
+        client, f"/api/projects/{project.id}/terminal", origin="https://evil.example"
+    ) as ws:
+        _auth(ws)
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+        assert closed.value.code == 4401
+
+
+def test_a_project_with_no_running_session_says_so_and_is_not_started(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    daemon = rig.daemon()
+    client = _client(daemon)
+    with _connect(client, f"/api/projects/{project.id}/terminal") as ws:
+        _auth(ws)
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+        assert closed.value.code == 4404 and "start it from the Overview" in closed.value.reason
+    assert client.get(f"/api/projects/{project.id}/agent-session").json()["state"] == "none"
+    with _connect(client, "/api/projects/nope/terminal") as ws:
+        _auth(ws)
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+        assert closed.value.code == 4404
+
+
+def test_typing_in_the_terminal_reaches_the_agent_and_its_output_comes_back(rig: Rig) -> None:
+    _echoer(rig)
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    client.post(f"/api/projects/{project.id}/agent-session/start", json={})
+    with _connect(client, f"/api/projects/{project.id}/terminal") as ws:
+        _auth(ws, size={"cols": 100, "rows": 30})
+        assert json.loads(ws.receive_text()) == {"type": "ready"}
+        _read_until(ws, b"READY")
+        ws.send_text(json.dumps({"type": "resize", "cols": 80, "rows": 24}))
+        ws.send_bytes(b"over the wire\r")
+        _read_until(ws, b"pong: over the wire")
+    # closing the view left the agent running
+    assert client.get(f"/api/projects/{project.id}/agent-session").json()["state"] == "running"

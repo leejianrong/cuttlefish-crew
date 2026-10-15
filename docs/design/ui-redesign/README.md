@@ -195,3 +195,10 @@ and this folder disagree after a slice lands, update this folder.
   stopped and it was started again with its resume command), and a note that permission questions appear in the
   session's own terminal, not under Needs you. Neutral surface, success colour only on the running state; no coral
   (nothing needs a decision). It reads again every five seconds.
+- **Terminal tab (CUT-96, 2026-10-16).** A project page has a **Terminal** tab after Overview: the agent's real
+  tmux session in xterm.js, inside an `inverse-surface` panel (colours from the `--md-sys-*` roles, no raw hex), with
+  a status line ("Connected to the agent's tmux session") and, below it, a row of 44px keys for a phone keyboard
+  (Esc, Tab, Ctrl-C, the arrows, Enter). Under 640px the panel is 52dvh and the tab leaves room above the fixed bottom
+  nav. With no session running it says so and offers **Start the agent session**; a lost connection says the agent
+  is still running in tmux and offers **Reconnect**; a rejected sign-in offers nothing to retry. It opens only when
+  the tab is shown, and never starts a session by itself. No coral: nothing here needs a decision from you.

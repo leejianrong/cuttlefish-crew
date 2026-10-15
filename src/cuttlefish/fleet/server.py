@@ -26,7 +26,9 @@ as before.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
+import json
 import logging
 import socket
 from collections.abc import Awaitable, Callable, Collection, Sequence
@@ -36,7 +38,7 @@ from typing import Any
 
 import satay.control
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
@@ -308,6 +310,13 @@ def _budget_from_body(body: dict[str, Any]) -> tuple[int | None, float | None]:
     if max_cost_usd is not None and not isinstance(max_cost_usd, int | float):
         raise HTTPException(400, "'max_cost_usd', if given, must be a number")
     return max_tokens, float(max_cost_usd) if max_cost_usd is not None else None
+
+
+def _int(value: object, default: int) -> int:
+    """A positive terminal dimension off the wire, or ``default``."""
+    return (
+        value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
+    )
 
 
 async def _json_body(request: Request) -> dict[str, Any]:
@@ -825,6 +834,77 @@ def create_app(
             return (await daemon.stop_agent_session(project_id)).to_json()
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    @app.websocket("/api/projects/{project_id}/terminal")
+    async def terminal(websocket: WebSocket, project_id: str) -> None:
+        """A terminal onto the project's agent session (CUT-96, ADR-0035).
+
+        A browser cannot set a header on a websocket, and a token in the URL would reach logs, so
+        the first message is `{"type": "auth", "token": ...}`, checked with the same guard as every
+        other route, with the handshake's own `Host` and `Origin`. Then `{"type": "ready"}`, and
+        from there binary frames are the terminal's bytes in both directions, and a text frame
+        `{"type": "resize", "cols": N, "rows": N}` resizes it."""
+        await websocket.accept()
+        try:
+            first = json.loads(await asyncio.wait_for(websocket.receive_text(), 10))
+            token = first.get("token") if isinstance(first, dict) else None
+            if not isinstance(first, dict) or first.get("type") != "auth":
+                raise ValueError("expected an auth message first")
+            security.check(
+                token=token if isinstance(token, str) else None,
+                host=websocket.headers.get("host"),
+                origin=websocket.headers.get("origin"),
+            )
+        except satay.control.AuthError as exc:
+            _LOG.warning("terminal for %s rejected: %s %s", project_id, exc.status, exc.detail)
+            await websocket.close(code=4401, reason="not authorised")
+            return
+        except (ValueError, TimeoutError, WebSocketDisconnect):
+            await websocket.close(code=4400, reason="expected an auth message")
+            return
+        raw_size = first.get("size")
+        size: dict[str, Any] = raw_size if isinstance(raw_size, dict) else {}
+        try:
+            attach = await daemon.open_terminal(
+                project_id, cols=_int(size.get("cols"), 120), rows=_int(size.get("rows"), 32)
+            )
+        except ProjectNotFoundError:
+            await websocket.close(code=4404, reason="no such project")
+            return
+        except FleetError as exc:
+            await websocket.close(code=4404, reason=str(exc)[:120])
+            return
+        await websocket.send_text(json.dumps({"type": "ready"}))
+
+        async def to_client() -> None:
+            async for chunk in attach.read():
+                await websocket.send_bytes(chunk)
+
+        async def from_client() -> None:
+            while True:
+                message = await websocket.receive()
+                if message["type"] == "websocket.disconnect":
+                    return
+                if message.get("bytes") is not None:
+                    await attach.write(message["bytes"])
+                elif message.get("text"):
+                    try:
+                        control = json.loads(message["text"])
+                    except ValueError:
+                        continue
+                    if isinstance(control, dict) and control.get("type") == "resize":
+                        attach.resize(_int(control.get("cols"), 120), _int(control.get("rows"), 32))
+
+        pumps = [asyncio.create_task(to_client()), asyncio.create_task(from_client())]
+        try:
+            await asyncio.wait(pumps, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in pumps:
+                task.cancel()
+            await asyncio.gather(*pumps, return_exceptions=True)
+            await attach.close()
+            with contextlib.suppress(RuntimeError):
+                await websocket.close()
 
     @app.post("/api/projects/{project_id}/steer")
     async def steer_project(project_id: str, request: Request) -> dict[str, Any]:

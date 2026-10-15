@@ -1,7 +1,8 @@
 // Where the dashboard is, as a URL hash (`#/projects/abc/team`), so a reload, the browser's Back
 // button and a pasted link land on the same screen. Pure: no window, no history, just the mapping.
 
-export type ProjectTab = "overview" | "needs-you" | "permissions" | "team" | "secrets";
+export type ProjectTab =
+  "overview" | "terminal" | "needs-you" | "permissions" | "team" | "secrets";
 
 export type Route =
   | { view: "projects" }
@@ -14,6 +15,7 @@ export type Route =
 
 export const PROJECT_TABS: readonly ProjectTab[] = [
   "overview",
+  "terminal",
   "needs-you",
   "permissions",
   "team",
@@ -53,7 +55,11 @@ export function parseHash(hash: string): Route {
       } catch {
         return HOME;
       }
-      return { view: "project", id: decoded, tab: tab && isTab(tab) ? tab : "overview" };
+      return {
+        view: "project",
+        id: decoded,
+        tab: tab && isTab(tab) ? tab : "overview",
+      };
     }
     default:
       return HOME;

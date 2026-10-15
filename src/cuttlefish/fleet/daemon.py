@@ -78,6 +78,7 @@ from cuttlefish.secrets.store import (
     default_secrets_db,
 )
 from cuttlefish.sessions import (
+    PtyAttach,
     SessionError,
     SessionInfo,
     SessionManager,
@@ -332,6 +333,17 @@ class FleetDaemon:
             )
         except SessionError as exc:
             raise FleetError(str(exc)) from exc
+
+    async def open_terminal(self, project_id: str, *, cols: int, rows: int) -> PtyAttach:
+        """A view onto the project's running agent session (CUT-96). Raises `FleetError` when no
+        session is running: the view does not start one, so opening it is never a surprise."""
+        project = self._projects.get(project_id)
+        manager = self._session_manager()
+        info = await asyncio.to_thread(manager.status, project.id, project.root)
+        if info.state != "running":
+            raise FleetError("no agent session is running; start it from the Overview first")
+        tmux, name = manager.tmux_session(project.id)
+        return PtyAttach(tmux, name, cols=cols, rows=rows)
 
     async def stop_agent_session(self, project_id: str) -> SessionInfo:
         project = self._projects.get(project_id)

@@ -222,6 +222,10 @@ class SessionManager:
         _write(root, record)
         return self.status(project_id, root)
 
+    def tmux_session(self, project_id: str) -> tuple[Tmux, str]:
+        """The tmux server and session name a terminal view attaches to."""
+        return self._tmux, session_name(project_id)
+
     def stop(self, project_id: str, root: str) -> SessionInfo:
         """End the tmux session and stop reconciling it. The conversation stays on disk."""
         self._tmux.kill_session(session_name(project_id))

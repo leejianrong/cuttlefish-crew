@@ -157,7 +157,9 @@ project's agent (`claude`, `codex` or `kopicode`, the project's backend) in tmux
 restart `cuttlefish serve` and it is still there; the card says it was **reattached**. After a reboot
 tmux is gone, and the next `cuttlefish serve` starts the agent again with the tool's own resume
 command (**relaunched**), so the conversation carries on. It asks for permission in its own
-terminal, not under Needs you.
+terminal, not under Needs you: open the project's **Terminal** tab, which is the real tmux session in
+the browser (xterm.js), with a key row for a phone. It needs the same sign-in as the rest of the
+dashboard, and closing it leaves the agent running.
 
 ## Usage from the command line
 
