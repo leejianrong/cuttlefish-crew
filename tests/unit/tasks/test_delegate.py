@@ -516,3 +516,36 @@ async def test_a_key_the_backend_does_not_use_from_the_environment_is_not_broker
     store.close()
     secrets_store.close()
     assert [lease["key"] for lease in broker.leased] == (["stored-key"] if leased else [])
+
+
+class _NamedRecordingBackend(_RecordingBackend):
+    NAME = "codex"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.kwargs: dict[str, object] = {}
+
+    async def delegate(self, **kwargs: object) -> object:  # type: ignore[override]
+        self.kwargs = kwargs
+        return object()
+
+
+@pytest.mark.parametrize(("switch", "expected"), [("1", True), (None, False)])
+async def test_a_codex_round_is_given_its_session_only_when_resume_is_on(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, switch: str | None, expected: bool
+) -> None:
+    backend = _NamedRecordingBackend()
+    monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
+    if switch:
+        monkeypatch.setenv("CUTTLEFISH_CODEX_RESUME", switch)
+    else:
+        monkeypatch.delenv("CUTTLEFISH_CODEX_RESUME", raising=False)
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary="kopicode"
+        )
+    )
+    await delegate_to_agent_backend("t", str(tmp_path), allow=[["go", "test"]])
+    store.close()
+    assert ("session" in backend.kwargs) is expected

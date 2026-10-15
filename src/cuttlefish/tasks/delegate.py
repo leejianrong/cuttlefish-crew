@@ -38,6 +38,7 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.agents.registry import resolve_backend
 from cuttlefish.broker import BrokerRoute, Lease
+from cuttlefish.delegate import codex_threads
 from cuttlefish.delegate.presets import read_only_allow, resolve_allow
 from cuttlefish.permissions import READ_ONLY
 from cuttlefish.secrets.store import DEFAULT_PROJECT
@@ -107,9 +108,9 @@ async def delegate_to_agent_backend(
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
-    if backend.NAME == "codex":
-        # CUT-92: the conversation this round continues, when thread continuity is on. Not a task
-        # argument, so recorded calls and replay are unchanged.
+    if codex_threads.resume_enabled() and getattr(backend, "NAME", None) == "codex":
+        # CUT-92: the conversation this round continues. Not a task argument, so recorded calls
+        # and replay are unchanged, and passed only when continuity is on.
         mode_kwargs["session"] = (requests.role_for(task_text) if requests else None) or None
     if limits and backend.NAME in ("kopicode", "codex", "claude-code"):
         mode_kwargs["limits"] = limits
