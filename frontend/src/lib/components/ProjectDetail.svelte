@@ -14,6 +14,7 @@
   import type { ProjectTab } from "../route";
   import { keepIfSame } from "../same";
   import { modeLabel, startFailure } from "../team";
+  import AgentSessionCard from "./AgentSessionCard.svelte";
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
@@ -284,6 +285,8 @@
           {/each}
         </section>
       {/if}
+
+      <AgentSessionCard {client} {projectId} />
 
       {#if project.running && installing}
         <p class="banner" role="status">

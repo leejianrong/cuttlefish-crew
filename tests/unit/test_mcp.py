@@ -44,6 +44,9 @@ async def test_list_tools_exposes_exactly_the_expected_surface(server: Any) -> N
         "update_roles",
         "list_requests",
         "answer_request",
+        "get_agent_session",
+        "start_agent_session",
+        "stop_agent_session",
     }
 
 
@@ -319,4 +322,21 @@ async def test_set_project_budget_patches_only_the_given_fields(
             "/api/projects/abc/budget",
             {"max_cost_usd": 2.5},
         )
+    ]
+
+
+async def test_agent_session_tools_call_the_right_routes(
+    server: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _stub_request(monkeypatch, {"state": "running"})
+    await server.call_tool("get_agent_session", {"project_id": "abc"})
+    await server.call_tool("start_agent_session", {"project_id": "abc", "backend": "codex"})
+    await server.call_tool("start_agent_session", {"project_id": "abc"})
+    await server.call_tool("stop_agent_session", {"project_id": "abc"})
+    base = ("http://127.0.0.1:9999", "test-token")
+    assert calls == [
+        (*base, "GET", "/api/projects/abc/agent-session", None),
+        (*base, "POST", "/api/projects/abc/agent-session/start", {"backend": "codex"}),
+        (*base, "POST", "/api/projects/abc/agent-session/start", {}),
+        (*base, "POST", "/api/projects/abc/agent-session/stop", None),
     ]

@@ -258,6 +258,36 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
         )
 
     @server.tool()
+    async def get_agent_session(project_id: str) -> dict[str, Any]:
+        """Whether project_id's agent is running in tmux, which backend it is, and how it last came
+        up (started, reattached, or relaunched with its resume command)."""
+        return await asyncio.to_thread(
+            _request, base_url, token, "GET", f"/api/projects/{project_id}/agent-session"
+        )
+
+    @server.tool()
+    async def start_agent_session(project_id: str, backend: str | None = None) -> dict[str, Any]:
+        """Start project_id's agent in tmux, or reattach to it, or relaunch it with its own resume
+        command. backend is claude-code, codex or kopicode; it defaults to the project's own."""
+        body = {"backend": backend} if backend else {}
+        return await asyncio.to_thread(
+            _request,
+            base_url,
+            token,
+            "POST",
+            f"/api/projects/{project_id}/agent-session/start",
+            body,
+        )
+
+    @server.tool()
+    async def stop_agent_session(project_id: str) -> dict[str, Any]:
+        """End project_id's tmux agent session. The conversation stays on disk and is resumed by
+        the next start_agent_session."""
+        return await asyncio.to_thread(
+            _request, base_url, token, "POST", f"/api/projects/{project_id}/agent-session/stop"
+        )
+
+    @server.tool()
     async def steer_project(project_id: str, role: str, text: str) -> dict[str, Any]:
         """Redirect a still-running role's work at its next round boundary."""
         body = {"role": role, "text": text}

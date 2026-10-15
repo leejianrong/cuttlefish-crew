@@ -799,6 +799,33 @@ def create_app(
             raise HTTPException(409, str(exc)) from exc
         return {"status": "stopping"}
 
+    @app.get("/api/projects/{project_id}/agent-session")
+    async def agent_session(project_id: str) -> dict[str, Any]:
+        try:
+            return (await daemon.agent_session(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/agent-session/start")
+    async def start_agent_session(project_id: str, request: Request) -> dict[str, Any]:
+        body = await _json_body(request)
+        backend = body.get("backend")
+        if backend is not None and not isinstance(backend, str):
+            raise HTTPException(400, "'backend', if given, must be a string")
+        try:
+            return (await daemon.start_agent_session(project_id, backend)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (FleetError, ConfigError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/agent-session/stop")
+    async def stop_agent_session(project_id: str) -> dict[str, Any]:
+        try:
+            return (await daemon.stop_agent_session(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.post("/api/projects/{project_id}/steer")
     async def steer_project(project_id: str, request: Request) -> dict[str, Any]:
         body = await _json_body(request)

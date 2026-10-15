@@ -189,3 +189,9 @@ and this folder disagree after a slice lands, update this folder.
   (applies at the end of the round, stopping first drops it) instead of a placeholder that vanishes. A sent
   steer is journaled at once as `SteeringQueued` and shows in the activity log as "You" with what became of
   it: sent, applied (at once for a Codex role, else at the round boundary), or not applied because the run ended first.
+- **Agent session card (CUT-95, 2026-10-16).** The project Overview has an **Agent session** card above the team
+  form: the state (Running in tmux, Stopped, Not started) with the backend's name, Start, Resume or Stop session,
+  one sentence on how it last came up (started a new session, found it still running and reattached, or tmux had
+  stopped and it was started again with its resume command), and a note that permission questions appear in the
+  session's own terminal, not under Needs you. Neutral surface, success colour only on the running state; no coral
+  (nothing needs a decision). It reads again every five seconds.
