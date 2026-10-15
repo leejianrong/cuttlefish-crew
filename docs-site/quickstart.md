@@ -116,7 +116,24 @@ is stopped, and the card shows its last failing command. Nothing is waiting for 
 environment, then steer that role from the project page; the card ends when you do.
 `CUTTLEFISH_STUCK_THRESHOLD` changes the five, and `0` turns the check off.
 
-## 6. Reach it from another device
+## 6. Keep an agent running in tmux
+
+The **Agent session** card on a project's Overview (also the MCP tools `get_agent_session`,
+`start_agent_session` and `stop_agent_session`) starts the project's agent, whichever of
+`claude`, `codex` or `kopicode` the project uses, inside tmux. Needs `tmux` installed.
+
+- Close the browser, or restart `cuttlefish serve`: the agent keeps running, and the card says
+  it **reattached**.
+- Reboot: tmux is gone. The next `cuttlefish serve` starts the agent again with the tool's own
+  resume command, and the card says it was **relaunched**. Resume is `claude --resume <id>`,
+  `codex resume --last` or `kopicode -resume <id>`.
+- **Stop session** ends it on purpose and it is not brought back at the next start; **Resume
+  session** picks the same conversation up.
+
+A tmux-hosted agent asks for permission in its own terminal. Needs you covers the team workflow
+([ADR-0034](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0034-the-project-agent-runs-in-tmux-and-is-relaunched-with-its-own-resume-command.md)).
+
+## 7. Reach it from another device
 
 ```bash
 cuttlefish serve --tailscale

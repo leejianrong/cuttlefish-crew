@@ -2,7 +2,8 @@
 // `cuttlefish.fleet.server`). Hand-written types mirroring the Python dataclasses
 // that slice adds -- no OpenAPI-codegen machinery for five routes.
 
-export type RoleStatus = "queued" | "working" | "blocked" | "done" | "failed" | "stopped";
+export type RoleStatus =
+  "queued" | "working" | "blocked" | "done" | "failed" | "stopped";
 
 /** A project's permission mode (ADR-0025). */
 export type PermissionMode = "ask-first" | "standard" | "auto";
@@ -150,7 +151,11 @@ export interface PrepareInfo {
   setting: PrepareSetting;
   steps: PrepareStepView[];
   /** Ecosystems cuttlefish cannot install yet, with why: shown, never hidden. */
-  unsupported: { ecosystem: EcosystemEnv["ecosystem"]; name: string; reason: string }[];
+  unsupported: {
+    ecosystem: EcosystemEnv["ecosystem"];
+    name: string;
+    reason: string;
+  }[];
   /** Projects whose install ran and made no folder: no dependencies, so nothing is missing. */
   nothing_to_install?: { ecosystem: EcosystemEnv["ecosystem"]; path: string }[];
 }
@@ -204,7 +209,8 @@ export interface EpisodicEventView {
 }
 
 /** What a person may answer a request with (ADR-0028). */
-export type RequestAnswer = "allow_once" | "allow_always" | "deny" | "answer" | "decline";
+export type RequestAnswer =
+  "allow_once" | "allow_always" | "deny" | "answer" | "decline";
 
 export type RequestResolution =
   | "allowed_once"
@@ -303,7 +309,10 @@ export async function fetchAuthMode(baseUrl: string): Promise<AuthMode> {
 /** `POST /api/login` (password mode only) -- exchanges the operator's password
  * for a short-lived session token, used exactly like the static token from then
  * on (the same `x-cuttlefish-token` header). */
-export async function login(baseUrl: string, password: string): Promise<string> {
+export async function login(
+  baseUrl: string,
+  password: string,
+): Promise<string> {
   let response: Response;
   try {
     response = await fetch(`${baseUrl}/api/login`, {
@@ -315,8 +324,13 @@ export async function login(baseUrl: string, password: string): Promise<string> 
     throw new FleetUnreachableError(baseUrl);
   }
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new FleetApiError(response.status, body.detail ?? response.statusText);
+    const body = await response
+      .json()
+      .catch(() => ({ detail: response.statusText }));
+    throw new FleetApiError(
+      response.status,
+      body.detail ?? response.statusText,
+    );
   }
   return ((await response.json()) as { token: string }).token;
 }
@@ -351,6 +365,16 @@ export interface SharedSecrets {
   shared: SharedSecretRow[];
 }
 
+/** A project's agent in tmux (CUT-95): whether it is up, and how it last got there. */
+export interface AgentSession {
+  state: "running" | "stopped" | "none";
+  tmux_session: string;
+  backend: string | null;
+  session_id: string | null;
+  last_action: "started" | "reattached" | "relaunched" | null;
+  at: string | null;
+}
+
 export class FleetClient {
   constructor(
     public readonly baseUrl: string,
@@ -372,8 +396,13 @@ export class FleetClient {
       throw new FleetUnreachableError(this.baseUrl);
     }
     if (!response.ok) {
-      const body = await response.json().catch(() => ({ detail: response.statusText }));
-      throw new FleetApiError(response.status, body.detail ?? response.statusText);
+      const body = await response
+        .json()
+        .catch(() => ({ detail: response.statusText }));
+      throw new FleetApiError(
+        response.status,
+        body.detail ?? response.statusText,
+      );
     }
     if (response.status === 204) {
       return undefined as T;
@@ -435,6 +464,23 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/environment`);
   }
 
+  getAgentSession(id: string): Promise<AgentSession> {
+    return this.request(`/api/projects/${id}/agent-session`);
+  }
+
+  startAgentSession(id: string, backend?: string): Promise<AgentSession> {
+    return this.request(`/api/projects/${id}/agent-session/start`, {
+      method: "POST",
+      body: JSON.stringify(backend ? { backend } : {}),
+    });
+  }
+
+  stopAgentSession(id: string): Promise<AgentSession> {
+    return this.request(`/api/projects/${id}/agent-session/stop`, {
+      method: "POST",
+    });
+  }
+
   getEvents(id: string): Promise<{ events: EpisodicEventView[] }> {
     return this.request(`/api/projects/${id}/events`);
   }
@@ -453,7 +499,10 @@ export class FleetClient {
     max_tokens?: number | null;
     max_cost_usd?: number | null;
   }): Promise<ProjectSummary> {
-    return this.request("/api/projects", { method: "POST", body: JSON.stringify(input) });
+    return this.request("/api/projects", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
   }
 
   updateRoles(id: string, roles: RoleDefinition[]): Promise<ProjectSummary> {
@@ -503,7 +552,9 @@ export class FleetClient {
   }
 
   deleteSharedSecret(name: string): Promise<{ name: string }> {
-    return this.request(`/api/secrets/${encodeURIComponent(name)}`, { method: "DELETE" });
+    return this.request(`/api/secrets/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    });
   }
 
   listProjectSecrets(id: string): Promise<ProjectSecrets> {
@@ -511,17 +562,27 @@ export class FleetClient {
   }
 
   /** Stores `value` under `name` for this project, replacing any value. Never returned. */
-  setProjectSecret(id: string, name: string, value: string): Promise<{ name: string }> {
-    return this.request(`/api/projects/${id}/secrets/${encodeURIComponent(name)}`, {
-      method: "PUT",
-      body: JSON.stringify({ value }),
-    });
+  setProjectSecret(
+    id: string,
+    name: string,
+    value: string,
+  ): Promise<{ name: string }> {
+    return this.request(
+      `/api/projects/${id}/secrets/${encodeURIComponent(name)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ value }),
+      },
+    );
   }
 
   deleteProjectSecret(id: string, name: string): Promise<{ name: string }> {
-    return this.request(`/api/projects/${id}/secrets/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    });
+    return this.request(
+      `/api/projects/${id}/secrets/${encodeURIComponent(name)}`,
+      {
+        method: "DELETE",
+      },
+    );
   }
 
   deregisterProject(id: string): Promise<void> {
@@ -536,11 +597,18 @@ export class FleetClient {
   ): Promise<{ team_id: string }> {
     return this.request(`/api/projects/${id}/start`, {
       method: "POST",
-      body: JSON.stringify({ roles, require_approval: requireApproval, prepare }),
+      body: JSON.stringify({
+        roles,
+        require_approval: requireApproval,
+        prepare,
+      }),
     });
   }
 
-  updateEnvironmentPrepare(id: string, prepare: PrepareSetting): Promise<ProjectSummary> {
+  updateEnvironmentPrepare(
+    id: string,
+    prepare: PrepareSetting,
+  ): Promise<ProjectSummary> {
     return this.request(`/api/projects/${id}/environment`, {
       method: "PATCH",
       body: JSON.stringify({ prepare }),
@@ -551,7 +619,11 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/stop`, { method: "POST" });
   }
 
-  steerProject(id: string, role: string, text: string): Promise<{ status: string }> {
+  steerProject(
+    id: string,
+    role: string,
+    text: string,
+  ): Promise<{ status: string }> {
     return this.request(`/api/projects/${id}/steer`, {
       method: "POST",
       body: JSON.stringify({ role, text }),
@@ -594,9 +666,16 @@ export class FleetClient {
     rule?: string[],
     text?: string,
   ): Promise<AnswerResult> {
-    return this.request(`/api/projects/${projectId}/requests/${requestId}/answer`, {
-      method: "POST",
-      body: JSON.stringify({ answer, ...(rule ? { rule } : {}), ...(text !== undefined ? { text } : {}) }),
-    });
+    return this.request(
+      `/api/projects/${projectId}/requests/${requestId}/answer`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          answer,
+          ...(rule ? { rule } : {}),
+          ...(text !== undefined ? { text } : {}),
+        }),
+      },
+    );
   }
 }

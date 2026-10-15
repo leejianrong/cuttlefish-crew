@@ -50,6 +50,7 @@ continues it.
 | One coding-agent CLI on `PATH`, logged in or keyed: [`kopicode`](https://github.com/leejianrong/kopicode#readme) (the default; v0.3.0 or later, v0.4.0 for cost, the turn cap, the context limit and questions; needs `OPENROUTER_API_KEY`), `claude`, or `codex` (after `codex login`) | delegating work |
 | `OPENROUTER_API_KEY` (optional) | cuttlefish's own summarising calls; see below |
 | Docker | only for `CUTTLEFISH_SANDBOX=container` |
+| `tmux` | only for the **Agent session** card (an agent that stays up when the browser closes or the daemon restarts) |
 
 Install kopicode with
 `curl -fsSL https://raw.githubusercontent.com/leejianrong/kopicode/main/scripts/install.sh | sh`
@@ -150,6 +151,13 @@ git -C ~/crew-demo/todo-api diff
 
 The Activity log on each project, and `uv run cuttlefish show <team-id>`, replay
 every step from the journal.
+
+**7. Keep an agent running.** The **Agent session** card on a project's Overview starts the
+project's agent (`claude`, `codex` or `kopicode`, the project's backend) in tmux. Close the browser or
+restart `cuttlefish serve` and it is still there; the card says it was **reattached**. After a reboot
+tmux is gone, and the next `cuttlefish serve` starts the agent again with the tool's own resume
+command (**relaunched**), so the conversation carries on. It asks for permission in its own
+terminal, not under Needs you.
 
 ## Usage from the command line
 

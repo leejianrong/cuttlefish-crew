@@ -36,7 +36,7 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import environment, envprep, logsetup, runtime
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
-from cuttlefish.config import PreparedRun, prepare_run
+from cuttlefish.config import PreparedRun, prepare_run, resolve_agent_backend
 from cuttlefish.delegate import codex_live
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import (
@@ -77,6 +77,15 @@ from cuttlefish.secrets.store import (
     check_value,
     default_secrets_db,
 )
+from cuttlefish.sessions import (
+    SessionError,
+    SessionInfo,
+    SessionManager,
+    Tmux,
+    agent_env,
+    default_socket,
+)
+from cuttlefish.sessions.manager import wanted as session_wanted
 from cuttlefish.steering import (
     SteeringDeliveryError,
     cancel_run,
@@ -267,8 +276,11 @@ class FleetDaemon:
         *,
         request_window_s: float = 600.0,
         secrets_db: Path | None = None,
+        sessions: SessionManager | None = None,
     ) -> None:
         self._projects = project_store
+        #: Each project's agent in tmux (CUT-95); built on first use unless a test supplies one.
+        self._sessions = sessions
         #: Where the dashboard's secrets live: ``~/.cuttlefish/secrets.db`` unless a test says.
         self._secrets_db = secrets_db
         self._running: dict[str, RunningTeam] = {}
@@ -297,6 +309,48 @@ class FleetDaemon:
             self._broker = Broker()
         await self._broker.start()
         return self._broker
+
+    # -- the agent session in tmux (CUT-95, ADR-0034) ----------------------------------------------
+
+    def _session_manager(self) -> SessionManager:
+        if self._sessions is None:
+            self._sessions = SessionManager(Tmux(default_socket()), env_for=agent_env)
+        return self._sessions
+
+    async def agent_session(self, project_id: str) -> SessionInfo:
+        project = self._projects.get(project_id)
+        return await asyncio.to_thread(self._session_manager().status, project.id, project.root)
+
+    async def start_agent_session(self, project_id: str, backend: str | None = None) -> SessionInfo:
+        """Start the project's agent in tmux, or reattach to it, or relaunch it with its resume
+        command. ``backend`` defaults to the project's own, else `CUTTLEFISH_AGENT_BACKEND`."""
+        project = self._projects.get(project_id)
+        chosen = resolve_agent_backend(backend or project.backend)
+        try:
+            return await asyncio.to_thread(
+                self._session_manager().ensure, project.id, project.root, chosen
+            )
+        except SessionError as exc:
+            raise FleetError(str(exc)) from exc
+
+    async def stop_agent_session(self, project_id: str) -> SessionInfo:
+        project = self._projects.get(project_id)
+        return await asyncio.to_thread(self._session_manager().stop, project.id, project.root)
+
+    async def reconcile_agent_sessions(self) -> list[tuple[str, SessionInfo | str]]:
+        """At daemon start, bring back every project whose agent was wanted: reattach to one tmux
+        kept running, relaunch one that is gone. A failure is reported, never raised, so one
+        project cannot hold the daemon back."""
+        results: list[tuple[str, SessionInfo | str]] = []
+        for project in self._projects.list():
+            if not await asyncio.to_thread(session_wanted, project.root):
+                continue
+            try:
+                results.append((project.name, await self.start_agent_session(project.id)))
+            except Exception as exc:  # one project's failure must not stop the others
+                logger.warning("agent session for %s not restored: %s", project.name, exc)
+                results.append((project.name, str(exc)))
+        return results
 
     async def close(self) -> None:
         """Release what the daemon holds open: the broker, and with it every lease."""

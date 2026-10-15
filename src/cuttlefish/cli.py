@@ -791,6 +791,17 @@ async def _serve(args: argparse.Namespace) -> int:
                     f"(team {attempt.team_id}): {attempt.error}",
                     file=sys.stderr,
                 )
+        for name, restored in await daemon.reconcile_agent_sessions():
+            if isinstance(restored, str):
+                print(
+                    f"cuttlefish serve: agent session for {name!r} not restored: {restored}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"cuttlefish serve: agent session for {name!r} {restored.last_action}",
+                    flush=True,
+                )
         host = args.host
         if args.tailscale:
             try:

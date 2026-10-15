@@ -93,6 +93,10 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **An agent gets an allowlisted environment, not the daemon's** (`delegate/subprocess_env.merge_env`). A variable an agent
   or a test double needs and does not get goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` (tests set it for `FAKE_KOPICODE_*`
   in `conftest.py`); never go back to inheriting everything. ADR-0029.
+- **The agent in tmux (CUT-95, ADR-0034) lives on its own tmux socket**, `~/.cuttlefish/tmux.sock` (a short
+  hashed path under `/tmp` when `HOME` is deep), never your own tmux. Tests and scratch runs get a separate server
+  from a scratch `HOME`. It asks for permission in its own terminal, not in Needs you. Kill a scratch one with
+  `tmux -S <socket> kill-server`, never `pkill`.
 - **`cuttlefish run` writes `.cuttlefish/` and `.satay/` into the current
   directory**, and the daemon writes them into each project's `--root`.
 - **The code beats prose.** Check a claim against the code before repeating
