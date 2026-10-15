@@ -30,6 +30,8 @@ import dataclasses
 import inspect
 import json
 import logging
+import os
+import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -40,6 +42,7 @@ from cuttlefish.agents.outcome import (
     DelegationOutcome,
     describe_refusals,
 )
+from cuttlefish.delegate import conversations
 from cuttlefish.delegate.claude_code import (
     _AUTO_EXTRA_DENIED_BASH_PREFIXES,
     _EDIT_TOOLS,
@@ -62,7 +65,9 @@ _DETAIL_CHARS = 1024
 QuestionHandler = Callable[[str, str, Sequence[str]], Awaitable[str | None]]
 
 
-def build_live_argv(binary: str, *, mode: str = "standard") -> list[str]:
+def build_live_argv(
+    binary: str, *, mode: str = "standard", session_args: Sequence[str] = ()
+) -> list[str]:
     """The argv for one live session. Edits inside the working directory are accepted by Claude
     Code itself (``manual``) decides only what is read-only; every other tool call, a file edit
     and a shell command that writes included, reaches the host."""
@@ -90,7 +95,17 @@ def build_live_argv(binary: str, *, mode: str = "standard") -> list[str]:
         denied.extend(_EDIT_TOOLS)
     args.append("--disallowedTools")
     args.extend(denied)
+    args.extend(session_args)
     return args
+
+
+def session_exists(session_id: str) -> bool:
+    """Whether Claude Code still has this conversation on disk. ``--resume`` of one it does not
+    have ends the round with an error, so the caller checks first and starts fresh instead. The
+    transcript is ``<config dir>/projects/<folder>/<id>.jsonl``; the folder name is Claude Code's
+    own, so every folder is searched."""
+    config = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+    return next((config / "projects").glob(f"*/{session_id}.jsonl"), None) is not None
 
 
 @dataclasses.dataclass
@@ -311,8 +326,14 @@ async def run_claude_code_live(
     ask: QuestionHandler | None = None,
     env: Mapping[str, str] | None = None,
     timeout: float | None = None,
+    conversation: str | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as one ``claude`` process and one turn, and classify what it did.
+
+    ``conversation`` (CUT-93) names the conversation to continue: when ``root`` remembers a
+    session for it and Claude Code still has it, the turn resumes it (``--resume``); otherwise a
+    new session is started under an id chosen here (``--session-id``) and remembered. ``None``
+    always starts a new session.
 
     ``decide`` is asked about every ``Bash`` command that prompts as ``("run_shell", "/bin/sh -c
     <line>")``. A turn past ``timeout`` is interrupted (``control_request`` ``interrupt``) and
@@ -320,9 +341,20 @@ async def run_claude_code_live(
 
     Raises :class:`DelegationError` for the binary missing or the process dying mid-turn.
     """
+    session_args: list[str] = []
+    if conversation:
+        remembered = conversations.recall(root, "claude-code", conversation)
+        if remembered and session_exists(remembered):
+            session_args = ["--resume", remembered]
+        else:
+            if remembered:
+                _LOG.warning("claude session %s is gone; starting a new one", remembered)
+            fresh = str(uuid.uuid4())
+            conversations.remember(root, "claude-code", conversation, fresh)
+            session_args = ["--session-id", fresh]
     try:
         process = await asyncio.create_subprocess_exec(
-            *build_live_argv(binary, mode=mode),
+            *build_live_argv(binary, mode=mode, session_args=session_args),
             cwd=root,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,

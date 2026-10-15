@@ -28,6 +28,7 @@ from typing import ClassVar, Literal
 from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.broker import BrokerRoute, Lease
+from cuttlefish.delegate import conversations
 from cuttlefish.delegate.claude_code import run_claude_code, run_claude_code_in_sandbox
 from cuttlefish.delegate.claude_code_live import QuestionHandler, run_claude_code_live
 from cuttlefish.limits import round_timeout_for
@@ -114,8 +115,12 @@ class ClaudeCodeBackend:
         asker: ShellAsker | None = None,
         limits: Mapping[str, int] | None = None,
         lease: Lease | None = None,
+        session: str | None = None,
     ) -> DelegationOutcome:
-        """``lease`` (ADR-0031) is the broker's stand-in for the key; the real key is not in
+        """``session`` (CUT-93) is the conversation to continue, normally the role's name; it takes
+        effect only with ``CUTTLEFISH_RESUME=1`` and only over ``stdio``, and the session id is
+        kept in the project root (``cuttlefish.delegate.conversations``).
+        ``lease`` (ADR-0031) is the broker's stand-in for the key; the real key is not in
         ``secrets`` then. It is ignored inside a sandbox, which cannot reach the daemon's loopback.
         ``asker`` (ADR-0028) lets a command nothing approves, and the model's own questions, be
         put to a person; only the ``stdio`` transport can hold a request open. ``limits`` carries
@@ -130,6 +135,9 @@ class ClaudeCodeBackend:
                 ask=_question_handler(asker, mode),
                 env=_env(secrets, lease),
                 timeout=round_timeout_for(limits),
+                conversation=(session or conversations.DEFAULT_KEY)
+                if conversations.resume_enabled("claude-code")
+                else None,
             )
         if sandbox_provider is None:
             return await run_claude_code(

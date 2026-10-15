@@ -20,7 +20,7 @@ from typing import ClassVar, Literal
 from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.broker import BrokerRoute, Lease
-from cuttlefish.delegate import codex_threads
+from cuttlefish.delegate import conversations
 from cuttlefish.delegate.codex import (
     BROKER_TOKEN_ENV,
     ENV_PASSTHROUGH,
@@ -111,8 +111,8 @@ class CodexBackend:
         live_role: str | None = None,
     ) -> DelegationOutcome:
         """``session`` (CUT-92) is the conversation to continue, normally the role's name; it takes
-        effect only with ``CUTTLEFISH_CODEX_RESUME=1`` and only over ``app-server``, and the
-        thread id is kept in the project root (``cuttlefish.delegate.codex_threads``).
+        effect only with ``CUTTLEFISH_RESUME=1`` and only over ``app-server``, and the
+        thread id is kept in the project root (``cuttlefish.delegate.conversations``).
         ``live_role`` (ADR-0033) names the role whose running turn the fleet daemon may steer.
         ``lease`` (ADR-0031) is the broker's stand-in for the key, taken by a delegation that
         runs on the host; a sandbox cannot reach the daemon's loopback and is given none.
@@ -133,8 +133,8 @@ class CodexBackend:
                 env_passthrough=ENV_PASSTHROUGH,
                 timeout=round_timeout_for(limits),
                 lease=lease,
-                thread_key=(session or codex_threads.DEFAULT_KEY)
-                if codex_threads.resume_enabled()
+                thread_key=(session or conversations.DEFAULT_KEY)
+                if conversations.resume_enabled("codex")
                 else None,
                 live_role=live_role,
             )

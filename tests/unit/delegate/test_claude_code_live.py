@@ -269,3 +269,89 @@ async def test_a_lease_replaces_the_key_and_points_claude_at_the_broker(fake: Fa
         assert env["ANTHROPIC_API_KEY"] == "cfb_placeholder"
     assert "real-key-never-given" not in fake.log.read_text()
     assert envs[1]["GITHUB_TOKEN"] == "gh-value"  # a project secret still arrives
+
+
+def _argv(fake: Fake) -> list[str]:
+    return [m["argv"] for m in fake.lines() if "argv" in m][-1]
+
+
+def _claude_has(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, session_id: str) -> None:
+    """What Claude Code leaves behind after a session: its transcript, under some folder."""
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    folder = tmp_path / "claude-config" / "projects" / "-some-folder"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{session_id}.jsonl").write_text("{}\n")
+
+
+async def test_a_later_round_resumes_the_remembered_session(
+    fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cuttlefish.delegate import conversations
+
+    monkeypatch.setenv("CUTTLEFISH_RESUME", "1")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    backend = fake.script({})
+    await fake.run(backend, session="dev")
+    first = _argv(fake)
+    assert first[first.index("--session-id") + 1] == conversations.recall(
+        str(fake.root), "claude-code", "dev"
+    )
+    session_id = first[first.index("--session-id") + 1]
+    _claude_has(tmp_path, monkeypatch, session_id)
+    fake.log.write_text("")
+    await fake.run(backend, session="dev")
+    second = _argv(fake)
+    assert second[second.index("--resume") + 1] == session_id
+    assert "--session-id" not in second
+
+
+async def test_a_session_claude_no_longer_has_is_replaced(
+    fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cuttlefish.delegate import conversations
+
+    monkeypatch.setenv("CUTTLEFISH_RESUME", "1")
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "claude-config"))
+    conversations.remember(str(fake.root), "claude-code", "dev", "gone")
+    await fake.run(fake.script({}), session="dev")
+    argv = _argv(fake)
+    assert "--resume" not in argv
+    assert argv[argv.index("--session-id") + 1] != "gone"
+    assert conversations.recall(str(fake.root), "claude-code", "dev") != "gone"
+
+
+async def test_another_role_does_not_share_the_session(
+    fake: Fake, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cuttlefish.delegate import conversations
+
+    monkeypatch.setenv("CUTTLEFISH_RESUME", "1")
+    backend = fake.script({})
+    await fake.run(backend, session="dev")
+    dev = conversations.recall(str(fake.root), "claude-code", "dev")
+    assert dev
+    _claude_has(tmp_path, monkeypatch, dev)
+    fake.log.write_text("")
+    await fake.run(backend, session="reviewer")
+    assert "--resume" not in _argv(fake)
+
+
+async def test_without_the_switch_every_round_is_a_new_session(
+    fake: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CUTTLEFISH_RESUME", raising=False)
+    await fake.run(fake.script({}), session="dev")
+    argv = _argv(fake)
+    assert "--resume" not in argv and "--session-id" not in argv
+    assert not (fake.root / ".cuttlefish" / "conversations.json").exists()
+
+
+def test_session_exists_looks_in_every_project_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cuttlefish.delegate.claude_code_live import session_exists
+
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "cfg"))
+    assert not session_exists("abc")
+    _claude_has(tmp_path, monkeypatch, "abc")
+    assert session_exists("abc") and not session_exists("abd")

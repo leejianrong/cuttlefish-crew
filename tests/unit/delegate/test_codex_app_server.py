@@ -395,33 +395,33 @@ async def test_without_the_switch_every_round_starts_a_thread(fake: Fake) -> Non
     fake.log.write_text("")
     await fake.run(backend, session="dev")
     assert fake.sent("thread/start") and not fake.sent("thread/resume")
-    assert not (fake.root / ".cuttlefish" / "codex-threads.json").exists()
+    assert not (fake.root / ".cuttlefish" / "conversations.json").exists()
 
 
 async def test_a_thread_codex_no_longer_has_is_replaced(
     fake: Fake, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CUTTLEFISH_CODEX_RESUME", "1")
-    from cuttlefish.delegate import codex_threads
+    from cuttlefish.delegate import conversations
 
-    codex_threads.remember(str(fake.root), "dev", "gone")
+    conversations.remember(str(fake.root), "codex", "dev", "gone")
     backend = fake.script({"resume_fails": True})
     outcome = await fake.run(backend, session="dev")
     assert outcome.kind == "completed"
     assert fake.sent("thread/resume") and fake.sent("thread/start")
-    assert codex_threads.recall(str(fake.root), "dev") == "th1"
+    assert conversations.recall(str(fake.root), "codex", "dev") == "th1"
 
 
 def test_forget_drops_only_that_key(tmp_path: Path) -> None:
-    from cuttlefish.delegate import codex_threads
+    from cuttlefish.delegate import conversations
 
     root = str(tmp_path)
-    codex_threads.remember(root, "a", "1")
-    codex_threads.remember(root, "b", "2")
-    codex_threads.forget(root, "a")
-    assert codex_threads.recall(root, "a") is None
-    assert codex_threads.recall(root, "b") == "2"
-    codex_threads.forget(root, "missing")
+    conversations.remember(root, "codex", "a", "1")
+    conversations.remember(root, "codex", "b", "2")
+    conversations.forget(root, "codex", "a")
+    assert conversations.recall(root, "codex", "a") is None
+    assert conversations.recall(root, "codex", "b") == "2"
+    conversations.forget(root, "codex", "missing")
 
 
 async def test_a_running_turn_takes_a_steer_at_once(fake: Fake) -> None:
