@@ -20,6 +20,7 @@ from typing import ClassVar, Literal
 from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.broker import BrokerRoute, Lease
+from cuttlefish.delegate import codex_threads
 from cuttlefish.delegate.codex import (
     BROKER_TOKEN_ENV,
     ENV_PASSTHROUGH,
@@ -106,8 +107,12 @@ class CodexBackend:
         asker: ShellAsker | None = None,
         limits: Mapping[str, int] | None = None,
         lease: Lease | None = None,
+        session: str | None = None,
     ) -> DelegationOutcome:
-        """``lease`` (ADR-0031) is the broker's stand-in for the key, taken by a delegation that
+        """``session`` (CUT-92) is the conversation to continue, normally the role's name; it takes
+        effect only with ``CUTTLEFISH_CODEX_RESUME=1`` and only over ``app-server``, and the
+        thread id is kept in the project root (``cuttlefish.delegate.codex_threads``).
+        ``lease`` (ADR-0031) is the broker's stand-in for the key, taken by a delegation that
         runs on the host; a sandbox cannot reach the daemon's loopback and is given none.
         ``asker`` (ADR-0028) lets a command nothing approves be put to a person; only the
         ``app-server`` transport can hold one open. ``limits`` carries the round's time limit; the
@@ -126,6 +131,9 @@ class CodexBackend:
                 env_passthrough=ENV_PASSTHROUGH,
                 timeout=round_timeout_for(limits),
                 lease=lease,
+                thread_key=(session or codex_threads.DEFAULT_KEY)
+                if codex_threads.resume_enabled()
+                else None,
             )
         if sandbox_provider is None:
             return await run_codex(

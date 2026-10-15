@@ -361,3 +361,64 @@ async def test_codex_exec_is_not_left_reading_the_daemons_stdin(
     with pytest.raises(DelegationError):
         await codex_module.run_codex(binary="codex", task_text="x", root=str(tmp_path))
     assert seen["stdin"] == asyncio.subprocess.DEVNULL
+
+
+async def test_a_later_round_resumes_the_remembered_thread(
+    fake: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_CODEX_RESUME", "1")
+    backend = fake.script({})
+    await fake.run(backend, session="dev")
+    assert len(fake.sent("thread/start")) == 1 and not fake.sent("thread/resume")
+    fake.log.write_text("")
+    await fake.run(backend, session="dev")
+    assert not fake.sent("thread/start")
+    resumed = fake.sent("thread/resume")[0]["params"]
+    assert resumed["threadId"] == "th1"
+    assert resumed["approvalPolicy"] == "untrusted" and resumed["cwd"] == str(fake.root)
+
+
+async def test_another_role_does_not_share_the_thread(
+    fake: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_CODEX_RESUME", "1")
+    backend = fake.script({})
+    await fake.run(backend, session="dev")
+    fake.log.write_text("")
+    await fake.run(backend, session="reviewer")
+    assert fake.sent("thread/start") and not fake.sent("thread/resume")
+
+
+async def test_without_the_switch_every_round_starts_a_thread(fake: Fake) -> None:
+    backend = fake.script({})
+    await fake.run(backend, session="dev")
+    fake.log.write_text("")
+    await fake.run(backend, session="dev")
+    assert fake.sent("thread/start") and not fake.sent("thread/resume")
+    assert not (fake.root / ".cuttlefish" / "codex-threads.json").exists()
+
+
+async def test_a_thread_codex_no_longer_has_is_replaced(
+    fake: Fake, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_CODEX_RESUME", "1")
+    from cuttlefish.delegate import codex_threads
+
+    codex_threads.remember(str(fake.root), "dev", "gone")
+    backend = fake.script({"resume_fails": True})
+    outcome = await fake.run(backend, session="dev")
+    assert outcome.kind == "completed"
+    assert fake.sent("thread/resume") and fake.sent("thread/start")
+    assert codex_threads.recall(str(fake.root), "dev") == "th1"
+
+
+def test_forget_drops_only_that_key(tmp_path: Path) -> None:
+    from cuttlefish.delegate import codex_threads
+
+    root = str(tmp_path)
+    codex_threads.remember(root, "a", "1")
+    codex_threads.remember(root, "b", "2")
+    codex_threads.forget(root, "a")
+    assert codex_threads.recall(root, "a") is None
+    assert codex_threads.recall(root, "b") == "2"
+    codex_threads.forget(root, "missing")

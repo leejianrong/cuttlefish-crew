@@ -48,6 +48,7 @@ from cuttlefish.agents.outcome import (
     describe_refusals,
 )
 from cuttlefish.broker import Lease
+from cuttlefish.delegate import codex_threads
 from cuttlefish.delegate.codex import codex_provider_args, codex_shell_policy_args
 from cuttlefish.delegate.consent import ConsentDecision
 from cuttlefish.delegate.kopicode_serve import Decider
@@ -445,8 +446,13 @@ async def run_codex_app_server(
     env_passthrough: tuple[str, ...] = (),
     timeout: float | None = None,
     lease: Lease | None = None,
+    thread_key: str | None = None,
 ) -> DelegationOutcome:
-    """Run one delegation as one thread and one turn, and classify what it did.
+    """Run one delegation as one turn on one thread, and classify what it did.
+
+    ``thread_key`` (CUT-92) names the conversation to continue: when ``root`` remembers a thread
+    for it, the turn runs on that thread (``thread/resume``); otherwise, or when Codex no longer
+    has it, a new one is started and remembered. ``None`` always starts a new thread.
 
     ``lease`` (ADR-0031) points Codex at the credential broker through a provider of its own.
 
@@ -483,19 +489,34 @@ async def run_codex_app_server(
             "initialize", {"clientInfo": {"name": "cuttlefish-crew", "version": "0"}}
         )
         connection.notify("initialized")
-        started = await connection.request(
-            "thread/start",
-            {
-                "cwd": root,
-                "approvalPolicy": "untrusted",
-                "sandbox": sandbox,
-                **({"model": model} if model else {}),
-            },
-        )
+        thread_params = {
+            "cwd": root,
+            "approvalPolicy": "untrusted",
+            "sandbox": sandbox,
+            **({"model": model} if model else {}),
+        }
+        started: Mapping[str, Any] | None = None
+        remembered = codex_threads.recall(root, thread_key) if thread_key else None
+        if remembered:
+            try:
+                started = await connection.request(
+                    "thread/resume", {"threadId": remembered, **thread_params}
+                )
+            except DelegationError as exc:
+                if process.returncode is not None:
+                    raise
+                _LOG.warning(
+                    "codex thread %s could not be resumed (%s); starting a new one", remembered, exc
+                )
+                codex_threads.forget(root, thread_key or "")
+        if started is None:
+            started = await connection.request("thread/start", thread_params)
         thread = started.get("thread")
         thread_id = thread.get("id") if isinstance(thread, Mapping) else None
         if not isinstance(thread_id, str):
             raise DelegationError("Codex app-server's thread/start returned no thread id")
+        if thread_key:
+            codex_threads.remember(root, thread_key, thread_id)
         turn = await connection.request(
             "turn/start",
             {

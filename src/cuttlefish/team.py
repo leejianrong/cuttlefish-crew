@@ -31,6 +31,7 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.budget import cumulative_usage
 from cuttlefish.budget import exceeded as budget_exceeded
+from cuttlefish.delegate.codex_threads import forget as forget_codex_thread
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
 from cuttlefish.episodic.events import (
     ApprovalDecision,
@@ -520,6 +521,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 # now rather than wait for the journal to cross its budget (a 100-turn round can
                 # stay under it). Failing to (no summariser key) is not a reason to stop: the
                 # continuation then carries the file list, as before.
+                forget_codex_thread(root, name)
                 try:
                     if await maybe_handover(
                         team_id, token_budget=token_budget, role=name, force=True, root=root

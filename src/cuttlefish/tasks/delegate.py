@@ -107,6 +107,10 @@ async def delegate_to_agent_backend(
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
+    if backend.NAME == "codex":
+        # CUT-92: the conversation this round continues, when thread continuity is on. Not a task
+        # argument, so recorded calls and replay are unchanged.
+        mode_kwargs["session"] = (requests.role_for(task_text) if requests else None) or None
     if limits and backend.NAME in ("kopicode", "codex", "claude-code"):
         mode_kwargs["limits"] = limits
     # ADR-0031: when the daemon runs a broker, the agent is leased its model key instead of

@@ -11,6 +11,7 @@ is appended to ``<log>``. The scenario is a JSON object:
   ``item/fileChange/requestApproval`` for it, completing it if the reply accepts;
   ``{"request": "<method>", "params": {...}}`` sends that server request and waits for the reply;
   ``{"hang": true}`` waits for ``turn/interrupt``, answers it and ends the turn ``interrupted``.
+``resume_fails``: answer ``thread/resume`` with an error, then expect ``thread/start``.
 ``final``: the final answer text (default ``done``). ``crash``: exit at once after the handshake.
 """
 
@@ -62,7 +63,11 @@ read_until(lambda m: m.get("method") == "initialized")
 if scenario.get("crash"):
     sys.stderr.write("fake codex: boom\n")
     sys.exit(3)
-answer(read_until(lambda m: m.get("method") == "thread/start"), {"thread": {"id": "th1"}})
+opened = read_until(lambda m: m.get("method") in ("thread/start", "thread/resume"))
+if opened["method"] == "thread/resume" and scenario.get("resume_fails"):
+    send({"id": opened["id"], "error": {"code": -32600, "message": "no rollout found"}})
+    opened = read_until(lambda m: m.get("method") == "thread/start")
+answer(opened, {"thread": {"id": opened.get("params", {}).get("threadId", "th1")}})
 answer(
     read_until(lambda m: m.get("method") == "turn/start"),
     {"turn": {"id": "tu1", "status": "inProgress", "items": []}},
