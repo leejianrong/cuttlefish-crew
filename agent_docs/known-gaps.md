@@ -311,3 +311,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   may also call tools badly. It is env-only and per process, not per project or role, and not available in a sandbox.
   Tested against a stub endpoint and a real kopicode on both transports; a round against a real Ollama was not run
   (the Ollama on the build machine's runner was killed on every request).
+- **Artifacts are markdown and images only, and only a Claude Code tmux session is told the folder exists** (CUT-97,
+  ADR-0036). Rounds on every backend carry the instruction in their task text. A Codex or kopicode session in tmux has
+  no launch flag we checked, so it must be asked. HTML, charts and rendered block types are CUT-114 and CUT-115. A
+  file is shown only if the daemon can read it from `<root>/.cuttlefish/artifacts/`, so a project run in a sandbox
+  provider's own checkout shows nothing there.

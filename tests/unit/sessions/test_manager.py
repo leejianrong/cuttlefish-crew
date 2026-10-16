@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from cuttlefish.artifacts import AGENT_NOTE
 from cuttlefish.sessions import SessionError, SessionManager, Tmux
 from cuttlefish.sessions.manager import launch_argv, wanted
 
@@ -60,7 +61,9 @@ def test_the_first_ensure_starts_the_tool_with_a_session_id(rig: Rig) -> None:
     info = rig.manager.ensure("p1", str(rig.root), "claude-code")
     assert info.state == "running" and info.last_action == "started"
     assert info.session_id
-    assert rig.launches() == [f"claude --session-id {info.session_id}"]
+    assert [x.split(" --append")[0] for x in rig.launches()] == [
+        f"claude --session-id {info.session_id}"
+    ]
     assert wanted(str(rig.root))
 
 
@@ -80,7 +83,7 @@ def test_after_tmux_is_killed_the_tool_is_relaunched_with_resume(rig: Rig) -> No
     again = rig.manager.ensure("p1", str(rig.root), "claude-code")
     assert again.state == "running" and again.last_action == "relaunched"
     assert again.session_id == first.session_id
-    assert rig.launches()[-1] == f"claude --resume {first.session_id}"
+    assert rig.launches()[-1].startswith(f"claude --resume {first.session_id} ")
 
 
 def test_stop_ends_the_session_and_is_not_undone_by_a_reconcile(rig: Rig) -> None:
@@ -123,12 +126,13 @@ def test_a_backend_with_no_interactive_tool_is_refused(rig: Rig) -> None:
 def test_resume_commands_per_backend(tmp_path: Path) -> None:
     root = str(tmp_path)
     assert launch_argv("claude-code", root=root, session_id="abc", resume=False) == [
-        "claude", "--session-id", "abc",
+        "claude", "--session-id", "abc", "--append-system-prompt", AGENT_NOTE,
     ]  # fmt: skip
     resumed = launch_argv("claude-code", root=root, session_id="abc", resume=True)
     assert (
         resumed[:2] == ["sh", "-c"]
-        and "claude --resume abc || exec claude --session-id abc" in resumed[2]
+        and "claude --resume abc --append-system-prompt" in resumed[2]
+        and "|| exec claude --session-id abc --append-system-prompt" in resumed[2]
     )
     assert launch_argv("codex", root=root, session_id="x", resume=False) == ["codex"]
     codex = launch_argv("codex", root=root, session_id="x", resume=True)

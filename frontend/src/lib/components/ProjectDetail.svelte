@@ -18,6 +18,7 @@
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
   import Icon from "./Icon.svelte";
+  import ArtifactsTab from "./ArtifactsTab.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
   import RequestCard from "./RequestCard.svelte";
   import PrepareConfirm from "./PrepareConfirm.svelte";
@@ -104,6 +105,7 @@
   const TABS = $derived([
     { id: "overview", label: "Overview" },
     { id: "terminal", label: "Terminal" },
+    { id: "artifacts", label: "Artifacts" },
     { id: "needs-you", label: "Needs you", badge: pending.length },
     { id: "permissions", label: "Permissions" },
     { id: "team", label: "Team" },
@@ -454,6 +456,10 @@
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>
         <EventLog {events} onOpenPermissions={() => onTabChange("permissions")} />
       </section>
+    </div>
+
+    <div id="panel-artifacts" role="tabpanel" aria-labelledby="tab-artifacts" hidden={tab !== "artifacts"}>
+      <ArtifactsTab {client} {projectId} active={tab === "artifacts"} />
     </div>
 
     <div id="panel-needs-you" role="tabpanel" aria-labelledby="tab-needs-you" hidden={tab !== "needs-you"}>

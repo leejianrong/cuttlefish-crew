@@ -365,6 +365,17 @@ export interface SharedSecrets {
   shared: SharedSecretRow[];
 }
 
+/** One file in a project's `.cuttlefish/artifacts/` (CUT-97). `path` is relative to that folder. */
+export interface Artifact {
+  path: string;
+  name: string;
+  /** `other` is listed by name only; the daemon will not serve it. */
+  kind: "markdown" | "image" | "other";
+  size: number;
+  /** Seconds since the epoch. */
+  modified: number;
+}
+
 /** A project's agent in tmux (CUT-95): whether it is up, and how it last got there. */
 export interface AgentSession {
   state: "running" | "stopped" | "none";
@@ -462,6 +473,30 @@ export class FleetClient {
 
   getEnvironment(id: string): Promise<EnvironmentSpec> {
     return this.request(`/api/projects/${id}/environment`);
+  }
+
+  async listArtifacts(id: string): Promise<Artifact[]> {
+    const body = await this.request<{ artifacts: Artifact[] }>(`/api/projects/${id}/artifacts`);
+    return body.artifacts;
+  }
+
+  /** One artifact's bytes. Fetched here, with the token, because a plain `<img src>` or link
+   * cannot send the header. */
+  async readArtifact(id: string, path: string): Promise<Blob> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${this.baseUrl}/api/projects/${id}/artifacts/file?path=${encodeURIComponent(path)}`,
+        { headers: { "x-cuttlefish-token": this.token } },
+      );
+    } catch {
+      throw new FleetUnreachableError(this.baseUrl);
+    }
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new FleetApiError(response.status, body.detail ?? response.statusText);
+    }
+    return response.blob();
   }
 
   getAgentSession(id: string): Promise<AgentSession> {

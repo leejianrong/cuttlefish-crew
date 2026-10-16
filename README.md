@@ -161,6 +161,14 @@ terminal, not under Needs you: open the project's **Terminal** tab, which is the
 the browser (xterm.js), with a key row for a phone. It needs the same sign-in as the rest of the
 dashboard, and closing it leaves the agent running.
 
+**8. Read what an agent made.** Agents are told to write a result (a plan, a review, a summary) as a
+markdown file under `.cuttlefish/artifacts/` in the project. The project's **Artifacts** tab lists those
+files, newest first, and shows markdown and images (png, jpg, gif, webp, svg); it reads the folder again every
+few seconds, so a new file appears without a refresh. Other files are listed by name only. Markdown is
+rendered by the dashboard itself, with no raw HTML, so nothing an agent writes there runs. Every round's task
+carries that instruction, and so does a Claude Code session started in tmux (`--append-system-prompt`). A
+Codex or kopicode session in tmux is not told yet, so ask it in your first message.
+
 ## Usage from the command line
 
 Run one task against the repo you are standing in (`--root` picks another):

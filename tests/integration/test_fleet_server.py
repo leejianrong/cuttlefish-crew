@@ -773,3 +773,34 @@ def test_starting_a_role_the_project_never_registered_is_400_and_lists_its_roles
     assert response.status_code == 400
     assert "'ghost'" in response.json()["detail"]
     assert "builder" in response.json()["detail"]
+
+
+def test_artifacts_are_listed_and_served_as_data_and_nothing_outside_the_folder(
+    client: TestClient, tmp_path: Path
+) -> None:
+    project = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "demo")}
+    ).json()
+    base = f"/api/projects/{project['id']}/artifacts"
+    assert client.get(base).json() == {"artifacts": []}
+
+    folder = tmp_path / "demo" / ".cuttlefish" / "artifacts"
+    folder.mkdir(parents=True)
+    (folder / "plan.md").write_text("# Plan")
+    (folder / "page.html").write_text("<script>1</script>")
+    (tmp_path / "secret.md").write_text("no")
+    (folder / "link.md").symlink_to(tmp_path / "secret.md")
+
+    listed = {a["path"]: a["kind"] for a in client.get(base).json()["artifacts"]}
+    assert listed == {"plan.md": "markdown", "page.html": "other"}
+
+    served = client.get(f"{base}/file", params={"path": "plan.md"})
+    assert served.status_code == 200 and served.text == "# Plan"
+    assert served.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in served.headers["content-security-policy"]
+    assert client.get(f"{base}/file", params={"path": "page.html"}).status_code == 415
+    assert client.get(f"{base}/file", params={"path": "link.md"}).status_code == 404
+    assert client.get(f"{base}/file", params={"path": "../../secret.md"}).status_code == 404
+    assert client.get("/api/projects/nope/artifacts").status_code == 404
+    unauthenticated = TestClient(client.app, base_url="http://127.0.0.1")
+    assert unauthenticated.get(f"{base}/file", params={"path": "plan.md"}).status_code == 401

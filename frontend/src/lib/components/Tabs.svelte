@@ -13,6 +13,13 @@
     label,
   }: { tabs: TabItem[]; active: string; onSelect: (id: string) => void; label: string } = $props();
 
+  // A deep link can open a tab past the edge of a narrow bar: bring it into view.
+  $effect(() => {
+    document
+      .getElementById(`tab-${active}`)
+      ?.scrollIntoView?.({ inline: "nearest", block: "nearest" });
+  });
+
   function onKeydown(event: KeyboardEvent, index: number) {
     const last = tabs.length - 1;
     let next = index;
@@ -93,19 +100,17 @@
     }
   }
 
-  /* At 360px and below the four labels cannot share one line: let them shrink and wrap
-     ("Needs you" onto two lines) rather than scroll the row. */
+  /* Seven tabs do not fit a phone even with wrapping: the labels overlapped. Keep each on one
+     line and let the bar scroll; the open tab is scrolled into view (see the script). */
   @media (max-width: 400px) {
     .tabs {
       gap: 0;
+      scrollbar-width: none;
     }
 
     .tab {
-      flex: 1 1 auto;
-      min-width: 0;
-      padding: 8px 4px;
-      text-align: center;
-      white-space: normal;
+      flex: 0 0 auto;
+      padding: 12px 10px;
     }
   }
 
