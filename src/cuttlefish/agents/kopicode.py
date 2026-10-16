@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import logging
 import os
 import shutil
 import tempfile
@@ -19,6 +20,7 @@ from pathlib import Path
 from typing import ClassVar, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.delegate import conversations
 from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
 from cuttlefish.delegate.kopicode import run_kopicode, run_kopicode_in_sandbox
 from cuttlefish.delegate.kopicode_serve import (
@@ -60,6 +62,12 @@ _CREDENTIAL_ENV_VARS = ("OPENROUTER_API_KEY",)
 #: Shared by every :class:`KopicodeBackend` in the process: ``delegate_to_agent_backend``
 #: resolves a fresh backend per delegation, so a per-instance pool would never be reused.
 #: Safe to share -- a child is keyed by binary and credential set.
+_LOG = logging.getLogger(__name__)
+
+#: ``CUTTLEFISH_KOPICODE_TRANSPORT=print`` runs the one-shot ``kopicode run --print`` instead of
+#: ``kopicode serve``. It cannot pause for a person, but it is the only one that can continue a
+#: session across rounds (CUT-94).
+TRANSPORT_ENV = "CUTTLEFISH_KOPICODE_TRANSPORT"
 _SHARED_POOL = ServePool()
 
 
@@ -110,11 +118,13 @@ class KopicodeBackend:
         self,
         binary: str = "kopicode",
         *,
-        transport: Literal["serve", "print"] = "serve",
+        transport: Literal["serve", "print"] | None = None,
         pool: ServePool | None = None,
     ) -> None:
         self._binary = binary
-        self._transport = transport
+        self._transport: Literal["serve", "print"] = transport or (
+            "print" if os.environ.get(TRANSPORT_ENV, "").strip().lower() == "print" else "serve"
+        )
         self._pool = pool if pool is not None else _SHARED_POOL
 
     async def delegate(
@@ -128,13 +138,20 @@ class KopicodeBackend:
         mode: str = "standard",
         asker: ShellAsker | None = None,
         limits: Mapping[str, int] | None = None,
+        session: str | None = None,
     ) -> DelegationOutcome:
-        """``limits`` are the project's and role's own settings (turns, token budget, context,
-        time); a key it lacks falls back to the environment, then the built-in default.
+        """``session`` (CUT-94) is the conversation to continue, normally the role's name. It takes
+        effect only with ``CUTTLEFISH_RESUME=1`` and only over the ``print`` transport, because
+        ``kopicode serve`` has no resume on ``session.start`` (KOP-207): there every round starts a
+        new session. ``limits`` are the project's and role's own settings (turns, token budget,
+        context, time); a key it lacks falls back to the environment, then the built-in default.
 
         ``asker`` (ADR-0028) lets a command nothing approves be put to a person, who has
         ``asker.window_s`` to answer (less when this kopicode cannot wait that long). Only the
         ``serve`` transport can hold a request open; ``run --print`` ignores it."""
+        resuming = conversations.resume_enabled(self.NAME)
+        if resuming and self._transport == "serve":
+            _LOG.info("kopicode serve cannot continue a session yet: this round starts a new one")
         if self._transport == "serve" and sandbox_provider is None:
             policy, consent_timeout = await self._consent(allow, mode, asker)
             return await run_kopicode_serve(
@@ -181,6 +198,7 @@ class KopicodeBackend:
                     root=root,
                     policy_file=str(policy_path),
                     env=_credential_envs(secrets),
+                    conversation=(session or conversations.DEFAULT_KEY) if resuming else None,
                 )
             return await self._delegate_inside_sandbox(
                 sandbox_provider,
