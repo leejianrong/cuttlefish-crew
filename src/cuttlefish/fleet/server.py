@@ -46,6 +46,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from cuttlefish import environment, envprep
+from cuttlefish.artifacts import (
+    ArtifactNotFoundError,
+    ArtifactNotPreviewableError,
+    ArtifactTooLargeError,
+)
 from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.delegate.consent import ConsentPolicyError, validate_allow_entry
 from cuttlefish.delegate.never_allowed import NEVER_ALLOWED_SUMMARY
@@ -807,6 +812,39 @@ def create_app(
         except FleetError as exc:
             raise HTTPException(409, str(exc)) from exc
         return {"status": "stopping"}
+
+    @app.get("/api/projects/{project_id}/artifacts")
+    async def list_artifacts(project_id: str) -> dict[str, Any]:
+        """The files in the project's ``.cuttlefish/artifacts/`` (CUT-97), newest first."""
+        try:
+            found = await daemon.list_artifacts(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"artifacts": [a.to_json() for a in found]}
+
+    @app.get("/api/projects/{project_id}/artifacts/file")
+    async def read_artifact(project_id: str, path: str) -> Response:
+        """One markdown or image file, as data: nothing here is rendered by the browser itself, and
+        the headers say so, so a file opened directly still runs nothing."""
+        try:
+            body, content_type = await daemon.read_artifact(project_id, path)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ArtifactNotFoundError as exc:
+            raise HTTPException(404, "no such artifact") from exc
+        except ArtifactNotPreviewableError as exc:
+            raise HTTPException(415, "this kind of file is listed but not shown") from exc
+        except ArtifactTooLargeError as exc:
+            raise HTTPException(413, "this file is too large to show") from exc
+        return Response(
+            body,
+            media_type=content_type,
+            headers={
+                "X-Content-Type-Options": "nosniff",
+                "Content-Security-Policy": "sandbox; default-src 'none'",
+                "Cache-Control": "no-store",
+            },
+        )
 
     @app.get("/api/projects/{project_id}/agent-session")
     async def agent_session(project_id: str) -> dict[str, Any]:

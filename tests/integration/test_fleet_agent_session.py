@@ -90,7 +90,9 @@ def test_a_backend_with_no_interactive_tool_is_a_409_naming_it(rig: Rig) -> None
 async def test_a_restarted_daemon_reattaches_to_the_agent_it_left_running(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     first = await rig.daemon().start_agent_session(project.id)
-    assert rig.launches() == [f"claude --session-id {first.session_id}"]
+    assert [x.split(" --append")[0] for x in rig.launches()] == [
+        f"claude --session-id {first.session_id}"
+    ]
 
     restored = await rig.daemon().reconcile_agent_sessions()  # a new daemon, same tmux server
     assert [(name, info.last_action) for name, info in restored] == [("alpha", "reattached")]  # type: ignore[union-attr]
@@ -104,7 +106,7 @@ async def test_a_restarted_daemon_relaunches_with_resume_once_tmux_is_gone(rig: 
     restored = await rig.daemon().reconcile_agent_sessions()
     info = restored[0][1]
     assert not isinstance(info, str) and info.last_action == "relaunched"
-    assert rig.launches()[-1] == f"claude --resume {first.session_id}"
+    assert rig.launches()[-1].startswith(f"claude --resume {first.session_id} ")
 
 
 async def test_a_session_that_was_stopped_is_not_brought_back(rig: Rig) -> None:

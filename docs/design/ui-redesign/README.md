@@ -195,6 +195,13 @@ and this folder disagree after a slice lands, update this folder.
   stopped and it was started again with its resume command), and a note that permission questions appear in the
   session's own terminal, not under Needs you. Neutral surface, success colour only on the running state; no coral
   (nothing needs a decision). It reads again every five seconds.
+- **Artifacts tab (CUT-97, 2026-10-16).** After Terminal. A list of the files in `.cuttlefish/artifacts/` (path,
+  kind, size, how long ago; newest first) beside a reading pane; under 720px the list stacks above it and scrolls
+  within 14rem. Markdown is drawn from a parsed tree with the theme's roles (no raw HTML, no remote images); an image
+  is fetched with the token and shown from a blob URL; any other file says it is listed but not shown. It opens on the
+  newest file that can be shown, reads the list every three seconds while the tab is open, and says what to do when
+  the folder is empty. No coral. The tab bar now scrolls sideways under 400px instead of wrapping, because seven
+  labels overlapped, and the open tab is scrolled into view.
 - **Terminal tab (CUT-96, 2026-10-16).** A project page has a **Terminal** tab after Overview: the agent's real
   tmux session in xterm.js, inside an `inverse-surface` panel (colours from the `--md-sys-*` roles, no raw hex), with
   a status line ("Connected to the agent's tmux session") and, below it, a row of 44px keys for a phone keyboard

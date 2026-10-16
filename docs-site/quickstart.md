@@ -135,6 +135,16 @@ prompts, watch it work. It uses the same sign-in as the rest of the dashboard (t
 password session otherwise), has a key row for a phone keyboard (Esc, Tab, Ctrl-C, arrows, Enter), and closing
 it leaves the agent running. With no session running it offers to start one.
 
+## Artifacts
+
+Agents are told to write results as markdown files under `.cuttlefish/artifacts/` in the project, and the
+project's **Artifacts** tab shows them: markdown, and images (png, jpg, gif, webp, svg), newest first, refreshed
+every few seconds. Other files are listed by name. The dashboard renders the markdown itself and drops raw HTML,
+`javascript:` links and remote images, so nothing in a file runs. Every round's task carries the instruction, as
+does a Claude Code session started in tmux; a Codex or kopicode session in tmux is not told yet. HTML
+artifacts are a later slice
+([ADR-0036](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0036-agents-leave-markdown-and-images-in-an-artifacts-folder-and-the-dashboard-renders-them-itself.md)).
+
 A tmux-hosted agent asks for permission in its own terminal. Needs you covers the team workflow
 ([ADR-0034](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0034-the-project-agent-runs-in-tmux-and-is-relaunched-with-its-own-resume-command.md)).
 

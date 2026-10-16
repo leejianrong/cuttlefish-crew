@@ -37,6 +37,7 @@ import satay
 from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.agents.registry import resolve_backend
+from cuttlefish.artifacts import AGENT_NOTE
 from cuttlefish.broker import BrokerRoute, Lease
 from cuttlefish.delegate import conversations
 from cuttlefish.delegate.presets import read_only_allow, resolve_allow
@@ -139,7 +140,7 @@ async def delegate_to_agent_backend(
             mode_kwargs["lease"] = lease
     try:
         outcome = await backend.delegate(
-            task_text=task_text,
+            task_text=f"{task_text}\n\n{AGENT_NOTE}",
             root=root,
             allow=effective_allow,
             secrets=resolved_secrets,

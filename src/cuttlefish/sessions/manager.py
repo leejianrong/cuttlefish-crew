@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from cuttlefish.artifacts import AGENT_NOTE
 from cuttlefish.sessions.tmux import Tmux, TmuxError, session_name
 
 Action = Literal["started", "reattached", "relaunched"]
@@ -137,9 +138,14 @@ def launch_argv(
     """
     if backend == "claude-code":
         sid = shlex.quote(session_id)
+        note = f"--append-system-prompt {shlex.quote(AGENT_NOTE)}"
         if resume:
-            return ["sh", "-c", f"claude --resume {sid} || exec claude --session-id {sid}"]
-        return ["claude", "--session-id", session_id]
+            return [
+                "sh",
+                "-c",
+                f"claude --resume {sid} {note} || exec claude --session-id {sid} {note}",
+            ]
+        return ["claude", "--session-id", session_id, "--append-system-prompt", AGENT_NOTE]
     if backend == "codex":
         if resume:
             return ["sh", "-c", "codex resume --last || exec codex"]

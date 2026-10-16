@@ -33,7 +33,8 @@ from satay.config import db_path as satay_db_path
 from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
-from cuttlefish import environment, envprep, logsetup, runtime
+from cuttlefish import artifacts, environment, envprep, logsetup, runtime
+from cuttlefish.artifacts import Artifact
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run, resolve_agent_backend
@@ -317,6 +318,14 @@ class FleetDaemon:
         if self._sessions is None:
             self._sessions = SessionManager(Tmux(default_socket()), env_for=agent_env)
         return self._sessions
+
+    async def list_artifacts(self, project_id: str) -> list[Artifact]:
+        project = self._projects.get(project_id)
+        return await asyncio.to_thread(artifacts.list_artifacts, project.root)
+
+    async def read_artifact(self, project_id: str, relative: str) -> tuple[bytes, str]:
+        project = self._projects.get(project_id)
+        return await asyncio.to_thread(artifacts.read_artifact, project.root, relative)
 
     async def agent_session(self, project_id: str) -> SessionInfo:
         project = self._projects.get(project_id)
