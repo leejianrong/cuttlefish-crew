@@ -442,6 +442,7 @@ async def test_the_agents_brief_says_how_to_run_things_in_this_project(
     (prompt,) = prompts
     assert "Environment: Python: use the project's own environment" in prompt
     assert prompt.rstrip().endswith("fix the bug")  # the task still comes last
+    assert ".cuttlefish/artifacts/" in prompt  # CUT-97: the agent is told where to leave results
 
 
 async def test_two_projects_get_their_own_agent_process_and_environment(

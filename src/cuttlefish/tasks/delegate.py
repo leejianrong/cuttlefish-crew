@@ -140,7 +140,7 @@ async def delegate_to_agent_backend(
             mode_kwargs["lease"] = lease
     try:
         outcome = await backend.delegate(
-            task_text=f"{task_text}\n\n{AGENT_NOTE}",
+            task_text=f"{AGENT_NOTE}\n\n{task_text}",
             root=root,
             allow=effective_allow,
             secrets=resolved_secrets,
