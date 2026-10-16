@@ -43,7 +43,7 @@ import json
 import logging
 import re
 import uuid
-from collections.abc import Awaitable, Callable, Coroutine, Mapping
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from typing import Any
 
 from cuttlefish.agents.outcome import (
@@ -315,8 +315,10 @@ class ServeChild:
         consent_deadline: float = DEFAULT_CONSENT_DEADLINE,
         on_consent: Callable[[ConsentRecord], None] | None = None,
         consent_timeout: float | None = None,
+        extra_args: Sequence[str] = (),
     ) -> ServeChild:
         flags = [] if consent_timeout is None else ["--consent-timeout", f"{int(consent_timeout)}s"]
+        flags += extra_args
         try:
             process = await asyncio.create_subprocess_exec(
                 binary,
@@ -880,7 +882,8 @@ class ServePool:
 
     def __init__(self) -> None:
         self._children: dict[
-            tuple[str, str | None, tuple[tuple[str, str], ...], float | None], ServeChild
+            tuple[str, str | None, tuple[tuple[str, str], ...], float | None, tuple[str, ...]],
+            ServeChild,
         ] = {}
         self._lock: asyncio.Lock | None = None
 
@@ -893,9 +896,10 @@ class ServePool:
         consent_deadline: float = DEFAULT_CONSENT_DEADLINE,
         on_consent: Callable[[ConsentRecord], None] | None = None,
         consent_timeout: float | None = None,
+        extra_args: Sequence[str] = (),
     ) -> ServeChild:
         loop = asyncio.get_running_loop()
-        key = (binary, root, tuple(sorted((env or {}).items())), consent_timeout)
+        key = (binary, root, tuple(sorted((env or {}).items())), consent_timeout, tuple(extra_args))
         if self._lock is None:
             self._lock = asyncio.Lock()
         async with self._lock:
@@ -911,6 +915,7 @@ class ServePool:
                 consent_deadline=consent_deadline,
                 on_consent=on_consent,
                 consent_timeout=consent_timeout,
+                extra_args=extra_args,
             )
             self._children[key] = child
             return child
@@ -943,8 +948,14 @@ async def run_kopicode_serve(
     session_limits: Mapping[str, int] | None = None,
     context_limit: float | None = None,
     resume: str | None = None,
+    provider_url: str | None = None,
+    model: str | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
+
+    ``provider_url`` (CUT-116) starts a child spawned here or in the pool with ``--provider-url``
+    (kopicode ADR-0027, feature ``provider_url.flag``), and ``model`` is sent on ``session.start``:
+    kopicode needs one for a custom endpoint. The caller checks the feature.
 
     ``resume`` (CUT-113) is the journal id of an earlier session to continue, sent as
     ``session.start``'s ``resume``; the caller passes it only for a kopicode that advertises
@@ -986,6 +997,7 @@ async def run_kopicode_serve(
     child dying mid-turn, a timeout); everything kopicode itself recorded is an outcome.
     """
     session = session_id or f"cuttlefish-{uuid.uuid4().hex[:12]}"
+    extra_args = ["--provider-url", provider_url] if provider_url else []
     journal = resume or session  # the session directory under root/.kopicode/sessions
     decide: Decider = policy.decide if isinstance(policy, ConsentPolicy) else policy
     if process_factory is not None:
@@ -1008,6 +1020,7 @@ async def run_kopicode_serve(
             consent_deadline=consent_deadline,
             on_consent=on_consent,
             consent_timeout=consent_timeout,
+            extra_args=extra_args,
         )
     else:
         child = await ServeChild.spawn(
@@ -1017,6 +1030,7 @@ async def run_kopicode_serve(
             consent_deadline=consent_deadline,
             on_consent=on_consent,
             consent_timeout=consent_timeout,
+            extra_args=extra_args,
         )
     timed_out = False
     child.register(session, decide, ask)
@@ -1036,6 +1050,7 @@ async def run_kopicode_serve(
                     "consent_mode": "remote_interactive",
                     **({"ask_mode": "remote"} if ask is not None else {}),
                     **({"resume": resume} if resume is not None else {}),
+                    **({"model": model} if model else {}),
                     **(session_limits or {}),
                 },
             )

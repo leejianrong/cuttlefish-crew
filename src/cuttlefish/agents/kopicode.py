@@ -30,6 +30,7 @@ from cuttlefish.delegate.kopicode_serve import (
     ServePool,
     StaleResumeError,
     run_kopicode_serve,
+    serve_features,
     serve_supports_ask,
     serve_supports_consent_timeout,
     serve_supports_limits,
@@ -58,7 +59,7 @@ _SANDBOX_KOPICODE_BINARY = "/usr/local/bin/kopicode"
 _SANDBOX_POLICY_FILE = "/tmp/cuttlefish-policy.toml"  # inside the sandbox, not the host
 
 #: kopicode's own model-provider credential (docs/QUESTIONS.md Q11).
-_CREDENTIAL_ENV_VARS = ("OPENROUTER_API_KEY",)
+_CREDENTIAL_ENV_VARS = ("OPENROUTER_API_KEY", "KOPICODE_PROVIDER_API_KEY")
 
 
 #: Shared by every :class:`KopicodeBackend` in the process: ``delegate_to_agent_backend``
@@ -70,6 +71,14 @@ _LOG = logging.getLogger(__name__)
 #: ``kopicode serve``. It cannot pause for a person, but it is the only one that can continue a
 #: session across rounds (CUT-94).
 TRANSPORT_ENV = "CUTTLEFISH_KOPICODE_TRANSPORT"
+
+#: ``CUTTLEFISH_KOPICODE_PROVIDER_URL`` sends kopicode's model traffic to an OpenAI-compatible
+#: endpoint (Ollama, llama.cpp, vLLM, a proxy) with ``--provider-url`` (kopicode ADR-0027), and
+#: ``CUTTLEFISH_KOPICODE_MODEL`` names the model it serves; kopicode needs both. The endpoint's key,
+#: if it wants one, is ``KOPICODE_PROVIDER_API_KEY``; ``OPENROUTER_API_KEY`` is not passed on.
+#: kopicode runs such a session unpinned: a development tool, not a benchmark arm (CUT-116).
+PROVIDER_URL_ENV = "CUTTLEFISH_KOPICODE_PROVIDER_URL"
+PROVIDER_MODEL_ENV = "CUTTLEFISH_KOPICODE_MODEL"
 _SHARED_POOL = ServePool()
 
 
@@ -78,7 +87,9 @@ async def close_shared_pool() -> None:
     await _SHARED_POOL.aclose()
 
 
-def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
+def _credential_envs(
+    secrets: Mapping[str, str], *, custom_endpoint: bool = False
+) -> dict[str, str]:
     """Every env var this delegation should carry a credential value for.
 
     ADR-0006: a name in `secrets` (already resolved from
@@ -96,6 +107,8 @@ def _credential_envs(secrets: Mapping[str, str]) -> dict[str, str]:
         if (value := secrets.get(name) or os.environ.get(name))
     }
     resolved.update({name: value for name, value in secrets.items() if name not in resolved})
+    if custom_endpoint:
+        resolved.pop("OPENROUTER_API_KEY", None)  # kopicode never sends it to another host
     return resolved
 
 
@@ -153,6 +166,8 @@ class KopicodeBackend:
         ``asker`` (ADR-0028) lets a command nothing approves be put to a person, who has
         ``asker.window_s`` to answer (less when this kopicode cannot wait that long). Only the
         ``serve`` transport can hold a request open; ``run --print`` ignores it."""
+        provider_url, model = await self._custom_endpoint(sandbox_provider)
+        env = _credential_envs(secrets, custom_endpoint=provider_url is not None)
         resuming = conversations.resume_enabled(self.NAME)
         can_resume = (
             resuming
@@ -176,7 +191,7 @@ class KopicodeBackend:
                     task_text=task_text,
                     root=root,
                     policy=policy,
-                    env=_credential_envs(secrets),
+                    env=env,
                     pool=self._pool,
                     consent_timeout=consent_timeout,
                     ask=ask,
@@ -184,6 +199,8 @@ class KopicodeBackend:
                     context_limit=context_limit,
                     timeout=round_timeout_for(limits),
                     resume=resume,
+                    provider_url=provider_url,
+                    model=model,
                 )
 
             try:
@@ -225,8 +242,10 @@ class KopicodeBackend:
                     task_text=task_text,
                     root=root,
                     policy_file=str(policy_path),
-                    env=_credential_envs(secrets),
+                    env=env,
                     conversation=(session or conversations.DEFAULT_KEY) if resuming else None,
+                    provider_url=provider_url,
+                    model=model,
                 )
             return await self._delegate_inside_sandbox(
                 sandbox_provider,
@@ -237,6 +256,34 @@ class KopicodeBackend:
             )
         finally:
             policy_path.unlink(missing_ok=True)
+
+    async def _custom_endpoint(
+        self, sandbox_provider: SandboxProvider | None
+    ) -> tuple[str | None, str | None]:
+        """The ``(url, model)`` kopicode is to use instead of OpenRouter, or ``(None, None)``.
+
+        Refused rather than half-applied: a model is needed with the URL (kopicode takes any id on
+        a custom endpoint but has none to default to), this kopicode must have the flag, and a
+        sandbox cannot reach a host-local endpoint (CUT-116)."""
+        url = os.environ.get(PROVIDER_URL_ENV, "").strip()
+        model = os.environ.get(PROVIDER_MODEL_ENV, "").strip()
+        if not url:
+            if model:
+                _LOG.warning(
+                    "%s is set without %s; ignoring it", PROVIDER_MODEL_ENV, PROVIDER_URL_ENV
+                )
+            return None, None
+        if not model:
+            raise DelegationError(
+                f"{PROVIDER_URL_ENV} needs {PROVIDER_MODEL_ENV}: the model id the endpoint serves"
+            )
+        if sandbox_provider is not None:
+            raise DelegationError(f"{PROVIDER_URL_ENV} is not supported with a sandbox provider")
+        if "provider_url.flag" not in await serve_features(self._binary):
+            raise DelegationError(
+                "this kopicode has no --provider-url (needs the provider_url.flag feature)"
+            )
+        return url, model
 
     async def _context_limit(self, limits: Mapping[str, int] | None = None) -> float | None:
         """How much of the model's window a round may fill, when this kopicode reports it (v0.4.0);
