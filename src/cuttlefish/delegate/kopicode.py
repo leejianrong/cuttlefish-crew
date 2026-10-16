@@ -215,6 +215,8 @@ def build_kopicode_argv(
     *,
     policy_file: str | None = None,
     resume: str | None = None,
+    provider_url: str | None = None,
+    model: str | None = None,
 ) -> list[str]:
     """The argv for one ``binary run --print task_text`` invocation.
 
@@ -224,6 +226,10 @@ def build_kopicode_argv(
     from ``kopicode sessions -json``: ``-resume`` continues it instead of starting a new one.
     """
     args = [binary, "run", "--print"]
+    if provider_url is not None:
+        args += ["--provider-url", provider_url]
+    if model is not None:
+        args += ["--model", model]
     if resume is not None:
         args += ["-resume", resume]
     if policy_file is not None:
@@ -241,8 +247,12 @@ async def run_kopicode(
     env: Mapping[str, str] | None = None,
     timeout: float | None = None,
     conversation: str | None = None,
+    provider_url: str | None = None,
+    model: str | None = None,
 ) -> DelegationOutcome:
     """Run ``binary run --print task_text`` in `root` and classify what it did.
+
+    ``provider_url`` and ``model`` (CUT-116) are kopicode's ``--provider-url`` and ``--model``.
 
     ``conversation`` (CUT-94) is the key (a role's name) whose kopicode session to continue: the
     id kept in ``root`` for it is passed as ``-resume``, and the id this run reports is kept for
@@ -260,12 +270,23 @@ async def run_kopicode(
     if remembered:
         try:
             return await _run_print(
-                binary, task_text, root, policy_file, env, timeout, conversation, remembered
+                binary,
+                task_text,
+                root,
+                policy_file,
+                env,
+                timeout,
+                conversation,
+                remembered,
+                provider_url,
+                model,
             )
         except _StaleSessionError:
             _LOG.warning("kopicode session %s is gone; starting a new one", remembered)
             conversations.forget(root, "kopicode", conversation or "")
-    return await _run_print(binary, task_text, root, policy_file, env, timeout, conversation, None)
+    return await _run_print(
+        binary, task_text, root, policy_file, env, timeout, conversation, None, provider_url, model
+    )
 
 
 class _StaleSessionError(Exception):
@@ -281,8 +302,17 @@ async def _run_print(
     timeout: float | None,
     conversation: str | None,
     resume: str | None,
+    provider_url: str | None = None,
+    model: str | None = None,
 ) -> DelegationOutcome:
-    args = build_kopicode_argv(binary, task_text, policy_file=policy_file, resume=resume)
+    args = build_kopicode_argv(
+        binary,
+        task_text,
+        policy_file=policy_file,
+        resume=resume,
+        provider_url=provider_url,
+        model=model,
+    )
 
     try:
         process = await asyncio.create_subprocess_exec(

@@ -305,3 +305,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   session. An older kopicode, and a sandbox provider (which starts a fresh child per round), start a new session each round. The
   one-shot `CUTTLEFISH_KOPICODE_TRANSPORT=print` also continues, with `-resume`, but cannot pause for a person, so a command nothing
   approves is refused. `launch_argv` (the tmux session) already resumes kopicode by itself.
+- **A custom kopicode endpoint is a development tool** (CUT-76, CUT-116). `CUTTLEFISH_KOPICODE_PROVIDER_URL` plus
+  `CUTTLEFISH_KOPICODE_MODEL` send kopicode to any OpenAI-compatible URL. kopicode sends no provider pin there, reports no
+  context window (so the context-pressure guard has nothing to read), and has no harness tuned for the model; a small local model
+  may also call tools badly. It is env-only and per process, not per project or role, and not available in a sandbox.
+  Tested against a stub endpoint and a real kopicode on both transports; a round against a real Ollama was not run
+  (the Ollama on the build machine's runner was killed on every request).

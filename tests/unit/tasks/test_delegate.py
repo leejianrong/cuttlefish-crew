@@ -114,7 +114,9 @@ async def test_secrets_are_resolved_from_the_store_scoped_to_the_declared_projec
             secret_names=["HUGGINGFACE_TOKEN"],
         )
 
-    assert calls == [("demo-project", ["HUGGINGFACE_TOKEN", "OPENROUTER_API_KEY"])]
+    assert calls == [
+        ("demo-project", ["HUGGINGFACE_TOKEN", "KOPICODE_PROVIDER_API_KEY", "OPENROUTER_API_KEY"])
+    ]
 
     store.close()
     secrets_store.close()
@@ -147,7 +149,7 @@ async def test_the_runtimes_secret_names_are_resolved_too_without_being_task_arg
     )
     with pytest.raises(DelegationError):
         await delegate_to_agent_backend("x", str(tmp_path), project="demo-project")
-    assert calls == [["GITHUB_TOKEN", "OPENROUTER_API_KEY"]]
+    assert calls == [["GITHUB_TOKEN", "KOPICODE_PROVIDER_API_KEY", "OPENROUTER_API_KEY"]]
     store.close()
     secrets_store.close()
 
