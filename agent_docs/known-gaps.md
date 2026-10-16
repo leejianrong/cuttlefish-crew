@@ -299,8 +299,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   `CLAUDE_CODE_OAUTH_TOKEN` in the daemon's environment still reaches Claude Code's commands. A running agent can still spend through its lease.
   `docs/research/harness-credentials-spike.md`.
 
-- **kopicode continues a session across rounds only over `CUTTLEFISH_KOPICODE_TRANSPORT=print`** (CUT-94). `run --print -resume <id>` takes
-  a session id, so with `CUTTLEFISH_RESUME=1` each role keeps its kopicode session in `<root>/.cuttlefish/conversations.json`. The default
-  `serve` transport cannot: `session.start` has no resume parameter, so every round there is a new session until kopicode adds one
-  (KOP-207, labelled `for-cuttlefish`). `print` cannot pause for a person, so a command nothing approves is refused, and a sandbox
-  provider starts a new session each round too. `launch_argv` (the tmux session) already resumes kopicode by itself.
+- **kopicode continues a session across rounds over `serve` only with a kopicode that lists `session.resume`, and not in a sandbox**
+  (CUT-94, CUT-113). With `CUTTLEFISH_RESUME=1` each role keeps its kopicode journal id in `<root>/.cuttlefish/conversations.json` and
+  sends it as `session.start`'s `resume` (kopicode PR #236, KOP-207); an id kopicode no longer has is dropped and the round runs as a new
+  session. An older kopicode, and a sandbox provider (which starts a fresh child per round), start a new session each round. The
+  one-shot `CUTTLEFISH_KOPICODE_TRANSPORT=print` also continues, with `-resume`, but cannot pause for a person, so a command nothing
+  approves is refused. `launch_argv` (the tmux session) already resumes kopicode by itself.

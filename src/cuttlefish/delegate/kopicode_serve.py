@@ -172,6 +172,15 @@ async def serve_features(binary: str) -> frozenset[str]:
     return features
 
 
+async def serve_supports_resume(binary: str) -> bool:
+    """Whether ``binary`` takes ``resume`` on ``session.start`` (``session.resume``, KOP-207)."""
+    return "session.resume" in await serve_features(binary)
+
+
+class StaleResumeError(DelegationError):
+    """``session.start`` was refused because the ``resume`` id is not one kopicode has."""
+
+
 async def serve_supports_ask(binary: str) -> bool:
     """Whether ``binary`` advertises ``ask.request`` (kopicode v0.4.0 and later)."""
     return "ask.request" in await serve_features(binary)
@@ -933,8 +942,16 @@ async def run_kopicode_serve(
     ask: AskHandler | None = None,
     session_limits: Mapping[str, int] | None = None,
     context_limit: float | None = None,
+    resume: str | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
+
+    ``resume`` (CUT-113) is the journal id of an earlier session to continue, sent as
+    ``session.start``'s ``resume``; the caller passes it only for a kopicode that advertises
+    ``session.resume`` (:func:`serve_supports_resume`). The wire ``session`` key stays this call's
+    own; the journal the record readers use is the resumed one. An id kopicode does not have raises
+    :class:`StaleResumeError`, with nothing run. The id to remember next is the basename of the
+    outcome's ``record``.
 
     With a ``pool`` the session runs on a resident child; without one a child is spawned for
     this call alone and shut down after. Either way the session is closed with
@@ -969,6 +986,7 @@ async def run_kopicode_serve(
     child dying mid-turn, a timeout); everything kopicode itself recorded is an outcome.
     """
     session = session_id or f"cuttlefish-{uuid.uuid4().hex[:12]}"
+    journal = resume or session  # the session directory under root/.kopicode/sessions
     decide: Decider = policy.decide if isinstance(policy, ConsentPolicy) else policy
     if process_factory is not None:
         if pool is not None:
@@ -1006,7 +1024,7 @@ async def run_kopicode_serve(
         child.watch_context(session, context_limit)
     if process_factory is None:
         threshold = threshold_from_env() if stuck_threshold is None else stuck_threshold
-        child.watch(session, SessionRecord(root, session), StuckDetector(threshold))
+        child.watch(session, SessionRecord(root, journal), StuckDetector(threshold))
     try:
         try:
             pending = await child.request(
@@ -1017,6 +1035,7 @@ async def run_kopicode_serve(
                     "prompt": task_text,
                     "consent_mode": "remote_interactive",
                     **({"ask_mode": "remote"} if ask is not None else {}),
+                    **({"resume": resume} if resume is not None else {}),
                     **(session_limits or {}),
                 },
             )
@@ -1054,7 +1073,7 @@ async def run_kopicode_serve(
         # The stream cuts each call's arguments, so a write with real content has no path in it;
         # the session's own record has it in full. Told to the classifier as the edits they are.
         known = {e.get("path") for e in events if e.get("kind") == "edit_applied"}
-        written = await asyncio.to_thread(SessionRecord(root, session).written_paths)
+        written = await asyncio.to_thread(SessionRecord(root, journal).written_paths)
         events = [
             *events,
             *({"kind": "edit_applied", "path": p} for p in written if p not in known),
@@ -1064,6 +1083,8 @@ async def run_kopicode_serve(
     error = response.get("error")
     if isinstance(error, dict):
         code = error.get("code")
+        if resume is not None and code == -32003 and "to resume" in str(error.get("message")):
+            raise StaleResumeError(f"kopicode has no session {resume!r} to resume")
         kind = (
             _RPC_FAILURE_KIND.get(code, "protocol_error")
             if isinstance(code, int)

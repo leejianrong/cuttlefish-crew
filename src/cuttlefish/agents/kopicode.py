@@ -28,10 +28,12 @@ from cuttlefish.delegate.kopicode_serve import (
     AskHandler,
     Decider,
     ServePool,
+    StaleResumeError,
     run_kopicode_serve,
     serve_supports_ask,
     serve_supports_consent_timeout,
     serve_supports_limits,
+    serve_supports_resume,
     serve_supports_usage,
 )
 from cuttlefish.delegate.policy import write_policy_file
@@ -141,32 +143,58 @@ class KopicodeBackend:
         session: str | None = None,
     ) -> DelegationOutcome:
         """``session`` (CUT-94) is the conversation to continue, normally the role's name. It takes
-        effect only with ``CUTTLEFISH_RESUME=1`` and only over the ``print`` transport, because
-        ``kopicode serve`` has no resume on ``session.start`` (KOP-207): there every round starts a
-        new session. ``limits`` are the project's and role's own settings (turns, token budget,
-        context, time); a key it lacks falls back to the environment, then the built-in default.
+        effect only with ``CUTTLEFISH_RESUME=1``: over ``print`` as ``-resume``, over ``serve`` as
+        ``session.start``'s ``resume`` when this kopicode lists ``session.resume`` (KOP-207; an
+        older one, and a sandboxed ``serve``, start a new session each round). ``limits`` are the
+        project's and role's own settings (turns, token budget, context, time); a key it lacks
+        falls back to
+        the environment, then the built-in default.
 
         ``asker`` (ADR-0028) lets a command nothing approves be put to a person, who has
         ``asker.window_s`` to answer (less when this kopicode cannot wait that long). Only the
         ``serve`` transport can hold a request open; ``run --print`` ignores it."""
         resuming = conversations.resume_enabled(self.NAME)
-        if resuming and self._transport == "serve":
-            _LOG.info("kopicode serve cannot continue a session yet: this round starts a new one")
+        can_resume = (
+            resuming
+            and self._transport == "serve"
+            and sandbox_provider is None
+            and await serve_supports_resume(self._binary)
+        )
+        if resuming and self._transport == "serve" and not can_resume:
+            _LOG.info("kopicode serve cannot continue a session here: this round starts a new one")
         if self._transport == "serve" and sandbox_provider is None:
             policy, consent_timeout = await self._consent(allow, mode, asker)
-            return await run_kopicode_serve(
-                binary=self._binary,
-                task_text=task_text,
-                root=root,
-                policy=policy,
-                env=_credential_envs(secrets),
-                pool=self._pool,
-                consent_timeout=consent_timeout,
-                ask=await self._ask_handler(asker, consent_timeout),
-                session_limits=await self._session_limits(limits),
-                context_limit=await self._context_limit(limits),
-                timeout=round_timeout_for(limits),
-            )
+            key = session or conversations.DEFAULT_KEY
+            remembered = conversations.recall(root, self.NAME, key) if can_resume else None
+            ask = await self._ask_handler(asker, consent_timeout)
+            session_limits = await self._session_limits(limits)
+            context_limit = await self._context_limit(limits)
+
+            async def attempt(resume: str | None) -> DelegationOutcome:
+                return await run_kopicode_serve(
+                    binary=self._binary,
+                    task_text=task_text,
+                    root=root,
+                    policy=policy,
+                    env=_credential_envs(secrets),
+                    pool=self._pool,
+                    consent_timeout=consent_timeout,
+                    ask=ask,
+                    session_limits=session_limits,
+                    context_limit=context_limit,
+                    timeout=round_timeout_for(limits),
+                    resume=resume,
+                )
+
+            try:
+                outcome = await attempt(remembered)
+            except StaleResumeError:
+                _LOG.warning("kopicode session %s is gone; starting a new one", remembered)
+                conversations.forget(root, self.NAME, key)
+                outcome = await attempt(None)
+            if can_resume and outcome.record:
+                conversations.remember(root, self.NAME, key, Path(outcome.record).name)
+            return outcome
         if self._transport == "serve" and isinstance(sandbox_provider, StreamingSandboxProvider):
             policy, consent_timeout = await self._consent(allow, mode, asker)
             return await self._delegate_serve_inside_sandbox(
