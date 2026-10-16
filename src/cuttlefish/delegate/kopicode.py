@@ -13,14 +13,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from collections.abc import Iterable, Mapping
 from typing import Any, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCallRecord
+from cuttlefish.delegate import conversations
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.episodic.redact import DEFAULT_SECRET_ENV_VARS, Redactor
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
+
+_LOG = logging.getLogger(__name__)
 
 #: What kopicode reads from its environment besides the credentials a backend declares (V5-E4).
 ENV_PASSTHROUGH = ("KOPICODE_*",)
@@ -34,6 +38,7 @@ _KIND_EDIT_APPLIED = "edit_applied"
 _KIND_TOOL_CALL_PARSED = "tool_call_parsed"
 _KIND_TOOL_RESULT = "tool_result"
 _KIND_SESSION_ENDED = "session_ended"
+_KIND_SESSION_STARTED = "session_started"
 _KIND_ASSISTANT_MESSAGE = "assistant_message"
 
 #: The most of the model's last message kept in a delegation summary (Codex keeps the same).
@@ -205,15 +210,22 @@ def _said(summary: str, reply: str) -> str:
 
 
 def build_kopicode_argv(
-    binary: str, task_text: str, *, policy_file: str | None = None
+    binary: str,
+    task_text: str,
+    *,
+    policy_file: str | None = None,
+    resume: str | None = None,
 ) -> list[str]:
     """The argv for one ``binary run --print task_text`` invocation.
 
     Shared by :func:`run_kopicode` (a direct host subprocess) and
     :func:`run_kopicode_in_sandbox` (a `SandboxProvider.exec` call) so the two
-    invocation paths can never drift on kopicode's own CLI grammar.
+    invocation paths can never drift on kopicode's own CLI grammar. ``resume`` is a session id
+    from ``kopicode sessions -json``: ``-resume`` continues it instead of starting a new one.
     """
     args = [binary, "run", "--print"]
+    if resume is not None:
+        args += ["-resume", resume]
     if policy_file is not None:
         args += ["--policy-file", policy_file]
     args.append(task_text)
@@ -228,8 +240,14 @@ async def run_kopicode(
     policy_file: str | None = None,
     env: Mapping[str, str] | None = None,
     timeout: float | None = None,
+    conversation: str | None = None,
 ) -> DelegationOutcome:
     """Run ``binary run --print task_text`` in `root` and classify what it did.
+
+    ``conversation`` (CUT-94) is the key (a role's name) whose kopicode session to continue: the
+    id kept in ``root`` for it is passed as ``-resume``, and the id this run reports is kept for
+    the next. A remembered id kopicode no longer has is dropped and the round runs again as a new
+    session. ``None`` always starts a new one.
 
     Raises :class:`DelegationError` for anything short of a recorded session: the
     binary missing, a non-JSON line, or a stream with no `session_ended`. Anything
@@ -238,7 +256,33 @@ async def run_kopicode(
     happens one layer up, in the satay task that calls this
     (``cuttlefish.tasks.delegate``).
     """
-    args = build_kopicode_argv(binary, task_text, policy_file=policy_file)
+    remembered = conversations.recall(root, "kopicode", conversation) if conversation else None
+    if remembered:
+        try:
+            return await _run_print(
+                binary, task_text, root, policy_file, env, timeout, conversation, remembered
+            )
+        except _StaleSessionError:
+            _LOG.warning("kopicode session %s is gone; starting a new one", remembered)
+            conversations.forget(root, "kopicode", conversation or "")
+    return await _run_print(binary, task_text, root, policy_file, env, timeout, conversation, None)
+
+
+class _StaleSessionError(Exception):
+    """``-resume`` named a session kopicode no longer has."""
+
+
+async def _run_print(
+    binary: str,
+    task_text: str,
+    root: str,
+    policy_file: str | None,
+    env: Mapping[str, str] | None,
+    timeout: float | None,
+    conversation: str | None,
+    resume: str | None,
+) -> DelegationOutcome:
+    args = build_kopicode_argv(binary, task_text, policy_file=policy_file, resume=resume)
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -263,12 +307,30 @@ async def run_kopicode(
         raise DelegationError(f"kopicode timed out after {timeout}s") from exc
     await process.wait()
 
+    stdout_text = stdout_bytes.decode("utf-8", errors="replace")
+    stderr_text = stderr_bytes.decode("utf-8", errors="replace")
+    started = session_id_of(stdout_text)
+    if resume is not None and started is None and process.returncode:
+        # No session_started: kopicode refused the id before it ran anything.
+        raise _StaleSessionError
+    if conversation and started:
+        conversations.remember(root, "kopicode", conversation, started)
     return classify_kopicode_output(
-        stdout_bytes.decode("utf-8", errors="replace"),
-        stderr_bytes.decode("utf-8", errors="replace"),
-        returncode=process.returncode,
-        env=env,
+        stdout_text, stderr_text, returncode=process.returncode, env=env
     )
+
+
+def session_id_of(stdout_text: str) -> str | None:
+    """The session id a ``run --print`` stream announces on its ``session_started`` line."""
+    for line in stdout_text.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(event, dict) and event.get("kind") == _KIND_SESSION_STARTED:
+            detail = event.get("detail")
+            return detail if isinstance(detail, str) and detail else None
+    return None
 
 
 async def run_kopicode_in_sandbox(

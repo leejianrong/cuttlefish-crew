@@ -109,11 +109,11 @@ async def delegate_to_agent_backend(
             role=requests.role_for(task_text), backend=backend.NAME
         )
     backend_name = getattr(backend, "NAME", None)
-    if backend_name in ("codex", "claude-code"):
-        # CUT-92, CUT-93: the role this round belongs to. Not a task argument, so recorded calls
-        # and replay are unchanged. `session` (the conversation to continue) only when continuity
-        # is on; `live_role` (who can steer the running turn, ADR-0033) only for Codex, inside
-        # the daemon.
+    if backend_name in ("codex", "claude-code", "kopicode"):
+        # CUT-92, CUT-93, CUT-94: the role this round belongs to. Not a task argument, so recorded
+        # calls and replay are unchanged. `session` (the conversation to continue) only when
+        # continuity is on; `live_role` (who can steer the running turn, ADR-0033) only for
+        # Codex, inside the daemon.
         role = requests.role_for(task_text) if requests else None
         if conversations.resume_enabled(backend_name):
             mode_kwargs["session"] = role
