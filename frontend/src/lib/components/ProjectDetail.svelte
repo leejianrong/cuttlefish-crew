@@ -11,7 +11,7 @@
   import { installProgress } from "../environment";
   import { latestRound } from "../events";
   import { lastRun, notRunText, runFigures, runHeading } from "../lastrun";
-  import type { ProjectTab } from "../route";
+  import { isSettingsTab, type ProjectTab } from "../route";
   import { keepIfSame } from "../same";
   import { modeLabel, startFailure } from "../team";
   import AgentSessionCard from "./AgentSessionCard.svelte";
@@ -102,15 +102,28 @@
     project && !project.running ? lastRun(events, project.status, project.usage) : null,
   );
 
+  // Four tabs for what you use while an agent runs; the three you set once live under Settings.
   const TABS = $derived([
     { id: "overview", label: "Overview" },
     { id: "terminal", label: "Terminal" },
-    { id: "artifacts", label: "Artifacts" },
     { id: "needs-you", label: "Needs you", badge: pending.length },
-    { id: "permissions", label: "Permissions" },
-    { id: "team", label: "Team" },
-    { id: "secrets", label: "Secrets" },
+    { id: "artifacts", label: "Artifacts" },
+    { id: "settings", label: "Settings" },
   ]);
+  const SECTIONS = [
+    { id: "team", label: "Team" },
+    { id: "permissions", label: "Permissions" },
+    { id: "secrets", label: "Secrets" },
+  ];
+  const inSettings = $derived(isSettingsTab(tab));
+  // Settings reopens the section you were last in, Team the first time.
+  let lastSection = $state<ProjectTab>("team");
+  $effect(() => {
+    if (isSettingsTab(tab)) lastSection = tab;
+  });
+  function selectTab(id: string) {
+    onTabChange(id === "settings" ? lastSection : (id as ProjectTab));
+  }
 
   // A starting point for a blank task box; picking one fills the first role's task.
   const EXAMPLES = [
@@ -263,7 +276,7 @@
       <p class="root mono">{project.root}</p>
     </header>
 
-    <Tabs tabs={TABS} active={tab} label="Project" onSelect={(id) => onTabChange(id as ProjectTab)} />
+    <Tabs tabs={TABS} active={inSettings ? "settings" : tab} label="Project" onSelect={selectTab} />
 
     <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden={tab !== "overview"}>
       {#if resumedEvents.length > 0}
@@ -478,22 +491,31 @@
       <TerminalView {client} {projectId} active={tab === "terminal"} />
     </div>
 
-    <div id="panel-permissions" role="tabpanel" aria-labelledby="tab-permissions" hidden={tab !== "permissions"}>
-      <PermissionsTab
-        {client}
-        {project}
-        onChanged={refresh}
-        onOpenTeam={() => onTabChange("team")}
-        onDirtyChange={(dirty) => (permissionsDirty = dirty)}
+    <div id="panel-settings" hidden={!inSettings}>
+      <Tabs
+        tabs={SECTIONS}
+        active={inSettings ? tab : lastSection}
+        label="Settings section"
+        variant="segmented"
+        onSelect={(id) => onTabChange(id as ProjectTab)}
       />
-    </div>
+      <div id="panel-permissions" role="tabpanel" aria-labelledby="tab-permissions" hidden={tab !== "permissions"}>
+        <PermissionsTab
+          {client}
+          {project}
+          onChanged={refresh}
+          onOpenTeam={() => onTabChange("team")}
+          onDirtyChange={(dirty) => (permissionsDirty = dirty)}
+        />
+      </div>
 
-    <div id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden={tab !== "team"}>
-      <TeamTab {client} {project} onChanged={refresh} onDirtyChange={(dirty) => (teamDirty = dirty)} />
-    </div>
+      <div id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden={tab !== "team"}>
+        <TeamTab {client} {project} onChanged={refresh} onDirtyChange={(dirty) => (teamDirty = dirty)} />
+      </div>
 
-    <div id="panel-secrets" role="tabpanel" aria-labelledby="tab-secrets" hidden={tab !== "secrets"}>
-      <SecretsTab {client} {project} active={tab === "secrets"} />
+      <div id="panel-secrets" role="tabpanel" aria-labelledby="tab-secrets" hidden={tab !== "secrets"}>
+        <SecretsTab {client} {project} active={tab === "secrets"} />
+      </div>
     </div>
   {:else if !unreachable && !missing}
     <p class="muted" role="status">Loading…</p>

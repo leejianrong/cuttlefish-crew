@@ -166,6 +166,10 @@ own.
 If the daemon restarts while the dashboard is open, it shows **Sign in again** and carries on where you
 were; a session you keep using stays signed in (12 hours idle, seven days at most).
 
+The top bar's account menu (the round icon at the top right) holds the theme (match system, light or dark), the
+sprite gallery and **Disconnect**. The bottom bar on a phone has the four places that span every project: Needs you,
+Projects, Role library and Shared secrets. A project's own Team, Permissions and Secrets are under its **Settings** tab.
+
 To try this from a phone first, with no model credit and none of your own projects, run `make phone` from a
 checkout. It checks that Tailscale and tmux are ready, then serves one sample project on the Tailscale address
 (port 8431, or `PORT=n`) with a fake agent in tmux, and prints the URL and a scratch password. State lives in

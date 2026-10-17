@@ -23,6 +23,14 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
   "secrets",
 ];
 
+/** The tabs that sit under Settings in the project page. Their own links stay valid, so an old
+ * `#/projects/<id>/permissions` still opens, now beneath the Settings tab. */
+export const SETTINGS_TABS: readonly ProjectTab[] = ["team", "permissions", "secrets"];
+
+export function isSettingsTab(tab: ProjectTab): boolean {
+  return SETTINGS_TABS.includes(tab);
+}
+
 export const HOME: Route = { view: "projects" };
 
 function isTab(value: string): value is ProjectTab {
@@ -59,7 +67,8 @@ export function parseHash(hash: string): Route {
       return {
         view: "project",
         id: decoded,
-        tab: tab && isTab(tab) ? tab : "overview",
+        // `settings` on its own opens the first section, Team.
+        tab: tab === "settings" ? "team" : tab && isTab(tab) ? tab : "overview",
       };
     }
     default:
