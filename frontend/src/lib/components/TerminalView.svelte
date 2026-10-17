@@ -181,6 +181,8 @@
 
   // After the sign-in dialog hands over a new client, a terminal that closed because its token was
   // refused, or because the daemon restarted under it, opens again by itself.
+  // Read once on purpose: it is compared with the later value, not tracked.
+  // svelte-ignore state_referenced_locally
   let lastClient = client;
   $effect(() => {
     if (client === lastClient) return;
