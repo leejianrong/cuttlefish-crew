@@ -50,6 +50,14 @@ class FrameType(IntEnum):
     PONG = 10
 
 
+#: The first byte of a `WS_DATA` payload says what the rest is. A websocket message larger than
+#: `CHUNK_SIZE` is sent as several frames (the daemon's terminal is a byte stream, so where a
+#: message ended does not matter there). `WS_ACCEPTED` is empty and goes daemon to browser once
+#: the app has accepted the socket, so the browser can tell "open" from "refused".
+WS_TEXT = 0
+WS_BINARY = 1
+WS_ACCEPTED = 2
+
 _CONNECTION_FRAMES = {FrameType.PING, FrameType.PONG}
 
 

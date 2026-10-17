@@ -51,6 +51,7 @@ from cuttlefish.config import (
 )
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
+from cuttlefish.fleet.relay_link import RelaySettings
 from cuttlefish.fleet.serve_token import default_serve_token_path
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
 from cuttlefish.limits import LIMIT_SPECS, validate_limits
@@ -64,6 +65,7 @@ from cuttlefish.projects.store import (
     check_root,
     check_root_free,
 )
+from cuttlefish.relay.server import DEFAULT_RELAY_PORT
 from cuttlefish.roles import BUILTIN_ROLES, UnknownTemplateError, role_definition, template_roles
 from cuttlefish.secrets.store import (
     SHARED_SCOPE,
@@ -819,6 +821,11 @@ async def _serve(args: argparse.Namespace) -> int:
                 dashboard_dir=_resolve_dashboard_dir(args.dashboard_dir),
                 browse_roots=[Path(root) for root in args.browse_root or ()],
                 token_file=default_serve_token_path(),
+                relay=(
+                    RelaySettings(args.relay, Path.home() / ".cuttlefish" / "relay-key")
+                    if args.relay
+                    else None
+                ),
             )
         except (ValueError, WeakPasswordError) as exc:
             print(f"cuttlefish serve: {exc}", file=sys.stderr)
@@ -834,6 +841,25 @@ async def _serve(args: argparse.Namespace) -> int:
 #: shape) can configure this without a wrapper script (KAN-1764).
 MCP_BASE_URL_ENV = "CUTTLEFISH_MCP_BASE_URL"
 MCP_TOKEN_ENV = "CUTTLEFISH_MCP_TOKEN"
+
+
+def _relay(args: argparse.Namespace) -> int:
+    """Run the relay (ADR-0037, CUT-119). Loopback unless told otherwise; it has no accounts yet,
+    so it must not be put on a public address."""
+    from cuttlefish.relay.server import run_relay
+
+    if not satay.control.is_loopback_host(args.host):
+        print(
+            "cuttlefish relay: warning: this relay has no accounts, and anyone who can reach it "
+            "can claim a room. Keep it on loopback or a private network.",
+            file=sys.stderr,
+        )
+    print(f"cuttlefish relay: ws://{args.host}:{args.port}", flush=True)
+    try:
+        asyncio.run(run_relay(args.host, args.port))
+    except KeyboardInterrupt:
+        print("\ncuttlefish relay: stopped", flush=True)
+    return EXIT_OK
 
 
 def _mcp(args: argparse.Namespace) -> int:
@@ -1309,6 +1335,17 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     serve_parser.add_argument(
+        "--relay",
+        default=os.environ.get("CUTTLEFISH_RELAY_URL"),
+        metavar="URL",
+        help=(
+            "Also dial out to a relay (ws://host:port, `cuttlefish relay`) and print a link that "
+            "opens the dashboard through it, end-to-end encrypted (ADR-0037). Loopback only for "
+            "now: no accounts, and the link is as strong as the dashboard's password. "
+            "Default: $CUTTLEFISH_RELAY_URL."
+        ),
+    )
+    serve_parser.add_argument(
         "--allow-origin",
         action="append",
         metavar="ORIGIN",
@@ -1342,6 +1379,13 @@ def build_parser() -> argparse.ArgumentParser:
             "silent fallback."
         ),
     )
+
+    relay_parser = subparsers.add_parser(
+        "relay",
+        help="Run the relay: a headless server that passes encrypted traffic to a daemon",
+    )
+    relay_parser.add_argument("--host", default="127.0.0.1")
+    relay_parser.add_argument("--port", type=int, default=DEFAULT_RELAY_PORT)
 
     mcp_parser = subparsers.add_parser(
         "mcp",
@@ -1424,6 +1468,8 @@ def main(argv: list[str] | None = None) -> int:
         return _doctor(args)
     if args.command == "serve":
         return _run_serve(args)
+    if args.command == "relay":
+        return _relay(args)
     if args.command == "mcp":
         return _mcp(args)
     return _show(args)

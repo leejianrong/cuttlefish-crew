@@ -228,3 +228,8 @@ and this folder disagree after a slice lands, update this folder.
   Settings has Team, Permissions and Secrets as a row of pills (`Tabs` `variant="segmented"`) and reopens the section you
   were last in. Every old link (`/team`, `/permissions`, `/secrets`) still opens its section and `/settings` opens Team. Five
   tabs fit a 390px phone exactly; narrower scrolls. Trade-off: the top bar costs 56px of terminal height on a phone.
+
+- **Opened through a relay (CUT-119, 2026-10-17).** A page opened from a `#relay=` link has no Connect screen and no token: its
+  requests and terminal go through the relay. The shell is unchanged. A bad link shows the pairing error as a line on the Connect
+  screen; a relay or daemon that cannot be reached shows the existing "Lost connection to the daemon. Retrying…" (it does not yet
+  say it is the relay).

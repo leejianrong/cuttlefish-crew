@@ -60,3 +60,10 @@ describe("frames", () => {
     expect(() => chunks(body, 0)).toThrow(FrameError);
   });
 });
+
+describe("websocket kind bytes", () => {
+  it("match the daemon's (frames.py pins the same three numbers)", async () => {
+    const { WS_TEXT, WS_BINARY, WS_ACCEPTED } = await import("./frames");
+    expect([WS_TEXT, WS_BINARY, WS_ACCEPTED]).toEqual([0, 1, 2]);
+  });
+});

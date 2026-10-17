@@ -155,6 +155,24 @@ pairing are enforced by the daemon.
 - Work on a shell, previews and media later rides on the tiers and streams defined here.
 - ADR-0011 and ADR-0013 stand for loopback and Tailscale. ADR-0001 to ADR-0036 are unaffected.
 
+## Built so far
+
+- **CUT-118**: `cuttlefish.relay.protocol` and `frontend/src/lib/relay`, checked against an independent Noise library.
+- **CUT-119** (2026-10-17): `cuttlefish relay` (a FastAPI app, headless), the daemon's connector, and a transport under
+  `api.ts` and the terminal. Proven on loopback with a real relay, a real daemon and Chromium at 390px. Choices made:
+  - A daemon has **one** connection to the relay for all its browsers. The relay puts a four-byte client id in front of each
+    message to the daemon and sends `client-open` and `client-close` (`protocol/envelope.py`). It can see ids and sizes only.
+  - A `WS_DATA` payload starts with a kind byte (text, binary, accepted), so a browser can tell "open" from "refused".
+  - The connector speaks to the daemon's own app in the same process, as the third `SecurityCheck`
+    (`fleet/relay_link.py`): a per-process token held only by the connector and the check. It drops any token or `Host` a
+    browser sent, and swaps the token inside a terminal's first message.
+  - The pairing link carries the relay address, room, the daemon's public key and a psk in a URL **fragment**. This is
+    config-only pairing: the psk is new on each daemon start and any browser holding it is let in. CUT-120 replaces it.
+  - A browser makes a new key on each page load for now; keeping a non-extractable one is CUT-120.
+  - There is no flow control yet. Streams interleave frame by frame, and a slow stream does not block a fast one (tested),
+    but a very large body is not paced.
+- Not built: accounts, the relay serving the page, rate limits, Web Push (CUT-121), tiers and a device store (CUT-120).
+
 ## Not decided here
 
 - The account provider, billing and where the relay is hosted.

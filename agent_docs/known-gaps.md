@@ -316,3 +316,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   no launch flag we checked, so it must be asked. HTML, charts and rendered block types are CUT-114 and CUT-115. A
   file is shown only if the daemon can read it from `<root>/.cuttlefish/artifacts/`, so a project run in a sandbox
   provider's own checkout shows nothing there.
+- **The relay is a loopback preview** (CUT-119, ADR-0037). No accounts: anyone who can reach it can claim a room, so it
+  must stay on loopback or a private network. The pairing link is a shared secret with the strength of the dashboard's
+  password (whoever holds it has the whole dashboard, and there are no tiers until CUT-120); it changes on every daemon
+  restart. The page is still served by the daemon, not the relay. A wrong or stale link shows the generic "Lost
+  connection to the daemon. Retrying…" and retries forever, because the relay error is not surfaced yet. Tested with a
+  Python browser and Chromium; Safari and Firefox were not run.

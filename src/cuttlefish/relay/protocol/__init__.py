@@ -5,11 +5,22 @@ Nothing here may import the rest of cuttlefish (fleet, secrets, episodic, agents
 later without untangling anything.
 """
 
+from cuttlefish.relay.protocol.envelope import (
+    CLIENT_ID_LEN,
+    EnvelopeError,
+    control,
+    parse_control,
+    unwrap,
+    wrap,
+)
 from cuttlefish.relay.protocol.frames import (
     CHUNK_SIZE,
     CONNECTION_STREAM,
     HEADER_LEN,
     MAX_PAYLOAD,
+    WS_ACCEPTED,
+    WS_BINARY,
+    WS_TEXT,
     Frame,
     FrameError,
     FrameType,
@@ -34,6 +45,7 @@ from cuttlefish.relay.protocol.streams import MAX_OPEN_STREAMS, Role, StreamErro
 
 __all__ = [
     "CHUNK_SIZE",
+    "CLIENT_ID_LEN",
     "CONNECTION_STREAM",
     "HEADER_LEN",
     "MAX_MESSAGE_LEN",
@@ -41,6 +53,10 @@ __all__ = [
     "MAX_PAYLOAD",
     "PROLOGUE",
     "PROTOCOL_NAME",
+    "WS_ACCEPTED",
+    "WS_BINARY",
+    "WS_TEXT",
+    "EnvelopeError",
     "EstablishedPeer",
     "Frame",
     "FrameError",
@@ -56,9 +72,13 @@ __all__ = [
     "UnknownPeerError",
     "accept",
     "chunks",
+    "control",
     "decode",
     "encode",
     "generate_static",
+    "parse_control",
     "public_bytes",
     "static_from_bytes",
+    "unwrap",
+    "wrap",
 ]

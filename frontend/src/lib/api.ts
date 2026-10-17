@@ -2,6 +2,9 @@
 // `cuttlefish.fleet.server`). Hand-written types mirroring the Python dataclasses
 // that slice adds -- no OpenAPI-codegen machinery for five routes.
 
+import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay";
+import { terminalPath } from "./terminal";
+
 export type RoleStatus =
   "queued" | "working" | "blocked" | "done" | "failed" | "stopped";
 
@@ -396,7 +399,14 @@ export class FleetClient {
     public readonly baseUrl: string,
     public token: string,
     private readonly onToken?: (token: string) => void,
+    /** How requests and the terminal socket reach the daemon: directly (the default), or through a relay. */
+    private readonly transport: ApiTransport = sameOriginTransport(baseUrl),
   ) {}
+
+  /** The terminal's socket for a project (ADR-0035), over whichever transport this client has. */
+  openTerminal(projectId: string): SocketLike {
+    return this.transport.openSocket(terminalPath(projectId));
+  }
 
   /** Keep a refreshed session token, so a phone that is in use stays signed in. */
   private keepRefreshedToken(response: Response): void {
@@ -410,7 +420,7 @@ export class FleetClient {
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}${path}`, {
+      response = await this.transport.fetch(path, {
         ...init,
         headers: {
           "content-type": "application/json",
@@ -501,8 +511,8 @@ export class FleetClient {
   async readArtifact(id: string, path: string): Promise<Blob> {
     let response: Response;
     try {
-      response = await fetch(
-        `${this.baseUrl}/api/projects/${id}/artifacts/file?path=${encodeURIComponent(path)}`,
+      response = await this.transport.fetch(
+        `/api/projects/${id}/artifacts/file?path=${encodeURIComponent(path)}`,
         { headers: { "x-cuttlefish-token": this.token } },
       );
     } catch {
