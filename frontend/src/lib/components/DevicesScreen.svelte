@@ -8,7 +8,7 @@
     type FleetClient,
     type RelayInfo,
   } from "../api";
-  import { formatCode } from "../relay";
+  import { formatCode, pairingAddressProblem } from "../relay";
 
   let { client }: { client: FleetClient } = $props();
 
@@ -47,7 +47,7 @@
   // The owner's own session is not held to a tier; a paired device is, and the daemon says no
   // to what it may not do. These only decide what to show.
   const canAdmin = $derived(you === null || you.tier === "admin");
-  const isLoopback = $derived(/^https?:\/\/(localhost|127\.|\[::1\])/.test(address));
+  const addressProblem = $derived(pairingAddressProblem(address));
   const active = $derived((roster?.devices ?? []).filter((d) => d.revoked_at === null));
   const removed = $derived((roster?.devices ?? []).filter((d) => d.revoked_at !== null));
   const secondsLeft = $derived(
@@ -175,11 +175,8 @@
             Address the device will open
             <input type="url" bind:value={address} placeholder="http://100.x.y.z:8431" />
           </label>
-          {#if isLoopback}
-            <p class="warn">
-              A phone cannot open <code>{address}</code>. Open this dashboard by its Tailscale or
-              LAN address, or type that address here.
-            </p>
+          {#if addressProblem}
+            <p class="warn">{addressProblem}</p>
           {/if}
           <div class="row">
             <button class="btn btn-filled" disabled={working} onclick={startPairing}>

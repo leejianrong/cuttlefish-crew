@@ -184,7 +184,9 @@ checkout. It checks that Tailscale and tmux are ready, then serves one sample pr
 
 To use the encrypted relay path on one machine, run `cuttlefish relay` in one terminal and
 `cuttlefish serve --relay ws://127.0.0.1:8450` in another. In the dashboard open the account menu, then **Devices**, make a
-pairing link and open it on the phone. Both screens show a six-digit code; confirm on the PC if they match. A new device
+pairing link and open it on the device. The page it opens must be https or `http://localhost`: a browser does not allow
+this encryption on a plain-http address, so a Tailscale `http://100.x.y.z` address signs in with the password but cannot pair
+(see the [CLI reference](cli-reference.md#cuttlefish-relay)). Both screens show a six-digit code; confirm on the PC if they match. A new device
 may read, answer Needs you, steer, start and stop; you give it the terminal or admin rights under Devices. Details and
 limits are in the [CLI reference](cli-reference.md#cuttlefish-relay).
 

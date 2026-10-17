@@ -333,4 +333,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   before this shipped raises nothing until it is started again. Codex and kopicode sessions in tmux still ask in their own
   terminals. The hooks were exercised end to end with a fake `claude` (and the real one only to confirm it starts with the
   flags), so a real prompt through real hooks is the one thing not run in this slice.
+- **A phone cannot pair from the plain-http Tailscale dashboard** (found 2026-10-18, ADR-0039). Pairing needs `crypto.subtle`,
+  which browsers withhold from a page that is not a secure context, and `http://<tailscale ip>` is not one (checked in Chromium
+  and Firefox on a real Tailscale address). Pairing was only ever run from `127.0.0.1`, which is exempt. The page now says
+  so instead of failing obscurely; the direct password sign-in over Tailscale is unaffected. The way through is an https page: the
+  hosted relay (CUT-121), Tailscale https, or a pure-JavaScript crypto fallback (a decision, see the ADR).
 

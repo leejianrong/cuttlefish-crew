@@ -246,4 +246,8 @@ and this folder disagree after a slice lands, update this folder.
   reads "Claude Code wants to run a command that isn't on the list" (or "wants to use WebFetch"), says "Paused until you answer
   here or in the terminal", and ends in the log as "Answered in the terminal", "No answer in time: the terminal still asks" (it
   denied nothing), "Ended: the agent session was stopped" or "Ended: the agent session ended". Coral as for every Needs you card.
+- **Pairing says when an address cannot work (2026-10-18).** The Devices screen's pairing card shows a note under the address box
+  when the address will not let a phone pair: this PC's own address ("a phone cannot open this address"), or any plain-http one
+  ("only allows pairing from an https address"). A page opened from a pairing link at an address with no WebCrypto shows that
+  explanation instead of the Pair screen, with the Connect screen's password sign-in still there. Neutral text, no coral.
 

@@ -157,10 +157,17 @@ bytes move. It does not see paths, commands, output or the terminal.
 ### Pairing a phone
 
 On the PC's dashboard open the account menu, then **Devices**, then **Make a pairing link**. It shows a link and a QR
-code that work once and expire after five minutes. Open the link on the phone (the dashboard must be reachable by the
-phone's address, such as its Tailscale address; type that address into the box if the PC's own dashboard is on
-`127.0.0.1`), name the device and tap **Pair**. The phone and the PC then both show the same six-digit code. **Confirm
-on the PC only if they match.** Until you do, the phone can reach nothing. After that the phone keeps its own key and
+code that work once and expire after five minutes. Open the link on the device, name it and tap **Pair**.
+
+**The page the device opens must be a secure address**: https, or `http://localhost` on the same machine. The encryption
+uses the browser's WebCrypto, which browsers switch off on plain http, so a plain-http address such as
+`http://100.x.y.z:8431` (a Tailscale address) **cannot pair**: the page says so. Checked in Chromium and Firefox on a real
+Tailscale address. A phone on Tailscale can still sign in with the password over that address, as before. Pairing from a
+phone needs an https page (the hosted relay will serve one), or Tailscale's own https addresses once the daemon supports
+them. On the PC itself, `http://localhost` works, which is how the pairing was tested.
+
+When the device taps Pair, it and the PC both show the same six-digit code. **Confirm on the PC only if they match.**
+Until you do, the device can reach nothing. After that the phone keeps its own key and
 secret and uses the relay whenever its page is opened.
 
 ### What a device may do
