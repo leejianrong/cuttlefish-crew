@@ -52,6 +52,15 @@ describe("stateText and explanation", () => {
     expect(explanation(session({ state: "running" }))).toContain(
       "not under Needs you",
     );
+    expect(explanation(session({ state: "running", asks: "terminal" }))).toContain(
+      "not under Needs you",
+    );
+    expect(explanation(session({ state: "running", asks: "needs-you" }))).toContain(
+      "appear under Needs you",
+    );
+    const auto = explanation(session({ state: "running", asks: "auto" }));
+    expect(auto).toContain("never asks");
+    expect(auto).toContain("start it again");
     expect(explanation(session({ state: "stopped" }))).toContain(
       "where it left off",
     );

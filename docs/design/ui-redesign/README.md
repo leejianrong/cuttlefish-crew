@@ -239,3 +239,11 @@ and this folder disagree after a slice lands, update this folder.
   returns to Connect with "This device was removed on the PC." A refusal by tier is the daemon's own sentence wherever a save or
   an action would have said "check that the daemon is still running", and the terminal says it with a Reconnect button for once the
   owner raises the tier. Neutral surfaces; coral only on Waiting for you. Not in the mockups.
+- **Needs you for a Claude Code session in tmux (CUT-127, 2026-10-17).** The Agent session card's sentence follows where that
+  session's questions go: "appear under Needs you, and in the session's terminal too. Answer in either place" (started with the
+  hooks), "started in Auto mode, so it never asks and nothing will appear under Needs you. Stop it and start it again after
+  changing the mode", or the old "its own terminal" for Codex, kopicode and sessions started before. A card from such a session
+  reads "Claude Code wants to run a command that isn't on the list" (or "wants to use WebFetch"), says "Paused until you answer
+  here or in the terminal", and ends in the log as "Answered in the terminal", "No answer in time: the terminal still asks" (it
+  denied nothing), "Ended: the agent session was stopped" or "Ended: the agent session ended". Coral as for every Needs you card.
+

@@ -43,6 +43,8 @@ PUBLIC = None
 ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("GET", "/api/auth-mode"): PUBLIC,
     ("POST", "/api/login"): PUBLIC,
+    # A session's hook script, with a token of its own that opens only this route (ADR-0040).
+    ("POST", "/api/hooks/claude-code/{project_id}"): PUBLIC,
     # Read.
     ("GET", "/api/limits"): Tier.VIEW,
     ("GET", "/api/permissions"): Tier.VIEW,

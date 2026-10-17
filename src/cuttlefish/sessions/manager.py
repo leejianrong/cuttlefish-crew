@@ -13,8 +13,9 @@ The record lives in ``<root>/.cuttlefish/agent-session.json`` next to the episod
 follows the project. It holds no secret. A project is only reconciled at daemon start when its
 record says ``wanted``, which Stop clears, so stopping an agent on purpose is never undone.
 
-A tmux-hosted agent asks for permission in its own terminal (the terminal view, CUT-96), not in
-Needs-you: that card belongs to the delegation path.
+A tmux-hosted agent asks for permission in its own terminal (the terminal view, CUT-96). A Claude
+Code session launched with our hooks (ADR-0040) also raises a Needs you card for it, and the
+terminal can still answer; the other backends ask in their terminals only.
 """
 
 from __future__ import annotations
@@ -27,15 +28,17 @@ import re
 import shlex
 import subprocess
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
 from cuttlefish.artifacts import AGENT_NOTE
+from cuttlefish.sessions.hooks import permission_mode
 from cuttlefish.sessions.tmux import Tmux, TmuxError, session_name
 
 Action = Literal["started", "reattached", "relaunched"]
+Asks = Literal["needs-you", "auto", "terminal"]
 State = Literal["running", "stopped", "none"]
 
 BACKENDS = ("claude-code", "codex", "kopicode")
@@ -73,6 +76,9 @@ class SessionInfo:
     session_id: str | None = None
     last_action: Action | None = None
     at: str | None = None
+    #: Where this session's permission questions go: ``needs-you`` (a Claude Code session with our
+    #: hooks, ADR-0040), ``auto`` (it never asks) or ``terminal`` (its own terminal, the default).
+    asks: Asks = "terminal"
 
     def to_json(self) -> dict[str, object]:
         return dataclasses.asdict(self)
@@ -129,7 +135,13 @@ def _latest_kopicode_session(binary: str, root: str) -> str | None:
 
 
 def launch_argv(
-    backend: str, *, root: str, session_id: str, resume: bool, kopicode_binary: str = "kopicode"
+    backend: str,
+    *,
+    root: str,
+    session_id: str,
+    resume: bool,
+    kopicode_binary: str = "kopicode",
+    claude_args: Sequence[str] = (),
 ) -> list[str]:
     """The command that starts the backend's interactive tool, resuming when asked.
 
@@ -138,14 +150,24 @@ def launch_argv(
     """
     if backend == "claude-code":
         sid = shlex.quote(session_id)
-        note = f"--append-system-prompt {shlex.quote(AGENT_NOTE)}"
+        # `claude_args`: our hooks and permission mode (ADR-0040), for a resume as for a start.
+        note = (
+            f"--append-system-prompt {shlex.quote(AGENT_NOTE)} {shlex.join(claude_args)}".rstrip()
+        )
         if resume:
             return [
                 "sh",
                 "-c",
                 f"claude --resume {sid} {note} || exec claude --session-id {sid} {note}",
             ]
-        return ["claude", "--session-id", session_id, "--append-system-prompt", AGENT_NOTE]
+        return [
+            "claude",
+            "--session-id",
+            session_id,
+            "--append-system-prompt",
+            AGENT_NOTE,
+            *claude_args,
+        ]
     if backend == "codex":
         if resume:
             return ["sh", "-c", "codex resume --last || exec codex"]
@@ -192,10 +214,23 @@ class SessionManager:
             session_id=_str(record.get("session_id")),
             last_action=_action(action),
             at=_str(record.get("at")),
+            asks=_asks(record.get("asks")),
         )
 
-    def ensure(self, project_id: str, root: str, backend: str) -> SessionInfo:
-        """Make sure the project's agent is running in tmux, and record which way it got there."""
+    def ensure(
+        self,
+        project_id: str,
+        root: str,
+        backend: str,
+        *,
+        mode: str = "standard",
+        hooks_settings: Path | None = None,
+    ) -> SessionInfo:
+        """Make sure the project's agent is running in tmux, and record which way it got there.
+
+        ``hooks_settings`` (Claude Code only, ADR-0040) is the settings file that gives the session
+        its permission hook, launched with the permission mode ``mode`` maps to. A session that is
+        found already running keeps the way it was launched."""
         if backend not in BACKENDS:
             raise SessionError(f"backend {backend!r} has no interactive session")
         name = session_name(project_id)
@@ -211,12 +246,18 @@ class SessionManager:
             previous = record.get("backend") == backend and record.get("launched") is True
             session_id = _str(record.get("session_id")) if previous else None
             session_id = session_id or str(uuid.uuid4())
+            hooked = backend == "claude-code" and hooks_settings is not None
             argv = launch_argv(
                 backend,
                 root=root,
                 session_id=session_id,
                 resume=previous,
                 kopicode_binary=self._kopicode,
+                claude_args=(
+                    ["--settings", str(hooks_settings), "--permission-mode", permission_mode(mode)]
+                    if hooked
+                    else []
+                ),
             )
             try:
                 self._tmux.new_session(name, cwd=root, argv=argv, env=self._env_for(root, backend))
@@ -224,6 +265,7 @@ class SessionManager:
                 raise SessionError(str(exc)) from exc
             action = "relaunched" if previous else "started"
             record.update(session_id=session_id, launched=True)
+            record["asks"] = ("auto" if mode == "auto" else "needs-you") if hooked else "terminal"
         record.update(backend=backend, wanted=True, last_action=action, at=_now())
         _write(root, record)
         return self.status(project_id, root)
@@ -240,6 +282,10 @@ class SessionManager:
             record["wanted"] = False
             _write(root, record)
         return self.status(project_id, root)
+
+
+def _asks(value: object) -> Asks:
+    return value if value == "needs-you" or value == "auto" else "terminal"
 
 
 def _action(value: object) -> Action | None:

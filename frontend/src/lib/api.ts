@@ -280,6 +280,8 @@ export interface NeedsYouRequest {
   backend: string | null;
   /** When an answer takes effect: `now` is a live prompt, the others are not. */
   lands: "now" | "end_of_turn" | "next_round";
+  /** From a project's agent session in tmux: its own terminal can answer too (ADR-0040). */
+  session?: boolean;
   expires_at: string;
   project_id: string;
   project_name: string;
@@ -428,6 +430,8 @@ export interface AgentSession {
   session_id: string | null;
   last_action: "started" | "reattached" | "relaunched" | null;
   at: string | null;
+  /** Where its permission questions go: Needs you (hooks), nowhere (Auto), or its terminal. */
+  asks?: "needs-you" | "auto" | "terminal";
 }
 
 /** A password-mode daemon sends a fresh session token in this header once the one in use is past
