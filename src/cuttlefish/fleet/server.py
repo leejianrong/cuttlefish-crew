@@ -72,7 +72,7 @@ from cuttlefish.fleet.daemon import (
 )
 from cuttlefish.fleet.devices import DeviceError
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
-from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings
+from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings, TierRefusal
 from cuttlefish.fleet.serve_token import load_or_create_token
 from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, parse_tier
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
@@ -1031,7 +1031,7 @@ def create_app(
                 )
         except satay.control.AuthError as exc:
             _LOG.warning("terminal for %s rejected: %s %s", project_id, exc.status, exc.detail)
-            if exc.status == 403:
+            if isinstance(exc, TierRefusal):
                 await websocket.close(code=4403, reason=str(exc.detail)[:120])
             else:
                 await websocket.close(code=4401, reason="not authorised")

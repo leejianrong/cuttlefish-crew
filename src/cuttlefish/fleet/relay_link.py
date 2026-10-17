@@ -35,6 +35,11 @@ DEVICE_HEADER = "x-cuttlefish-device"
 _TOUCH_EVERY_SECONDS = 60.0
 
 
+class TierRefusal(satay.control.AuthError):
+    """A paired device asked for something above its tier (403). A subclass so the terminal can
+    close with its own code, and a refused origin (also a 403) keeps closing with 4401."""
+
+
 class RelayAwareCheck:
     """Accepts the connector's token, and defers to `primary` for anything else."""
 
@@ -73,7 +78,7 @@ class RelayGuard:
             raise satay.control.AuthError(401, "this device is not paired, or was revoked")
         needed = required_tier(method, path)
         if needed is not None and device.tier < needed:
-            raise satay.control.AuthError(403, _too_low(device.tier, needed))
+            raise TierRefusal(403, _too_low(device.tier, needed))
         now = time.monotonic()
         if now - self._touched.get(device.id, -_TOUCH_EVERY_SECONDS) >= _TOUCH_EVERY_SECONDS:
             self._touched[device.id] = now
