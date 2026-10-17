@@ -20,6 +20,7 @@ from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.projects.store import ProjectStore
 from cuttlefish.sessions import SessionManager, Tmux
+from cuttlefish.sessions.tmux import session_name
 
 pytestmark = pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux is not installed")
 
@@ -141,6 +142,17 @@ def _read_until(ws: Any, needle: bytes, tries: int = 60) -> bytes:
     raise AssertionError(f"never saw {needle!r}; got {seen[-200:]!r}")
 
 
+def _wait_until_detached(rig: Rig, project_id: str, timeout: float = 10.0) -> None:
+    name = session_name(project_id)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        listed = rig.tmux._run("list-clients", "-t", f"={name}", check=False).stdout
+        if not listed.strip():
+            return
+        time.sleep(0.05)
+    raise AssertionError("the terminal's tmux client never detached")
+
+
 def _connect(client: TestClient, path: str, **headers: str) -> Any:
     """A websocket as a loopback browser would open it (the test client's own host is not)."""
     return client.websocket_connect(path, headers={"host": "127.0.0.1", **headers})
@@ -206,5 +218,10 @@ def test_typing_in_the_terminal_reaches_the_agent_and_its_output_comes_back(rig:
         ws.send_text(json.dumps({"type": "resize", "cols": 80, "rows": 24}))
         ws.send_bytes(b"over the wire\r")
         _read_until(ws, b"pong: over the wire")
+        # Leave the view and wait for the daemon to finish detaching. The test client cancels the
+        # app the moment its `with` block ends, without waiting for the handler's cleanup, so a
+        # handler still waiting for tmux's client to go made the exit fail now and then (CUT-125).
+        ws.close(1000)
+        _wait_until_detached(rig, project.id)
     # closing the view left the agent running
     assert client.get(f"/api/projects/{project.id}/agent-session").json()["state"] == "running"

@@ -121,18 +121,26 @@ class PtyAttach:
         if self._closed:
             return
         self._closed = True
-        with contextlib.suppress(ValueError, OSError):
-            self._loop.remove_reader(self._master)
-        if self._process.poll() is None:
-            # SIGHUP makes the tmux client detach; the session itself is untouched.
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(self._process.pid, signal.SIGHUP)
-            try:
-                await asyncio.wait_for(asyncio.to_thread(self._process.wait), 3)
-            except TimeoutError:
+        try:
+            with contextlib.suppress(ValueError, OSError):
+                self._loop.remove_reader(self._master)
+            if self._process.poll() is None:
+                # SIGHUP makes the tmux client detach; the session itself is untouched.
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(self._process.pid, signal.SIGHUP)
+                try:
+                    await asyncio.wait_for(asyncio.to_thread(self._process.wait), 3)
+                except TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        os.killpg(self._process.pid, signal.SIGKILL)
+                    await asyncio.to_thread(self._process.wait)
+        finally:
+            # Also when this task is cancelled mid-wait (a server shutting down, a test client
+            # tearing down): the pty must still be closed, and a client that has not detached yet
+            # is killed rather than left behind. Only the tmux client dies, never the session.
+            if self._process.poll() is None:
                 with contextlib.suppress(ProcessLookupError):
                     os.killpg(self._process.pid, signal.SIGKILL)
-                await asyncio.to_thread(self._process.wait)
-        with contextlib.suppress(OSError):
-            os.close(self._master)
-        self._queue.put_nowait(None)
+            with contextlib.suppress(OSError):
+                os.close(self._master)
+            self._queue.put_nowait(None)
