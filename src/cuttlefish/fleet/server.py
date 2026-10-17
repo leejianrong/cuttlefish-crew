@@ -951,7 +951,8 @@ def create_app(
                 task.cancel()
             await asyncio.gather(*pumps, return_exceptions=True)
             await attach.close()
-            with contextlib.suppress(RuntimeError):
+            # Already closed by the peer, or by uvicorn at shutdown (Ctrl-C with a browser open).
+            with contextlib.suppress(RuntimeError, WebSocketDisconnect):
                 await websocket.close()
 
     @app.post("/api/projects/{project_id}/steer")

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseHash, routeHash, sameRoute, type Route } from "./route";
+import { isSettingsTab, parseHash, routeHash, sameRoute, type Route } from "./route";
 
 const ROUTES: Route[] = [
   { view: "projects" },
@@ -31,6 +31,21 @@ describe("route hashes", () => {
       expect(parseHash(hash)).toEqual({ view: "projects" });
     }
     expect(parseHash("#/projects/p1/nope")).toEqual({ view: "project", id: "p1", tab: "overview" });
+  });
+
+  it("opens Team for a bare settings link, and keeps the old section links", () => {
+    expect(parseHash("#/projects/p1/settings")).toEqual({ view: "project", id: "p1", tab: "team" });
+    expect(parseHash("#/projects/p1/permissions")).toEqual({
+      view: "project",
+      id: "p1",
+      tab: "permissions",
+    });
+  });
+
+  it("knows which tabs sit under Settings", () => {
+    for (const tab of ["team", "permissions", "secrets"] as const) expect(isSettingsTab(tab)).toBe(true);
+    for (const tab of ["overview", "terminal", "artifacts", "needs-you"] as const)
+      expect(isSettingsTab(tab)).toBe(false);
   });
 
   it("compares by where it points", () => {

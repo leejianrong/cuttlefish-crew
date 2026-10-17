@@ -12,7 +12,8 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: "needs-you", label: "Needs you", icon: "bell" },
   { id: "projects", label: "Projects", icon: "folder" },
-  { id: "roles", label: "Roles", icon: "users" },
-  { id: "secrets", label: "Secrets", icon: "lock" },
-  { id: "sprites", label: "Sprites", icon: "sprite" },
+  // "Role library" and "Shared secrets" say they span every project; each project page has its own
+  // Team and Secrets under Settings. The sprite gallery is in the account menu, not here.
+  { id: "roles", label: "Role library", icon: "users" },
+  { id: "secrets", label: "Shared secrets", icon: "lock" },
 ];

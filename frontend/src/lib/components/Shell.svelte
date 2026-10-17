@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { applyTheme, nextTheme, saveTheme, type ThemePreference } from "../theme";
+  import { applyTheme, saveTheme, type ThemePreference } from "../theme";
   import type { NavItem } from "../nav";
   import { badgeText } from "../requests";
+  import AccountMenu from "./AccountMenu.svelte";
   import Icon from "./Icon.svelte";
 
   let {
@@ -23,13 +24,11 @@
     children: Snippet;
   } = $props();
 
-  const themeIcon = $derived(theme === "light" ? "sun" : theme === "dark" ? "moon" : "contrast");
-  const themeLabel = $derived(
-    theme === "system" ? "Theme: match system" : theme === "light" ? "Theme: light" : "Theme: dark",
+  const title = $derived(
+    items.find((item) => item.id === active)?.label ?? (active === "sprites" ? "Sprite gallery" : "Projects"),
   );
 
-  function cycleTheme() {
-    const next = nextTheme(theme);
+  function setTheme(next: ThemePreference) {
     applyTheme(next);
     saveTheme(next);
     onThemeChange(next);
@@ -62,17 +61,23 @@
       {/each}
     </div>
 
-    <div class="footer">
-      <button class="icon-button" onclick={cycleTheme} aria-label={themeLabel} title={themeLabel}>
-        <Icon name={themeIcon} />
-      </button>
-      <button class="icon-button" onclick={onDisconnect} aria-label="Disconnect" title="Disconnect">
-        <Icon name="logout" />
-      </button>
-    </div>
   </nav>
 
   <div class="content">
+    <header class="topbar">
+      <svg class="topmark" width="32" height="32" viewBox="0 0 40 40" role="img" aria-label="cuttlefish-crew">
+        <rect width="40" height="40" rx="12" fill="var(--md-sys-color-primary)" />
+        <circle cx="14" cy="17" r="3.2" fill="var(--md-sys-color-attention-container)" />
+        <circle cx="26" cy="22" r="3.6" fill="var(--md-sys-color-attention-container)" />
+      </svg>
+      <p class="title title-large">{title}</p>
+      <AccountMenu
+        {theme}
+        onThemeChange={setTheme}
+        onOpenSprites={() => onNavigate("sprites")}
+        {onDisconnect}
+      />
+    </header>
     {@render children()}
   </div>
 </div>
@@ -185,47 +190,38 @@
     color: var(--md-sys-color-on-secondary-container);
   }
 
-  .footer {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
 
-  .icon-button {
-    all: unset;
-    box-sizing: border-box;
-    position: relative;
-    overflow: hidden;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    color: var(--md-sys-color-on-surface-variant);
-  }
 
-  .icon-button::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: currentColor;
-    opacity: 0;
-    transition: opacity var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-  }
 
-  .icon-button:hover::before {
-    opacity: 0.08;
-  }
 
-  .icon-button:focus-visible {
-    outline: 2px solid var(--md-sys-color-primary);
-    outline-offset: 2px;
-  }
 
   .content {
     flex: 1;
     min-width: 0;
+  }
+
+  /* Not sticky: with a keyboard open the terminal scrolls to the top of the page, and a pinned bar
+     would sit on top of it (terminallayout.ts). */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 56px;
+    padding: 0 16px 0 24px;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  }
+
+  .topmark {
+    display: none;
+  }
+
+  .title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* On a phone the rail becomes a bottom bar (M3 navigation bar). */
@@ -253,6 +249,16 @@
       display: none;
     }
 
+    /* The rail's mark is gone on a phone: the top bar carries it instead. */
+    .topmark {
+      display: block;
+      flex: none;
+    }
+
+    .topbar {
+      padding: 0 12px 0 16px;
+    }
+
     .destinations {
       flex-direction: row;
       justify-content: space-around;
@@ -276,13 +282,9 @@
       width: min(56px, 100%);
     }
 
-    .footer {
-      flex-direction: row;
-      flex: none;
-    }
   }
 
-  /* Four destinations and the two footer buttons must fit a 320px phone without sideways scroll. */
+  /* Four destinations must fit a 320px phone without sideways scroll. */
   @media (max-width: 400px) {
     .rail {
       gap: 4px;
@@ -299,13 +301,6 @@
       letter-spacing: 0;
     }
 
-    .footer {
-      gap: 0;
-    }
 
-    .icon-button {
-      width: 36px;
-      height: 36px;
-    }
   }
 </style>

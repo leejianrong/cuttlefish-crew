@@ -13,6 +13,23 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 home="${PHONE_HOME:-/tmp/cuttlefish-phone}"
 port="${PORT:-8431}"
+# The first free port from $port up, so the URL printed below is the one that is really served.
+free_port() {
+	python3 - "$1" "$2" <<'PY'
+import socket, sys
+host, port = sys.argv[1], int(sys.argv[2])
+for p in range(port, port + 20):
+    with socket.socket() as s:
+        try:
+            s.bind((host, p))
+        except OSError:
+            continue
+        print(p)
+        break
+else:
+    sys.exit(1)
+PY
+}
 fail() { echo "phone: $*" >&2; exit 1; }
 
 command -v tmux >/dev/null || fail "tmux is not installed (sudo apt install tmux)"
@@ -26,6 +43,7 @@ if [ "$peers" -le 1 ]; then
 	echo "       with the same account (leejianrong2@gmail.com for this machine), then run this again." >&2
 fi
 
+port="$(free_port "$ts_ip" "$port")" || fail "no free port from $port upwards on $ts_ip"
 [ "${RESET:-0}" = "1" ] && { tmux -S "$home/.cuttlefish/tmux.sock" kill-server 2>/dev/null || true; rm -rf "$home"; }
 mkdir -p "$home/bin" "$home/sample" "$home/.cuttlefish"
 chmod 700 "$home"

@@ -11,7 +11,15 @@
     active,
     onSelect,
     label,
-  }: { tabs: TabItem[]; active: string; onSelect: (id: string) => void; label: string } = $props();
+    variant = "bar",
+  }: {
+    tabs: TabItem[];
+    active: string;
+    onSelect: (id: string) => void;
+    label: string;
+    /** `segmented` is a row of pills for a section inside a tab, so it does not read as a second tab bar. */
+    variant?: "bar" | "segmented";
+  } = $props();
 
   // A deep link can open a tab past the edge of a narrow bar: bring it into view.
   $effect(() => {
@@ -39,7 +47,7 @@
   }
 </script>
 
-<div class="tabs" role="tablist" aria-label={label}>
+<div class="tabs" class:segmented={variant === "segmented"} role="tablist" aria-label={label}>
   {#each tabs as tab, index (tab.id)}
     <button
       id="tab-{tab.id}"
@@ -100,8 +108,7 @@
     }
   }
 
-  /* Seven tabs do not fit a phone even with wrapping: the labels overlapped. Keep each on one
-     line and let the bar scroll; the open tab is scrolled into view (see the script). */
+  /* Keep each tab on one line and let the bar scroll if it must (five fit a 390px phone, more than that did not); the open tab is scrolled into view (see the script). */
   @media (max-width: 400px) {
     .tabs {
       gap: 0;
@@ -110,8 +117,27 @@
 
     .tab {
       flex: 0 0 auto;
-      padding: 12px 10px;
+      padding: 12px 6px;
     }
+  }
+
+  .tabs.segmented {
+    border-bottom: 0;
+    gap: 8px;
+    margin-bottom: 1rem;
+  }
+
+  .segmented .tab {
+    padding: 6px 16px;
+    margin-bottom: 0;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: 8px;
+  }
+
+  .segmented .tab.active {
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+    border-color: transparent;
   }
 
   .count {

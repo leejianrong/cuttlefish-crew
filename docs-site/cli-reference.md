@@ -356,11 +356,13 @@ reviewer's and planner's prompts are what keep them from editing.
 
 ## Permissions and team, in the dashboard
 
-A project's page has three tabs. **Permissions** sets the mode, switches command groups on and
+A project's page has four tabs for working (Overview, Terminal, Needs you, Artifacts) and a **Settings** tab
+with three sections: Permissions, Team and Secrets. (A link to an old tab, such as `#/projects/<id>/team`, still opens
+that section.) **Permissions** sets the mode, switches command groups on and
 off (the same presets as above, plus your own commands) and shows the always-blocked list and
 how each agent receives a mode. **Team** edits the project's roles: change a role's prompt,
 agent and permissions, add a built-in or custom role, remove one, reset a built-in to its default
-prompt, or replace the whole team from a template. The **Roles** destination lists the built-in
+prompt, or replace the whole team from a template. The **Role library** destination lists the built-in
 roles and teams read-only; each project keeps its own copy of a role, so editing one never
 changes the library.
 

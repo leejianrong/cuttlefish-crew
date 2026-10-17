@@ -218,3 +218,13 @@ and this folder disagree after a slice lands, update this folder.
   **Disconnect** as the way out; the page behind keeps its place and a terminal that closed reconnects after the sign-in.
   The Projects screen no longer says "No projects yet" while the daemon is unreachable. Neutral surfaces, no coral in
   the dialog. How a real on-screen keyboard resizes the terminal is checked on a phone, not in the emulator.
+
+- **Top bar, account menu and Settings tab (CUT-98, 2026-10-17).** From a real phone pass: the bottom bar held five
+  destinations plus the theme and sign-out buttons, and a project page had seven tabs, three of which shared a name with a
+  destination. Now a top bar (title left, a round account button right, the mark on a phone) holds a menu: Theme (match
+  system, light, dark), Sprite gallery and Disconnect. It is not sticky, because a pinned bar would cover the terminal when
+  the keyboard scrolls it to the top of the page. The rail and bottom bar list only places that span every project: Needs you,
+  Projects, **Role library** and **Shared secrets**. A project has Overview, Terminal, Needs you, Artifacts and **Settings**;
+  Settings has Team, Permissions and Secrets as a row of pills (`Tabs` `variant="segmented"`) and reopens the section you
+  were last in. Every old link (`/team`, `/permissions`, `/secrets`) still opens its section and `/settings` opens Team. Five
+  tabs fit a 390px phone exactly; narrower scrolls. Trade-off: the top bar costs 56px of terminal height on a phone.
