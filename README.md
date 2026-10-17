@@ -202,7 +202,7 @@ for you on their default transports. The one-shot transports
 (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, `CUTTLEFISH_CODEX_TRANSPORT=exec`) and any
 sandbox provider cannot, so they refuse a command nothing approves.
 Everything else (project-scoped secrets, container/E2B sandboxes, token ceilings,
-Tailscale access, the MCP server, every flag) is in the
+Tailscale access, the MCP server, a preview of the encrypted relay, every flag) is in the
 [CLI reference](https://leejianrong.github.io/cuttlefish-crew/docs/cli-reference/).
 
 ## Configuration

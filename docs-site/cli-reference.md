@@ -135,9 +135,29 @@ Sessions do not survive a restart: the dashboard asks you to sign in again and c
 | `--host HOST` | Loopback by default. A non-loopback host (LAN IP, Tailscale address, `0.0.0.0`) requires `CUTTLEFISH_SERVE_PASSWORD` and switches to password/session auth. |
 | `--port PORT` | Auto-picks a free port if the default is taken. |
 | `--tailscale` | Bind directly to this machine's own Tailscale IPv4 address — the recommended remote-access path. Overrides `--host`. |
+| `--relay URL` | Also dial out to a relay (`ws://host:port`, run by `cuttlefish relay`) and print a link that opens the dashboard through it, end-to-end encrypted. Preview, loopback only: see [the relay](#cuttlefish-relay). Default: `$CUTTLEFISH_RELAY_URL`. |
 | `--allow-origin ORIGIN` | A browser origin the dashboard may be served from in non-loopback mode. Repeatable. |
 | `--browse-root PATH` | A folder the dashboard's folder picker may browse: its subfolders only, with hidden folders and links out of the tree excluded. Repeatable. Default: your home directory. Registering a project is not limited to these. In non-loopback mode, set it to a workspaces folder rather than your home. |
 | `--dashboard-dir PATH` | Serve the dashboard's own production build from this directory, same-origin with the JSON API. Default: auto-detect `./frontend/dist`. |
+
+## `cuttlefish relay`
+
+**Preview (CUT-119, [ADR-0037](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0037-a-relay-carries-end-to-end-encrypted-traffic-between-a-browser-and-the-daemon.md)).**
+A headless server, with no screens, that passes encrypted traffic between a browser and a daemon. The daemon
+dials out to it (`cuttlefish serve --relay ws://127.0.0.1:8450`), prints a link, and a browser that opens the
+link runs a Noise handshake with the daemon *through* the relay. The relay sees which rooms exist, who connects
+and leaves, and how many bytes move. It does not see paths, commands, output or the terminal.
+
+| Flag | What it does |
+|---|---|
+| `--host HOST` | Loopback by default. It warns on anything else, because it has no accounts yet. |
+| `--port PORT` | Default 8450. |
+
+What this preview is not: there are no accounts, so anyone who can reach the relay can claim a room, and the
+link `serve` prints is a shared secret (anyone with it has the whole dashboard, as with the password). It is
+new each time the daemon starts. Pairing a device once, per-device tiers and revocation are CUT-120. The page
+itself is still served by the daemon, so this proves the encrypted path and does not yet let a phone with no
+VPN reach a PC.
 
 ## `cuttlefish doctor`
 
@@ -204,6 +224,7 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. cuttlefish asks kopicode for `--consent-timeout` when `serve --help` lists it (kopicode v0.3.0 and later). An older kopicode denies after its own fixed 60 seconds, so there you get 45. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` and the dashboard's secrets routes are unavailable. |
 | `CUTTLEFISH_SERVE_PASSWORD` | unset | Required for any non-loopback `cuttlefish serve` bind. |
+| `CUTTLEFISH_RELAY_URL` | unset | The relay `cuttlefish serve` dials out to, as `--relay` does (preview). |
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |
 
 A real run also needs a model credential for whichever LLM provider and

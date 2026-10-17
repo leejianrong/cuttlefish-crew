@@ -121,3 +121,37 @@ describe("FleetClient session refresh (ADR-0038)", () => {
     await expect(client.listProjects()).rejects.toMatchObject({ status: 401 });
   });
 });
+
+describe("FleetClient over a transport", () => {
+  it("sends every request through the transport it was given, and never fetch", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const seen: { path: string; token: unknown }[] = [];
+    const transport = {
+      fetch: async (path: string, init?: RequestInit) => {
+        seen.push({ path, token: (init?.headers as Record<string, string>)["x-cuttlefish-token"] });
+        return new Response(JSON.stringify({ projects: [] }), { status: 200 });
+      },
+      openSocket: vi.fn(),
+    };
+    const client = new FleetClient("relay://abc", "relay", undefined, transport);
+    await client.listProjects();
+    expect(seen).toEqual([{ path: "/api/projects", token: "relay" }]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("opens the terminal through the transport by path", () => {
+    const socket = {};
+    const openSocket = vi.fn(() => socket);
+    const client = new FleetClient("relay://abc", "relay", undefined, { fetch: vi.fn(), openSocket } as never);
+    expect(client.openTerminal("p 1")).toBe(socket);
+    expect(openSocket).toHaveBeenCalledWith("/api/projects/p%201/terminal");
+  });
+
+  it("reaches a daemon directly when no transport is given", async () => {
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ projects: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    await new FleetClient("http://127.0.0.1:8420/", "t").listProjects();
+    expect(fetchSpy).toHaveBeenCalledWith("http://127.0.0.1:8420/api/projects", expect.anything());
+  });
+});

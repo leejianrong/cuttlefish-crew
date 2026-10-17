@@ -12,7 +12,8 @@
   let {
     onConnected,
     onShowGallery,
-  }: { onConnected: (client: FleetClient) => void; onShowGallery: () => void } = $props();
+    notice = "",
+  }: { onConnected: (client: FleetClient) => void; onShowGallery: () => void; notice?: string } = $props();
 
   // ADR-0011: a daemon's own `/api/auth-mode` says whether it wants the classic
   // loopback-mode static token or a non-loopback bind's password login -- checked
@@ -79,6 +80,9 @@
   {#if step === "url"}
     <form class="card elevated" onsubmit={checkBaseUrl}>
       <h1 class="headline-small">cuttlefish-crew</h1>
+      {#if notice}
+        <p class="error" role="alert">{notice}</p>
+      {/if}
       <p class="hint">
         Connect to a running <code>cuttlefish serve</code>. Its address is printed in the
         terminal where you started it.

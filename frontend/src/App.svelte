@@ -13,6 +13,7 @@
   import { NAV_ITEMS } from "./lib/nav";
   import { keepIfSame } from "./lib/same";
   import { HOME, parseHash, routeHash, sameRoute, type ProjectTab, type Route } from "./lib/route";
+  import { forgetRelay, startRelay } from "./lib/relayconnect";
   import { clearConnection, loadConnection, saveConnection } from "./lib/session";
   import { applyTheme, loadTheme, type ThemePreference } from "./lib/theme";
   import { tabTitle } from "./lib/title";
@@ -23,9 +24,22 @@
     return new FleetClient(baseUrl, token, (fresh) => saveConnection({ baseUrl, token: fresh }));
   }
 
-  const remembered = loadConnection();
+  // Opened from a pairing link (`#relay=...`, ADR-0037)? Then every request and the terminal go through
+  // the relay, and there is no token to ask for: the daemon's connector speaks for a paired browser.
+  const relayStart = startRelay();
+  let relay = relayStart && "transport" in relayStart ? relayStart : null;
+  const relayNotice = relayStart && "error" in relayStart ? relayStart.error : "";
+  function makeRelayClient(transport: NonNullable<typeof relay>["transport"], room: string): FleetClient {
+    return new FleetClient(`relay://${room.slice(0, 8)}`, "relay", undefined, transport);
+  }
+
+  const remembered = relay ? null : loadConnection();
   let client = $state<FleetClient | null>(
-    remembered ? makeClient(remembered.baseUrl, remembered.token) : null,
+    relay
+      ? makeRelayClient(relay.transport, relay.room)
+      : remembered
+        ? makeClient(remembered.baseUrl, remembered.token)
+        : null,
   );
   // The daemon stopped accepting the saved sign-in (a restart, an expired session): ask again here
   // instead of leaving the page on "Lost connection" (CUT-112).
@@ -126,6 +140,11 @@
   }
 
   function disconnect() {
+    if (relay) {
+      relay.transport.close();
+      relay = null;
+      forgetRelay();
+    }
     client = null;
     signedOut = false;
     go(HOME);
@@ -153,7 +172,7 @@
   {#if showGallery}
     <SpriteGallery onBack={() => go(HOME)} />
   {:else}
-    <ConnectScreen {onConnected} onShowGallery={() => go({ view: "sprites" })} />
+    <ConnectScreen {onConnected} notice={relayNotice} onShowGallery={() => go({ view: "sprites" })} />
   {/if}
 {:else}
   <Shell

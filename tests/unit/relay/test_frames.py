@@ -85,3 +85,10 @@ def test_an_empty_body_is_no_chunks_and_a_bad_size_is_refused() -> None:
         chunks(b"abc", 0)
     with pytest.raises(FrameError):
         chunks(b"abc", MAX_PAYLOAD + 1)
+
+
+def test_the_websocket_kind_bytes_are_the_ones_the_browser_uses() -> None:
+    # frontend/src/lib/relay/frames.ts has the same three numbers, and its test pins them too.
+    from cuttlefish.relay.protocol import WS_ACCEPTED, WS_BINARY, WS_TEXT
+
+    assert (WS_TEXT, WS_BINARY, WS_ACCEPTED) == (0, 1, 2)

@@ -12,6 +12,12 @@ export const CHUNK_SIZE = 60000;
 export const CONNECTION_STREAM = 0;
 export const MAX_STREAM_ID = 2 ** 32 - 1;
 
+/** The first byte of a WS_DATA payload says what the rest is (see frames.py). A websocket message larger than
+ * CHUNK_SIZE goes as several frames. WS_ACCEPTED is empty and comes from the daemon once its app accepted the socket. */
+export const WS_TEXT = 0;
+export const WS_BINARY = 1;
+export const WS_ACCEPTED = 2;
+
 export const FrameType = {
   REQUEST: 1,
   RESPONSE: 2,

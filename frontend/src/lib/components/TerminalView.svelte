@@ -3,12 +3,12 @@
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
   import type { FleetClient } from "../api";
+  import type { SocketLike } from "../relay";
   import {
     KEY_ROW,
     authMessage,
     describeClose,
     resizeMessage,
-    terminalUrl,
     type CloseInfo,
   } from "../terminal";
   import { keyboardOpen, screenHeight } from "../terminallayout";
@@ -32,7 +32,7 @@
 
   let term: Terminal | null = null;
   let fit: FitAddon | null = null;
-  let socket: WebSocket | null = null;
+  let socket: SocketLike | null = null;
   let observer: ResizeObserver | null = null;
   let connectedFor = "";
   const encoder = new TextEncoder();
@@ -116,7 +116,7 @@
     } catch {
       /* fitted on the first resize */
     }
-    const ws = new WebSocket(terminalUrl(client.baseUrl, projectId));
+    const ws = client.openTerminal(projectId);
     ws.binaryType = "arraybuffer";
     socket = ws;
     ws.onopen = () => ws.send(authMessage(client.token, terminal.cols, terminal.rows));

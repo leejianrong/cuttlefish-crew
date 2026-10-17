@@ -69,7 +69,8 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **`cuttlefish.relay.protocol` and `frontend/src/lib/relay/` import nothing from the rest of
   cuttlefish** (standard library and `cryptography` in Python, `@noble/curves` in the browser). They
   are meant to be lifted into their own repository later. Tests enforce it, and a device is trusted
-  only after its first transport message decrypts. ADR-0037.
+  only after its first transport message decrypts. `cuttlefish.relay.server` and `.connector` may use web libraries but
+  import nothing else from cuttlefish: the relay holds no project data, and the connector is handed an ASGI app. ADR-0037.
 - **With `CUTTLEFISH_CREDENTIAL_BROKER=1` an agent never holds its model key.**
   The daemon's broker keeps it and leases a short-lived token; the real key is
   removed from the secrets handed to the backend, and the lease is revoked in a

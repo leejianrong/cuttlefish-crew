@@ -71,6 +71,7 @@ from cuttlefish.fleet.daemon import (
     UnknownRoleError,
 )
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
+from cuttlefish.fleet.relay_link import RelayLink, RelaySettings
 from cuttlefish.fleet.serve_token import load_or_create_token
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
@@ -386,8 +387,8 @@ def create_app(
                 _LOG.warning("%s %s rejected: %s %s", request.method, path, exc.status, exc.detail)
                 return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
         response = await call_next(request)
-        if isinstance(security, SessionAuth) and path.startswith("/api/") and path != "/api/login":
-            fresh = security.refresh(request.headers.get(TOKEN_HEADER))
+        if login is not None and path.startswith("/api/") and path != "/api/login":
+            fresh = login.refresh(request.headers.get(TOKEN_HEADER))
             if fresh is not None:
                 response.headers[TOKEN_REFRESH_HEADER] = fresh
         return response
@@ -898,11 +899,16 @@ def create_app(
             token = first.get("token") if isinstance(first, dict) else None
             if not isinstance(first, dict) or first.get("type") != "auth":
                 raise ValueError("expected an auth message first")
-            security.check(
-                token=token if isinstance(token, str) else None,
-                host=websocket.headers.get("host"),
-                origin=websocket.headers.get("origin"),
-            )
+            try:
+                security.check(
+                    token=token if isinstance(token, str) else None,
+                    host=websocket.headers.get("host"),
+                    origin=websocket.headers.get("origin"),
+                )
+            except TypeError as exc:
+                # satay's own check compares tokens as `str` and raises on non-ASCII text, which a
+                # websocket message (unlike a header) can carry. It is a wrong token all the same.
+                raise satay.control.AuthError(401, "invalid token") from exc
         except satay.control.AuthError as exc:
             _LOG.warning("terminal for %s rejected: %s %s", project_id, exc.status, exc.detail)
             await websocket.close(code=4401, reason="not authorised")
@@ -1108,6 +1114,7 @@ async def run_daemon(
     dashboard_dir: Path | None = None,
     browse_roots: Sequence[Path] = (),
     token_file: Path | None = None,
+    relay: RelaySettings | None = None,
 ) -> None:
     """Serve `daemon`'s HTTP surface until cancelled (`cuttlefish serve`).
 
@@ -1177,6 +1184,9 @@ async def run_daemon(
             flush=True,
         )
     _LOG.info("listening on http://%s:%s%s", host, resolved_port, dashboard_note)
+    link = RelayLink.create(relay) if relay is not None else None
+    if link is not None:
+        security = link.wrap(security)
     app = create_app(
         daemon,
         security=security,
@@ -1187,4 +1197,18 @@ async def run_daemon(
     )
     config = uvicorn.Config(app, host=host, port=resolved_port, log_level="warning")
     server = uvicorn.Server(config)
-    await server.serve()
+    connector_task: asyncio.Task[None] | None = None
+    if link is not None:
+        connector_task = asyncio.create_task(link.connector(app).run())
+        print(
+            f"cuttlefish serve: relay {link.settings.url} -- open this to use the dashboard "
+            "through it (a temporary link: whoever has it has the dashboard; it changes "
+            "when this daemon restarts):\n  " + link.pairing_url(f"http://{host}:{resolved_port}"),
+            flush=True,
+        )
+    try:
+        await server.serve()
+    finally:
+        if connector_task is not None:
+            connector_task.cancel()
+            await asyncio.gather(connector_task, return_exceptions=True)

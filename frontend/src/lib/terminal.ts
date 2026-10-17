@@ -4,7 +4,12 @@
 /** `http://host:8420` becomes `ws://host:8420`, `https` becomes `wss`. */
 export function terminalUrl(baseUrl: string, projectId: string): string {
   const base = baseUrl.replace(/\/+$/, "").replace(/^http/, "ws");
-  return `${base}/api/projects/${encodeURIComponent(projectId)}/terminal`;
+  return `${base}${terminalPath(projectId)}`;
+}
+
+/** Where the daemon serves a project's terminal, whichever way the socket gets there. */
+export function terminalPath(projectId: string): string {
+  return `/api/projects/${encodeURIComponent(projectId)}/terminal`;
 }
 
 /** The first message. A browser cannot set a header on a websocket and a token in the address would

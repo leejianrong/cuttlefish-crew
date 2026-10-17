@@ -53,3 +53,28 @@ def test_the_rules_would_catch_a_violation(tmp_path: Path) -> None:
     bad = tmp_path / "bad.py"
     bad.write_text("from cuttlefish.fleet import daemon\nimport cuttlefish.secrets\n")
     assert _imports(bad) == {"cuttlefish.fleet", "cuttlefish.secrets"}
+
+
+RELAY = PACKAGE.parent
+#: The relay server and the connector may use web libraries, but may not reach into the rest of
+#: cuttlefish: the relay holds no project data (ADR-0037), and the connector is given an ASGI app
+#: instead of importing the fleet.
+SERVICE_MODULES = ("server.py", "connector.py")
+SERVICE_THIRD_PARTY = {"cryptography", "fastapi", "starlette", "uvicorn", "websockets"}
+
+
+def test_the_relay_server_and_connector_import_nothing_from_the_rest_of_cuttlefish() -> None:
+    stdlib = set(sys.stdlib_module_names)
+    offenders: list[str] = []
+    for module in SERVICE_MODULES:
+        for name in sorted(_imports(RELAY / module)):
+            top = name.split(".")[0]
+            ok = (
+                top in stdlib
+                or top in SERVICE_THIRD_PARTY
+                or name == "cuttlefish.relay"
+                or name.startswith("cuttlefish.relay.")
+            )
+            if not ok:
+                offenders.append(f"{module}: {name}")
+    assert offenders == []
