@@ -1,6 +1,6 @@
 # ADR-0037: A relay carries end-to-end encrypted traffic between a browser and the daemon, and lives in this repo as its own package
 
-- Status: Proposed (a spike's draft, to be accepted or changed by Jian before any relay code)
+- Status: Accepted
 - Date: 2026-10-17
 - Deciders: Jian
 
@@ -14,7 +14,9 @@ CUT-98's investigation). A PC behind a home router accepts no inbound connection
 the browser and the PC's own outbound connection. That something is a relay.
 
 Jian's decisions, 2026-10-17: the relay is a near-term goal; it is built in this repository; the encryption is end to
-end and strong, even at the cost of a bigger build.
+end and strong, even at the cost of a bigger build. On reading the spike, Jian accepted this ADR as written, chose
+**View and Approve** as a new device's default tier, and required **an outside review of the pairing, tier and
+revocation design before accounts and hosting ship**.
 
 The hands-on checks are in `docs/research/relay-spike.md`, with a prototype in `docs/research/relay-spike/`.
 
@@ -147,7 +149,8 @@ pairing are enforced by the daemon.
 
 - Needs its own service to run, with accounts, rate limits and abuse handling that the self-hosted path never needed.
 - A new, security-critical area: the protocol is small and uses Noise, but the pairing flow, the tiers and the
-  revocation path need review before release. Independent review is required, not optional.
+  revocation path need review before release. **Accounts and hosting (R4) do not ship until an outside reviewer has
+  reviewed them.** The protocol package and a loopback relay can be built before that, since nothing public exists yet.
 - The daemon grows a connector, a device store, a third `SecurityCheck` and a pairing screen.
 - Work on a shell, previews and media later rides on the tiers and streams defined here.
 - ADR-0011 and ADR-0013 stand for loopback and Tailscale. ADR-0001 to ADR-0036 are unaffected.
