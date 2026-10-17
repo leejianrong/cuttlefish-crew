@@ -245,7 +245,7 @@
   }
 </script>
 
-<div class="page">
+<div class="page" class:terminal-tab={tab === "terminal"}>
   <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Projects</button>
 
   {#if missing}
@@ -514,6 +514,22 @@
   .back {
     margin: 0 0 0.75rem -12px;
     padding: 0 16px 0 12px;
+  }
+
+  /* The Terminal tab on a phone gives its height to the terminal: no path line, a tighter header,
+     and no room reserved below (the terminal sizes itself to the bottom bar, CUT-98). */
+  @media (max-width: 640px) {
+    .page.terminal-tab {
+      padding: 0.5rem 1rem 0.5rem;
+    }
+
+    .page.terminal-tab .back {
+      margin-bottom: 0;
+    }
+
+    .page.terminal-tab .root {
+      display: none;
+    }
   }
 
   h1,

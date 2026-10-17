@@ -33,6 +33,10 @@ import satay.control
 #: the way the loopback-mode static token effectively is for the process's life.
 DEFAULT_SESSION_TTL_SECONDS = 12 * 60 * 60
 
+#: A session that is used slides forward (ADR-0038), but never past this age since the
+#: password was typed, so a phone left signed in is asked for the password again within a week.
+DEFAULT_MAX_SESSION_SECONDS = 7 * 24 * 60 * 60
+
 #: A non-loopback bind is reachable by anyone who can guess the password; refuse
 #: one short enough to guess in an afternoon rather than accept it silently.
 MIN_PASSWORD_LENGTH = 12
@@ -74,6 +78,7 @@ class SessionAuth:
     password: str
     allowed_origins: frozenset[str] = frozenset()
     ttl_seconds: int = DEFAULT_SESSION_TTL_SECONDS
+    max_session_seconds: int = DEFAULT_MAX_SESSION_SECONDS
     _secret: bytes = field(default_factory=lambda: secrets.token_bytes(32), repr=False)
     _failures: int = field(default=0, repr=False)
     _locked_until: float = field(default=0.0, repr=False)
@@ -103,20 +108,47 @@ class SessionAuth:
         self._failures = 0
         return self._mint(now)
 
-    def _mint(self, now: float) -> str:
-        expiry = int(now + self.ttl_seconds)
-        return f"{expiry}.{self._sign(expiry)}"
+    def _mint(self, now: float, issued: float | None = None) -> str:
+        """`{expiry}.{issued}.{mac}`. A fresh login is issued now; a refresh keeps the original
+        `issued`, and its expiry is cut at `issued + max_session_seconds`."""
+        first = int(now if issued is None else issued)
+        expiry = min(int(now + self.ttl_seconds), first + self.max_session_seconds)
+        return f"{expiry}.{first}.{self._sign(expiry, first)}"
 
-    def _sign(self, expiry: int) -> str:
-        return hmac.new(self._secret, str(expiry).encode(), "sha256").hexdigest()
+    def _sign(self, expiry: int, issued: int) -> str:
+        return hmac.new(self._secret, f"{expiry}.{issued}".encode(), "sha256").hexdigest()
+
+    def _parse_session_token(self, token: str) -> tuple[int, int] | None:
+        """`(expiry, issued)` of a token that is genuine and unexpired, else `None`."""
+        parts = token.split(".")
+        if len(parts) != 3 or not parts[2] or not parts[0].isdigit() or not parts[1].isdigit():
+            return None
+        expiry, issued = int(parts[0]), int(parts[1])
+        if expiry < time.time():
+            return None
+        if not hmac.compare_digest(parts[2], self._sign(expiry, issued)):
+            return None
+        return expiry, issued
 
     def _verify_session_token(self, token: str) -> bool:
-        expiry_str, sep, mac = token.partition(".")
-        if not sep or not mac or not expiry_str.isdigit():
-            return False
-        if int(expiry_str) < time.time():
-            return False
-        return hmac.compare_digest(mac, self._sign(int(expiry_str)))
+        return self._parse_session_token(token) is not None
+
+    def refresh(self, token: str | None) -> str | None:
+        """A fresh token for a genuine one that is past half its life, else `None` (ADR-0038).
+
+        The dashboard keeps whatever this returns, so a phone that is in use stays signed in for
+        `ttl_seconds` after its last request, up to `max_session_seconds` since the password was
+        typed. An unused session still ends `ttl_seconds` after its last request, and a restart
+        still ends every session (the signing secret is per process)."""
+        parsed = self._parse_session_token(token) if token else None
+        if parsed is None:
+            return None
+        expiry, issued = parsed
+        now = time.time()
+        if expiry - now > self.ttl_seconds / 2:
+            return None
+        fresh = self._mint(now, issued=issued)
+        return None if fresh == token else fresh
 
     def check(self, *, token: str | None, host: str | None, origin: str | None) -> None:
         """`host` is unchecked (see ADR-0011: a `Host`-based rebinding defence only
@@ -143,6 +175,7 @@ class SessionAuth:
 
 
 __all__ = [
+    "DEFAULT_MAX_SESSION_SECONDS",
     "DEFAULT_SESSION_TTL_SECONDS",
     "MIN_PASSWORD_LENGTH",
     "SecurityCheck",

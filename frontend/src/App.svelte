@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { FleetClient, type NeedsYouRequest } from "./lib/api";
+  import { FleetApiError, FleetClient, type NeedsYouRequest } from "./lib/api";
   import AddProject from "./lib/components/AddProject.svelte";
   import ConnectScreen from "./lib/components/ConnectScreen.svelte";
   import RolesLibrary from "./lib/components/RolesLibrary.svelte";
@@ -7,6 +7,7 @@
   import NeedsYouScreen from "./lib/components/NeedsYouScreen.svelte";
   import Portfolio from "./lib/components/Portfolio.svelte";
   import ProjectDetail from "./lib/components/ProjectDetail.svelte";
+  import SignInAgain from "./lib/components/SignInAgain.svelte";
   import Shell from "./lib/components/Shell.svelte";
   import SpriteGallery from "./lib/components/SpriteGallery.svelte";
   import { NAV_ITEMS } from "./lib/nav";
@@ -14,11 +15,21 @@
   import { HOME, parseHash, routeHash, sameRoute, type ProjectTab, type Route } from "./lib/route";
   import { clearConnection, loadConnection, saveConnection } from "./lib/session";
   import { applyTheme, loadTheme, type ThemePreference } from "./lib/theme";
+  import { tabTitle } from "./lib/title";
+
+  // A password-mode daemon hands out a fresh session token as the old one ages (ADR-0038). Every
+  // client keeps it in this browser, so a reload carries on signed in.
+  function makeClient(baseUrl: string, token: string): FleetClient {
+    return new FleetClient(baseUrl, token, (fresh) => saveConnection({ baseUrl, token: fresh }));
+  }
 
   const remembered = loadConnection();
   let client = $state<FleetClient | null>(
-    remembered ? new FleetClient(remembered.baseUrl, remembered.token) : null,
+    remembered ? makeClient(remembered.baseUrl, remembered.token) : null,
   );
+  // The daemon stopped accepting the saved sign-in (a restart, an expired session): ask again here
+  // instead of leaving the page on "Lost connection" (CUT-112).
+  let signedOut = $state(false);
   // Where we are lives in the URL hash, so a reload, Back and a pasted link land on the same screen.
   let route = $state<Route>(parseHash(window.location.hash));
   const openProjectId = $derived(route.view === "project" ? route.id : null);
@@ -90,10 +101,16 @@
       waiting = keepIfSame(waiting, (await client.listRequests()).requests);
       waitingFetchedAt = Date.now();
       waitingUnreachable = false;
-    } catch {
-      waitingUnreachable = true;
+    } catch (error) {
+      if (error instanceof FleetApiError && error.status === 401) signedOut = true;
+      else waitingUnreachable = true;
     }
   }
+
+  // The count in the tab title is what a phone shows in its tab switcher.
+  $effect(() => {
+    document.title = client ? tabTitle(waiting.length) : tabTitle(0);
+  });
 
   $effect(() => {
     if (!client) return;
@@ -103,12 +120,14 @@
   });
 
   function onConnected(newClient: FleetClient) {
-    client = newClient;
+    client = makeClient(newClient.baseUrl, newClient.token);
+    signedOut = false;
     saveConnection({ baseUrl: newClient.baseUrl, token: newClient.token });
   }
 
   function disconnect() {
     client = null;
+    signedOut = false;
     go(HOME);
     waiting = [];
     clearConnection();
@@ -186,4 +205,16 @@
       />
     {/if}
   </Shell>
+  {#if signedOut}
+    <SignInAgain
+      {client}
+      onSignedIn={(next) => {
+        client = makeClient(next.baseUrl, next.token);
+        saveConnection({ baseUrl: next.baseUrl, token: next.token });
+        signedOut = false;
+        refreshWaiting();
+      }}
+      onDisconnect={disconnect}
+    />
+  {/if}
 {/if}

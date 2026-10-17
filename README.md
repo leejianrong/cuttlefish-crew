@@ -158,8 +158,9 @@ restart `cuttlefish serve` and it is still there; the card says it was **reattac
 tmux is gone, and the next `cuttlefish serve` starts the agent again with the tool's own resume
 command (**relaunched**), so the conversation carries on. It asks for permission in its own
 terminal, not under Needs you: open the project's **Terminal** tab, which is the real tmux session in
-the browser (xterm.js), with a key row for a phone. It needs the same sign-in as the rest of the
-dashboard, and closing it leaves the agent running.
+the browser (xterm.js), with a key row for a phone that sits right under the terminal, above the bottom bar. It needs the same
+sign-in as the rest of the dashboard, and closing it leaves the agent running. The page title shows the
+Needs you count, and if the daemon restarts under an open page it asks you to sign in again.
 
 **8. Read what an agent made.** Agents are told to write a result (a plan, a review, a summary) as a
 markdown file under `.cuttlefish/artifacts/` in the project. The project's **Artifacts** tab lists those

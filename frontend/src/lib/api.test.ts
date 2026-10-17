@@ -4,7 +4,14 @@
 // `tests/integration/test_fleet_server_auth.py`.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FleetApiError, FleetUnreachableError, fetchAuthMode, login } from "./api";
+import {
+  FleetApiError,
+  FleetClient,
+  FleetUnreachableError,
+  TOKEN_REFRESH_HEADER,
+  fetchAuthMode,
+  login,
+} from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -73,5 +80,44 @@ describe("login", () => {
     await expect(login("http://127.0.0.1:8420", "whatever")).rejects.toBeInstanceOf(
       FleetUnreachableError,
     );
+  });
+});
+
+describe("FleetClient session refresh (ADR-0038)", () => {
+  const reply = (headers: Record<string, string> = {}, status = 200) =>
+    vi.fn(async () => new Response(JSON.stringify({ projects: [] }), { status, headers }));
+
+  it("keeps a fresh token the daemon sends and tells the app", async () => {
+    vi.stubGlobal("fetch", reply({ [TOKEN_REFRESH_HEADER]: "new-token" }));
+    const seen: string[] = [];
+    const client = new FleetClient("http://x", "old-token", (token) => seen.push(token));
+    await client.listProjects();
+    expect(client.token).toBe("new-token");
+    expect(seen).toEqual(["new-token"]);
+  });
+
+  it("sends the new token on the next request", async () => {
+    const fetchMock = reply({ [TOKEN_REFRESH_HEADER]: "new-token" });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FleetClient("http://x", "old-token");
+    await client.listProjects();
+    await client.listProjects();
+    const second = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect((second[1].headers as Record<string, string>)["x-cuttlefish-token"]).toBe("new-token");
+  });
+
+  it("leaves the token alone when no header comes back", async () => {
+    vi.stubGlobal("fetch", reply());
+    const seen: string[] = [];
+    const client = new FleetClient("http://x", "old-token", (token) => seen.push(token));
+    await client.listProjects();
+    expect(client.token).toBe("old-token");
+    expect(seen).toEqual([]);
+  });
+
+  it("reports a rejected token as a 401 the app can act on", async () => {
+    vi.stubGlobal("fetch", reply({}, 401));
+    const client = new FleetClient("http://x", "stale");
+    await expect(client.listProjects()).rejects.toMatchObject({ status: 401 });
   });
 });

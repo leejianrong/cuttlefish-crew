@@ -126,7 +126,9 @@ Start the fleet daemon: launches and owns every registered project's team
 concurrently, in one process. On a loopback bind it prints a URL and a token. The token is
 saved in `~/.cuttlefish/serve-token` (mode 0600) and reused on every start, so a restart does not
 sign an open dashboard out; delete the file to rotate it. A non-loopback bind uses the password
-instead, and its sessions do not survive a restart.
+instead. A session lasts 12 hours after its last request and slides forward while you use it (up to seven
+days from the password, [ADR-0038](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0038-a-password-session-slides-forward-while-it-is-used.md)).
+Sessions do not survive a restart: the dashboard asks you to sign in again and carries on where it was.
 
 | Flag | What it does |
 |---|---|

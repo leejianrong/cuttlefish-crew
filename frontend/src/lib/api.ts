@@ -386,11 +386,26 @@ export interface AgentSession {
   at: string | null;
 }
 
+/** A password-mode daemon sends a fresh session token in this header once the one in use is past
+ * half its life (ADR-0038). */
+export const TOKEN_REFRESH_HEADER = "x-cuttlefish-token-refresh";
+
 export class FleetClient {
+  /** `token` changes when the daemon sends a fresh one; `onToken` lets the app store it. */
   constructor(
     public readonly baseUrl: string,
-    public readonly token: string,
+    public token: string,
+    private readonly onToken?: (token: string) => void,
   ) {}
+
+  /** Keep a refreshed session token, so a phone that is in use stays signed in. */
+  private keepRefreshedToken(response: Response): void {
+    const fresh = response.headers.get(TOKEN_REFRESH_HEADER);
+    if (fresh && fresh !== this.token) {
+      this.token = fresh;
+      this.onToken?.(fresh);
+    }
+  }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     let response: Response;
@@ -406,6 +421,7 @@ export class FleetClient {
     } catch {
       throw new FleetUnreachableError(this.baseUrl);
     }
+    this.keepRefreshedToken(response);
     if (!response.ok) {
       const body = await response
         .json()
@@ -492,6 +508,7 @@ export class FleetClient {
     } catch {
       throw new FleetUnreachableError(this.baseUrl);
     }
+    this.keepRefreshedToken(response);
     if (!response.ok) {
       const body = await response.json().catch(() => ({ detail: response.statusText }));
       throw new FleetApiError(response.status, body.detail ?? response.statusText);
