@@ -80,6 +80,17 @@ next handshake finds no secret for its key and is refused before any message is 
 A `CONTROL` frame (type 11, stream 0, JSON) carries pairing progress and the revocation notice. It is in the Python and
 TypeScript packages with a vector test for the short code in both.
 
+## Found after it was written: pairing needs a secure origin
+
+The handshake, the keys and the session all use `crypto.subtle`, which every browser withholds from a page that is not a
+secure context: https, or http on localhost. Opened at `http://<tailscale ip>:<port>`, `isSecureContext` is false and
+`crypto.subtle` is undefined (checked in Chromium and Firefox on a real Tailscale address). So **a phone cannot pair from the
+plain-http Tailscale dashboard**. The earlier runs of this ADR's flow all used `127.0.0.1`, which is exempt, and so did not show it.
+The dashboard now says so on both sides (the Devices screen warns about the address it will put in the link, and a page that
+cannot pair explains why and leaves the direct password sign-in available). The ways forward are the https relay (CUT-121,
+which serves the page), https addresses from Tailscale, or a pure-JavaScript fallback for the crypto that would work on any
+origin and would give up the "the code came over tls" argument ADR-0037 makes for a hosted page; that last choice is Jian's.
+
 ## Left out on purpose
 
 - **A WebAuthn step-up for Terminal and Admin** (ADR-0037). It needs a secure origin, and a page served over plain http on

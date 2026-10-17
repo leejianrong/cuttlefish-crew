@@ -4,12 +4,14 @@
 // pairing asks for a new link, which is the right trade for a one-time secret.
 
 import {
+  INSECURE_PAGE_MESSAGE,
   PairingError,
   RelayTransport,
   clearIdentity,
   decodePairing,
   indexedDbStore,
   loadIdentity,
+  webCryptoAvailable,
   type DeviceIdentity,
   type KeyValueStore,
   type PairingLink,
@@ -37,15 +39,19 @@ export async function startRelay(
 ): Promise<RelayStart> {
   // Read the hash before touching the address: `window.location` is live, and replaceState changes it.
   const { hash, pathname, search } = location;
+  const cryptoOk = webCryptoAvailable();
   if (hash.startsWith(PREFIX)) {
     history.replaceState(null, "", `${pathname}${search}#/projects`);
+    // Plain http on a Tailscale or LAN address has no WebCrypto, so say so rather than fail obscurely.
+    if (!cryptoOk) return { kind: "error", message: INSECURE_PAGE_MESSAGE };
     try {
       return { kind: "pair", link: decodePairing(hash.slice(PREFIX.length)) };
     } catch (error) {
       return { kind: "error", message: error instanceof PairingError ? error.message : "This pairing link could not be read." };
     }
   }
-  const store = identityStore();
+  // A browser that paired earlier but is now on an address with no WebCrypto signs in directly instead.
+  const store = cryptoOk ? identityStore() : null;
   const identity = store ? await loadIdentity(store) : null;
   return identity ? { kind: "paired", identity } : { kind: "none" };
 }

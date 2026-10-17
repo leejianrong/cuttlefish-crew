@@ -48,3 +48,26 @@ describe("startRelay", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("startRelay on a page with no WebCrypto (plain http on a Tailscale or LAN address)", () => {
+  it("says why a pairing link cannot be used there, and still takes the secret out of the address", async () => {
+    const { startRelay } = await import("./relayconnect");
+    const replaced: string[] = [];
+    vi.stubGlobal("history", { replaceState: (_s: unknown, _t: string, url: string) => replaced.push(url) });
+    vi.stubGlobal("isSecureContext", false);
+    vi.stubGlobal("crypto", {});
+    const start = await startRelay({ hash: "#pair=anything", pathname: "/", search: "" });
+    expect(start).toMatchObject({ kind: "error" });
+    expect((start as { message: string }).message).toContain("plain http address");
+    expect(replaced).toEqual(["/#/projects"]);
+    vi.unstubAllGlobals();
+  });
+
+  it("does not try a remembered pairing there either", async () => {
+    const { startRelay } = await import("./relayconnect");
+    vi.stubGlobal("isSecureContext", false);
+    vi.stubGlobal("crypto", {});
+    expect(await startRelay({ hash: "", pathname: "/", search: "" })).toEqual({ kind: "none" });
+    vi.unstubAllGlobals();
+  });
+});
