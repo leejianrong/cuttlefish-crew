@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 LIVE_TOKEN_BUDGET ?= 1000000
 .PHONY: help dev demo lint type check test test-all test-sandbox-live test-live ci install-hooks \
-	install-systemd-service frontend-install frontend-check frontend-test frontend-build docs
+	install-systemd-service phone frontend-install frontend-check frontend-test frontend-build docs
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -20,6 +20,10 @@ dev: ## Sync the dev environment (uv sync)
 # running `cd frontend && npm run dev` and `cuttlefish serve` separately.
 demo: ## Build the dashboard + run cuttlefish serve (LOG=1 or LOG=<path> also saves the output)
 	./scripts/demo.sh
+
+# Tailscale + phone check (CUT-98): see scripts/phone.sh. Scratch HOME, fake agent, no model credit.
+phone: ## Serve the dashboard on this machine's Tailscale address for a phone check (RESET=1, PORT=n)
+	./scripts/phone.sh
 
 lint: ## Ruff lint + format check
 	uv run ruff check .
