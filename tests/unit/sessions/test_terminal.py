@@ -111,3 +111,26 @@ async def test_two_views_of_one_session_both_see_its_output(session: tuple[Tmux,
     finally:
         await a.close()
         await b.close()
+
+
+async def test_a_close_that_is_cancelled_still_closes_the_pty_and_leaves_no_client(
+    session: tuple[Tmux, str],
+) -> None:
+    import os
+
+    tmux, name = session
+    attach = PtyAttach(tmux, name, cols=100, rows=30)
+    await _until(attach, b"READY")
+    master = attach._master
+    closing = asyncio.create_task(attach.close())
+    await asyncio.sleep(0)  # it has started, and is waiting for tmux's client to go
+    closing.cancel()
+    await asyncio.gather(closing, return_exceptions=True)
+    with pytest.raises(OSError):
+        os.fstat(master)  # the pty's file descriptor is closed
+    for _ in range(100):
+        if not tmux._run("list-clients", "-t", f"={name}", check=False).stdout.strip():
+            break
+        await asyncio.sleep(0.05)
+    assert tmux._run("list-clients", "-t", f"={name}", check=False).stdout.strip() == ""
+    assert tmux.has_session(name)  # only the client went; the agent's session stays
