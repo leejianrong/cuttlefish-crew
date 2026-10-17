@@ -135,3 +135,22 @@ describe("backendLabel", () => {
     expect(backendLabel("other")).toBe("other");
   });
 });
+
+describe("a request from a project's agent session in tmux", () => {
+  it("never says it denied what the terminal still asks", () => {
+    const from = (state: NeedsYouRequest["state"]) => outcomeLabel(request({ session: true, state }));
+    expect(from("expired")).toBe("No answer in time: the terminal still asks");
+    expect(from("cancelled")).toBe("Ended: the agent session was stopped");
+    expect(from("abandoned")).toBe("Ended: the agent session ended");
+    expect(from("superseded")).toBe("Answered in the terminal");
+    expect(from("allowed_once")).toBe("Allowed once");
+    expect(from("denied")).toBe("Denied");
+    // A team's request keeps its own wording.
+    expect(outcomeLabel(request({ state: "expired" }))).toBe("Denied: no answer in time");
+  });
+
+  it("says the terminal can answer too while it waits", () => {
+    expect(landsLabel("now", true)).toBe("Paused until you answer here or in the terminal");
+    expect(landsLabel("now")).toBe("Paused until you answer");
+  });
+});

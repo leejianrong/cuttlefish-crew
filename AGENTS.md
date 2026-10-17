@@ -15,8 +15,9 @@ reference), headless Claude Code, headless Codex. Python, `uv`, `ruff`,
 - **Never read or open `.env`.** It holds the real `OPENROUTER_API_KEY` for
   this repo. Refer to `.env.example` instead — the committed template with
   no real values.
-- **Never read or open `.cuttlefish/devices.db` or `.cuttlefish/relay-key`.** They hold each paired device's secret and the
-  daemon's own relay key. Use `GET /api/devices`, which shows neither.
+- **Never read or open `.cuttlefish/devices.db`, `.cuttlefish/relay-key` or `.cuttlefish/hook-token`.** They hold each
+  paired device's secret, the daemon's relay key, and the token a Claude Code session's hook script uses. Use `GET
+  /api/devices`, which shows neither.
 - **Never read or open `.cuttlefish/secrets.db`.** It's encrypted at rest,
   but still holds every project's real secrets; use `cuttlefish secrets
   get/list` instead. Never log or print `CUTTLEFISH_SECRETS_KEY` itself —
@@ -103,11 +104,17 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   in `conftest.py`); never go back to inheriting everything. ADR-0029.
 - **The agent in tmux (CUT-95, ADR-0034) lives on its own tmux socket**, `~/.cuttlefish/tmux.sock` (a short
   hashed path under `/tmp` when `HOME` is deep), never your own tmux. Tests and scratch runs get a separate server
-  from a scratch `HOME`. It asks for permission in its own terminal, not in Needs you. Kill a scratch one with
+  from a scratch `HOME`. A Claude Code session asks in its terminal and, through a held `PermissionRequest` hook
+  (ADR-0040), in Needs you; Codex and kopicode ask in the terminal only. Kill a scratch one with
   `tmux -S <socket> kill-server`, never `pkill`. The Terminal tab (ADR-0035) is a websocket whose first message
   carries the token; it is typed access to an agent, so keep a non-loopback bind's password.
 - **`cuttlefish run` writes `.cuttlefish/` and `.satay/` into the current
   directory**, and the daemon writes them into each project's `--root`.
+- **A hook that cannot decide prints nothing, and a held hook is released at shutdown.** A Claude Code session's hook
+  (`sessions/hook_script.py`, ADR-0040) never prints `allow` unless the daemon said so in that response; every failure is
+  silence, so the terminal's own dialog asks. A held hook is an in-flight request, and uvicorn waits for those at shutdown,
+  so `_FleetServer` releases them first (`daemon.release_held_hooks`). Do not add a route that waits on a person without
+  teaching that release about it.
 - **The code beats prose.** Check a claim against the code before repeating
   it, and update the README and `docs-site/` in the same PR as any behaviour
   they describe (`make docs` builds the site with `--strict`).

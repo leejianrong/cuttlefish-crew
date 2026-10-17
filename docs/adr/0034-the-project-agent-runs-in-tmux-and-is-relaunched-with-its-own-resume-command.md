@@ -34,9 +34,9 @@ in the project root.** `SessionManager.ensure` starts it, reattaches to it or re
 
 ## Consequences
 
-- A tmux-hosted agent asks for permission **in its own terminal**. Needs-you cards belong to the delegation path
-  (ADR-0028); a card for a tmux session needs the tool's own hook, and is not built. The terminal view (CUT-96)
-  is where a person answers.
+- A tmux-hosted agent asks for permission **in its own terminal**. The terminal view (CUT-96) is where a person
+  answers. *Update (ADR-0040, CUT-127):* a Claude Code session also raises a Needs you card through a held
+  `PermissionRequest` hook; Codex and kopicode sessions still ask in the terminal only.
 - A project's team workflow and its tmux session are separate: a stream-json round and the TUI must not both
   drive one Claude conversation at once. Which one a project uses is the person's choice for now.
 - tmux must be installed. Without it Start says so; nothing else in cuttlefish needs it.

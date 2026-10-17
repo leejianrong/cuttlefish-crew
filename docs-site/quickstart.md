@@ -147,8 +147,13 @@ does a Claude Code session started in tmux; a Codex or kopicode session in tmux 
 artifacts are a later slice
 ([ADR-0036](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0036-agents-leave-markdown-and-images-in-an-artifacts-folder-and-the-dashboard-renders-them-itself.md)).
 
-A tmux-hosted agent asks for permission in its own terminal. Needs you covers the team workflow
-([ADR-0034](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0034-the-project-agent-runs-in-tmux-and-is-relaunched-with-its-own-resume-command.md)).
+A Claude Code session in tmux asks for permission in its own terminal **and** under Needs you: cuttlefish starts it
+with a hook that raises a card, so you can allow or deny from the dashboard or a phone, and answering in the terminal
+clears the card. A command on the project's list runs without asking and a never-allowed one is refused without a card,
+as for a team. A session started in Auto mode never asks, and the Agent session card says so. Changing a project's mode
+applies to the next session you start. Codex and kopicode sessions still ask only in their terminals
+([ADR-0034](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0034-the-project-agent-runs-in-tmux-and-is-relaunched-with-its-own-resume-command.md),
+[ADR-0040](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0040-a-claude-code-session-in-tmux-raises-needs-you-cards-through-a-held-permission-hook.md)).
 
 ## 7. Reach it from another device
 

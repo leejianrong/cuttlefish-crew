@@ -46,5 +46,11 @@ export function explanation(session: AgentSession): string {
   if (session.state === "stopped") {
     return "Start it to pick the conversation up where it left off.";
   }
+  if (session.asks === "needs-you") {
+    return "Permission questions appear under Needs you, and in the session's terminal too. Answer in either place.";
+  }
+  if (session.asks === "auto") {
+    return "This session was started in Auto mode, so it never asks and nothing will appear under Needs you. Stop it and start it again after changing the mode.";
+  }
   return "Permission questions appear in the session's own terminal, not under Needs you.";
 }

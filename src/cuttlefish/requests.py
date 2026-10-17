@@ -198,6 +198,8 @@ class RequestBroker:
         why: str,
         window_s: float,
         suggestion: Sequence[str] | None = None,
+        title: str | None = None,
+        session: bool = False,
     ) -> PendingRequest:
         """A shell command nothing approves yet: journal it and return it to be held.
 
@@ -206,6 +208,7 @@ class RequestBroker:
         if suggestion is None:
             suggestion = suggest_rule(line)
         who = role or "An agent"
+        # `title` is for a tool that is not a shell command (a session's hook, ADR-0040).
         return self._raise(
             project_id,
             team_id,
@@ -213,7 +216,7 @@ class RequestBroker:
             record=RequestRaised(
                 request_id=uuid.uuid4().hex,
                 kind="permission",
-                title=f"{who} wants to run a command that isn't on the list",
+                title=title or f"{who} wants to run a command that isn't on the list",
                 detail=line,
                 why=why,
                 answers=permission_answers(suggestion),
@@ -221,6 +224,7 @@ class RequestBroker:
                 suggested_rule=list(suggestion) if suggestion else None,
                 role=role,
                 backend=backend,
+                session=session,
             ),
             window_s=window_s,
         )
@@ -441,6 +445,11 @@ class RequestBroker:
             for p in list(self._pending.values())
             if p.team_id == team_id
         ]
+
+    def reopen(self, team_id: str) -> None:
+        """A scope that was closed may ask again: a project's agent session that is started anew
+        (ADR-0040). A stopped team stays closed for good."""
+        self._closed.discard(team_id)
 
     def is_closed(self, team_id: str) -> bool:
         """Whether the team was stopped or has ended: nothing it asks now can be answered."""

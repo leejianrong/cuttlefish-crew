@@ -37,10 +37,10 @@ export function isStartOfCommand(rule: string[], command: string): boolean {
 }
 
 /** When an answer reaches the agent, as the card's tag says it. */
-export function landsLabel(lands: NeedsYouRequest["lands"]): string {
+export function landsLabel(lands: NeedsYouRequest["lands"], session = false): string {
   switch (lands) {
     case "now":
-      return "Paused until you answer";
+      return session ? "Paused until you answer here or in the terminal" : "Paused until you answer";
     case "end_of_turn":
       return "Delivered when this turn ends";
     case "next_round":
@@ -60,6 +60,15 @@ export const OUTCOMES: Record<RequestResolution, string> = {
   declined: "Left unanswered: you declined",
 };
 
+/** How a request from a project's agent session in tmux ended. Nothing was denied when it expired or
+ * the session stopped: the terminal's own dialog is still there, or the session is gone. */
+const SESSION_OUTCOMES: Partial<Record<RequestResolution, string>> = {
+  expired: "No answer in time: the terminal still asks",
+  cancelled: "Ended: the agent session was stopped",
+  abandoned: "Ended: the agent session ended",
+  superseded: "Answered in the terminal",
+};
+
 /** How a `question` ended without an answer: nothing was denied, it simply went unanswered. */
 const QUESTION_OUTCOMES: Partial<Record<RequestResolution, string>> = {
   expired: "Left unanswered: no answer in time",
@@ -74,7 +83,13 @@ const BLOCKED_OUTCOMES: Partial<Record<RequestResolution, string>> = {
 
 export function outcomeLabel(request: NeedsYouRequest): string {
   const blocked = request.kind === "blocked";
-  const specific = blocked ? BLOCKED_OUTCOMES : request.kind === "question" ? QUESTION_OUTCOMES : {};
+  const specific = request.session
+    ? SESSION_OUTCOMES
+    : blocked
+      ? BLOCKED_OUTCOMES
+      : request.kind === "question"
+        ? QUESTION_OUTCOMES
+        : {};
   const base =
     request.state === "pending"
       ? blocked

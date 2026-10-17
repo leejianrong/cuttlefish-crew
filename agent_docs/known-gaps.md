@@ -325,3 +325,12 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   data calls (pairing itself says what went wrong). A removed device is told on its next connection or request. The
   device store is plain SQLite (mode 0600, no encryption at rest). The outside review ADR-0037 requires has not happened.
   Tested with a Python browser and Chromium; Safari and Firefox were not run.
+- **A Claude Code session's Needs you cards rest on observed behaviour** (CUT-127, ADR-0040). The `PermissionRequest` hook,
+  its allow and deny output, and the transcript's wording for a call refused in the terminal were observed on `claude`
+  2.1.301, not documented. If the wording changes, a card for a call denied in the terminal lingers until the next prompt
+  or the end of the turn; it never approves anything. `AskUserQuestion` is left to the terminal (no question card for
+  tmux yet). A project's mode is read when the session starts, so changing it applies to the next start; a session started
+  before this shipped raises nothing until it is started again. Codex and kopicode sessions in tmux still ask in their own
+  terminals. The hooks were exercised end to end with a fake `claude` (and the real one only to confirm it starts with the
+  flags), so a real prompt through real hooks is the one thing not run in this slice.
+

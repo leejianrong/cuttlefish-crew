@@ -30,6 +30,7 @@ import contextlib
 import dataclasses
 import json
 import logging
+import secrets
 import socket
 from collections.abc import Awaitable, Callable, Collection, Sequence
 from datetime import UTC, datetime
@@ -62,6 +63,7 @@ from cuttlefish.delegate.presets import (
     validate_presets,
 )
 from cuttlefish.episodic.store import EpisodicEvent
+from cuttlefish.fleet import hook_files
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.daemon import (
     FleetDaemon,
@@ -123,6 +125,12 @@ DEFAULT_FLEET_PORT = 8420
 #: dashboard must be able to tell which mode is active, and log in, before it
 #: has ever held a token or session.
 _PUBLIC_PATHS = frozenset({"/api/auth-mode", "/api/login"})
+
+#: The route a Claude Code session's hook script posts to, and the header that authenticates it. A
+#: separate token from the owner's: it can raise a Needs you card and cannot answer one (ADR-0040).
+HOOK_PREFIX = "/api/hooks/"
+HOOK_TOKEN_HEADER = "x-cuttlefish-hook-token"
+_HOOK_BODY_LIMIT = 256 * 1024
 
 _LOG = logging.getLogger(__name__)
 
@@ -357,6 +365,7 @@ def create_app(
     dashboard_dir: Path | None = None,
     folders: FolderBrowser | None = None,
     relay: RelayLink | None = None,
+    hook_token: str | None = None,
 ) -> FastAPI:
     """`login` is only non-`None` in non-loopback/password mode (ADR-0011) -- it
     both backs `POST /api/login` and doubles as `security` in that mode, since
@@ -369,6 +378,9 @@ def create_app(
     routes answer 404 rather than browsing anything by default.
     """
     app = FastAPI(title="cuttlefish-crew fleet daemon")
+    # Without one the hook route answers nothing, so a daemon built without hooks (a test of
+    # something else) has no way in through it.
+    hook_token = hook_token or secrets.token_urlsafe(32)
 
     @app.middleware("http")
     async def _check_security(
@@ -379,6 +391,14 @@ def create_app(
         # no secret of its own; gating page-load itself would just be friction with
         # no security benefit, since every API call it then makes is still checked.
         path = request.url.path
+        if path.startswith(HOOK_PREFIX):
+            # A session's hook script has its own token, which opens this one route and nothing else
+            # (ADR-0040); neither the owner's session nor a paired device's tier applies to it.
+            if not secrets.compare_digest(
+                request.headers.get(HOOK_TOKEN_HEADER, "").encode(), hook_token.encode()
+            ):
+                return JSONResponse(status_code=401, content={"detail": "invalid hook token"})
+            return await call_next(request)
         if path.startswith("/api/") and path not in _PUBLIC_PATHS:
             try:
                 security.check(
@@ -968,6 +988,24 @@ def create_app(
             },
         )
 
+    @app.post("/api/hooks/claude-code/{project_id}")
+    async def claude_hook(project_id: str, request: Request) -> dict[str, Any]:
+        """A hook of the project's Claude Code session (ADR-0040). A permission hook is held here
+        until a person answers or the window ends; the answer is `{}` for no decision."""
+        length = int(request.headers.get("content-length") or 0)
+        if length > _HOOK_BODY_LIMIT:
+            raise HTTPException(413, "hook payload too large")
+        body = await _json_body(request)
+
+        async def gone() -> None:
+            while not await request.is_disconnected():
+                await asyncio.sleep(1.0)
+
+        try:
+            return await daemon.claude_hook(project_id, body, gone)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.get("/api/projects/{project_id}/agent-session")
     async def agent_session(project_id: str) -> dict[str, Any]:
         try:
@@ -1203,6 +1241,19 @@ def _self_origin(host: str, port: int) -> str:
     return f"http://{host}:{port}"
 
 
+class _FleetServer(uvicorn.Server):
+    """uvicorn waits for in-flight requests when it shuts down, and a held hook (ADR-0040) is a
+    request that waits for a person. Release those first, so Ctrl-C ends the daemon promptly."""
+
+    def __init__(self, config: uvicorn.Config, on_shutdown: Callable[[], None]) -> None:
+        super().__init__(config)
+        self._on_shutdown = on_shutdown
+
+    async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
+        self._on_shutdown()
+        await super().shutdown(sockets)
+
+
 def find_free_port(host: str, preferred: int, *, attempts: int = 20) -> int:
     """The first free port at or after `preferred` on `host` -- a plain
     `socket.bind` probe, pure stdlib (dev-playbook guidance: don't depend on
@@ -1318,9 +1369,17 @@ async def run_daemon(
         dashboard_dir=dashboard_dir,
         folders=FolderBrowser(browse_roots or [Path.home()]),
         relay=link,
+        hook_token=hook_files.hook_token(),
     )
-    config = uvicorn.Config(app, host=host, port=resolved_port, log_level="warning")
-    server = uvicorn.Server(config)
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=resolved_port,
+        log_level="warning",
+        # A safety net: nothing the daemon serves should outlast a shutdown by long.
+        timeout_graceful_shutdown=15,
+    )
+    server = _FleetServer(config, daemon.release_held_hooks)
     connector_task: asyncio.Task[None] | None = None
     if link is not None:
         connector_task = asyncio.create_task(link.connector(app).run())
@@ -1329,9 +1388,11 @@ async def run_daemon(
             "from the dashboard: Account menu, Devices.",
             flush=True,
         )
+    hook_files.write_daemon_info(host, resolved_port)
     try:
         await server.serve()
     finally:
+        hook_files.remove_daemon_info()
         if connector_task is not None:
             connector_task.cancel()
             await asyncio.gather(connector_task, return_exceptions=True)

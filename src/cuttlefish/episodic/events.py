@@ -332,6 +332,9 @@ class RequestRaised:
     #: A question's choices when the agent offered some to pick from, so a card can show them as
     #: buttons. Empty for a free-text question and for every other kind.
     options: list[str] = dataclasses.field(default_factory=list)
+    #: Raised by a project's agent session in tmux (ADR-0040), whose terminal can also answer. So an
+    #: expiry or a stop leaves the terminal's own dialog standing rather than denying the command.
+    session: bool = False
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

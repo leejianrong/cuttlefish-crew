@@ -19,13 +19,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import functools
 import logging
 import os
 import uuid
-from collections.abc import Collection, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 import satay
 import satay.control
@@ -53,6 +54,7 @@ from cuttlefish.episodic.events import (
     TeamStopped,
 )
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
+from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
@@ -87,6 +89,7 @@ from cuttlefish.sessions import (
     agent_env,
     default_socket,
 )
+from cuttlefish.sessions.hooks import write_settings
 from cuttlefish.sessions.manager import wanted as session_wanted
 from cuttlefish.steering import (
     SteeringDeliveryError,
@@ -296,6 +299,8 @@ class FleetDaemon:
         #: team id -> the episodic store its requests are journaled to, while it runs.
         self._team_stores: dict[str, EpisodicStore] = {}
         self.requests = RequestBroker(self._append_for_team)
+        #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
+        self._claude_hooks = ClaudeHooks(self)
         #: The credential broker (ADR-0031): started with the first team that needs it.
         self._broker: Broker | None = None
 
@@ -336,9 +341,23 @@ class FleetDaemon:
         command. ``backend`` defaults to the project's own, else `CUTTLEFISH_AGENT_BACKEND`."""
         project = self._projects.get(project_id)
         chosen = resolve_agent_backend(backend or project.backend)
+        settings: Path | None = None
+        if chosen == "claude-code":
+            # Its permission questions come to Needs you through our hooks (ADR-0040).
+            settings = await asyncio.to_thread(
+                write_settings, project.root, project.id, self._request_window_s
+            )
+            self.requests.reopen(session_scope(project.id))
         try:
             return await asyncio.to_thread(
-                self._session_manager().ensure, project.id, project.root, chosen
+                functools.partial(
+                    self._session_manager().ensure,
+                    project.id,
+                    project.root,
+                    chosen,
+                    mode=project.mode,
+                    hooks_settings=settings,
+                )
             )
         except SessionError as exc:
             raise FleetError(str(exc)) from exc
@@ -356,6 +375,9 @@ class FleetDaemon:
 
     async def stop_agent_session(self, project_id: str) -> SessionInfo:
         project = self._projects.get(project_id)
+        # Cards the session holds end now, and the hooks waiting on them are told there is no
+        # decision (ADR-0040), before the tmux session goes.
+        self._claude_hooks.end_session(project.id)
         return await asyncio.to_thread(self._session_manager().stop, project.id, project.root)
 
     async def reconcile_agent_sessions(self) -> list[tuple[str, SessionInfo | str]]:
@@ -378,6 +400,8 @@ class FleetDaemon:
         if self._broker is not None:
             await self._broker.close()
             self._broker = None
+        for scope in [s for s in self._team_stores if s.startswith("session:")]:
+            self._team_stores.pop(scope).close()
 
     # -- secrets (the dashboard's, ADR-0006): names go out, values never do ----------------------
 
@@ -476,6 +500,44 @@ class FleetDaemon:
     def _append_for_team(self, team_id: str, payload: EventPayload) -> EpisodicEvent:
         return self._team_stores[team_id].append(team_id, payload)
 
+    @property
+    def request_window_s(self) -> float:
+        return self._request_window_s
+
+    def release_held_hooks(self) -> None:
+        """Called as the HTTP server begins to shut down: see `ClaudeHooks.release_all`."""
+        self._claude_hooks.release_all()
+
+    def open_session_journal(self, project: Project) -> None:
+        """Make the project's agent session a place requests can be journaled: its own scope in the
+        project's episodic store, held open until the daemon closes (ADR-0040)."""
+        scope = session_scope(project.id)
+        if scope in self._team_stores:
+            return
+        path = Path(project.root) / ".cuttlefish" / "episodic.db"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._team_stores[scope] = EpisodicStore.open(path)
+
+    async def claude_hook(
+        self,
+        project_id: str,
+        payload: Mapping[str, Any],
+        gone: Callable[[], Awaitable[None]],
+    ) -> dict[str, Any]:
+        """One hook of the project's Claude Code session (ADR-0040): what to tell its script."""
+        return await self._claude_hooks.handle(self._projects.get(project_id), payload, gone)
+
+    def _session_events(self, project: Project) -> list[EpisodicEvent]:
+        """Every event of the project's agent session (its hook cards), read-only."""
+        path = Path(project.root) / ".cuttlefish" / "episodic.db"
+        if not path.exists():
+            return []
+        store = EpisodicStore.open(path)
+        try:
+            return list(store.read(session_scope(project.id)))
+        finally:
+            store.close()
+
     def answer_request(
         self,
         project_id: str,
@@ -502,7 +564,7 @@ class FleetDaemon:
         return outcome
 
     def _from_journal(self, project: Project, request_id: str) -> RequestError:
-        for entry in history(self._last_team_events(project)):
+        for entry in history([*self._last_team_events(project), *self._session_events(project)]):
             if entry.raised.request_id == request_id:
                 if entry.resolved is None:  # raised, never resolved, and not live: abandoned
                     return AlreadyResolvedError(Outcome(request_id, "abandoned", "system"))
@@ -520,7 +582,9 @@ class FleetDaemon:
     def request_history(self, project_id: str, *, limit: int = 50) -> list[HistoryEntry]:
         """The project's last team's requests that have ended, newest first."""
         project = self._projects.get(project_id)
-        ended = [e for e in history(self._last_team_events(project)) if e.resolved is not None]
+        events = [*self._last_team_events(project), *self._session_events(project)]
+        ended = [e for e in history(events) if e.resolved is not None]
+        ended.sort(key=lambda entry: entry.raised_at)
         return ended[::-1][:limit]
 
     def sweep_abandoned(self, keep_blocked: Collection[str] = ()) -> int:
@@ -536,20 +600,25 @@ class FleetDaemon:
         count = 0
         for project in self._projects.list():
             path = Path(project.root) / ".cuttlefish" / "episodic.db"
-            if project.last_team_id is None or not path.exists():
+            if not path.exists():
                 continue
+            # A project's last team, and its agent session (its hook cards die with the daemon too).
+            scopes = [session_scope(project.id)]
+            if project.last_team_id is not None:
+                scopes.append(project.last_team_id)
             store = EpisodicStore.open(path)
             try:
-                for raised in unresolved(store.read(project.last_team_id)):
-                    if raised.kind == "blocked" and project.last_team_id in keep_blocked:
-                        continue
-                    store.append(
-                        project.last_team_id,
-                        RequestResolved(
-                            request_id=raised.request_id, resolution="abandoned", by="system"
-                        ),
-                    )
-                    count += 1
+                for scope in scopes:
+                    for raised in unresolved(store.read(scope)):
+                        if raised.kind == "blocked" and scope in keep_blocked:
+                            continue
+                        store.append(
+                            scope,
+                            RequestResolved(
+                                request_id=raised.request_id, resolution="abandoned", by="system"
+                            ),
+                        )
+                        count += 1
             finally:
                 store.close()
         return count
