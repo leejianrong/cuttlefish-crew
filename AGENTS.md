@@ -152,7 +152,7 @@ own doc comment all beat a paragraph). Start reading at
 - [`docs/adr/`](docs/adr/) — why each load-bearing decision was made. The
   newest, ADR-0032, makes one long-lived agent session per project the primary
   object (decided, not built; V6 in `docs/SLICES.md`), so read it before
-  changing how a round or a delegation starts. ADR-0037 (proposed, not built) is the
+  changing how a round or a delegation starts. ADR-0037 (accepted, not built; build order in CUT-E16) is the
   end-to-end encrypted relay for a public web app; read it before touching remote access.
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed; [`docs/SLICES.md`](docs/SLICES.md) — the build order.
