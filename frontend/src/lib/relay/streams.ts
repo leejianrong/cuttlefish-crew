@@ -100,7 +100,7 @@ export class StreamMux {
 
   receive(f: Frame): Frame {
     const kind = f.type;
-    if (kind === FrameType.PING || kind === FrameType.PONG) return f;
+    if (kind === FrameType.PING || kind === FrameType.PONG || kind === FrameType.CONTROL) return f;
     if (OPENING.has(kind)) {
       this.acceptOpen(f);
       return f;

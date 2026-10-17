@@ -131,7 +131,7 @@ class StreamMux:
         allowed.
         """
         kind = frame.type
-        if kind in (FrameType.PING, FrameType.PONG):
+        if kind in (FrameType.PING, FrameType.PONG, FrameType.CONTROL):
             return frame
         stream_id = frame.stream
         if kind in _OPENING:

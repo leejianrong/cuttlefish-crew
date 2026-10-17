@@ -7,7 +7,7 @@ import { MAX_MESSAGE_LEN, TAG_LEN } from "./noise";
 describe("frames", () => {
   it("round trips every type", () => {
     for (const type of Object.values(FrameType)) {
-      const stream = type === FrameType.PING || type === FrameType.PONG ? 0 : 3;
+      const stream = type === FrameType.PING || type === FrameType.PONG || type === FrameType.CONTROL ? 0 : 3;
       const original = frame(type, stream, Uint8Array.of(0, 255));
       expect(decode(encode(original))).toEqual(original);
     }

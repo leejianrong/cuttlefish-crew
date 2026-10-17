@@ -117,3 +117,13 @@ def test_a_message_for_another_daemon_is_refused() -> None:
     caller, _, _ = _call()
     with pytest.raises(NoiseError):
         accept(generate_static(), lambda _s: PSK, caller.write_message1())
+
+
+def test_the_short_code_is_six_digits_and_matches_the_browsers() -> None:
+    from cuttlefish.relay.protocol import format_code, short_code
+
+    # frontend/src/lib/relay/paircode.test.ts pins the same two values.
+    assert short_code(bytes(range(32))) == "497170"
+    assert short_code(bytes(32)) == "864793"
+    assert format_code("497170") == "497 170"
+    assert len({short_code(bytes([i]) * 32) for i in range(60)}) > 50

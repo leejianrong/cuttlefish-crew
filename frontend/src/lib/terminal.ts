@@ -34,7 +34,7 @@ export const KEY_ROW: { label: string; aria: string; send: string }[] = [
   { label: "Enter", aria: "Enter", send: "\r" },
 ];
 
-export type CloseKind = "unauthorised" | "no-session" | "lost" | "ended";
+export type CloseKind = "unauthorised" | "forbidden" | "no-session" | "lost" | "ended";
 
 export interface CloseInfo {
   kind: CloseKind;
@@ -47,6 +47,13 @@ export function describeClose(code: number, reason: string): CloseInfo {
     return {
       kind: "unauthorised",
       text: "The daemon did not accept this sign-in. Sign in again and the terminal reconnects.",
+    };
+  }
+  if (code === 4403) {
+    return {
+      // Signed in, but not allowed: the owner can raise this device's tier, so it may try again.
+      kind: "forbidden",
+      text: reason || "This device is not allowed to use the terminal. Raise it under Devices on the PC.",
     };
   }
   if (code === 4404) {

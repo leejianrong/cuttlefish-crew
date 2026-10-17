@@ -62,6 +62,10 @@ describe("KEY_ROW", () => {
 describe("describeClose", () => {
   it("names the daemon's own codes", () => {
     expect(describeClose(4401, "not authorised").kind).toBe("unauthorised");
+    const denied = describeClose(4403, "This device is paired as approve and this needs terminal.");
+    expect(denied.kind).toBe("forbidden");
+    expect(denied.text).toContain("needs terminal");
+    expect(describeClose(4403, "").text).toContain("Devices on the PC");
     const none = describeClose(
       4404,
       "no agent session is running; start it from the Overview first",

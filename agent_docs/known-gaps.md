@@ -316,9 +316,12 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   no launch flag we checked, so it must be asked. HTML, charts and rendered block types are CUT-114 and CUT-115. A
   file is shown only if the daemon can read it from `<root>/.cuttlefish/artifacts/`, so a project run in a sandbox
   provider's own checkout shows nothing there.
-- **The relay is a loopback preview** (CUT-119, ADR-0037). No accounts: anyone who can reach it can claim a room, so it
-  must stay on loopback or a private network. The pairing link is a shared secret with the strength of the dashboard's
-  password (whoever holds it has the whole dashboard, and there are no tiers until CUT-120); it changes on every daemon
-  restart. The page is still served by the daemon, not the relay. A wrong or stale link shows the generic "Lost
-  connection to the daemon. Retrying…" and retries forever, because the relay error is not surfaced yet. Tested with a
-  Python browser and Chromium; Safari and Firefox were not run.
+- **The relay is a preview** (CUT-119, CUT-120, ADR-0037, ADR-0039). No accounts: anyone who can reach it can claim a
+  room, so it must stay on loopback or a private network. The page is still served by the daemon, not the relay. There is
+  no WebAuthn step-up for Terminal and Admin (it needs an https origin, CUT-121); they are simply off until the owner turns
+  them on. A stolen unlocked Approve phone can answer Needs you and start or stop teams, and can remove the owner's other
+  devices (revoking needs only Approve so a lost phone can be cut off from another), until the owner removes it. A wrong or
+  stale pairing link, or a daemon the relay cannot reach, shows the generic "Lost connection to the daemon. Retrying…" for
+  data calls (pairing itself says what went wrong). A removed device is told on its next connection or request. The
+  device store is plain SQLite (mode 0600, no encryption at rest). The outside review ADR-0037 requires has not happened.
+  Tested with a Python browser and Chromium; Safari and Firefox were not run.

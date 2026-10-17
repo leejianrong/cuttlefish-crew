@@ -5,7 +5,7 @@ function payload(body: unknown): string {
   return toBase64Url(new TextEncoder().encode(JSON.stringify(body)));
 }
 const key = (fill: number) => toBase64Url(new Uint8Array(32).fill(fill));
-const good = { v: 1, relay: "ws://127.0.0.1:8450/", room: "abc12345", daemon: key(1), psk: key(2) };
+const good = { v: 2, relay: "ws://127.0.0.1:8450/", room: "abc12345", daemon: key(1), pairing: key(2) };
 
 describe("base64url", () => {
   it("round-trips every byte value", () => {
@@ -21,16 +21,16 @@ describe("decodePairing", () => {
     expect(config.relay).toBe("ws://127.0.0.1:8450");
     expect(config.room).toBe("abc12345");
     expect(config.daemon).toEqual(new Uint8Array(32).fill(1));
-    expect(config.psk).toEqual(new Uint8Array(32).fill(2));
+    expect(config.secret).toEqual(new Uint8Array(32).fill(2));
   });
 
   it("says what is wrong in words for a person", () => {
     const cases: [string, unknown][] = [
       ["damaged", "%%%not base64%%%"],
-      ["understands", { ...good, v: 2 }],
+      ["understands", { ...good, v: 1 }],
       ["websocket address", { ...good, relay: "http://x" }],
-      ["missing a key", { ...good, psk: undefined }],
-      ["wrong size", { ...good, psk: key(3).slice(0, 10) }],
+      ["missing a key", { ...good, pairing: undefined }],
+      ["wrong size", { ...good, pairing: key(3).slice(0, 10) }],
     ];
     for (const [needle, body] of cases) {
       const text = typeof body === "string" ? body : payload(body);

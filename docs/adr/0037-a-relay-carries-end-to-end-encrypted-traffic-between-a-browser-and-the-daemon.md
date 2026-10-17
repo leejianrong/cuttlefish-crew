@@ -171,7 +171,9 @@ pairing are enforced by the daemon.
   - A browser makes a new key on each page load for now; keeping a non-extractable one is CUT-120.
   - There is no flow control yet. Streams interleave frame by frame, and a slow stream does not block a fast one (tested),
     but a very large body is not paced.
-- Not built: accounts, the relay serving the page, rate limits, Web Push (CUT-121), tiers and a device store (CUT-120).
+- **CUT-120** (2026-10-17): the real pairing, a device store, tiers enforced by the daemon on every route, and revocation, in
+  ADR-0039. This replaced the config-only link above.
+- Not built: accounts, the relay serving the page, rate limits, Web Push (CUT-121), a WebAuthn step-up (needs https).
 
 ## Not decided here
 

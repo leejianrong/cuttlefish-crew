@@ -1,7 +1,7 @@
 // Pure helpers for the Permissions and Team tabs: drafts, comparisons, role edits. Nothing
 // here touches the network or the DOM, so each rule is testable on its own.
 
-import { FleetApiError, type AccessLevel, type BuiltinRole, type RoleDefinition } from "./api";
+import { FleetApiError, refusal, type AccessLevel, type BuiltinRole, type RoleDefinition } from "./api";
 
 /** Whether two lists hold the same items, ignoring order. */
 export function sameSet(a: readonly string[], b: readonly string[]): boolean {
@@ -167,6 +167,8 @@ export function presetsForLanguages(
  * the daemon being away. `applied` lists what an earlier step of the same Save did save. */
 export function saveFailure(error: unknown, applied: readonly string[]): string {
   const saved = applied.length > 0 ? `Saved ${applied.join(" and ")}, but not the rest. ` : "";
+  const refused = refusal(error);
+  if (refused) return `${saved}${refused}`;
   if (error instanceof FleetApiError && error.status === 400) {
     return `${saved}Couldn't save: ${error.message}.`;
   }
@@ -181,6 +183,8 @@ export function saveFailure(error: unknown, applied: readonly string[]): string 
  * not answer at all is a different message, and any other failure points at the daemon's log
  * (`~/.cuttlefish/logs/cuttlefish.log`). */
 export function startFailure(error: unknown): string {
+  const refused = refusal(error);
+  if (refused) return refused;
   if (error instanceof FleetApiError && error.status === 409) {
     const reason = error.message.replace(/^project '[^']*' (failed to start: )?/, "").trim();
     if (reason) return `Couldn't start that team: ${reason.replace(/\.$/, "")}.`;

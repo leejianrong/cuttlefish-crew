@@ -70,9 +70,11 @@ from cuttlefish.fleet.daemon import (
     SecretsUnavailableError,
     UnknownRoleError,
 )
+from cuttlefish.fleet.devices import DeviceError
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
-from cuttlefish.fleet.relay_link import RelayLink, RelaySettings
+from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings, TierRefusal
 from cuttlefish.fleet.serve_token import load_or_create_token
+from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, parse_tier
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
     ACCESS_LEVELS,
@@ -354,6 +356,7 @@ def create_app(
     cors_origins: Collection[str] = (),
     dashboard_dir: Path | None = None,
     folders: FolderBrowser | None = None,
+    relay: RelayLink | None = None,
 ) -> FastAPI:
     """`login` is only non-`None` in non-loopback/password mode (ADR-0011) -- it
     both backs `POST /api/login` and doubles as `security` in that mode, since
@@ -383,6 +386,14 @@ def create_app(
                     host=request.headers.get("host"),
                     origin=request.headers.get("origin"),
                 )
+                if relay is not None and relay.guard.is_relay(request.headers.get(TOKEN_HEADER)):
+                    # Through the relay: the connector vouches for who it is, and the daemon holds
+                    # that device to its tier (ADR-0039).
+                    relay.guard.authorize(
+                        device_id=request.headers.get(DEVICE_HEADER),
+                        method=request.method,
+                        path=path,
+                    )
             except satay.control.AuthError as exc:
                 _LOG.warning("%s %s rejected: %s %s", request.method, path, exc.status, exc.detail)
                 return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
@@ -453,6 +464,106 @@ def create_app(
         except satay.control.AuthError as exc:
             raise HTTPException(exc.status, exc.detail) from exc
         return {"token": token, "expires_in": login.ttl_seconds}
+
+    def _relay() -> RelayLink:
+        if relay is None:
+            raise HTTPException(404, "this daemon was not started with --relay")
+        return relay
+
+    @app.get("/api/relay")
+    async def relay_info(request: Request) -> dict[str, Any]:
+        if relay is None:
+            return {"enabled": False}
+        you = (
+            relay.guard.device_for(request.headers)
+            if relay.guard.is_relay(request.headers.get(TOKEN_HEADER))
+            else None
+        )
+        return {
+            "enabled": True,
+            "url": relay.settings.url,
+            "room": relay.room,
+            "you": you.as_json() if you is not None else None,
+        }
+
+    @app.get("/api/devices")
+    async def list_devices() -> dict[str, Any]:
+        link = _relay()
+        open_pairing = link.pairing.current()
+        return {
+            "devices": [d.as_json() for d in link.store.list()],
+            "pending": [p.as_json() for p in link.pairing.pending()],
+            "pairing": None if open_pairing is None else {"expires_at": open_pairing.expires_at},
+        }
+
+    @app.post("/api/devices/pairing")
+    async def start_pairing() -> dict[str, Any]:
+        payload, expires_at = _relay().start_pairing()
+        return {"payload": payload, "expires_at": expires_at}
+
+    @app.delete("/api/devices/pairing")
+    async def cancel_pairing() -> dict[str, str]:
+        _relay().pairing.cancel()
+        return {"status": "cancelled"}
+
+    def _tier_from(body: dict[str, Any], *, allowed: tuple[Tier, ...]) -> Tier | None:
+        raw = body.get("tier")
+        if raw is None:
+            return None
+        try:
+            tier = parse_tier(str(raw))
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        if tier not in allowed:
+            raise HTTPException(
+                400,
+                f"a device can only be confirmed as {allowed[0].label} or "
+                f"{allowed[-1].label}; raise it afterwards",
+            )
+        return tier
+
+    @app.post("/api/devices/pending/{pending_id}/confirm")
+    async def confirm_device(pending_id: str, request: Request) -> dict[str, Any]:
+        link = _relay()
+        body = await _json_body(request)
+        tier = _tier_from(body, allowed=(Tier.VIEW, Tier.APPROVE)) or DEFAULT_TIER
+        try:
+            device = link.pairing.confirm(pending_id, tier)
+        except DeviceError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        _LOG.info("device %s (%s) paired as %s", device.id, device.name, device.tier.label)
+        return device.as_json()
+
+    @app.post("/api/devices/pending/{pending_id}/reject")
+    async def reject_device(pending_id: str) -> dict[str, str]:
+        try:
+            _relay().pairing.reject(pending_id)
+        except DeviceError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"status": "rejected"}
+
+    @app.patch("/api/devices/{device_id}")
+    async def update_device(device_id: str, request: Request) -> dict[str, Any]:
+        link = _relay()
+        body = await _json_body(request)
+        tier = _tier_from(body, allowed=tuple(Tier))
+        if tier is None:
+            raise HTTPException(400, "'tier' is required")
+        try:
+            device = link.store.set_tier(device_id, tier)
+        except DeviceError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        _LOG.info("device %s is now %s", device.id, device.tier.label)
+        return device.as_json()
+
+    @app.delete("/api/devices/{device_id}")
+    async def revoke_device(device_id: str) -> dict[str, Any]:
+        try:
+            device = await _relay().revoke(device_id)
+        except DeviceError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        _LOG.info("device %s (%s) revoked", device.id, device.name)
+        return device.as_json()
 
     def _browser() -> FolderBrowser:
         if folders is None:
@@ -909,9 +1020,21 @@ def create_app(
                 # satay's own check compares tokens as `str` and raises on non-ASCII text, which a
                 # websocket message (unlike a header) can carry. It is a wrong token all the same.
                 raise satay.control.AuthError(401, "invalid token") from exc
+            if relay is not None and relay.guard.is_relay(
+                token if isinstance(token, str) else None
+            ):
+                device = first.get("device")
+                relay.guard.authorize(
+                    device_id=device if isinstance(device, str) else None,
+                    method="WS",
+                    path=f"/api/projects/{project_id}/terminal",
+                )
         except satay.control.AuthError as exc:
             _LOG.warning("terminal for %s rejected: %s %s", project_id, exc.status, exc.detail)
-            await websocket.close(code=4401, reason="not authorised")
+            if isinstance(exc, TierRefusal):
+                await websocket.close(code=4403, reason=str(exc.detail)[:120])
+            else:
+                await websocket.close(code=4401, reason="not authorised")
             return
         except (ValueError, TimeoutError, WebSocketDisconnect):
             await websocket.close(code=4400, reason="expected an auth message")
@@ -1194,6 +1317,7 @@ async def run_daemon(
         cors_origins=cors_origins,
         dashboard_dir=dashboard_dir,
         folders=FolderBrowser(browse_roots or [Path.home()]),
+        relay=link,
     )
     config = uvicorn.Config(app, host=host, port=resolved_port, log_level="warning")
     server = uvicorn.Server(config)
@@ -1201,9 +1325,8 @@ async def run_daemon(
     if link is not None:
         connector_task = asyncio.create_task(link.connector(app).run())
         print(
-            f"cuttlefish serve: relay {link.settings.url} -- open this to use the dashboard "
-            "through it (a temporary link: whoever has it has the dashboard; it changes "
-            "when this daemon restarts):\n  " + link.pairing_url(f"http://{host}:{resolved_port}"),
+            f"cuttlefish serve: relay {link.settings.url} (end-to-end encrypted). Pair a phone "
+            "from the dashboard: Account menu, Devices.",
             flush=True,
         )
     try:
@@ -1212,3 +1335,5 @@ async def run_daemon(
         if connector_task is not None:
             connector_task.cancel()
             await asyncio.gather(connector_task, return_exceptions=True)
+        if link is not None:
+            link.close()

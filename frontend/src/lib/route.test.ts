@@ -6,6 +6,7 @@ const ROUTES: Route[] = [
   { view: "add" },
   { view: "needs-you" },
   { view: "secrets" },
+  { view: "devices" },
   { view: "roles" },
   { view: "sprites" },
   { view: "project", id: "abc123", tab: "overview" },

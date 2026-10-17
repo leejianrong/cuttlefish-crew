@@ -2,6 +2,8 @@
   import { FleetApiError, FleetClient, type NeedsYouRequest } from "./lib/api";
   import AddProject from "./lib/components/AddProject.svelte";
   import ConnectScreen from "./lib/components/ConnectScreen.svelte";
+  import DevicesScreen from "./lib/components/DevicesScreen.svelte";
+  import PairScreen from "./lib/components/PairScreen.svelte";
   import RolesLibrary from "./lib/components/RolesLibrary.svelte";
   import SharedSecretsScreen from "./lib/components/SharedSecretsScreen.svelte";
   import NeedsYouScreen from "./lib/components/NeedsYouScreen.svelte";
@@ -10,10 +12,11 @@
   import SignInAgain from "./lib/components/SignInAgain.svelte";
   import Shell from "./lib/components/Shell.svelte";
   import SpriteGallery from "./lib/components/SpriteGallery.svelte";
+  import type { DeviceIdentity, PairingLink, RelayTransport } from "./lib/relay";
   import { NAV_ITEMS } from "./lib/nav";
   import { keepIfSame } from "./lib/same";
   import { HOME, parseHash, routeHash, sameRoute, type ProjectTab, type Route } from "./lib/route";
-  import { forgetRelay, startRelay } from "./lib/relayconnect";
+  import { forgetRelay, makeRelayTransport, startRelay } from "./lib/relayconnect";
   import { clearConnection, loadConnection, saveConnection } from "./lib/session";
   import { applyTheme, loadTheme, type ThemePreference } from "./lib/theme";
   import { tabTitle } from "./lib/title";
@@ -24,23 +27,39 @@
     return new FleetClient(baseUrl, token, (fresh) => saveConnection({ baseUrl, token: fresh }));
   }
 
-  // Opened from a pairing link (`#relay=...`, ADR-0037)? Then every request and the terminal go through
-  // the relay, and there is no token to ask for: the daemon's connector speaks for a paired browser.
-  const relayStart = startRelay();
-  let relay = relayStart && "transport" in relayStart ? relayStart : null;
-  const relayNotice = relayStart && "error" in relayStart ? relayStart.error : "";
-  function makeRelayClient(transport: NonNullable<typeof relay>["transport"], room: string): FleetClient {
-    return new FleetClient(`relay://${room.slice(0, 8)}`, "relay", undefined, transport);
+  // What this page is: opened from a pairing link (`#pair=...`, ADR-0039), a browser that paired before
+  // (then every request and the terminal go through the relay as that device), a remembered direct
+  // connection, or none yet. Finding a stored pairing is asynchronous, so the first paint waits for it.
+  let booting = $state(true);
+  let pairing = $state<PairingLink | null>(null);
+  let notice = $state("");
+  let relay: RelayTransport | null = null;
+  let relayDevice: DeviceIdentity | null = null;
+  // Set while this device removes itself, so the daemon's "revoked" notice is not shown as news.
+  let removingSelf = false;
+
+  function useRelay(identity: DeviceIdentity) {
+    relayDevice = identity;
+    relay = makeRelayTransport(identity, () => {
+      if (removingSelf) return;
+      // The owner removed this device on the PC: forget the pairing and say why.
+      void forgetRelay();
+      relay = null;
+      client = null;
+      notice = "This device was removed on the PC. Pair it again to use the relay.";
+    });
+    client = new FleetClient(`relay://${identity.room.slice(0, 8)}`, "relay", undefined, relay);
   }
 
-  const remembered = relay ? null : loadConnection();
-  let client = $state<FleetClient | null>(
-    relay
-      ? makeRelayClient(relay.transport, relay.room)
-      : remembered
-        ? makeClient(remembered.baseUrl, remembered.token)
-        : null,
-  );
+  const remembered = loadConnection();
+  let client = $state<FleetClient | null>(null);
+  startRelay().then((start) => {
+    if (start.kind === "pair") pairing = start.link;
+    else if (start.kind === "error") notice = start.message;
+    else if (start.kind === "paired") useRelay(start.identity);
+    else if (remembered) client = makeClient(remembered.baseUrl, remembered.token);
+    booting = false;
+  });
   // The daemon stopped accepting the saved sign-in (a restart, an expired session): ask again here
   // instead of leaving the page on "Lost connection" (CUT-112).
   let signedOut = $state(false);
@@ -51,6 +70,7 @@
   const showGallery = $derived(route.view === "sprites");
   const showRoles = $derived(route.view === "roles");
   const showSecrets = $derived(route.view === "secrets");
+  const showDevices = $derived(route.view === "devices");
   const showNeedsYou = $derived(route.view === "needs-you");
   const adding = $derived(route.view === "add");
 
@@ -95,7 +115,9 @@
   const active = $derived(
     showGallery
       ? "sprites"
-      : showRoles
+      : showDevices
+        ? "devices"
+        : showRoles
         ? "roles"
         : showSecrets
           ? "secrets"
@@ -139,11 +161,16 @@
     saveConnection({ baseUrl: newClient.baseUrl, token: newClient.token });
   }
 
-  function disconnect() {
-    if (relay) {
-      relay.transport.close();
+  async function disconnect() {
+    if (relay && client) {
+      // A paired device that disconnects removes itself, so no orphan is left on the PC.
+      removingSelf = true;
+      await client.revokeDevice(relayDevice?.id ?? "").catch(() => undefined);
+      relay.close();
       relay = null;
-      forgetRelay();
+      relayDevice = null;
+      removingSelf = false;
+      await forgetRelay();
     }
     client = null;
     signedOut = false;
@@ -157,6 +184,8 @@
     go(
       id === "sprites"
         ? { view: "sprites" }
+        : id === "devices"
+          ? { view: "devices" }
         : id === "roles"
           ? { view: "roles" }
           : id === "secrets"
@@ -168,11 +197,22 @@
   }
 </script>
 
-{#if !client}
+{#if booting}
+  <p class="booting" role="status">Loading…</p>
+{:else if pairing}
+  <PairScreen
+    link={pairing}
+    onPaired={(identity) => {
+      pairing = null;
+      useRelay(identity);
+    }}
+    onCancel={() => (pairing = null)}
+  />
+{:else if !client}
   {#if showGallery}
     <SpriteGallery onBack={() => go(HOME)} />
   {:else}
-    <ConnectScreen {onConnected} notice={relayNotice} onShowGallery={() => go({ view: "sprites" })} />
+    <ConnectScreen {onConnected} {notice} onShowGallery={() => go({ view: "sprites" })} />
   {/if}
 {:else}
   <Shell
@@ -189,6 +229,8 @@
       <RolesLibrary {client} />
     {:else if showSecrets}
       <SharedSecretsScreen {client} />
+    {:else if showDevices}
+      <DevicesScreen {client} />
     {:else if showNeedsYou}
       <NeedsYouScreen
         {client}
@@ -237,3 +279,13 @@
     />
   {/if}
 {/if}
+
+<style>
+  .booting {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    color: var(--text-muted);
+    margin: 0;
+  }
+</style>

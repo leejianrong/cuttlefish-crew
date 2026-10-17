@@ -229,7 +229,13 @@ and this folder disagree after a slice lands, update this folder.
   were last in. Every old link (`/team`, `/permissions`, `/secrets`) still opens its section and `/settings` opens Team. Five
   tabs fit a 390px phone exactly; narrower scrolls. Trade-off: the top bar costs 56px of terminal height on a phone.
 
-- **Opened through a relay (CUT-119, 2026-10-17).** A page opened from a `#relay=` link has no Connect screen and no token: its
-  requests and terminal go through the relay. The shell is unchanged. A bad link shows the pairing error as a line on the Connect
-  screen; a relay or daemon that cannot be reached shows the existing "Lost connection to the daemon. Retrying…" (it does not yet
-  say it is the relay).
+- **Pairing and Devices (CUT-120, 2026-10-17).** The account menu has **Devices** (`#/devices`). It shows: Pair a device (an
+  address box, a note when the address is loopback because a phone cannot open it, and a button; then a QR code, the link, a
+  five-minute countdown, Copy link and Cancel), **Waiting for you** (a device's name, a large six-digit code, Confirm and
+  Reject; coral edge because it needs a decision), **Paired devices** (name, last used, an "Allowed to" select of View, Approve,
+  Terminal and Admin with a line on what each means, and Remove with an inline "Sign out at once?"), and **Removed**. A page opened
+  from a `#pair=` link shows **Pair this device** (a name box, Pair, then the same six digits large, "Confirm on the PC only if its
+  screen shows this same code", and Cancel). A paired browser has no Connect screen and no token; if the owner removes it, it
+  returns to Connect with "This device was removed on the PC." A refusal by tier is the daemon's own sentence wherever a save or
+  an action would have said "check that the daemon is still running", and the terminal says it with a Reconnect button for once the
+  owner raises the tier. Neutral surfaces; coral only on Waiting for you. Not in the mockups.

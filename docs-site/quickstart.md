@@ -175,13 +175,13 @@ checkout. It checks that Tailscale and tmux are ready, then serves one sample pr
 (port 8431, or `PORT=n`) with a fake agent in tmux, and prints the URL and a scratch password. State lives in
 `/tmp/cuttlefish-phone`; `make phone RESET=1` starts over.
 
-### Preview: through a relay
+### Preview: pair a phone through a relay
 
-To see the encrypted relay path on one machine, run `cuttlefish relay` in one terminal and
-`cuttlefish serve --relay ws://127.0.0.1:8450` in another. `serve` prints a link ending in `#relay=...`; open it and
-the dashboard loads its data and its terminal through the relay, with no request straight to the daemon. The link is a
-secret and changes when the daemon restarts. Details and limits are in the
-[CLI reference](cli-reference.md#cuttlefish-relay).
+To use the encrypted relay path on one machine, run `cuttlefish relay` in one terminal and
+`cuttlefish serve --relay ws://127.0.0.1:8450` in another. In the dashboard open the account menu, then **Devices**, make a
+pairing link and open it on the phone. Both screens show a six-digit code; confirm on the PC if they match. A new device
+may read, answer Needs you, steer, start and stop; you give it the terminal or admin rights under Devices. Details and
+limits are in the [CLI reference](cli-reference.md#cuttlefish-relay).
 
 See [CLI reference](cli-reference.md) for every command and flag, and
 [Architecture](architecture.md) for how the pieces fit together.

@@ -31,7 +31,7 @@ def test_the_header_is_five_bytes_big_endian() -> None:
 
 def test_every_type_survives_a_round_trip() -> None:
     for kind in FrameType:
-        stream = 0 if kind in (FrameType.PING, FrameType.PONG) else 3
+        stream = 0 if kind in (FrameType.PING, FrameType.PONG, FrameType.CONTROL) else 3
         frame = Frame(kind, stream, b"\x00\xff")
         assert decode(encode(frame)) == frame
 

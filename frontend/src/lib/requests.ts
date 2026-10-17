@@ -91,7 +91,7 @@ export function outcomeLabel(request: NeedsYouRequest): string {
 export function answerProblem(status: number, detail: string): string {
   if (status === 409) return "This request already ended, so it can't be answered now.";
   if (status === 404) return "This request is gone. It may have ended while the page was open.";
-  if (status === 422) return detail;
+  if (status === 422 || status === 403) return detail;
   return "Couldn't send that answer. Check that the daemon is still running.";
 }
 

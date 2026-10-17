@@ -1,13 +1,14 @@
 <script lang="ts">
-  import type {
-    AccessLevel,
-    BuiltinRole,
-    FleetClient,
-    LimitInfo,
-    LimitValues,
-    ProjectSummary,
-    RoleDefinition,
-    TeamTemplate,
+  import {
+    refusal,
+    type AccessLevel,
+    type BuiltinRole,
+    type FleetClient,
+    type LimitInfo,
+    type LimitValues,
+    type ProjectSummary,
+    type RoleDefinition,
+    type TeamTemplate,
   } from "../api";
   import {
     addableBuiltins,
@@ -135,8 +136,9 @@
       await client.updateLimits(project.id, projectLimits);
       await onChanged();
       limitsNotice = "Saved. A team already running keeps the values it started with.";
-    } catch {
-      limitsError = "Couldn't save that. Check that the daemon is still running, then try again.";
+    } catch (caught) {
+      limitsError =
+        refusal(caught) ?? "Couldn't save that. Check that the daemon is still running, then try again.";
     } finally {
       savingLimits = false;
     }
@@ -179,8 +181,9 @@
       await onChanged();
       notice = message;
       return true;
-    } catch {
-      error = "Couldn't save that. Check that the daemon is still running, then try again.";
+    } catch (caught) {
+      error =
+        refusal(caught) ?? "Couldn't save that. Check that the daemon is still running, then try again.";
       return false;
     } finally {
       saving = false;

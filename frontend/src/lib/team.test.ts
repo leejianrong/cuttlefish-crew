@@ -236,3 +236,14 @@ describe("startFailure", () => {
     expect(startFailure(new TypeError("fetch failed"))).toContain("Couldn't reach the daemon");
   });
 });
+
+describe("a device refused by its tier", () => {
+  it("gets the daemon's own sentence, not advice to check the daemon", async () => {
+    const { FleetApiError } = await import("./api");
+    const refused = new FleetApiError(403, "This device is paired as approve and this needs admin. Change it under Devices on the PC.");
+    expect(saveFailure(refused, [])).toContain("needs admin");
+    expect(saveFailure(refused, [])).not.toContain("still running");
+    expect(saveFailure(refused, ["mode"])).toMatch(/^Saved mode, but not the rest\. This device/);
+    expect(startFailure(refused)).toContain("needs admin");
+  });
+});
