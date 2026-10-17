@@ -1,6 +1,6 @@
 # Session control spike (CUT-91)
 
-Hands-on checks behind ADR-0032. Checks 1, 2 and 3 are done; check 4 (the Codex desktop app) needs the app and is open.
+Hands-on checks behind ADR-0032. Checks 1, 2, 3 and 5 are done; check 4 (the Codex desktop app) needs the app and is open.
 
 ## Check 2: can two clients drive one Codex thread? (done, 2026-10-16)
 
@@ -66,6 +66,74 @@ For CUT-95 and CUT-98: the reboot path is "tmux, then `claude --resume <sessionI
 from `claude agents --json` (or the transcript's file name) and stored per project. A phone can use Anthropic's own
 Remote Control URL for a single session, as the research doc said. Cuttlefish does not need to rebuild that for
 Claude, only to show the link and list the sessions.
+
+## Check 5: can a tmux-hosted Claude Code session raise a Needs you card? (done, 2026-10-17, CUT-126)
+
+Yes, with a `PermissionRequest` hook. `claude` 2.1.301, an interactive session in tmux, `--permission-mode default`, tiny
+prompts on the Haiku model (a few cents). The scripts are in `claude-hook-spike/`. Each line below was observed, not read
+from the docs; where the docs say something the checks did not reproduce, it is marked.
+
+**What fires, and when** (permission mode `default`, a `mkdir` that needs approval):
+
+- `UserPromptSubmit`, then `PreToolUse` (0.1 s before the next event), then **`PermissionRequest` at the moment the dialog
+  appears**. With no decision the normal dialog shows.
+- **`Notification` with `notification_type: permission_prompt` arrives 6.0 s later** and says only "Claude needs your
+  permission", with no tool or command. Too late and too thin to be the main signal.
+- Payload fields. `PermissionRequest`: `tool_name`, `tool_input` (the command and its description), `permission_mode`,
+  `session_id`, `transcript_path`, `cwd`, `prompt_id`, `permission_suggestions`. It has no `tool_use_id`, but the
+  `PreToolUse` just before it does, with the same input.
+- **Auto mode never asks.** The same `mkdir` in this install's default (`auto mode on`) ran with no dialog and no
+  `PermissionRequest`. A project's approvals only exist if the session is launched with a mode that prompts.
+
+**The hook can answer for the person** (the dialog stays on screen while it waits):
+
+- A hook that holds 3 s and returns `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}`:
+  the dialog was visible for the whole wait, vanished when the hook answered, and the command ran (`PostToolUse` followed).
+- `behavior: "deny"` with a `message`: no dialog, the command did not run, and the turn ended (`Stop`).
+- So a held hook plus a daemon endpoint is a real Allow and Deny on a phone, with the terminal as a second place to answer.
+
+**Failure never approves:**
+
+- A hook that exits 1, or exits 2, or prints nothing: the dialog stays and the command waits for the person.
+- A `timeout` (seconds, on the hook entry in settings) kills a hung hook with SIGTERM when it expires. The dialog stays and
+  nothing runs. The docs give 600 s as the default, which was not tested.
+
+**Answering in the terminal while the hook is still held:**
+
+- The command runs (or not) as typed. **The hook process is not cancelled and gets no signal.** It stays alive until its own
+  timeout. A hook that holds for the daemon must therefore watch for the item having been resolved elsewhere and exit.
+
+**How a waiting item is cleared:**
+
+- Allowed in the terminal: `PostToolUse` fires. Then `Stop` at the end of the turn.
+- **Denied in the terminal: no hook event fires at all** (no `PostToolUse`, no `PostToolUseFailure`, no `Stop`). The one
+  structured signal is the session transcript: a `tool_result` with `is_error: true`, the text "The user doesn't want to
+  proceed with this tool use", the `tool_use_id`, then "[Request interrupted by user for tool use]". The daemon can tail it
+  (check 1 already established the transcript is NDJSON) and match the denied call by `tool_use_id`, learned from the
+  `PreToolUse` hook, or by its input. The next `UserPromptSubmit` also clears everything for that session.
+
+**Getting hooks in without touching the project:**
+
+- `claude --settings <file>` loaded our hooks and left the project's files alone. A project's own `.claude/settings.json`
+  hook for the same event also ran, once each. They merge; neither replaces the other.
+- A new folder shows "Do you trust this folder?" before anything else. It appears in the terminal and the Terminal tab
+  can answer it, but the daemon cannot assume the session is ready until it passes.
+
+**Recommendation.** Build level 2: a held `PermissionRequest` hook that raises a Needs you card with Allow and Deny
+(`RequestRaised` and `RequestResolved`, ADR-0028), and on any failure does nothing, so the terminal dialog is the fallback.
+Level 1 (a "waiting in terminal" item) is the same hook without the decision, so it comes free. Requirements it must meet:
+
+- The never-allowed list holds in every mode, so the hook denies those commands without asking (V4), and `tool_input`
+  shown on a card goes through the same redaction as the journal.
+- Launch with `--permission-mode` taken from the project's mode (ask first and standard map to `default`, auto to
+  `auto`); a project left on auto raises nothing, and the card for such a project should say so.
+- A hook `timeout` below the daemon's own deadline, and an exit that is never an allow.
+- Clearing: the held hook polls the daemon; the daemon closes the item on `PostToolUse`, on the transcript's rejected
+  `tool_result`, on `Stop`, on `UserPromptSubmit` and on a session that is gone.
+
+Not checked: Codex and kopicode in tmux (neither has been looked at for a hook), a hook on Claude Code's other permission
+modes (`acceptEdits`, `plan`), `permission_suggestions` for an "always allow" button, several sessions at once, and the
+600 s default.
 
 ## Check 4
 
