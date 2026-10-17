@@ -40,12 +40,14 @@ from cuttlefish.relay.protocol.noise import (
     public_bytes,
     static_from_bytes,
 )
+from cuttlefish.relay.protocol.pairing import CODE_DIGITS, format_code, short_code
 from cuttlefish.relay.protocol.session import EstablishedPeer, PendingPeer, UnknownPeerError, accept
 from cuttlefish.relay.protocol.streams import MAX_OPEN_STREAMS, Role, StreamError, StreamMux
 
 __all__ = [
     "CHUNK_SIZE",
     "CLIENT_ID_LEN",
+    "CODE_DIGITS",
     "CONNECTION_STREAM",
     "HEADER_LEN",
     "MAX_MESSAGE_LEN",
@@ -75,9 +77,11 @@ __all__ = [
     "control",
     "decode",
     "encode",
+    "format_code",
     "generate_static",
     "parse_control",
     "public_bytes",
+    "short_code",
     "static_from_bytes",
     "unwrap",
     "wrap",

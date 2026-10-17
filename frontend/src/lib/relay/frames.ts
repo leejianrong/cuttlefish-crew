@@ -29,6 +29,8 @@ export const FrameType = {
   RESET: 8,
   PING: 9,
   PONG: 10,
+  /** A connection-level message as JSON (pairing progress, a revocation notice). Stream 0 only. */
+  CONTROL: 11,
 } as const;
 export type FrameType = (typeof FrameType)[keyof typeof FrameType];
 
@@ -51,9 +53,9 @@ export interface Frame {
 export function frame(type: FrameType, stream: number, payload: Bytes = new Uint8Array(0)): Frame {
   if (!Number.isInteger(stream) || stream < 0 || stream > MAX_STREAM_ID) throw new FrameError("stream id out of range");
   if (payload.length > MAX_PAYLOAD) throw new FrameError("payload too large for one frame");
-  const connection = type === FrameType.PING || type === FrameType.PONG;
+  const connection = type === FrameType.PING || type === FrameType.PONG || type === FrameType.CONTROL;
   if (connection !== (stream === CONNECTION_STREAM)) {
-    throw new FrameError("ping and pong belong on stream 0 and nothing else does");
+    throw new FrameError("ping, pong and control belong on stream 0 and nothing else does");
   }
   return { type, stream, payload };
 }

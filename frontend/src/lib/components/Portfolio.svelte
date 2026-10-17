@@ -1,6 +1,6 @@
 <script lang="ts">
   import { keepIfSame } from "../same";
-  import type { FleetClient, ProjectSummary } from "../api";
+  import { refusal, type FleetClient, type ProjectSummary } from "../api";
   import ProjectCard from "./ProjectCard.svelte";
   import Icon from "./Icon.svelte";
 
@@ -41,8 +41,8 @@
     actionError = null;
     try {
       await client.stopProject(id);
-    } catch {
-      actionError = "Couldn't stop that team. Check that the daemon is still running.";
+    } catch (error) {
+      actionError = refusal(error) ?? "Couldn't stop that team. Check that the daemon is still running.";
     }
     await refresh();
   }
@@ -51,8 +51,9 @@
     actionError = null;
     try {
       await client.deregisterProject(id);
-    } catch {
-      actionError = "Couldn't remove that project. Check that the daemon is still running.";
+    } catch (error) {
+      actionError =
+        refusal(error) ?? "Couldn't remove that project. Check that the daemon is still running.";
     }
     await refresh();
   }

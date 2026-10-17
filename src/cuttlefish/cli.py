@@ -822,7 +822,11 @@ async def _serve(args: argparse.Namespace) -> int:
                 browse_roots=[Path(root) for root in args.browse_root or ()],
                 token_file=default_serve_token_path(),
                 relay=(
-                    RelaySettings(args.relay, Path.home() / ".cuttlefish" / "relay-key")
+                    RelaySettings(
+                        args.relay,
+                        Path.home() / ".cuttlefish" / "relay-key",
+                        Path.home() / ".cuttlefish" / "devices.db",
+                    )
                     if args.relay
                     else None
                 ),

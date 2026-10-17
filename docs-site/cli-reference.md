@@ -142,22 +142,41 @@ Sessions do not survive a restart: the dashboard asks you to sign in again and c
 
 ## `cuttlefish relay`
 
-**Preview (CUT-119, [ADR-0037](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0037-a-relay-carries-end-to-end-encrypted-traffic-between-a-browser-and-the-daemon.md)).**
+**Preview (CUT-119 and CUT-120, [ADR-0037](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0037-a-relay-carries-end-to-end-encrypted-traffic-between-a-browser-and-the-daemon.md),
+[ADR-0039](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0039-a-device-pairs-once-with-a-confirm-on-the-pc-and-the-daemon-holds-it-to-a-tier.md)).**
 A headless server, with no screens, that passes encrypted traffic between a browser and a daemon. The daemon
-dials out to it (`cuttlefish serve --relay ws://127.0.0.1:8450`), prints a link, and a browser that opens the
-link runs a Noise handshake with the daemon *through* the relay. The relay sees which rooms exist, who connects
-and leaves, and how many bytes move. It does not see paths, commands, output or the terminal.
+dials out to it (`cuttlefish serve --relay ws://127.0.0.1:8450`), and a browser that has paired with the daemon runs a
+Noise handshake with it *through* the relay. The relay sees which rooms exist, who connects and leaves, and how many
+bytes move. It does not see paths, commands, output or the terminal.
 
 | Flag | What it does |
 |---|---|
 | `--host HOST` | Loopback by default. It warns on anything else, because it has no accounts yet. |
 | `--port PORT` | Default 8450. |
 
-What this preview is not: there are no accounts, so anyone who can reach the relay can claim a room, and the
-link `serve` prints is a shared secret (anyone with it has the whole dashboard, as with the password). It is
-new each time the daemon starts. Pairing a device once, per-device tiers and revocation are CUT-120. The page
-itself is still served by the daemon, so this proves the encrypted path and does not yet let a phone with no
-VPN reach a PC.
+### Pairing a phone
+
+On the PC's dashboard open the account menu, then **Devices**, then **Make a pairing link**. It shows a link and a QR
+code that work once and expire after five minutes. Open the link on the phone (the dashboard must be reachable by the
+phone's address, such as its Tailscale address; type that address into the box if the PC's own dashboard is on
+`127.0.0.1`), name the device and tap **Pair**. The phone and the PC then both show the same six-digit code. **Confirm
+on the PC only if they match.** Until you do, the phone can reach nothing. After that the phone keeps its own key and
+secret and uses the relay whenever its page is opened.
+
+### What a device may do
+
+A new device is **Approve**: it can read, answer Needs you, steer, start and stop, and remove a device. **View** is read
+only. **Terminal** adds the agent's terminal and **Admin** adds settings, secrets, folders, projects and devices. You
+raise a device to Terminal or Admin under Devices, and the daemon enforces each tier on every route. The PC's own session
+is not limited. **Remove** on a device signs it out at once, and its next connection is refused; a paired device can remove
+another one, so a lost phone can be cut off from a second.
+
+### What this preview is not
+
+There are no accounts, so anyone who can reach the relay can claim a room; keep it on loopback or a private network.
+The page itself is still served by the daemon, so this does not yet let a phone with no VPN reach a PC. There is no
+WebAuthn step-up for Terminal and Admin (it needs https), so those tiers stay on until you turn them off. Devices are
+kept in `~/.cuttlefish/devices.db`, and the daemon's own key in `~/.cuttlefish/relay-key`, both mode 0600.
 
 ## `cuttlefish doctor`
 

@@ -11,6 +11,7 @@ from typing import Any
 
 import uvicorn
 import websockets
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from cuttlefish.relay.protocol import (
@@ -120,6 +121,7 @@ class Browser:
     def __init__(self, socket: Any, transport: Transport) -> None:
         self._socket = socket
         self._transport = transport
+        self.controls: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._mux = StreamMux(Role.INITIATOR)
         self._lock = asyncio.Lock()
         self._frames: dict[int, asyncio.Queue[Frame]] = {}
@@ -129,19 +131,68 @@ class Browser:
         self.close_code: int | None = None
 
     @classmethod
-    async def connect(cls, relay_url: str, room: str, daemon_public: bytes, psk: bytes) -> Browser:
+    async def connect(
+        cls,
+        relay_url: str,
+        room: str,
+        daemon_public: bytes,
+        psk: bytes,
+        static: X25519PrivateKey | None = None,
+        hello: bytes = b"hello",
+    ) -> Browser:
+        """A paired device's connection: handshake, then a first message the daemon must decrypt."""
+        browser = await cls._handshake(relay_url, room, daemon_public, psk, static, hello)
+        pong = decode(browser._transport.decrypt(await asyncio.wait_for(browser._socket.recv(), 5)))
+        assert pong.type is FrameType.PONG, pong
+        browser._reader = asyncio.create_task(browser._read())
+        return browser
+
+    @classmethod
+    async def pair(
+        cls,
+        relay_url: str,
+        room: str,
+        daemon_public: bytes,
+        pairing_secret: bytes,
+        name: str = "Test phone",
+        static: X25519PrivateKey | None = None,
+    ) -> Browser:
+        """A new device's connection with the one-time pairing secret. What the daemon answers
+        arrives on `controls`; nothing is read for it until then."""
+        browser = await cls._handshake(
+            relay_url,
+            room,
+            daemon_public,
+            pairing_secret,
+            static,
+            json.dumps({"name": name}).encode(),
+        )
+        browser._reader = asyncio.create_task(browser._read())
+        return browser
+
+    @classmethod
+    async def _handshake(
+        cls,
+        relay_url: str,
+        room: str,
+        daemon_public: bytes,
+        psk: bytes,
+        static: X25519PrivateKey | None,
+        hello: bytes,
+    ) -> Browser:
         socket = await websockets.connect(f"{relay_url}/ws/client/{room}", max_size=70000)
-        initiator = Initiator(generate_static(), daemon_public, psk)
+        initiator = Initiator(static or generate_static(), daemon_public, psk)
         await socket.send(initiator.write_message1())
         reply = await asyncio.wait_for(socket.recv(), 5)
         assert isinstance(reply, bytes)
         transport, _ = initiator.read_message2(reply)
         browser = cls(socket, transport)
-        await socket.send(transport.encrypt(encode(Frame(FrameType.PING, 0, b"hello"))))
-        pong = decode(transport.decrypt(await asyncio.wait_for(socket.recv(), 5)))
-        assert pong.type is FrameType.PONG
-        browser._reader = asyncio.create_task(browser._read())
+        await socket.send(transport.encrypt(encode(Frame(FrameType.PING, 0, hello))))
         return browser
+
+    @property
+    def handshake_hash(self) -> bytes:
+        return self._transport.handshake_hash
 
     async def _read(self) -> None:
         try:
@@ -150,6 +201,9 @@ class Browser:
                 frame = self._mux.receive(decode(self._transport.decrypt(message)))
                 if frame.type is FrameType.PING:
                     await self._send(self._mux.pong_for(frame))
+                    continue
+                if frame.type is FrameType.CONTROL:
+                    self.controls.put_nowait(json.loads(frame.payload))
                     continue
                 socket = self._sockets.get(frame.stream)
                 if socket is not None:

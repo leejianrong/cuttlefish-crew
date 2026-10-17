@@ -1,7 +1,7 @@
 // Words and checks for the Secrets tab. The daemon sends names and kinds, never values; what a
 // person reads about them is decided here.
 
-import { FleetApiError, type ProjectSummary } from "./api";
+import { FleetApiError, refusal, type ProjectSummary } from "./api";
 
 /** The name rule the daemon enforces (a secret becomes an environment variable), checked here
  * first so a typo is caught before a round trip. null when the name is fine. */
@@ -63,6 +63,8 @@ export function credentialNote(name: string, brokered = false): string {
 
 /** A failed save or remove, in words that say what to do. */
 export function secretFailure(error: unknown): string {
+  const refused = refusal(error);
+  if (refused) return refused;
   if (error instanceof FleetApiError) {
     if (error.status === 400 || error.status === 409) return error.message;
     if (error.status === 404) return "That secret is no longer there. Reload the tab.";

@@ -25,7 +25,7 @@
   } = $props();
 
   const title = $derived(
-    items.find((item) => item.id === active)?.label ?? (active === "sprites" ? "Sprite gallery" : "Projects"),
+    items.find((item) => item.id === active)?.label ?? (active === "sprites" ? "Sprite gallery" : active === "devices" ? "Devices" : "Projects"),
   );
 
   function setTheme(next: ThemePreference) {
@@ -74,6 +74,7 @@
       <AccountMenu
         {theme}
         onThemeChange={setTheme}
+        onOpenDevices={() => onNavigate("devices")}
         onOpenSprites={() => onNavigate("sprites")}
         {onDisconnect}
       />

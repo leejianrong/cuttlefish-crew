@@ -5,6 +5,41 @@
 import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay";
 import { terminalPath } from "./terminal";
 
+/** A device paired through the relay (ADR-0039). Never carries a key or a secret. */
+export interface DeviceInfo {
+  id: string;
+  name: string;
+  tier: DeviceTier;
+  created_at: number;
+  last_seen_at: number | null;
+  revoked_at: number | null;
+}
+
+export type DeviceTier = "view" | "approve" | "terminal" | "admin";
+
+/** A device that proved the pairing secret and is waiting for the owner to confirm it. */
+export interface PendingDevice {
+  id: string;
+  name: string;
+  /** The six digits it shows; they must match the ones on the phone. */
+  code: string;
+  requested_at: number;
+}
+
+export interface DevicesState {
+  devices: DeviceInfo[];
+  pending: PendingDevice[];
+  pairing: { expires_at: number } | null;
+}
+
+export interface RelayInfo {
+  enabled: boolean;
+  url?: string;
+  room?: string;
+  /** Set when this request came through the relay from a paired device. */
+  you?: DeviceInfo | null;
+}
+
 export type RoleStatus =
   "queued" | "working" | "blocked" | "done" | "failed" | "stopped";
 
@@ -280,6 +315,12 @@ export class FleetApiError extends Error {
 /** Thrown by `FleetClient.request` when `fetch` itself fails (daemon unreachable,
  * wrong base URL) -- distinct from `FleetApiError`, which means the daemon *did*
  * answer, just with an error status. */
+/** The daemon's own words when it refused a request outright (403): a device paired through the relay is held to a tier (ADR-0039),
+ * and "check that the daemon is still running" would send a person the wrong way. Null for any other failure. */
+export function refusal(error: unknown): string | null {
+  return error instanceof FleetApiError && error.status === 403 ? error.message : null;
+}
+
 export class FleetUnreachableError extends Error {
   constructor(baseUrl: string) {
     super(`couldn't reach the fleet daemon at ${baseUrl}`);
@@ -541,6 +582,48 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/agent-session/stop`, {
       method: "POST",
     });
+  }
+
+  getRelay(): Promise<RelayInfo> {
+    return this.request("/api/relay");
+  }
+
+  listDevices(): Promise<DevicesState> {
+    return this.request("/api/devices");
+  }
+
+  /** Opens a pairing (replacing any open one). `payload` goes in a link's `#pair=` fragment. */
+  startPairing(): Promise<{ payload: string; expires_at: number }> {
+    return this.request("/api/devices/pairing", { method: "POST", body: "{}" });
+  }
+
+  cancelPairing(): Promise<{ status: string }> {
+    return this.request("/api/devices/pairing", { method: "DELETE" });
+  }
+
+  confirmDevice(pendingId: string, tier?: "view" | "approve"): Promise<DeviceInfo> {
+    return this.request(`/api/devices/pending/${encodeURIComponent(pendingId)}/confirm`, {
+      method: "POST",
+      body: JSON.stringify(tier ? { tier } : {}),
+    });
+  }
+
+  rejectDevice(pendingId: string): Promise<{ status: string }> {
+    return this.request(`/api/devices/pending/${encodeURIComponent(pendingId)}/reject`, {
+      method: "POST",
+      body: "{}",
+    });
+  }
+
+  setDeviceTier(deviceId: string, tier: DeviceTier): Promise<DeviceInfo> {
+    return this.request(`/api/devices/${encodeURIComponent(deviceId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ tier }),
+    });
+  }
+
+  revokeDevice(deviceId: string): Promise<DeviceInfo> {
+    return this.request(`/api/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
   }
 
   getEvents(id: string): Promise<{ events: EpisodicEventView[] }> {

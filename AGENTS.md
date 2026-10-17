@@ -15,6 +15,8 @@ reference), headless Claude Code, headless Codex. Python, `uv`, `ruff`,
 - **Never read or open `.env`.** It holds the real `OPENROUTER_API_KEY` for
   this repo. Refer to `.env.example` instead — the committed template with
   no real values.
+- **Never read or open `.cuttlefish/devices.db` or `.cuttlefish/relay-key`.** They hold each paired device's secret and the
+  daemon's own relay key. Use `GET /api/devices`, which shows neither.
 - **Never read or open `.cuttlefish/secrets.db`.** It's encrypted at rest,
   but still holds every project's real secrets; use `cuttlefish secrets
   get/list` instead. Never log or print `CUTTLEFISH_SECRETS_KEY` itself —
@@ -69,7 +71,8 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **`cuttlefish.relay.protocol` and `frontend/src/lib/relay/` import nothing from the rest of
   cuttlefish** (standard library and `cryptography` in Python, `@noble/curves` in the browser). They
   are meant to be lifted into their own repository later. Tests enforce it, and a device is trusted
-  only after its first transport message decrypts. `cuttlefish.relay.server` and `.connector` may use web libraries but
+  only after its first transport message decrypts, and a device the owner has not confirmed on the PC is served nothing. Every
+  route needs a tier in `fleet/tiers.py` (a test fails if one is missing; unlisted means Admin). `cuttlefish.relay.server` and `.connector` may use web libraries but
   import nothing else from cuttlefish: the relay holds no project data, and the connector is handed an ASGI app. ADR-0037.
 - **With `CUTTLEFISH_CREDENTIAL_BROKER=1` an agent never holds its model key.**
   The daemon's broker keeps it and leases a short-lived token; the real key is
@@ -158,7 +161,7 @@ own doc comment all beat a paragraph). Start reading at
   newest, ADR-0032, makes one long-lived agent session per project the primary
   object (decided, not built; V6 in `docs/SLICES.md`), so read it before
   changing how a round or a delegation starts. ADR-0037 (accepted, not built; build order in CUT-E16) is the
-  end-to-end encrypted relay for a public web app; read it before touching remote access.
+  end-to-end encrypted relay for a public web app; read it, and ADR-0039 (pairing and tiers), before touching remote access.
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed; [`docs/SLICES.md`](docs/SLICES.md) — the build order.
 - [`docs/research/`](docs/research/) — the hands-on Paperclip comparison.

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FleetClient, PrepareSetting } from "../api";
+  import { refusal, type FleetClient, type PrepareSetting } from "../api";
   import {
     PREPARE_SETTINGS,
     environmentRows,
@@ -67,8 +67,8 @@
       const updated = await client.updateEnvironmentPrepare(projectId, next);
       setting = updated.env_prepare;
       onSettingChanged?.();
-    } catch {
-      saveError = "Couldn't save that. Check that the daemon is still running.";
+    } catch (error) {
+      saveError = refusal(error) ?? "Couldn't save that. Check that the daemon is still running.";
     } finally {
       saving = false;
     }

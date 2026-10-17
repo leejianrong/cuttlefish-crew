@@ -48,6 +48,8 @@ class FrameType(IntEnum):
     RESET = 8
     PING = 9
     PONG = 10
+    #: A connection-level message as JSON (pairing progress, a revocation notice). Stream 0 only.
+    CONTROL = 11
 
 
 #: The first byte of a `WS_DATA` payload says what the rest is. A websocket message larger than
@@ -58,7 +60,7 @@ WS_TEXT = 0
 WS_BINARY = 1
 WS_ACCEPTED = 2
 
-_CONNECTION_FRAMES = {FrameType.PING, FrameType.PONG}
+_CONNECTION_FRAMES = {FrameType.PING, FrameType.PONG, FrameType.CONTROL}
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +75,7 @@ class Frame:
         if len(self.payload) > MAX_PAYLOAD:
             raise FrameError("payload too large for one frame")
         if (self.type in _CONNECTION_FRAMES) != (self.stream == CONNECTION_STREAM):
-            raise FrameError("ping and pong belong on stream 0 and nothing else does")
+            raise FrameError("ping, pong and control belong on stream 0 and nothing else does")
 
 
 def encode(frame: Frame) -> bytes:

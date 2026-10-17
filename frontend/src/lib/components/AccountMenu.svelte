@@ -5,11 +5,13 @@
   let {
     theme,
     onThemeChange,
+    onOpenDevices,
     onOpenSprites,
     onDisconnect,
   }: {
     theme: ThemePreference;
     onThemeChange: (next: ThemePreference) => void;
+    onOpenDevices: () => void;
     onOpenSprites: () => void;
     onDisconnect: () => void;
   } = $props();
@@ -108,6 +110,10 @@
         </button>
       {/each}
       <hr />
+      <button class="item" role="menuitem" tabindex="-1" onclick={() => pick(onOpenDevices)}>
+        <span class="tick"><Icon name="phone" size={18} /></span>
+        Devices
+      </button>
       <button class="item" role="menuitem" tabindex="-1" onclick={() => pick(onOpenSprites)}>
         <span class="tick"><Icon name="sprite" size={18} /></span>
         Sprite gallery

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import secrets
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,9 +20,10 @@ from relay_rig import Browser, Server, Tap, free_port, relay_app
 from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.fleet.relay_link import RelayAwareCheck, RelayLink, RelaySettings
 from cuttlefish.fleet.server import create_app
+from cuttlefish.fleet.tiers import Tier
 from cuttlefish.projects.store import ProjectStore
 from cuttlefish.relay.connector import RelayConnector, load_or_create_daemon_key, room_id_for
-from cuttlefish.relay.protocol import public_bytes
+from cuttlefish.relay.protocol import generate_static, public_bytes
 
 TOKEN_HEADER = "x-cuttlefish-token"
 SECRET_MARKER = b"MARKER-a1f3c9-do-not-leak"
@@ -95,12 +97,17 @@ class Rig:
     connector: RelayConnector
     tap: Tap
     public: bytes
-    psk: bytes
+    secret: bytes
     internal: str
+    static: object
 
-    async def browser(self, psk: bytes | None = None) -> Browser:
+    async def browser(self, secret: bytes | None = None) -> Browser:
         return await Browser.connect(
-            self.relay.ws_url, self.connector.room, self.public, psk or self.psk
+            self.relay.ws_url,
+            self.connector.room,
+            self.public,
+            secret or self.secret,
+            self.static,  # type: ignore[arg-type]
         )
 
 
@@ -114,13 +121,18 @@ async def _rig(tmp_path: Path, make_app, *, delays=(0.05,)) -> AsyncIterator[Rig
     connector._delays = delays
     task = asyncio.create_task(connector.run())
     await asyncio.wait_for(connector.connected.wait(), 5)
+    # A device that has been through pairing, made directly: the pairing flow has its own tests.
+    static = generate_static()
+    secret = secrets.token_bytes(32)
+    link.store.create("test device", public_bytes(static), secret, Tier.ADMIN)
     rig = Rig(
         relay,
         connector,
         tap,
         public_bytes(load_or_create_daemon_key(link.settings.key_path)),
-        link.psk,
+        secret,
         link.internal_token,
+        static,
     )
     try:
         yield rig
@@ -187,19 +199,30 @@ async def test_the_app_sees_the_connectors_token_and_never_one_the_browser_sent(
         await browser.close()
 
 
-async def test_a_browser_with_the_wrong_psk_gets_nothing(rig: Rig) -> None:
+async def test_a_browser_with_the_wrong_secret_gets_nothing(rig: Rig) -> None:
     from cuttlefish.relay.protocol import NoiseError
 
     # Its handshake reply decrypts under a different psk, so the browser's own side fails.
     with pytest.raises(NoiseError):
-        await Browser.connect(rig.relay.ws_url, rig.connector.room, rig.public, bytes(32))
-    # The daemon is still serving a browser that holds the right psk.
+        await rig.browser(bytes(32))
+    # The daemon is still serving a device that holds the right secret.
     good = await rig.browser()
     try:
         status, _h, _b = await good.request("GET", "/api/fast")
         assert status == 200
     finally:
         await good.close()
+
+
+async def test_a_key_the_daemon_has_never_seen_is_turned_away_when_no_pairing_is_open(
+    rig: Rig,
+) -> None:
+    import websockets
+
+    with pytest.raises(websockets.ConnectionClosed) as closed:
+        await Browser.connect(rig.relay.ws_url, rig.connector.room, rig.public, rig.secret)
+        # (a new key with a made-up secret: the daemon has no secret to answer it with)
+    assert closed.value.rcvd is not None and closed.value.rcvd.code == 1008
 
 
 async def test_a_large_body_each_way_arrives_intact(rig: Rig) -> None:
@@ -316,6 +339,9 @@ async def test_the_connector_reconnects_when_the_relay_comes_back(tmp_path: Path
     app = _echo_app(RelayAwareCheck(satay.control.SecurityPolicy(token="l"), link.internal_token))  # type: ignore[arg-type]
     connector = link.connector(app)
     connector._delays = (0.05,)
+    static = generate_static()
+    secret = secrets.token_bytes(32)
+    link.store.create("test device", public_bytes(static), secret, Tier.ADMIN)
     task = asyncio.create_task(connector.run())
     try:
         await asyncio.wait_for(connector.connected.wait(), 5)
@@ -326,7 +352,7 @@ async def test_the_connector_reconnects_when_the_relay_comes_back(tmp_path: Path
         try:
             await asyncio.wait_for(connector.connected.wait(), 5)
             browser = await Browser.connect(
-                again.ws_url, connector.room, public_bytes(connector.static), link.psk
+                again.ws_url, connector.room, public_bytes(connector.static), secret, static
             )
             status, _h, _b = await browser.request("GET", "/api/fast")
             assert status == 200
