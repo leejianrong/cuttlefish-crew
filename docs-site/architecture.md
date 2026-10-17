@@ -85,6 +85,8 @@ waiting to be closed.
 
 Non-loopback binds get real password/session auth
 ([ADR-0011](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0011-non-loopback-serve-gets-its-own-login-session-layer-not-satays-token.md)),
+whose sessions slide forward while they are used
+([ADR-0038](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0038-a-password-session-slides-forward-while-it-is-used.md)),
 the daemon can serve its own dashboard build same-origin
 ([ADR-0012](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0012-the-daemon-serves-its-own-dashboard-build-same-origin-static-shell.md)),
 and `--tailscale` binds directly to your tailnet address

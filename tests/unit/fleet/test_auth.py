@@ -106,3 +106,56 @@ def test_check_allows_a_loopback_origin_even_with_no_allowlist_entry() -> None:
     token = auth.login(password)
     auth.check(token=token, host=None, origin="http://localhost:5183")  # does not raise
     auth.check(token=token, host=None, origin="http://127.0.0.1:5183")  # does not raise
+
+
+def _auth(**kwargs: int) -> SessionAuth:
+    return SessionAuth(password="a" * MIN_PASSWORD_LENGTH, **kwargs)
+
+
+def test_a_fresh_token_is_not_refreshed() -> None:
+    auth = _auth()
+    token = auth.login("a" * MIN_PASSWORD_LENGTH)
+    assert auth.refresh(token) is None
+
+
+def test_a_token_past_half_its_life_is_replaced_by_one_that_checks_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    auth = _auth(ttl_seconds=1000)
+    start = time.time()
+    token = auth.login("a" * MIN_PASSWORD_LENGTH)
+    monkeypatch.setattr(time, "time", lambda: start + 600)
+    fresh = auth.refresh(token)
+    assert fresh is not None and fresh != token
+    auth.check(token=fresh, host=None, origin=None)
+    # The new token runs a full ttl from the refresh, so it outlives the old one.
+    monkeypatch.setattr(time, "time", lambda: start + 1100)
+    auth.check(token=fresh, host=None, origin=None)
+    with pytest.raises(satay.control.AuthError):
+        auth.check(token=token, host=None, origin=None)
+
+
+def test_a_session_never_slides_past_the_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    auth = _auth(ttl_seconds=1000, max_session_seconds=1500)
+    start = time.time()
+    token = auth.login("a" * MIN_PASSWORD_LENGTH)
+    now = start
+    for _ in range(10):
+        now += 600
+        monkeypatch.setattr(time, "time", lambda now=now: now)
+        fresh = auth.refresh(token)
+        if fresh is None:
+            break
+        token = fresh
+    monkeypatch.setattr(time, "time", lambda: start + 1501)
+    with pytest.raises(satay.control.AuthError):
+        auth.check(token=token, host=None, origin=None)
+
+
+def test_refresh_ignores_a_missing_forged_or_expired_token() -> None:
+    auth = _auth()
+    assert auth.refresh(None) is None
+    assert auth.refresh("1.2.3") is None
+    assert auth.refresh("not-a-token") is None
+    expired = _auth(ttl_seconds=-1)
+    assert expired.refresh(expired.login("a" * MIN_PASSWORD_LENGTH)) is None

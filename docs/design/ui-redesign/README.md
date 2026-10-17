@@ -205,7 +205,16 @@ and this folder disagree after a slice lands, update this folder.
 - **Terminal tab (CUT-96, 2026-10-16).** A project page has a **Terminal** tab after Overview: the agent's real
   tmux session in xterm.js, inside an `inverse-surface` panel (colours from the `--md-sys-*` roles, no raw hex), with
   a status line ("Connected to the agent's tmux session") and, below it, a row of 44px keys for a phone keyboard
-  (Esc, Tab, Ctrl-C, the arrows, Enter). Under 640px the panel is 52dvh and the tab leaves room above the fixed bottom
-  nav. With no session running it says so and offers **Start the agent session**; a lost connection says the agent
+  (Esc, Tab, Ctrl-C, the arrows, Enter). Under 640px the panel was 52dvh with room left above the fixed bottom
+  nav; CUT-98 replaced that with a screen sized to the space left (see the entry at the end). With no session running it says so and offers **Start the agent session**; a lost connection says the agent
   is still running in tmux and offers **Reconnect**; a rejected sign-in offers nothing to retry. It opens only when
   the tab is shown, and never starts a session by itself. No coral: nothing here needs a decision from you.
+- **Phone layout and sign-in again (CUT-98, CUT-112, 2026-10-17).** On a phone the Terminal tab hides the project's path and
+  tightens the header, and the terminal is sized in script to what is left between the header and the bottom bar
+  (`lib/terminallayout.ts`, from `visualViewport` so a keyboard shrinks it), with the key row (44px keys, two rows at
+  390px) right under it instead of beneath the bar; at 844px tall the screen is 26 rows. Buttons are 44px tall under
+  640px. The browser tab's title carries the Needs you count, `(2) cuttlefish-crew`. When the daemon answers 401 (a restart,
+  a session past its idle time) a modal **Sign in again** dialog asks for the password, or the new token on loopback, with
+  **Disconnect** as the way out; the page behind keeps its place and a terminal that closed reconnects after the sign-in.
+  The Projects screen no longer says "No projects yet" while the daemon is unreachable. Neutral surfaces, no coral in
+  the dialog. How a real on-screen keyboard resizes the terminal is checked on a phone, not in the emulator.

@@ -41,7 +41,7 @@ export function describeClose(code: number, reason: string): CloseInfo {
   if (code === 4401) {
     return {
       kind: "unauthorised",
-      text: "The daemon did not accept this sign-in. Reconnect from the Connect screen.",
+      text: "The daemon did not accept this sign-in. Sign in again and the terminal reconnects.",
     };
   }
   if (code === 4404) {

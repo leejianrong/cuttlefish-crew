@@ -23,10 +23,9 @@
       const result = await client.listProjects();
       projects = keepIfSame(projects, result.projects);
       unreachable = false;
+      loaded = true;
     } catch {
       unreachable = true;
-    } finally {
-      loaded = true;
     }
   }
 
@@ -87,7 +86,7 @@
     {/each}
   </div>
 
-  {#if loaded && projects.length === 0}
+  {#if loaded && !unreachable && projects.length === 0}
     <div class="card filled empty-state">
       <h2 class="title-large">No projects yet</h2>
       <p class="body-medium muted">

@@ -37,7 +37,7 @@
 </script>
 
 <div class="shell">
-  <nav class="rail" aria-label="Main">
+  <nav class="rail" id="shell-nav" aria-label="Main">
     <svg class="mark" width="40" height="40" viewBox="0 0 40 40" role="img" aria-label="cuttlefish-crew">
       <rect width="40" height="40" rx="12" fill="var(--md-sys-color-primary)" />
       <circle cx="14" cy="17" r="3.2" fill="var(--md-sys-color-attention-container)" />

@@ -11,6 +11,7 @@
     terminalUrl,
     type CloseInfo,
   } from "../terminal";
+  import { keyboardOpen, screenHeight } from "../terminallayout";
 
   let {
     client,
@@ -22,6 +23,12 @@
   let status = $state<"idle" | "connecting" | "connected" | "closed">("idle");
   let closed = $state<CloseInfo | null>(null);
   let starting = $state(false);
+  // On a phone the screen is sized to the space left between the header and the bottom bar, so
+  // the key row sits right under it instead of beneath the bar (CUT-98). Null means CSS decides.
+  let panel: HTMLElement | undefined = $state();
+  let bar: HTMLElement | undefined = $state();
+  let keys: HTMLElement | undefined = $state();
+  let screenPx = $state<number | null>(null);
 
   let term: Terminal | null = null;
   let fit: FitAddon | null = null;
@@ -65,6 +72,22 @@
       return; // hidden or zero-sized: the next resize fits it
     }
     if (socket?.readyState === WebSocket.OPEN) socket.send(resizeMessage(term.cols, term.rows));
+  }
+
+  function layout() {
+    if (!active || !panel || !window.matchMedia("(max-width: 640px)").matches) {
+      screenPx = null;
+      return;
+    }
+    const visible = window.visualViewport?.height ?? window.innerHeight;
+    const typing = keyboardOpen(visible, window.innerHeight);
+    // The panel starts at the top of the page when nothing above it is scrolled away.
+    const top = panel.getBoundingClientRect().top + window.scrollY;
+    const nav = document.getElementById("shell-nav")?.offsetHeight ?? 0;
+    const chrome = (bar?.offsetHeight ?? 0) + (keys?.offsetHeight ?? 0) + 24;
+    screenPx = screenHeight({ visible, layout: window.innerHeight, top, nav, chrome });
+    // With a keyboard up, scroll the header away so the screen and the keys stay in view.
+    if (typing) panel.scrollIntoView({ block: "start" });
   }
 
   function send(data: Uint8Array<ArrayBuffer>) {
@@ -142,6 +165,29 @@
     else if (active) queueMicrotask(refit);
   });
 
+  // Size the screen when the tab is shown, and again when the window or the keyboard changes it.
+  $effect(() => {
+    if (!active) return;
+    window.scrollTo({ top: 0 });
+    layout();
+    const again = () => layout();
+    window.addEventListener("resize", again);
+    window.visualViewport?.addEventListener("resize", again);
+    return () => {
+      window.removeEventListener("resize", again);
+      window.visualViewport?.removeEventListener("resize", again);
+    };
+  });
+
+  // After the sign-in dialog hands over a new client, a terminal that closed because its token was
+  // refused, or because the daemon restarted under it, opens again by itself.
+  let lastClient = client;
+  $effect(() => {
+    if (client === lastClient) return;
+    lastClient = client;
+    if (active && (closed?.kind === "unauthorised" || closed?.kind === "lost")) connect();
+  });
+
   $effect(() => {
     return () => {
       disconnect();
@@ -153,8 +199,8 @@
   });
 </script>
 
-<section class="terminal" aria-labelledby="terminal-heading">
-  <div class="bar">
+<section class="terminal" aria-labelledby="terminal-heading" bind:this={panel}>
+  <div class="bar" bind:this={bar}>
     <h2 id="terminal-heading" class="title-medium">Terminal</h2>
     <span class="state body-small muted" role="status">
       {#if status === "connected"}Connected to the agent's tmux session
@@ -177,9 +223,14 @@
     </div>
   {/if}
 
-  <div class="screen" bind:this={host} data-testid="terminal-screen"></div>
+  <div
+    class="screen"
+    bind:this={host}
+    data-testid="terminal-screen"
+    style:height={screenPx === null ? undefined : `${screenPx}px`}
+  ></div>
 
-  <div class="keys" role="toolbar" aria-label="Keys a phone keyboard lacks">
+  <div class="keys" bind:this={keys} role="toolbar" aria-label="Keys a phone keyboard lacks">
     {#each KEY_ROW as key (key.label)}
       <button type="button" class="key" aria-label={key.aria} onclick={() => press(key.send)}>
         {key.label}
@@ -233,14 +284,14 @@
   }
 
   @media (max-width: 640px) {
-    /* The bottom nav is fixed: leave room so the key row can be scrolled clear of it. */
-    .terminal {
-      padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px));
-    }
-
+    /* The screen is sized in script to what is left (see layout()); this is the fallback. */
     .screen {
       height: 52dvh;
-      min-height: 12rem;
+      min-height: 7.5rem;
+    }
+
+    .terminal {
+      margin: 0.25rem 0 0;
     }
   }
 

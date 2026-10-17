@@ -108,6 +108,10 @@ from cuttlefish.roles import (
 #: and a per-task steering request must never be confused for one another.
 TOKEN_HEADER = "x-cuttlefish-token"
 
+#: A password-mode response carries a fresh session token here when the caller's is past half its
+#: life (ADR-0038); the dashboard keeps it, so a phone in use stays signed in.
+TOKEN_REFRESH_HEADER = "x-cuttlefish-token-refresh"
+
 #: Arbitrary, unregistered with IANA -- an operator with a real conflict overrides
 #: it with `--port`, the same escape hatch `satay dev`'s own default port has.
 DEFAULT_FLEET_PORT = 8420
@@ -381,7 +385,12 @@ def create_app(
             except satay.control.AuthError as exc:
                 _LOG.warning("%s %s rejected: %s %s", request.method, path, exc.status, exc.detail)
                 return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
-        return await call_next(request)
+        response = await call_next(request)
+        if isinstance(security, SessionAuth) and path.startswith("/api/") and path != "/api/login":
+            fresh = security.refresh(request.headers.get(TOKEN_HEADER))
+            if fresh is not None:
+                response.headers[TOKEN_REFRESH_HEADER] = fresh
+        return response
 
     @app.exception_handler(StarletteHTTPException)
     async def _log_http_error(request: Request, exc: StarletteHTTPException) -> Response:
@@ -423,6 +432,7 @@ def create_app(
         allow_origins=sorted(cors_origins),
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[TOKEN_REFRESH_HEADER],
     )
 
     @app.get("/api/auth-mode")

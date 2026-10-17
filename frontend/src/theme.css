@@ -239,3 +239,9 @@ svg.i.sm { width: 18px; height: 18px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* A thumb needs 44px: buttons grow on a phone (CUT-98). */
+@media (max-width: 640px) {
+  .btn { height: 44px; }
+  .icon-btn { width: 44px; height: 44px; }
+}

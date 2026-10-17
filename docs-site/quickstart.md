@@ -133,7 +133,9 @@ The **Agent session** card on a project's Overview (also the MCP tools `get_agen
 The project's **Terminal** tab is that tmux session in the browser: type to the agent, answer its permission
 prompts, watch it work. It uses the same sign-in as the rest of the dashboard (the token on loopback, the
 password session otherwise), has a key row for a phone keyboard (Esc, Tab, Ctrl-C, arrows, Enter), and closing
-it leaves the agent running. With no session running it offers to start one.
+it leaves the agent running. On a phone the terminal takes the height that is left between the header and
+the bottom bar, with the key row right under it, and the page title carries the Needs you count, like
+`(2) cuttlefish-crew`. With no session running it offers to start one.
 
 ## Artifacts
 
@@ -160,6 +162,9 @@ Opening the printed URL directly on your tailnet needs no extra flag. Keep
 it running across crashes and reboots with `make install-systemd-service` —
 it reviews and prints the exact next commands, never starts anything on its
 own.
+
+If the daemon restarts while the dashboard is open, it shows **Sign in again** and carries on where you
+were; a session you keep using stays signed in (12 hours idle, seven days at most).
 
 See [CLI reference](cli-reference.md) for every command and flag, and
 [Architecture](architecture.md) for how the pieces fit together.
