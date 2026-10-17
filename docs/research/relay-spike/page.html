@@ -1,0 +1,53 @@
+<!doctype html><meta charset=utf-8><title>relay client</title><body>relay client</body>
+<script type="module">
+import { newStaticKey, initiatorWrite, initiatorFinish, b64 } from "./noise.js";
+const hex = (s) => Uint8Array.from(s.match(/../g).map((h) => parseInt(h, 16)));
+const toHex = (u) => [...u].map((b) => b.toString(16).padStart(2, "0")).join("");
+const idb = () => new Promise((res, rej) => { const r = indexedDB.open("relay-proto", 1); r.onupgradeneeded = () => r.result.createObjectStore("k"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+const idbGet = async (k) => { const d = await idb(); return new Promise((res) => { const q = d.transaction("k").objectStore("k").get(k); q.onsuccess = () => res(q.result); }); };
+const idbPut = async (k, v) => { const d = await idb(); return new Promise((res) => { const t = d.transaction("k", "readwrite"); t.objectStore("k").put(v, k); t.oncomplete = () => res(); }); };
+
+window.staticKeyInfo = async () => {
+  let kp = await idbGet("static"); let created = false;
+  if (!kp) { kp = await newStaticKey(); await idbPut("static", kp); created = true; }
+  const pub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
+  let exportable = true; try { await crypto.subtle.exportKey("raw", kp.privateKey); } catch { exportable = false; }
+  let pkcs8 = true; try { await crypto.subtle.exportKey("pkcs8", kp.privateKey); } catch { pkcs8 = false; }
+  return { created, pub: toHex(pub), privateKeyExtractable: exportable || pkcs8 };
+};
+
+window.connect = async ({ relay, room, daemonPub, psk, tamper }) => {
+  const kp = await idbGet("static") || (await newStaticKey());
+  const ws = new WebSocket(`${relay}/r/${room}/client`); ws.binaryType = "arraybuffer";
+  const q = []; let wake; ws.onmessage = (e) => { q.push(new Uint8Array(e.data)); wake?.(); };
+  const next = async () => { while (!q.length) await new Promise((r) => (wake = r)); return q.shift(); };
+  await new Promise((r, j) => { ws.onopen = r; ws.onerror = j; });
+  const t0 = performance.now();
+  const { msg, state } = await initiatorWrite(kp, hex(daemonPub), hex(psk), new TextEncoder().encode('{"hello":"browser"}'), new TextEncoder().encode("cuttlefish-relay/1"));
+  ws.send(msg);
+  const m2 = await Promise.race([next(), new Promise((_, j) => setTimeout(() => j(new Error("no reply from daemon")), 3000))]);
+  const { transport, payload } = await initiatorFinish(state, m2);
+  const handshakeMs = performance.now() - t0;
+  let nextId = 1;
+  const request = async (method, path, body) => {
+    const id = nextId++; const t = performance.now();
+    ws.send(await transport.encrypt(new TextEncoder().encode(JSON.stringify({ id, method, path, body: body ?? null }))));
+    const head = JSON.parse(new TextDecoder().decode(await transport.decrypt(await next())));
+    const parts = [];
+    for (let i = 0; i < head.n; i++) { const c = JSON.parse(new TextDecoder().decode(await transport.decrypt(await next()))); parts.push(b64.dec(c.d)); }
+    const out = new Uint8Array(head.len); let o = 0; for (const p of parts) { out.set(p, o); o += p.length; }
+    return { status: head.status, bytes: out, ms: performance.now() - t };
+  };
+  const requestBin = async (path) => {
+    const id = nextId++; const t = performance.now();
+    ws.send(await transport.encrypt(new TextEncoder().encode(JSON.stringify({ id, method: "GET", path, bin: true }))));
+    const head = JSON.parse(new TextDecoder().decode(await transport.decrypt(await next())));
+    const out = new Uint8Array(head.len); let o = 0;
+    for (let i = 0; i < head.n; i++) { const c = await transport.decrypt(await next()); out.set(c, o); o += c.length; }
+    return { status: head.status, bytes: out, ms: performance.now() - t };
+  };
+  window.__requestBin = requestBin; window.__request = request; window.__ws = ws; window.__transport = transport;
+  return { handshakeMs, daemonPayload: new TextDecoder().decode(payload) };
+};
+window.ready = true;
+</script>
