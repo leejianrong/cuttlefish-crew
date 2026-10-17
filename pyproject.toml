@@ -94,7 +94,7 @@ src = ["src", "tests"]
 # Markdown here is hand-written prose (README, ADRs) with deliberate line
 # breaks and table alignment — see satay-runtime's own pyproject.toml for why
 # a Python formatter should not reflow it.
-extend-exclude = ["*.md", "docs/research/relay-spike"]  # spike code, not part of the package
+extend-exclude = ["*.md", "docs/research/relay-spike", "docs/research/claude-hook-spike"]  # spike code, not part of the package
 
 [tool.ruff.lint]
 select = [
