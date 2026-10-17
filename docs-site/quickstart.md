@@ -166,5 +166,10 @@ own.
 If the daemon restarts while the dashboard is open, it shows **Sign in again** and carries on where you
 were; a session you keep using stays signed in (12 hours idle, seven days at most).
 
+To try this from a phone first, with no model credit and none of your own projects, run `make phone` from a
+checkout. It checks that Tailscale and tmux are ready, then serves one sample project on the Tailscale address
+(port 8431, or `PORT=n`) with a fake agent in tmux, and prints the URL and a scratch password. State lives in
+`/tmp/cuttlefish-phone`; `make phone RESET=1` starts over.
+
 See [CLI reference](cli-reference.md) for every command and flag, and
 [Architecture](architecture.md) for how the pieces fit together.
