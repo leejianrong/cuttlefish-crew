@@ -173,6 +173,16 @@ function controlText(payload: Bytes): string {
   return "The daemon did not accept this device.";
 }
 
+/** What a pairing that fails before the daemon has said anything means to a person. The daemon drops a
+ * connection whose one-time secret it does not hold (spent, expired or replaced) with "protocol error", and
+ * nothing else: with no reply heard, that is the useful reading. Anything else is passed on as it came. */
+export function pairingFailure(failure: unknown, heardDaemon: boolean): unknown {
+  if (!heardDaemon && failure instanceof RelayError && /protocol error/i.test(failure.message)) {
+    return new PairingFailed("refused", "This pairing link was already used or has expired. Make a new one on the PC.");
+  }
+  return failure;
+}
+
 export class PairingFailed extends Error {
   constructor(
     readonly state: "rejected" | "expired" | "refused",
@@ -198,13 +208,17 @@ export async function pairWithDaemon(
 ): Promise<DeviceIdentity> {
   const curve = await getX25519();
   const key = await curve.generate();
-  const channel = await openChannel(link.relay, link.room, link.daemon, link.secret, key, curve);
+  let channel: Awaited<ReturnType<typeof openChannel>> | null = null;
+  let heardDaemon = false;
   try {
+    // The daemon drops a link whose secret it does not hold during this handshake, so it is inside the try.
+    channel = await openChannel(link.relay, link.room, link.daemon, link.secret, key, curve);
     const { ws, transport, next } = channel;
     ws.send(await transport.encrypt(encode(frame(FrameType.PING, 0, encoder.encode(JSON.stringify({ name }))))));
     const mine = await shortCode(transport.handshakeHash);
     for (;;) {
       const reply = decode(await transport.decrypt(await next(PAIRING_WAIT_MS)));
+      heardDaemon = true;
       if (reply.type !== FrameType.CONTROL) continue;
       const message = JSON.parse(decoder.decode(reply.payload)) as {
         t?: string;
@@ -241,8 +255,10 @@ export async function pairWithDaemon(
         throw new PairingFailed("refused", "This pairing link was already used or has expired. Make a new one on the PC.");
       }
     }
+  } catch (failure) {
+    throw pairingFailure(failure, heardDaemon);
   } finally {
-    channel.ws.close();
+    channel?.ws.close();
   }
 }
 

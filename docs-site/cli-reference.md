@@ -200,6 +200,14 @@ raise a device to Terminal or Admin under Devices, and the daemon enforces each 
 is not limited. **Remove** on a device signs it out at once, and its next connection is refused; a paired device can remove
 another one, so a lost phone can be cut off from a second.
 
+A device below Approve cannot list devices, so its Devices page shows its own name and tier instead, and the tier updates
+within a few seconds of a change on the PC. A pairing link works once: opened again, it says it was already used or has
+expired.
+
+**Remove ends the device's paired connection, not a password session.** If the same browser also signed in with the
+dashboard password, that session stays valid until it expires or the daemon restarts, and it is not held to a tier. Only
+the paired path is tiered, so to test a tier, use a browser that has never signed in with the password.
+
 ### What this preview is not
 
 There are no accounts, so anyone who can reach the relay can claim a room; keep it on loopback or a private network.

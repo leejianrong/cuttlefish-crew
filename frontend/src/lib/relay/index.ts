@@ -6,6 +6,6 @@ export { getX25519, webCryptoSupportsX25519, KeyError, type Bytes, type KeyPair,
 export * from "./transport";
 export * from "./secure";
 export * from "./pairing";
-export { PairingFailed, RelayConnection, RelayError, RelaySocket, RelayTransport, closeText, pairWithDaemon } from "./connection";
+export { PairingFailed, RelayConnection, RelayError, RelaySocket, RelayTransport, closeText, pairWithDaemon, pairingFailure } from "./connection";
 export * from "./identity";
 export * from "./paircode";
