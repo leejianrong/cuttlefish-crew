@@ -246,6 +246,10 @@ and this folder disagree after a slice lands, update this folder.
   reads "Claude Code wants to run a command that isn't on the list" (or "wants to use WebFetch"), says "Paused until you answer
   here or in the terminal", and ends in the log as "Answered in the terminal", "No answer in time: the terminal still asks" (it
   denied nothing), "Ended: the agent session was stopped" or "Ended: the agent session ended". Coral as for every Needs you card.
+- **A device below Approve still sees what it is (CUT-132, 2026-10-18).** A paired device cannot list devices below Approve, so its
+  Devices screen shows one card, "This browser", with its name and tier, what that tier allows, and that the list needs Approve.
+  It used to stay on "Loading…". A pairing link that was already used or has expired says so on the Pair screen, in place of the
+  daemon's bare "protocol error".
 - **Pairing says when an address cannot work (2026-10-18).** The Devices screen's pairing card shows a note under the address box
   when the address will not let a phone pair: this PC's own address ("a phone cannot open this address"), or any plain-http one
   ("only allows pairing from an https address"). A page opened from a pairing link at an address with no WebCrypto shows that

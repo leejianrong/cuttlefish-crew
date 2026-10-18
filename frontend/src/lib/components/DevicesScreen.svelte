@@ -154,6 +154,17 @@
         <code>cuttlefish relay</code> in another terminal. Phones on Tailscale do not need it.
       </p>
     </section>
+  {:else if relay && you && !roster}
+    <!-- A device below Approve may not list devices, so there is no roster; it can still be told what it is. -->
+    <section class="card">
+      <h2 class="title-medium">This browser</h2>
+      <p class="status" role="status">This browser is a paired device ({you.name}, {you.tier}).</p>
+      <p class="muted">{tierNote(you.tier)}</p>
+      <p class="muted">
+        The device list needs Approve, and pairing others or changing tiers needs Admin. You give a
+        device more on the PC.
+      </p>
+    </section>
   {:else if relay && roster}
     {#if you}
       <p class="status" role="status">
