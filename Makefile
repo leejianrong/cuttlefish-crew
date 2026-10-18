@@ -22,7 +22,7 @@ demo: ## Build the dashboard + run cuttlefish serve (LOG=1 or LOG=<path> also sa
 	./scripts/demo.sh
 
 # Tailscale + phone check (CUT-98): see scripts/phone.sh. Scratch HOME, fake agent, no model credit.
-phone: ## Serve the dashboard on this machine's Tailscale address for a phone check (RESET=1, PORT=n)
+phone: ## Serve the dashboard on this machine's Tailscale address for a phone check (HTTPS=1 to pair, RESET=1, PORT=n)
 	./scripts/phone.sh
 
 lint: ## Ruff lint + format check
