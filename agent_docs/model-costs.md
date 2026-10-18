@@ -59,6 +59,13 @@ late). That is one run per arm and a cap-truncated one, so it is a lead, not a r
 as the cheap kopicode model for cuttlefish rounds, set through the URL path, and repeat the task three times when the key has room.** The
 account's OpenRouter guardrail only allows a few models (see below), and `deepseek/deepseek-v4.1-flash` is on that list.
 
+### Summariser trial, 2026-10-18 (CUT-129)
+
+`deepseek/deepseek-v4.1-flash` as the handover summariser, over two live runs (19 summaries): no empty or first-person answers, every summary had the
+four sections and a git block, about $0.0014 each ($0.0055 for four, $0.024 for fifteen), and 40 per cent of a 16-round run's spend. `qwen/qwen3-coder-next`
+as summariser cost about $0.0004 a call over 22 summaries with the same shape. If summary cost starts to matter, a cheaper allowed model is the lever. Detail: the
+ADR-0030 update of this date.
+
 ### This key's guardrail, and its weekly limit
 
 - The account's OpenRouter guardrail (set to stop an expensive model being used by accident) blocks most models. Of 18 tried, these
@@ -67,8 +74,8 @@ account's OpenRouter guardrail only allows a few models (see below), and `deepse
   `minimax/minimax-m2`, `z-ai/glm-5.2` and others. A blocked model is a 404 ("0 endpoints ... matching your guardrail restrictions").
   With the pinned summariser blocked, a handover silently falls back to carrying the previous summary, so a run against this key must set
   `CUTTLEFISH_LLM_MODEL` to an allowed model or it tests nothing.
-- The key has a $1.00 weekly limit. A full 16-round run is about $0.13, so two or three runs in one week use it up; the third arm of this
-  session ended on it. A rerun needs the limit raised or the reset.
+- The key had a $1.00 weekly limit, which ended three runs on 2026-10-18; the owner then set it to reset daily. A full 16-round run on
+  `deepseek/deepseek-v4.1-flash` costs about $0.06 (rounds plus summaries).
 
 ## Cheaper without changing the model
 
