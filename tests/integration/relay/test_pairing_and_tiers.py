@@ -85,7 +85,9 @@ def _unb64(text: str) -> str:
 async def rig(tmp_path: Path) -> AsyncIterator[Rig]:
     relay = Server(relay_app())
     await relay.start()
-    link = RelayLink.create(RelaySettings(relay.ws_url, tmp_path / "relay-key"))
+    link = RelayLink.create(
+        RelaySettings(relay.ws_url, tmp_path / "relay-key", page_url="https://box.tail1234.ts.net")
+    )
     store = ProjectStore.open(tmp_path / "projects.db")
     root = tmp_path / "alpha"
     root.mkdir()
@@ -424,6 +426,8 @@ async def test_what_a_device_may_see_of_the_relay_says_who_it_is(rig: Rig) -> No
         await browser.close()
     owner_view = (await rig.owner.get("/api/relay", headers=OWNER)).json()
     assert owner_view["enabled"] is True and owner_view["you"] is None
+    # What the dashboard offers as the address a pairing link opens.
+    assert owner_view["page_url"] == "https://box.tail1234.ts.net"
 
 
 async def test_a_device_list_never_contains_a_key_or_a_secret(rig: Rig) -> None:

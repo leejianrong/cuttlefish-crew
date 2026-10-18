@@ -42,6 +42,9 @@
     }
   }
   let address = $state(savedAddress());
+  // The daemon may know the https page a phone should open; offer it until the person types their own,
+  // over whatever the PC's own browser is on or an earlier address left in storage.
+  let addressTouched = $state(false);
 
   const you = $derived(relay?.you ?? null);
   // The owner's own session is not held to a tier; a paired device is, and the daemon says no
@@ -64,6 +67,7 @@
   async function load() {
     try {
       relay = await client.getRelay();
+      if (!addressTouched && relay.page_url && address !== relay.page_url) address = relay.page_url;
       if (relay.enabled) roster = await client.listDevices();
       failed = false;
     } catch {
@@ -184,7 +188,7 @@
           </p>
           <label>
             Address the device will open
-            <input type="url" bind:value={address} placeholder="http://100.x.y.z:8431" />
+            <input type="url" bind:value={address} oninput={() => (addressTouched = true)} placeholder="http://100.x.y.z:8431" />
           </label>
           {#if addressProblem}
             <p class="warn">{addressProblem}</p>

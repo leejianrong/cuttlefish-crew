@@ -103,6 +103,10 @@ class RelaySettings:
     #: `tailscale serve` the daemon reaches the relay on loopback `ws://` and a phone must use
     #: `wss://<machine>.<tailnet>.ts.net:<port>` (ADR-0041).
     public_url: str | None = None
+    #: The address of the dashboard page a phone should open, when the daemon knows it (behind
+    #: `tailscale serve` it is `https://<machine>.<tailnet>.ts.net`). The dashboard offers it as the
+    #: address a pairing link opens, instead of whatever address the PC's own browser is on.
+    page_url: str | None = None
 
     @property
     def browser_url(self) -> str:

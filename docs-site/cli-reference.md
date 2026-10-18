@@ -178,7 +178,7 @@ when it exists. On the PC itself, `http://localhost` works.
 3. Run `cuttlefish relay` (it stays on loopback), then `tailscale serve --bg --https=443 http://127.0.0.1:8431` and
    `tailscale serve --bg --https=8443 http://127.0.0.1:<relay port>`. Tailscale needs root for this, or `sudo tailscale set
    --operator=$USER` once. `tailscale serve reset` undoes it.
-4. Open `https://<machine>.<tailnet>.ts.net/` on the PC, sign in, and make a pairing link. The link carries the https page
+4. Open `https://<machine>.<tailnet>.ts.net/` on the PC (from WSL2 only a browser inside WSL, such as one run through WSLg, can reach it; a Windows browser should use `http://127.0.0.1:<port>`), sign in, and make a pairing link. The address box under Devices already holds the https address. The link carries the https page
    and a `wss://<machine>.<tailnet>.ts.net:8443` relay address. The phone needs the Tailscale app on the same tailnet.
 
 `make phone HTTPS=1` does steps 2 and 3 for you against a scratch home and a fake agent, asking before it changes the
