@@ -26,8 +26,8 @@
   let connecting = $state(false);
   let error = $state<string | null>(null);
 
-  async function checkBaseUrl(event: SubmitEvent) {
-    event.preventDefault();
+  async function checkBaseUrl(event?: SubmitEvent) {
+    event?.preventDefault();
     connecting = true;
     error = null;
     try {
@@ -39,6 +39,15 @@
       connecting = false;
     }
   }
+
+  // A dashboard the daemon serves is already at the daemon's address (`defaultBaseUrl`), so there is nothing to
+  // type: go straight to the password or token. A failed check, or a notice to read, leaves the address step.
+  let autoChecked = false;
+  $effect(() => {
+    if (autoChecked) return;
+    autoChecked = true;
+    if (baseUrl !== FALLBACK_BASE_URL && !notice) void checkBaseUrl();
+  });
 
   async function connect(event: SubmitEvent) {
     event.preventDefault();

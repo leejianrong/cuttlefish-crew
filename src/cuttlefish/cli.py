@@ -891,6 +891,7 @@ async def _serve(args: argparse.Namespace) -> int:
                 public_url=(
                     f"wss://{tailnet_name}:{TAILSCALE_RELAY_PORT}" if tailnet_name else None
                 ),
+                page_url=f"https://{tailnet_name}" if tailnet_name else None,
             )
         try:
             await run_daemon(

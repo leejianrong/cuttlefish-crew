@@ -502,6 +502,7 @@ def create_app(
         return {
             "enabled": True,
             "url": relay.settings.browser_url,
+            "page_url": relay.settings.page_url,
             "room": relay.room,
             "you": you.as_json() if you is not None else None,
         }

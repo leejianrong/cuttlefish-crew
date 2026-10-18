@@ -344,8 +344,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   in Chromium and Firefox against real `https://<machine>.<tailnet>.ts.net` and `wss://…:8443` addresses. Not run: a real
   phone, Safari or WebKit (no system libraries here), Web Push. cuttlefish prints the `tailscale serve` commands and never
   runs them; they need root or `tailscale set --operator`. The machine and tailnet names go into public certificate logs.
-  A daemon behind `tailscale serve` needs `CUTTLEFISH_SERVE_PASSWORD` and an exact port (never moved). The dashboard's
-  sign-in screen still asks for a Base URL even when served from the daemon's own https address; not changed here.
+  A daemon behind `tailscale serve` needs `CUTTLEFISH_SERVE_PASSWORD` and an exact port (never moved). (CUT-133: the dashboard now
+  offers that https address in Devices, and goes straight to the password when the daemon serves the page.)
 - **Removing a paired device does not end a password session in the same browser** (found 2026-10-18, CUT-132). Revocation cuts the
   device's relay connection and its stored pairing. A browser that also signed in with the dashboard password keeps that session
   (sliding, ADR-0038) until it expires or the daemon restarts, and a password session is the owner: not held to a tier and able to

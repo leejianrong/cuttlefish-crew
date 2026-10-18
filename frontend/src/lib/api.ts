@@ -35,6 +35,8 @@ export interface DevicesState {
 export interface RelayInfo {
   enabled: boolean;
   url?: string;
+  /** The https page a phone should open, when the daemon knows it (behind `tailscale serve`). */
+  page_url?: string | null;
   room?: string;
   /** Set when this request came through the relay from a paired device. */
   you?: DeviceInfo | null;

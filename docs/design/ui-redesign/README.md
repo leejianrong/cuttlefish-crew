@@ -246,6 +246,10 @@ and this folder disagree after a slice lands, update this folder.
   reads "Claude Code wants to run a command that isn't on the list" (or "wants to use WebFetch"), says "Paused until you answer
   here or in the terminal", and ends in the log as "Answered in the terminal", "No answer in time: the terminal still asks" (it
   denied nothing), "Ended: the agent session was stopped" or "Ended: the agent session ended". Coral as for every Needs you card.
+- **Fewer steps to sign in and a right address to pair (CUT-133, 2026-10-18).** A dashboard the daemon serves goes straight to the
+  password or token, with no Base URL step; a failed check, or a notice to read, still shows the address step. Under Devices, when
+  the daemon was started with `--tailscale-https` it offers its https page as the address a pairing link opens (`page_url` in
+  `/api/relay`), over the PC's own address or one left in storage, until the person types their own.
 - **A device below Approve still sees what it is (CUT-132, 2026-10-18).** A paired device cannot list devices below Approve, so its
   Devices screen shows one card, "This browser", with its name and tier, what that tier allows, and that the list needs Approve.
   It used to stay on "Loading…". A pairing link that was already used or has expired says so on the Pair screen, in place of the
