@@ -10,14 +10,15 @@ Prices are US dollars per million tokens, input / output. They move; re-pull the
   12-turn round about $0.01, a 16-round team about $0.12 (`qwen/qwen3-coder-next`, $0.12 / $0.80).
 - **cuttlefish's own summaries** (one per continuation): `openrouter/auto` picked `z-ai/glm-5.3-flash` ($0.15 / $0.50), a
   reasoning model that twice spent its whole 4096-token output cap and answered nothing. Now pinned
-  (`CUTTLEFISH_LLM_MODEL`, default `qwen/qwen3-30b-a3b-instruct-2507`, $0.048 / $0.193, no reasoning).
+  (`CUTTLEFISH_LLM_MODEL`, default `deepseek/deepseek-v4.1-flash`, $0.065 / $0.144, low reasoning effort; changed from `qwen/qwen3-30b-a3b-instruct-2507` in CUT-129, which the account's guardrail blocks).
 - **Our own live tests and exploratory runs.** The usual way to hit a daily or weekly key limit.
 
 ## Summariser candidates (non-reasoning instruct, tool support not needed)
 
 | Model | in / out | Context | Note |
 | --- | --- | --- | --- |
-| `qwen/qwen3-30b-a3b-instruct-2507` | 0.048 / 0.193 | 262k | the default |
+| `deepseek/deepseek-v4.1-flash` | 0.065 / 0.144 | 1M | the default since CUT-129; reasoning-capable, so watch for empty answers |
+| `qwen/qwen3-30b-a3b-instruct-2507` | 0.048 / 0.193 | 262k | the former default (blocked by this owner's guardrail) |
 | `mistralai/mistral-small-3.2-24b-instruct` | 0.094 / 0.250 | 256k | steady instruction following |
 | `google/gemma-3-12b-it` | 0.050 / 0.150 | 131k | smaller |
 | `mistralai/mistral-nemo` | 0.019 / 0.030 | 131k | cheapest that writes a decent report |
