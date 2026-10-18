@@ -328,7 +328,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Usage is counted but nothing refuses at a byte cap yet, and there is no abuse switch or account deletion (CUT-147,
   CUT-148). A visitor with the gate password but no pairing link sees the dashboard's connect screen, which asks for a
   daemon address that the relay does not answer; onboarding (CUT-146) replaces it. The relay is one process with rooms in
-  memory, so it is one instance. The image is smoke-tested locally and in CI (CUT-144), but over plain http: Caddy's real certificate, the Droplet and the deploy path are untested (CUT-141, CUT-143). Never run an open relay
+  memory, so it is one instance. The image is smoke-tested locally and in CI (CUT-144), but over plain http: Caddy's real certificate, the Droplet and the deploy path are untested (CUT-143). The deploy pipeline is written and its script tested against local docker, but its workflow, the restricted SSH key, the `production` approval and a rollback on the real Droplet have not run (CUT-141; the guide is `docs-site/hosted-relay.md`). A deploy stops the relay for a few seconds. Never run an open relay
   (no `--db`) on a public address: the CLI refuses it.
 - **The relay path is a preview** (CUT-119, CUT-120, ADR-0037, ADR-0039). An open relay (no `--db`) has no accounts: anyone who
   can reach it can claim a room, so it must stay on loopback or a private network. There is

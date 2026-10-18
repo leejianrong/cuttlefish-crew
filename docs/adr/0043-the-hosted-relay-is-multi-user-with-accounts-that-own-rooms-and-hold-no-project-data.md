@@ -164,6 +164,20 @@ CUT-135 creates the tables above in full, so the later cards fill in behaviour a
   including with `..`, encoded and doubled-slash paths. CI runs it on every PR (job `relay-image`); the deploy pipeline
   (CUT-141) runs it on the image it just built, by digest. The pairing step uses the Python protocol browser, not a real
   browser (Chromium and Firefox were checked by hand for CUT-135).
+- **CUT-141** (2026-10-18): the pipeline (`.github/workflows/deploy.yml`, `.github/actions/deploy-relay`,
+  `deploy/relay/relay-deploy.sh`; guide in `docs-site/hosted-relay.md`). After a green CI run on `main` it builds the image,
+  pushes it to GHCR, records the digest, and smoke-tests that digest. A deploy job in the protected `production` environment
+  (reviewers at first) runs the Droplet's one allowed command over a key restricted to it, with the image **by digest**;
+  `relay-deploy` replaces the container, health-checks it and restores the previous one if it is unhealthy. Choices made:
+  - The deploy key and the host key are environment secrets; the host key is pinned, never trusted on first use.
+  - The deploy script is owned by root and not writable by the deploy user, so the key cannot rewrite what it may run. Updating
+    the script means re-running the bootstrap (CUT-143), which is the one thing not done through the pipeline.
+  - Nothing deploys until the repository variable `DEPLOY_ENABLED` is `true`, so the pipeline can land before the Droplet exists.
+  - The GHCR package is meant to be public (it holds open-source code and the dashboard build, no secret), so the Droplet pulls
+    with no credential. Jian makes it public once, after the first push.
+  - A rollback to an earlier release is the same workflow run by hand with a digest, through the same approval.
+  - The deploy briefly stops the relay (seconds); daemons reconnect with their own backoff (at most 10 seconds) and browsers
+    pair again on their next connection.
 - Not built: GitHub and Google sign-in and a room per PC from the dashboard (CUT-145), onboarding (CUT-146), the abuse switch,
   per-account quotas and the daily byte cap (CUT-147), account deletion and the terms (CUT-148). The usage table is filled but
   nothing refuses at a cap yet.

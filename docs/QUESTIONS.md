@@ -83,6 +83,7 @@ None. Both forks raised in round 1 were resolved the same round.
 | Q70 | Where does the hosted relay run? | ASSUMED | A plain DigitalOcean Droplet with Caddy for the certificate. App Platform is not used because websocket support was not confirmed. Jian creates the Droplet later. | CUT-143 |
 | Q71 | What is the hosted relay's tenancy model: who owns a room, who may join, what is stored, how is an account deleted? | DECIDED | Accounts own rooms through a registration token; joining needs no account (the daemon's pairing is the gate); no project data, keys or credentials; sign-up closed until the outside review; deletion is complete within 7 days. Accepted by Jian, 2026-10-18. | ADR-0043, CUT-142 |
 | Q72 | Who can reach the hosted service before the outside review? | DECIDED | Only the owner: sign-up is closed, and the whole site sits behind one shared Caddy password, except the daemon's websocket, which its room token gates. Jian, 2026-10-18. | ADR-0043, CUT-135 |
+| Q73 | How does a release reach the Droplet, and who approves it? | DECIDED | Only through `deploy.yml`: build on merge, record the digest, smoke-test it, then a deploy job in the protected `production` environment (approval each time at first) over a key restricted to one root-owned script, with a health check and rollback to the previous container. Jian, 2026-10-18. | ADR-0043, CUT-141 |
 
 ## Coverage
 
