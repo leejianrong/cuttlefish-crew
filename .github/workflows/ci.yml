@@ -84,6 +84,20 @@ jobs:
       - name: pytest (integration only, real kopicode on PATH)
         run: uv run pytest tests/integration -q
 
+  relay-image:
+    name: Relay image smoke test (docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      # CUT-144: build deploy/relay/Dockerfile and run the image as it will be deployed: the page
+      # loads, a daemon registers a room, a browser pairs, and Caddy's password gate holds.
+      - name: build the relay image and smoke-test it
+        run: make test-smoke
+
   frontend:
     name: Dashboard frontend (svelte-check + vitest + build)
     runs-on: ubuntu-latest
