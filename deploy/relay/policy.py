@@ -8,9 +8,15 @@ not take the file on trust: `relay-deploy` renders it with `docker compose confi
 start anything this check does not recognise. An allow-list, so a new compose feature is refused
 until someone decides it is safe.
 
-    docker compose config --no-env-resolution --format json | python3 policy.py \\
-        --relay-image IMAGE --release-dir DIR --relay-env FILE --caddy-env FILE \\
-        --http-port 80 --https-port 443
+    RELAY_ENV_FILE=empty1 CADDY_ENV_FILE=empty2 docker compose config --format json |
+        python3 policy.py --relay-image IMAGE --release-dir DIR --relay-env empty1 \\
+        --caddy-env empty2 --http-port 80 --https-port 443
+
+The two env files given while rendering are EMPTY placeholders. Compose versions differ in whether
+`config` keeps an `env_file` entry or inlines the file's variables into `environment`, so the check
+does not depend on it: with empty files, `environment` must be exactly what the compose file itself
+sets, which means an `env_file` the bundle added for itself (one that holds anything) shows up as an
+extra variable and is refused.
 
 Prints one line per problem and exits 1, or prints nothing and exits 0. Standard library only.
 Installed by the bootstrap, root-owned, at /usr/local/lib/cuttlefish-relay/policy.py.
@@ -105,7 +111,8 @@ def violations(
             entry.get("path") if isinstance(entry, dict) else entry
             for entry in service.get("env_file") or []
         ]
-        if env_files != [expected_env]:
+        # Absent when this compose version inlines the file; if it is kept, it is the placeholder.
+        if env_files and env_files != [expected_env]:
             bad(f"{name}: env_file must be exactly {expected_env}, found {env_files}")
 
         environment = service.get("environment") or {}

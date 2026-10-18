@@ -35,6 +35,7 @@ class Registry:
     not_read_only: str
     privileged: str
     host_mount: str
+    env_file_leak: str
     no_bundle: str
     symlinked_caddyfile: str
     extra_file: str
@@ -78,6 +79,12 @@ def registry(image: str) -> Iterator[Registry]:
         ),
         "host_mount": (
             f"RUN sed -i 's#^      - relay-data:/data#      - relay-data:/data\\n      - /:/host#' "
+            f"{bundle}/compose.yaml"
+        ),
+        # An env file of the bundle's own: a file on the Droplet that holds KEY=value lines.
+        "env_file_leak": (
+            "RUN sed -i 's#^    env_file: ..RELAY_ENV_FILE.*#"
+            "    env_file:\\n      - ${RELAY_ENV_FILE}\\n      - /etc/os-release#' "
             f"{bundle}/compose.yaml"
         ),
         "no_bundle": f"RUN rm -rf {bundle}",
@@ -273,7 +280,7 @@ def test_a_first_deploy_that_is_unhealthy_leaves_nothing_running(droplet: Drople
     assert not (droplet.state / "current").exists()
 
 
-@pytest.mark.parametrize("variant", ["not_read_only", "privileged", "host_mount"])
+@pytest.mark.parametrize("variant", ["not_read_only", "privileged", "host_mount", "env_file_leak"])
 def test_a_compose_file_that_breaks_the_allow_list_is_refused_and_nothing_changes(
     droplet: Droplet, variant: str
 ) -> None:

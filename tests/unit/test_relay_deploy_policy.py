@@ -1,5 +1,5 @@
 """Unit (CUT-153): the allow-list a relay release's compose file must pass before `relay-deploy`
-runs it. The baseline is the shape `docker compose config --no-env-resolution --format json` prints
+runs it. The baseline is the shape `docker compose config --format json` prints
 for deploy/relay/compose.yaml; each test breaks one rule. A smoke test renders the real file."""
 
 from __future__ import annotations
@@ -302,6 +302,27 @@ def test_top_level_rules_catch_their_break(what: str, edit: Any, needle: str) ->
     assert any(needle in p for p in problems), (what, problems)
 
 
+def test_it_does_not_matter_whether_this_compose_version_keeps_env_file_or_inlines_it() -> None:
+    inlined = baseline()
+    for service in inlined["services"].values():
+        service.pop("env_file")  # an older compose merges the file's variables into `environment`
+    assert check(inlined) == []
+
+
+def test_variables_that_an_env_file_of_the_bundles_own_brought_in_are_refused() -> None:
+    """Rendered with empty placeholder files, anything in `environment` came from the bundle itself:
+    an `env_file` it named that holds values (here as an inlining compose would show them)."""
+    for service, extra in (
+        ("caddy", "GATE_PASSWORD_HASH"),
+        ("relay", "CUTTLEFISH_RELAY_OWNER_SECRET"),
+    ):
+        config = baseline()
+        config["services"][service].pop("env_file")
+        config["services"][service].setdefault("environment", {})[extra] = "x"
+        problems = check(config)
+        assert any("environment must be exactly" in p for p in problems), (service, problems)
+
+
 def test_other_ports_or_release_paths_are_judged_against_what_the_script_was_told() -> None:
     config = baseline()
     assert check(config, http_port="8080")  # the file publishes 80, the script allows 8080
@@ -347,12 +368,10 @@ def test_the_real_compose_file_passes_its_own_policy(tmp_path: Path) -> None:
     rendered = subprocess.run(
         [
             "docker", "compose", "-f", str(release / "compose.yaml"),
-            "config", "--no-env-resolution", "--format", "json",
+            "config", "--format", "json",
         ],
         env=env, capture_output=True, text=True,
     )  # fmt: skip
-    if rendered.returncode != 0 and "unknown flag" in rendered.stderr:
-        pytest.skip("this docker compose is too old for --no-env-resolution")
     assert rendered.returncode == 0, rendered.stderr
     config = json.loads(rendered.stdout)
     problems = policy.violations(

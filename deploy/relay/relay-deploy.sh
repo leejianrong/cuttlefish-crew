@@ -76,8 +76,9 @@ old_dir="$STATE/releases/$old_hex"
 release="$STATE/releases/$hex"
 incoming="$STATE/releases/.incoming-$$"
 uplog="$STATE/releases/.up-$$.log"
+placeholders="$STATE/releases/.placeholders-$$"
 # shellcheck disable=SC2329  # run by the trap
-cleanup() { rm -rf "$incoming" "$uplog"; }
+cleanup() { rm -rf "$incoming" "$uplog" "$placeholders"; }
 trap cleanup EXIT
 
 compose() { # release dir, then compose arguments
@@ -96,6 +97,22 @@ serving() {
     [[ -n "$address" && "$address" != :* ]] && host=(-H "Host: $address")
     code="$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' "${host[@]}" "http://127.0.0.1:$HTTP_PORT/healthz" 2>/dev/null || true)"
     case "$code" in 200 | 301 | 302 | 307 | 308 | 401) return 0 ;; *) return 1 ;; esac
+}
+
+# The compose file as docker renders it, with EMPTY env files standing in for the real ones, so the
+# real secrets never reach the policy check and its answer does not depend on how this compose
+# version treats `env_file`. A bundle that names an env file of its own would show its variables.
+mkdir -p "$placeholders"
+: >"$placeholders/relay.env"
+: >"$placeholders/caddy.env"
+render() { # release dir
+    RELAY_ENV_FILE="$placeholders/relay.env" CADDY_ENV_FILE="$placeholders/caddy.env" \
+        compose "$1" config --format json
+}
+judge() { # release dir; reads the rendered config on standard input, prints the problems
+    python3 "$POLICY" --relay-image "$image" --release-dir "$1" \
+        --relay-env "$placeholders/relay.env" --caddy-env "$placeholders/caddy.env" \
+        --http-port "$HTTP_PORT" --https-port "$HTTPS_PORT"
 }
 
 bring_up() { # release dir
@@ -134,14 +151,12 @@ chmod 644 "$incoming/compose.yaml" "$incoming/Caddyfile"
 printf '%s\n' "$image" >"$incoming/image"
 
 # 2. Render it and judge it, before anything running is touched.
-rendered="$(compose "$incoming" config --no-env-resolution --format json 2>&1)" || {
+rendered="$(render "$incoming" 2>&1)" || {
     log "refused: docker compose could not read the bundle's compose file:"
     printf '%s\n' "$rendered" | sed 's/^/    /'
     exit 65
 }
-if ! problems="$(printf '%s' "$rendered" | python3 "$POLICY" --relay-image "$image" \
-    --release-dir "$incoming" --relay-env "$RELAY_ENV" --caddy-env "$CADDY_ENV" \
-    --http-port "$HTTP_PORT" --https-port "$HTTPS_PORT")"; then
+if ! problems="$(printf '%s' "$rendered" | judge "$incoming")"; then
     log "refused: the bundle's compose file does not pass policy:"
     printf '%s\n' "$problems" | sed 's/^/    /'
     exit 65
@@ -152,10 +167,8 @@ if [[ "$hex" != "$old_hex" ]]; then
     rm -rf "$release"
     mv "$incoming" "$release"
 fi
-rendered="$(compose "$release" config --no-env-resolution --format json)"
-if ! printf '%s' "$rendered" | python3 "$POLICY" --relay-image "$image" \
-    --release-dir "$release" --relay-env "$RELAY_ENV" --caddy-env "$CADDY_ENV" \
-    --http-port "$HTTP_PORT" --https-port "$HTTPS_PORT" >/dev/null; then
+rendered="$(render "$release")"
+if ! printf '%s' "$rendered" | judge "$release" >/dev/null; then
     log "refused: the policy passed in the staging folder and failed in the release folder"
     [[ "$hex" == "$old_hex" ]] || rm -rf "$release"
     exit 65
