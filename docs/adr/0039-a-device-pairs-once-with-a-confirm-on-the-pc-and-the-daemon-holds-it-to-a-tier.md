@@ -89,7 +89,8 @@ plain-http Tailscale dashboard**. The earlier runs of this ADR's flow all used `
 The dashboard now says so on both sides (the Devices screen warns about the address it will put in the link, and a page that
 cannot pair explains why and leaves the direct password sign-in available). The ways forward are the https relay (CUT-121,
 which serves the page), https addresses from Tailscale, or a pure-JavaScript fallback for the crypto that would work on any
-origin and would give up the "the code came over tls" argument ADR-0037 makes for a hosted page; that last choice is Jian's.
+origin and would give up the "the code came over tls" argument ADR-0037 makes for a hosted page. Jian chose, on 2026-10-18: Tailscale
+https first, the hosted relay second, and the JavaScript fallback dropped (ADR-0041).
 
 ## Left out on purpose
 
