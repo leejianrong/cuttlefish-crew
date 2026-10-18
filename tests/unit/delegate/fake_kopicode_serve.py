@@ -11,6 +11,8 @@ sends a consent.request and records the reply (or ``"timeout"`` after ``wait`` s
 ``{"wait_for": "session.cancel"}`` blocks until that method arrives; ``{"close": [<msg>...]}``
 waits for session.close, writes the messages (``session_ended``), then acknowledges it;
 ``{"usage": {...}}`` waits for a session.usage and answers it with that usage object;
+``{"handoff": {...}}`` waits for a session.handoff and answers it with that result (or, with
+``{"handoff_error": <code>}``, with an error);
 ``{"record": [<line>...]}`` appends those JSON lines to the session's own record,
 ``./.kopicode/sessions/<session>/events.jsonl`` (what the stuck-agent detector reads);
 ``{"eof": [<msg>...]}`` blocks until stdin closes, then writes the messages (shutdown's
@@ -140,6 +142,26 @@ for step in scenario:
                 "result": {"session": ctx["session"], "usage": step["usage"]},
             }
         )
+    elif "handoff" in step or "handoff_error" in step:
+        while (msg := lines.get()) is not None and msg.get("method") != "session.handoff":
+            pass
+        assert msg is not None, "stdin closed before session.handoff"
+        if "handoff_error" in step:
+            out(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg["id"],
+                    "error": {"code": step["handoff_error"], "message": "no draft"},
+                }
+            )
+        else:
+            out(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg["id"],
+                    "result": {"session": ctx["session"], **step["handoff"]},
+                }
+            )
     elif "record" in step:
         record = Path.cwd() / ".kopicode" / "sessions" / ctx["session"] / "events.jsonl"
         record.parent.mkdir(parents=True, exist_ok=True)

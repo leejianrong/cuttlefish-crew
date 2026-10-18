@@ -254,6 +254,17 @@ def round_timeout_for(limits: Mapping[str, int] | None) -> float | None:
     return round_timeout_from_env()
 
 
+#: The agent writes the handoff at a checkpoint, always (ADR-0042). ``CUTTLEFISH_HANDOFF=summary``
+#: is an escape hatch that keeps cuttlefish's own summary from the journal, for a backend or a run
+#: where the agent's cannot be had; it goes when the summariser does (CUT-140).
+HANDOFF_ENV = "CUTTLEFISH_HANDOFF"
+
+
+def agent_handoff_enabled(environ: Mapping[str, str] | None = None) -> bool:
+    raw = (environ if environ is not None else os.environ).get(HANDOFF_ENV, "")
+    return raw.strip().lower() != "summary"
+
+
 def context_limit_for(limits: Mapping[str, int] | None) -> float | None:
     if limits and "context_limit_percent" in limits:
         percent = limits["context_limit_percent"]

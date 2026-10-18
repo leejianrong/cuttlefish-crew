@@ -123,3 +123,8 @@ class DelegationOutcome:
     # (KAN-1792, ADR-0021) -- empty for every transport with no live consent
     # (`run --print`, the other backends).
     consent_decisions: list[ConsentDecisionRecord] = dataclasses.field(default_factory=list)
+    # The agent's own handoff document for a round that ran out of room (ADR-0042): written by the
+    # agent from its own history when cuttlefish asked, so it carries what the journal cannot (what
+    # a command printed, why a choice was made). ``None`` for every other round and for a backend
+    # with no way to ask.
+    handoff: str | None = None

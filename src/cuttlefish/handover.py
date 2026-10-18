@@ -113,6 +113,7 @@ async def maybe_handover(
     role: str | None = None,
     force: bool = False,
     root: str | None = None,
+    agent_document: str | None = None,
 ) -> bool:
     """Summarise and checkpoint if the window since the last handover is over budget.
 
@@ -126,6 +127,10 @@ async def maybe_handover(
     ``force`` writes one whatever the window's size (but not for an empty window): a fresh
     session after a checkpoint has only what it is told, and a round that ran 100 turns can
     sit well under the budget in journal tokens (ADR-0030).
+
+    ``agent_document`` (ADR-0042) is a handoff the agent wrote itself from its own history when it
+    was asked. It is journaled as the handover as it is: no summarising call is made, so this path
+    needs no summariser key, and a blank one is ignored.
 
     ``root`` is the project's folder: when given, the repository's own recent commits and
     uncommitted changes (read from git, never summarised) are appended to the handover, so the
@@ -159,21 +164,24 @@ async def maybe_handover(
     if total_tokens < token_budget and not force:
         return False
 
-    previous = _previous_summary(decoded, last_handover_seq)
-    summary, calls = await _write_summary(window, previous)
-    for call in calls:
-        await journal(
-            task_id,
-            LlmCallCompleted(
-                model=str(call["model"]),
-                prompt=_prompt_of(call),
-                response=str(call["text"]),
-                input_tokens=_as_int(call.get("input_tokens")),
-                output_tokens=_as_int(call.get("output_tokens")),
-                role=role,
-                cost_usd=_as_float(call.get("cost_usd")),
-            ),
-        )
+    if agent_document is not None and agent_document.strip():
+        summary = agent_document.strip()
+    else:
+        previous = _previous_summary(decoded, last_handover_seq)
+        summary, calls = await _write_summary(window, previous)
+        for call in calls:
+            await journal(
+                task_id,
+                LlmCallCompleted(
+                    model=str(call["model"]),
+                    prompt=_prompt_of(call),
+                    response=str(call["text"]),
+                    input_tokens=_as_int(call.get("input_tokens")),
+                    output_tokens=_as_int(call.get("output_tokens")),
+                    role=role,
+                    cost_usd=_as_float(call.get("cost_usd")),
+                ),
+            )
     if root:
         state = await read_repo_state(root)
         if state:

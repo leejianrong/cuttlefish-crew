@@ -15,7 +15,13 @@ from satay.api.primitives import start
 from satay.journal.store import SQLiteStore
 
 from cuttlefish import runtime
-from cuttlefish.episodic.events import DelegationFailed, DelegationStarted, RoundContinued
+from cuttlefish.episodic.events import (
+    DelegationFailed,
+    DelegationStarted,
+    HandoverWritten,
+    LlmCallCompleted,
+    RoundContinued,
+)
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.requests import RequestBroker, RequestContext
@@ -387,3 +393,90 @@ async def test_a_roles_idle_limit_holds_it_sooner_than_the_teams(tmp_path: Path)
     )
     assert result["status"] == "failed"
     assert len([p for p in payloads if isinstance(p, DelegationStarted)]) == 1
+
+
+# -- the agent writes the handoff itself (ADR-0042) ----------------------------------------------
+
+_AGENT_DOC = "## Goal\nFinish the slug helper.\n## Learned\nthe tests need LANG=C"
+
+
+def _round_with_handoff(document: str) -> list[Any]:
+    """A round that stops at the turn cap and is asked for its handoff before it is closed."""
+    steps = _round("max_turns", 4, edit=True)
+    return [*steps[:-1], {"handoff": {"document": document, "path": "p"}}, steps[-1]]
+
+
+async def test_with_agent_handoff_the_next_round_is_told_what_the_agent_wrote(
+    tmp_path: Path,
+) -> None:
+    binary = _script(
+        tmp_path,
+        [*_round_with_handoff(_AGENT_DOC), *_round("completed", 0)],
+        features=[*FEATURES, "session.handoff"],
+    )
+    # The replay provider has no responses: a summarising call would fail, so none is made.
+    result, payloads = await _run(tmp_path, binary)
+    assert result["status"] == "completed"
+    handovers = [p for p in payloads if isinstance(p, HandoverWritten)]
+    assert len(handovers) == 1 and _AGENT_DOC in handovers[0].summary
+    assert not [p for p in payloads if isinstance(p, LlmCallCompleted)]
+    asked = [m for m in _all_sent(tmp_path) if m.get("method") == "session.handoff"]
+    assert len(asked) == 1 and "build it" in asked[0]["params"]["goal"]
+    assert _AGENT_DOC in _sent(tmp_path)[1]["params"]["prompt"]
+
+
+async def test_agent_handoff_falls_back_to_the_summary_when_kopicode_cannot_write_one(
+    tmp_path: Path,
+) -> None:
+    from cuttlefish.llm.provider import LlmResponse
+
+    store = EpisodicStore.open(tmp_path / "episodic.db")
+    runtime.configure(
+        runtime.Runtime(
+            episodic_store=store,
+            llm_provider=ReplayLlmProvider([LlmResponse(model="m", text="BUILT slug; NEXT wrap")]),
+            kopicode_binary=_wrapper(tmp_path, stops=1),  # no session.handoff feature
+        )
+    )
+    root = tmp_path / "root"
+    root.mkdir()
+    result = await start(
+        run_team,
+        {"team_id": "t", "root": str(root), "roles": [{"name": "builder", "text": "build it"}]},
+        run_id="t",
+        store=SQLiteStore.open(":memory:"),
+    ).result()
+    store.close()
+    assert result["status"] == "completed"
+    assert "BUILT slug; NEXT wrap" in _sent(tmp_path)[1]["params"]["prompt"]
+    assert not [m for m in _all_sent(tmp_path) if m.get("method") == "session.handoff"]
+
+
+async def test_the_agent_is_asked_for_a_handoff_by_default(tmp_path: Path) -> None:
+    binary = _script(
+        tmp_path,
+        [*_round_with_handoff(_AGENT_DOC), *_round("completed", 0)],
+        features=[*FEATURES, "session.handoff"],
+    )
+    result, payloads = await _run(tmp_path, binary)  # no CUTTLEFISH_HANDOFF set
+    assert result["status"] == "completed"
+    assert [m for m in _all_sent(tmp_path) if m.get("method") == "session.handoff"]
+    assert any(isinstance(p, HandoverWritten) and _AGENT_DOC in p.summary for p in payloads)
+
+
+async def test_the_summary_escape_hatch_never_asks_the_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_HANDOFF", "summary")
+    binary = _script(
+        tmp_path,
+        [*_round("max_turns", 4), *_round("completed", 0)],
+        features=[*FEATURES, "session.handoff"],
+    )
+    result, _ = await _run(tmp_path, binary)
+    assert result["status"] == "completed"
+    assert not [m for m in _all_sent(tmp_path) if m.get("method") == "session.handoff"]
+
+
+def _all_sent(tmp_path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in (tmp_path / "sent.jsonl").read_text().splitlines()]

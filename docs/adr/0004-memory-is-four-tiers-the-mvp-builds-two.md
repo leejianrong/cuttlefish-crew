@@ -1,6 +1,6 @@
 # ADR-0004: Memory is four tiers, the MVP builds two, and each tier owns its own store
 
-- Status: Accepted
+- Status: Accepted. The handover mechanism (cuttlefish's own model writes the summary) is superseded by ADR-0042; the tiers, the stores and the journal rules stand.
 - Date: 2026-08-23
 - Deciders: Jian
 
