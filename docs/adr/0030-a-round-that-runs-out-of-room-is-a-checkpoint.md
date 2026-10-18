@@ -249,3 +249,23 @@ claimed something git contradicts was not checked. Every summariser call was jou
 cost (about $0.0004 to $0.0008 each). The summariser here was `qwen/qwen3-coder-next`, because the pinned `qwen/qwen3-30b-a3b-instruct-2507` is blocked
 by the account's guardrail (`agent_docs/model-costs.md`). Not seen: rounds 12 to 16, the no-edit loop, whether the token totals equal kopicode's
 `usage.total`, and the pinned summariser. CUT-74 stays open for a full run once the key has room and the pinned model is allowed.
+
+## Update: the rerun with the new summariser (CUT-74, CUT-129, 2026-10-18)
+
+The summariser default is now `deepseek/deepseek-v4.1-flash` (the previous one is blocked by the owner's OpenRouter guardrail), and the coding model was
+the same, through kopicode's `--provider-url` (kopicode v0.5.0+14). Two live runs of the nine-module task, one cap per round each:
+
+- **12 turns a round:** 5 rounds, 4 handovers, all nine modules committed and 45 of 45 tests passing; $0.024 for the rounds and $0.0055 for four summaries.
+- **4 turns a round, to force a long chain:** 16 rounds, 15 handovers, then `max_continuations` (15) stopped it with six of nine modules committed and 30 tests
+  passing; $0.035 for the rounds and $0.024 for fifteen summaries. It is the full-length chain the card asked for, not a finished task.
+
+What the 19 handovers showed. All had Done, Remaining, Failed or refused and Open questions (as `##` headings in the first run, as plain lines in the second) and a
+repository block read from git. None was empty (2,400 to 3,900 characters; the longest summary used 3,055 output tokens of the 8,192 cap), none opened in the first
+person, and none said a thing "did not happen"; test results not in the log were written as "unconfirmed". All six commit hashes quoted across the 15 handovers
+of the long run are real commits in the repository. Five of the 16 rounds made no edit (rounds 3, 10, 13, 14, 16), never more than two in a row, so
+the old pattern of five idle rounds at the end did not recur. A summary costs about $0.0014 on this model, against about $0.0004 on `qwen/qwen3-coder-next`,
+and was 40 per cent of the long run's spend (fifteen calls against sixteen short rounds).
+
+Not checked: whether any handover claims something git contradicts other than a commit hash, whether the daemon's token totals equal kopicode's own `usage.total`,
+and the earlier pinned model, which this account cannot call. One run per setting. The old summariser's empty answers came from a reasoning model with a small
+cap; this model reasons too, and did not do that in 19 calls, which is not a guarantee. The check stays in `agent_docs/known-gaps.md`'s list of real-model runs.

@@ -27,9 +27,10 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_API_KEY_ENV = "OPENROUTER_API_KEY"
 #: cuttlefish's own summaries (handovers) need no strong model. Pinned, not `openrouter/auto`: auto
 #: picks per request and once picked a reasoning model that spent its whole output cap thinking and
-#: answered nothing. A small instruct model, no reasoning, about $0.003 a summary. Override with
-#: ``CUTTLEFISH_LLM_MODEL`` (any OpenRouter model id).
-DEFAULT_MODEL = "qwen/qwen3-30b-a3b-instruct-2507"
+#: answered nothing. A small cheap model ($0.065 / $0.144 per million tokens); it can reason, so the
+#: call asks for low effort and a generous output cap. Override with ``CUTTLEFISH_LLM_MODEL`` (any
+#: OpenRouter model id).
+DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 MODEL_ENV = "CUTTLEFISH_LLM_MODEL"
 DEFAULT_MAX_TOKENS = 8192
 
