@@ -70,23 +70,24 @@ echo "secrets on disk"
 secret="$(sed -n 's/^CUTTLEFISH_RELAY_OWNER_SECRET=//p' "$STATE_DIR/relay.env" 2>/dev/null)"
 (( ${#secret} >= 32 )) && pass "the owner secret is 32 characters or more" || fail "the owner secret is missing or short"
 unset secret
-[[ "$(owner_mode /etc/caddy/relay.env)" == "root:caddy 640" ]] && pass "caddy's relay.env is root:caddy 640" || fail "caddy's relay.env is '$(owner_mode /etc/caddy/relay.env)'"
-grep -q "^GATE_PASSWORD_HASH='\\\$2[aby]\\\$" /etc/caddy/relay.env 2>/dev/null && pass "the gate holds a bcrypt hash, not a password" || fail "the gate password hash is missing or not bcrypt"
+[[ "$(owner_mode "$STATE_DIR/caddy.env")" == "root:$DEPLOY_USER 640" ]] && pass "caddy.env is root:$DEPLOY_USER 640" || fail "caddy.env is '$(owner_mode "$STATE_DIR/caddy.env")'"
+grep -q "^GATE_PASSWORD_HASH='\\\$2[aby]\\\$" "$STATE_DIR/caddy.env" 2>/dev/null && pass "the gate holds a bcrypt hash, not a password" || fail "the gate password hash is missing or not bcrypt"
+grep -q '^RELAY_ADDRESS=.' "$STATE_DIR/caddy.env" 2>/dev/null && pass "caddy.env names the site address" || fail "caddy.env has no RELAY_ADDRESS"
 
-echo "caddy"
-cmp -s /etc/caddy/Caddyfile "$REPO_DIR/deploy/relay/Caddyfile" && pass "the Caddyfile matches this checkout" || fail "the Caddyfile differs from this checkout"
-check "the Caddyfile validates" runuser -u caddy -- bash -c 'set -a; . /etc/caddy/relay.env; set +a; caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile'
-check "caddy's service reads relay.env" grep -q 'EnvironmentFile=/etc/caddy/relay.env' /etc/systemd/system/caddy.service.d/relay.conf
+echo "the policy relay-deploy judges releases with"
+[[ "$(stat -c '%U' /usr/local/lib/cuttlefish-relay/policy.py 2>/dev/null)" == "root" ]] && pass "policy.py is owned by root" || fail "policy.py is not owned by root"
+pmode="$(stat -c '%a' /usr/local/lib/cuttlefish-relay/policy.py 2>/dev/null || echo 777)"
+(( (8#$pmode & 8#022) == 0 )) && pass "policy.py is writable by root only" || fail "policy.py is writable by group or others ($pmode)"
+cmp -s /usr/local/lib/cuttlefish-relay/policy.py "$REPO_DIR/deploy/relay/policy.py" && pass "policy.py matches this checkout" || fail "policy.py differs from this checkout (re-run bootstrap.sh to update it)"
 
 echo "updates and docker"
 check "package lists and security updates run daily" bash -c "apt-config dump | grep -q 'APT::Periodic::Unattended-Upgrade \"1\"' && apt-config dump | grep -q 'APT::Periodic::Update-Package-Lists \"1\"'"
-check "Caddy's repository is allowed to update itself" grep -q 'cloudsmith/caddy/stable:any-version' /etc/apt/apt.conf.d/52relay-unattended-upgrades
 check "docker rotates its logs" grep -q '"max-size": "10m"' /etc/docker/daemon.json
-check "caddy's key is the pinned one" bash -c "gpg --show-keys --with-colons /usr/share/keyrings/caddy-stable-archive-keyring.gpg | awk -F: '/^fpr:/{print \$10; exit}' | grep -qx 65760C51EDEA2017CEA2CA15155B6D79CA56EA34"
+check "the docker compose plugin is installed" docker compose version
 
 if ((live)); then
     echo "running services"
-    for unit in ssh docker caddy unattended-upgrades; do
+    for unit in ssh docker unattended-upgrades; do
         check "$unit is active" systemctl is-active --quiet "$unit"
     done
     ufw_status="$(ufw status verbose 2>/dev/null)"
@@ -94,6 +95,13 @@ if ((live)); then
     allowed_ports="$(awk '/ALLOW IN|LIMIT IN/ && $1 !~ /\(v6\)/ {print $1 ":" $2}' <<<"$ufw_status" | sort | tr '\n' ' ')"
     [[ "$allowed_ports" == "22/tcp:LIMIT 443:ALLOW 443/tcp:ALLOW 443/udp:ALLOW 80/tcp:ALLOW " || "$allowed_ports" == "22/tcp:LIMIT 443/tcp:ALLOW 443/udp:ALLOW 80/tcp:ALLOW " ]] &&
         pass "ufw opens 22 (limited), 80 and 443 only" || fail "ufw opens: $allowed_ports"
+    if [[ -s "$STATE_DIR/current" ]]; then
+        running="$(docker compose -p cuttlefish-relay ps --status running --format '{{.Service}}' 2>/dev/null | sort | tr '\n' ' ')"
+        [[ "$running" == "caddy relay " ]] && pass "the stack is running: relay and caddy" || fail "the stack is running: '$running'"
+        [[ -z "$(docker port cuttlefish-relay-relay-1 2>/dev/null)" ]] && pass "the relay publishes no port to the host" || fail "the relay publishes a port to the host"
+    else
+        pass "no release has been deployed yet (the pipeline's first deploy starts the stack)"
+    fi
     # Anything listening on a public address must be ssh, http or https. The relay is on loopback.
     stray="$(ss -H -ltun 2>/dev/null | awk '{print $5}' | grep -Ev '^(127\.|\[::1\]|\[fe80|::1)' | grep -Ev ':(22|80|443)$' | grep -Ev '^(0\.0\.0\.0|\*|\[::\]):(68|323)$' || true)"
     [[ -z "$stray" ]] && pass "nothing else listens on a public address" || fail "listening on: $(tr '\n' ' ' <<<"$stray")"

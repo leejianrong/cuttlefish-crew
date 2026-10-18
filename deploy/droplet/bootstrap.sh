@@ -12,11 +12,17 @@
 #   - an admin user with sudo for you, and a `deploy` user for the pipeline whose key may run only
 #     /usr/local/bin/relay-deploy (a `command=` restriction), owned by root
 #   - ufw: deny incoming, allow 22 (rate limited), 80, 443
-#   - automatic security updates for Ubuntu and Caddy, with a reboot at 04:30 when one needs it
-#   - docker (Ubuntu's docker.io) with log rotation, and Caddy from its own signed apt repository,
-#     whose key is checked against a pinned fingerprint
-#   - Caddy in front of the relay with the shared password gate (deploy/relay/Caddyfile)
-#   - /opt/cuttlefish-relay/relay.env holding the owner secret (made here, never printed)
+#   - automatic security updates for Ubuntu, with a reboot at 04:30 when one needs it
+#   - docker and the compose plugin (Ubuntu's docker.io and docker-compose-v2) with log rotation
+#   - the settings the stack reads, in /opt/cuttlefish-relay: relay.env (the owner secret, made here and
+#     never printed) and caddy.env (the domain and the shared password's hash). The relay and Caddy
+#     themselves are containers that `relay-deploy` starts from the release image (deploy/relay/
+#     compose.yaml); this script installs neither
+#   - the policy file `relay-deploy` judges each release's compose file with
+#
+# It also copes with a machine you have already set up a little by hand: an existing admin user (keeps its
+# keys and, if it has a password, its sudo password), docker already installed (not installed again), an
+# existing /etc/docker/daemon.json (merged), and `ufw allow OpenSSH` (replaced by a rate-limited rule).
 #
 # Inputs (environment variables):
 #   RELAY_DOMAIN        required. The name that points at this Droplet (an A record must exist before
@@ -26,17 +32,14 @@
 #   ADMIN_USER          default `admin`.
 #   DEPLOY_USER         default `deploy`.
 #   GATE_USER           default `owner`. The user name of the shared password.
-#   GATE_PASSWORD_HASH  optional, from `caddy hash-password`. If neither this nor an earlier run's
-#                       hash exists, a password is made and shown once at the end.
+#   GATE_PASSWORD_HASH  optional, a bcrypt hash (`printf '%s' pw | deploy/droplet/gate_hash.sh IMAGE`).
+#                       If neither this nor an earlier run's hash exists, a password is made and shown
+#                       once at the end.
 #
 # BOOTSTRAP_SKIP_SERVICES=1 leaves ufw, systemd and the running ssh daemon alone. The tests use it
 # inside a container; on a real Droplet never set it.
 
 set -euo pipefail
-
-CADDY_KEY_FINGERPRINT="65760C51EDEA2017CEA2CA15155B6D79CA56EA34" # gitleaks:allow (a public key fingerprint, not a secret)
-CADDY_KEY_URL="${CADDY_KEY_URL:-https://dl.cloudsmith.io/public/caddy/stable/gpg.key}" # overridable only so a test can offer a wrong key
-CADDY_REPO_LINE="deb [signed-by=/usr/share/keyrings/caddy-stable-archive-keyring.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian any-version main"
 
 ADMIN_USER="${ADMIN_USER:-admin}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
@@ -70,8 +73,9 @@ export DEBIAN_FRONTEND=noninteractive
 # shellcheck disable=SC2016  # a pattern, not an expansion
 BCRYPT='^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$'
 [[ -z "${GATE_PASSWORD_HASH:-}" || "$GATE_PASSWORD_HASH" =~ $BCRYPT ]] ||
-    die "GATE_PASSWORD_HASH must be a bcrypt hash from \`caddy hash-password\`"
-for file in deploy/relay/relay-deploy.sh deploy/relay/Caddyfile; do
+    die "GATE_PASSWORD_HASH must be a bcrypt hash (deploy/droplet/gate_hash.sh makes one)"
+for file in deploy/relay/relay-deploy.sh deploy/relay/policy.py deploy/relay/compose.yaml \
+    deploy/relay/Caddyfile deploy/droplet/gate_hash.sh; do
     [[ -f "$REPO_DIR/$file" ]] || die "run this from a checkout of the repository ($file is missing)"
 done
 
@@ -104,36 +108,41 @@ log "Updating packages"
 apt-get update -qq
 apt-get upgrade -y -qq
 apt-get install -y -qq ca-certificates curl gnupg openssh-server sudo ufw unattended-upgrades \
-    docker.io openssl
-
-log "Adding Caddy's apt repository (key checked against a pinned fingerprint)"
-tmpkey="$(mktemp)"
-curl -fsSL "$CADDY_KEY_URL" -o "$tmpkey"
-actual="$(gpg --show-keys --with-colons "$tmpkey" | awk -F: '/^fpr:/ {print $10; exit}')"
-if [[ "$actual" != "$CADDY_KEY_FINGERPRINT" ]]; then
-    rm -f "$tmpkey"
-    die "Caddy's signing key has fingerprint $actual, not the pinned $CADDY_KEY_FINGERPRINT; refusing to trust it"
+    openssl python3
+# Docker may already be there (installed by hand, from Ubuntu or from Docker's own repository). Do not
+# install a second one on top: docker.io and docker-ce fight over containerd.
+if command -v docker >/dev/null; then
+    log "Docker is already installed: leaving it alone"
+else
+    apt-get install -y -qq docker.io
 fi
-gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg "$tmpkey"
-rm -f "$tmpkey"
-chmod 644 /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-printf '%s\n' "$CADDY_REPO_LINE" >/etc/apt/sources.list.d/caddy-stable.list
-apt-get update -qq
-apt-get install -y -qq caddy
+if ! docker compose version >/dev/null 2>&1; then
+    if dpkg -s docker-ce >/dev/null 2>&1; then
+        apt-get install -y -qq docker-compose-plugin # from Docker's own repository
+    else
+        apt-get install -y -qq docker-compose-v2
+    fi
+fi
 
 # -- users ----------------------------------------------------------------------------------------
 
 log "Users: $ADMIN_USER (sudo) and $DEPLOY_USER (the pipeline)"
 id "$ADMIN_USER" >/dev/null 2>&1 || adduser --disabled-password --gecos "" "$ADMIN_USER" >/dev/null
 usermod -aG sudo "$ADMIN_USER"
-# Key-only login, so sudo cannot ask for a password that does not exist.
-printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$ADMIN_USER" >"/etc/sudoers.d/90-$ADMIN_USER"
-chmod 440 "/etc/sudoers.d/90-$ADMIN_USER"
-visudo -cf "/etc/sudoers.d/90-$ADMIN_USER" >/dev/null || die "sudoers entry is invalid"
+# A user made without a password cannot answer sudo's prompt over key-only SSH, so it gets passwordless
+# sudo. A user that already has a password (one you made by hand) keeps asking for it.
+if [[ "$(passwd -S "$ADMIN_USER" | awk '{print $2}')" == "P" ]]; then
+    log "$ADMIN_USER already has a password: sudo keeps asking for it"
+else
+    printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$ADMIN_USER" >"/etc/sudoers.d/90-$ADMIN_USER"
+    chmod 440 "/etc/sudoers.d/90-$ADMIN_USER"
+    visudo -cf "/etc/sudoers.d/90-$ADMIN_USER" >/dev/null || die "sudoers entry is invalid"
+fi
 
 id "$DEPLOY_USER" >/dev/null 2>&1 || adduser --disabled-password --gecos "" "$DEPLOY_USER" >/dev/null
 # The docker group is root-equivalent. What contains it is that this user's only key can run one
 # root-owned script that accepts one kind of argument (see relay-deploy.sh).
+getent group docker >/dev/null || groupadd docker # a docker that came some other way may not have made it
 usermod -aG docker "$DEPLOY_USER"
 
 install_authorized_keys() { # user, line
@@ -144,7 +153,18 @@ install_authorized_keys() { # user, line
     chown "$user:$user" "$home/.ssh/authorized_keys"
     chmod 600 "$home/.ssh/authorized_keys"
 }
-install_authorized_keys "$ADMIN_USER" "$admin_key admin-key"
+# The admin's own keys are kept (an existing one may be the key you are logged in with); the given key
+# is added if it is not there. The deploy user's file is replaced: it holds exactly one restricted key.
+ensure_authorized_key() { # user, "<type> <base64>"
+    local user="$1" key="$2" home
+    home="$(getent passwd "$user" | cut -d: -f6)"
+    install -d -m 700 -o "$user" -g "$user" "$home/.ssh"
+    touch "$home/.ssh/authorized_keys"
+    grep -qF "$key" "$home/.ssh/authorized_keys" || printf '%s admin-key\n' "$key" >>"$home/.ssh/authorized_keys"
+    chown "$user:$user" "$home/.ssh/authorized_keys"
+    chmod 600 "$home/.ssh/authorized_keys"
+}
+ensure_authorized_key "$ADMIN_USER" "$admin_key"
 # `restrict` turns off forwarding, agent, X11 and a tty; `command=` runs the script whatever the
 # client asked for and hands the client's text to it as SSH_ORIGINAL_COMMAND.
 install_authorized_keys "$DEPLOY_USER" "restrict,command=\"/usr/local/bin/relay-deploy\" $deploy_key pipeline-deploy-key"
@@ -153,6 +173,8 @@ install_authorized_keys "$DEPLOY_USER" "restrict,command=\"/usr/local/bin/relay-
 
 log "Installing /usr/local/bin/relay-deploy (root-owned; the deploy user cannot change it)"
 install -m 755 -o root -g root "$REPO_DIR/deploy/relay/relay-deploy.sh" /usr/local/bin/relay-deploy
+install -d -m 755 -o root -g root /usr/local/lib/cuttlefish-relay
+install -m 644 -o root -g root "$REPO_DIR/deploy/relay/policy.py" /usr/local/lib/cuttlefish-relay/policy.py
 
 install -d -m 750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$STATE_DIR"
 if [[ ! -f "$STATE_DIR/relay.env" ]]; then
@@ -169,55 +191,73 @@ chmod 640 "$STATE_DIR/relay.env"
 
 log "Docker: rotate container logs, keep containers up across daemon upgrades"
 install -d -m 755 /etc/docker
-cat >/etc/docker/daemon.json <<'JSON'
-{
-  "log-driver": "local",
-  "log-opts": { "max-size": "10m", "max-file": "3" },
-  "live-restore": true
-}
-JSON
+# Merged into whatever is already there (the first time, the old file is kept as daemon.json.bak).
+python3 - <<'PY'
+import json
+import os
+import shutil
 
-# -- caddy ----------------------------------------------------------------------------------------
+path = "/etc/docker/daemon.json"
+config = {}
+if os.path.exists(path):
+    if not os.path.exists(path + ".bak"):
+        shutil.copy(path, path + ".bak")
+    with open(path) as handle:
+        text = handle.read().strip()
+    config = json.loads(text) if text else {}
+config.update(
+    {
+        "log-driver": "local",
+        "log-opts": {"max-size": "10m", "max-file": "3"},
+        "live-restore": True,
+    }
+)
+with open(path, "w") as handle:
+    json.dump(config, handle, indent=2)
+    handle.write("\n")
+PY
+if services; then
+    systemctl enable --now docker
+    systemctl restart docker
+fi
 
-log "Caddy: the repository's Caddyfile with the shared password in front"
+# -- the stack's settings ----------------------------------------------------------------------------
+
+log "The settings the relay and Caddy read (the stack itself is started by the pipeline)"
 generated_password=""
 if [[ -n "${GATE_PASSWORD_HASH:-}" ]]; then
     gate_hash="$GATE_PASSWORD_HASH"
-elif [[ -f /etc/caddy/relay.env ]] && grep -q '^GATE_PASSWORD_HASH=' /etc/caddy/relay.env; then
-    gate_hash="$(sed -n "s/^GATE_PASSWORD_HASH='\(.*\)'$/\1/p" /etc/caddy/relay.env)"
+elif [[ -f "$STATE_DIR/caddy.env" ]] && grep -q '^GATE_PASSWORD_HASH=' "$STATE_DIR/caddy.env"; then
+    gate_hash="$(sed -n "s/^GATE_PASSWORD_HASH='\(.*\)'$/\1/p" "$STATE_DIR/caddy.env")"
 else
+    services || die "without a running docker daemon, give GATE_PASSWORD_HASH instead of having one made"
+    caddy_image="$(sed -n 's/^    image: \(caddy:[^ ]*\)$/\1/p' "$REPO_DIR/deploy/relay/compose.yaml")"
+    [[ -n "$caddy_image" ]] || die "could not read the pinned Caddy image from deploy/relay/compose.yaml"
     generated_password="$(openssl rand -base64 18 | tr -d '=+/\n')"
-    gate_hash="$(caddy hash-password --plaintext "$generated_password")"
+    gate_hash="$(printf '%s' "$generated_password" | "$REPO_DIR/deploy/droplet/gate_hash.sh" "$caddy_image")"
 fi
-[[ "$gate_hash" =~ $BCRYPT ]] || die "the gate password hash in /etc/caddy/relay.env is not a bcrypt hash"
-install -d -m 755 /etc/caddy
-(umask 027 && cat >/etc/caddy/relay.env <<EOF
+[[ "$gate_hash" =~ $BCRYPT ]] || die "the gate password hash is not a bcrypt hash"
+
+install -d -m 750 -o "$DEPLOY_USER" -g "$DEPLOY_USER" "$STATE_DIR"
+# Root writes them, the deploy user (and so compose's env_file) can read them, nobody else.
+(umask 027 && cat >"$STATE_DIR/caddy.env" <<EOF
 RELAY_ADDRESS=$RELAY_DOMAIN
 GATE_USER=$GATE_USER
 GATE_PASSWORD_HASH='$gate_hash'
 EOF
 )
-chown root:caddy /etc/caddy/relay.env
-chmod 640 /etc/caddy/relay.env
-install -m 644 -o root -g root "$REPO_DIR/deploy/relay/Caddyfile" /etc/caddy/Caddyfile
-install -d -m 755 /etc/systemd/system/caddy.service.d
-printf '[Service]\nEnvironmentFile=/etc/caddy/relay.env\n' >/etc/systemd/system/caddy.service.d/relay.conf
-
-# Validate as the caddy user: as root it would create the access log owned by root, and the service
-# could then not write it.
-runuser -u caddy -- bash -c 'set -a; . /etc/caddy/relay.env; set +a; caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile' >/dev/null 2>&1 ||
-    die "Caddy rejected its configuration: run \`runuser -u caddy -- caddy validate --config /etc/caddy/Caddyfile\` to see why"
+chown "root:$DEPLOY_USER" "$STATE_DIR/caddy.env"
+chmod 640 "$STATE_DIR/caddy.env"
 
 # -- automatic security updates -------------------------------------------------------------------
 
-log "Automatic security updates (Ubuntu and Caddy), rebooting at 04:30 when one needs it"
+log "Automatic security updates, rebooting at 04:30 when one needs it"
 cat >/etc/apt/apt.conf.d/20auto-upgrades <<'APT'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 APT
 cat >/etc/apt/apt.conf.d/52relay-unattended-upgrades <<'APT'
-Unattended-Upgrade::Allowed-Origins:: "cloudsmith/caddy/stable:any-version";
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 Unattended-Upgrade::Automatic-Reboot "true";
 Unattended-Upgrade::Automatic-Reboot-Time "04:30";
@@ -253,16 +293,14 @@ sshd -t || die "sshd rejected the new configuration; nothing was reloaded"
 
 if services; then
     log "Starting services and the firewall"
-    systemctl daemon-reload
-    systemctl enable --now docker
-    systemctl restart docker
-    systemctl enable caddy
-    systemctl restart caddy
     systemctl enable --now unattended-upgrades
 
     ufw default deny incoming >/dev/null
     ufw default allow outgoing >/dev/null
     ufw limit 22/tcp >/dev/null
+    # A hand-made `ufw allow OpenSSH` is replaced by the rate-limited rule above (added first, so SSH
+    # is never closed).
+    ufw --force delete allow OpenSSH >/dev/null 2>&1 || true
     ufw allow 80/tcp >/dev/null
     ufw allow 443/tcp >/dev/null
     ufw allow 443/udp >/dev/null # HTTP/3
@@ -278,13 +316,16 @@ host_key="$(cut -d' ' -f1,2 /etc/ssh/ssh_host_ed25519_key.pub 2>/dev/null || tru
 log "Done"
 cat <<EOF
 Next:
-  1. Point the DNS A record for $RELAY_DOMAIN at this Droplet (Caddy gets its certificate once it does).
+  1. Point the DNS A record for $RELAY_DOMAIN at this Droplet (Caddy gets its certificate once it does;
+     add ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory to $STATE_DIR/caddy.env for a
+     first run if you want to be sure before using the real rate limit, and remove it afterwards).
   2. In GitHub, on the \`production\` environment, set:
        DEPLOY_HOST=$RELAY_DOMAIN   DEPLOY_USER=$DEPLOY_USER   RELAY_PUBLIC_URL=https://$RELAY_DOMAIN
        secret DEPLOY_SSH_KEY    = the private half of the key whose public half you gave as DEPLOY_PUBLIC_KEY
        secret DEPLOY_KNOWN_HOSTS = ${host_key:+$RELAY_DOMAIN $host_key}
      then set the repository variable DEPLOY_ENABLED=true and approve the first deploy.
-  3. The relay's owner secret is in $STATE_DIR/relay.env (read it with sudo as $ADMIN_USER).
+  3. The relay's owner secret is in $STATE_DIR/relay.env (read it with sudo as $ADMIN_USER). The stack
+     is not running yet: the pipeline's first deploy starts it.
   4. Check this machine any time with: sudo $REPO_DIR/deploy/droplet/verify.sh
 EOF
 if [[ -n "$generated_password" ]]; then

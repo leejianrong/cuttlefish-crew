@@ -5,10 +5,19 @@
 # daemon's websocket: it dials in from a PC that cannot answer a password prompt, and it is already
 # gated by its room's registration token, which the relay checks.
 #
-# RELAY_ADDRESS      the site address: the domain in production, or ":8080" for a plain-http local test
+# It runs in the compose stack (compose.yaml) and is shipped inside the relay image, so it reaches
+# the Droplet only through the deploy pipeline. Settings come from the environment:
+#
+# RELAY_ADDRESS      the site address: the domain in production, or ":80" for a plain-http local run
 # GATE_USER          the user name for the shared password
-# GATE_PASSWORD_HASH from `caddy hash-password` (never the password itself)
-# RELAY_UPSTREAM     where the relay listens; 127.0.0.1:8450 in production
+# GATE_PASSWORD_HASH a bcrypt hash (never the password itself)
+# RELAY_UPSTREAM     where the relay listens: relay:8450 in the stack
+# ACME_CA            optional. Set to Let's Encrypt's staging directory for a first run, so a mistake
+#                    cannot use up the real rate limit
+
+{
+	acme_ca {$ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+}
 
 {$RELAY_ADDRESS} {
 	encode zstd gzip
@@ -17,14 +26,14 @@
 	# the relay counts limits against.
 	@daemon path /ws/daemon/*
 	handle @daemon {
-		reverse_proxy {$RELAY_UPSTREAM:127.0.0.1:8450}
+		reverse_proxy {$RELAY_UPSTREAM}
 	}
 
 	handle {
 		basic_auth {
 			{$GATE_USER} {$GATE_PASSWORD_HASH}
 		}
-		reverse_proxy {$RELAY_UPSTREAM:127.0.0.1:8450}
+		reverse_proxy {$RELAY_UPSTREAM}
 	}
 
 	header {

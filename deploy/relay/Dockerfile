@@ -25,6 +25,10 @@ COPY src/ ./src/
 RUN uv sync --frozen --no-dev
 COPY --from=dashboard /src/frontend/dist ./dashboard
 
+# The deploy bundle (CUT-153): how this release is run. `relay-deploy` takes these two files out of the
+# image it is deploying, so the stack's configuration reaches the Droplet only with a release.
+COPY deploy/relay/compose.yaml deploy/relay/Caddyfile ./deploy-bundle/
+
 USER relay
 ENV PATH="/app/.venv/bin:$PATH" \
     CUTTLEFISH_RELAY_DB=/data/relay.db
@@ -32,8 +36,8 @@ VOLUME /data
 EXPOSE 8450
 
 # The owner's sign-in secret is CUTTLEFISH_RELAY_OWNER_SECRET, given at run time, never baked in. The
-# relay trusts X-Forwarded-For because the only thing that can reach its port is the proxy in front:
-# publish it on the host's loopback only (-p 127.0.0.1:8450:8450).
+# relay trusts X-Forwarded-For because the only thing that can reach its port is the proxy in front: in
+# the compose stack it is on an internal network with Caddy and is never published to the host.
 HEALTHCHECK --interval=15s --timeout=3s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8450/healthz', timeout=2).status == 200 else 1)"
 CMD ["cuttlefish", "relay", "--host", "0.0.0.0", "--port", "8450", "--pages", "/app/dashboard", "--trust-forwarded"]

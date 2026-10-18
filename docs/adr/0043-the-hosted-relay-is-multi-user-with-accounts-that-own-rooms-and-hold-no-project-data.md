@@ -184,6 +184,28 @@ CUT-135 creates the tables above in full, so the later cards fill in behaviour a
   Caddy with a 04:30 reboot, docker, Caddy from its signed repository with the key checked against a pinned fingerprint, and the
   owner secret made once and never shown. Run for real in an Ubuntu 24.04 container (`make test-bootstrap`) with a real sshd.
   `BOOTSTRAP_SKIP_SERVICES=1` leaves `ufw`, systemd and the ssh reload out for that test only. **Not run on a real Droplet.**
+- **CUT-153** (2026-10-19): the relay and Caddy as a **docker compose stack** (`deploy/relay/compose.yaml`), replacing the host
+  Caddy that CUT-141 and CUT-143 first built. Jian asked for everything to be containerised so `docker compose up` just works.
+  What changed, and why:
+  - Two containers: `caddy` (the official image pinned by digest, publishing 80 and 443) and `relay` (on an internal network with
+    Caddy, no route to the internet, **no port published to the host**). That makes the relay's trust in `X-Forwarded-For`
+    safe by construction, and the tests run what production runs.
+  - **The compose file and the Caddyfile ship inside the relay image** (`/app/deploy-bundle`), so configuration reaches the
+    Droplet only with a release, through the pipeline. `relay-deploy` takes them out of the digest it is deploying.
+  - Because that makes root-run configuration come from an image, **the Droplet does not take it on trust:** `relay-deploy`
+    renders the compose file and refuses it unless it passes `deploy/relay/policy.py`, an allow-list (two services, our images,
+    read-only, capabilities dropped, no privileged mode, no host mounts, only ports 80 and 443). A stolen SSH key alone could
+    not change the file; the allow-list covers a compromised image push too. The bundle must be exactly two plain files.
+  - Rollback restores the previous *release* (its compose file, Caddyfile and image together), so a bad Caddyfile is rolled back
+    like a bad relay. A release from before the stack has no bundle and is refused.
+  - The bootstrap no longer installs Caddy, its apt repository or key, or a systemd drop-in. It installs docker and the compose
+    plugin, writes `relay.env` and `caddy.env`, and installs `relay-deploy` and `policy.py` (root-owned). The shared password's
+    hash is made by the pinned Caddy image from a password on standard input.
+  - The bootstrap adapts to a machine already set up by hand instead of assuming a fresh one: an existing admin user keeps its
+    keys and its sudo password, docker that is already installed is not installed again (`docker.io` and `docker-ce` fight over
+    containerd), `daemon.json` is merged, and `ufw allow OpenSSH` is replaced by the rate-limited rule.
+  - Caddy and the relay are no longer updated by the OS: a new Caddy is a change to one line of `compose.yaml`, reviewed and
+    deployed like any release.
 - Not built: GitHub and Google sign-in and a room per PC from the dashboard (CUT-145), onboarding (CUT-146), the abuse switch,
   per-account quotas and the daily byte cap (CUT-147), account deletion and the terms (CUT-148). The usage table is filled but
   nothing refuses at a cap yet.

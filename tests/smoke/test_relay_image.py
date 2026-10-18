@@ -29,10 +29,11 @@ from cuttlefish.relay.protocol.envelope import CLOSE_UNAUTHORISED
 OWNER_HEADERS = {TOKEN_HEADER: "loopback"}
 
 
-async def make_room(relay: Container, label: str = "Smoke PC") -> tuple[str, str]:
-    """Sign in as the owner and make a room, the way the dashboard will."""
-    async with httpx.AsyncClient(base_url=relay.http) as http:
-        signed_in = await http.post("/relay-api/session", json={"secret": relay.owner_secret})
+async def make_room(target: Any, label: str = "Smoke PC") -> tuple[str, str]:
+    """Sign in as the owner and make a room, the way the dashboard will. `target` is a Container
+    (direct) or a Stack (through Caddy, so with the shared password)."""
+    async with httpx.AsyncClient(base_url=target.http, auth=getattr(target, "basic", None)) as http:
+        signed_in = await http.post("/relay-api/session", json={"secret": target.owner_secret})
         assert signed_in.status_code == 204, signed_in.text
         # The cookie is `Secure`, which a client does not send over plain http: send it by hand.
         cookie = signed_in.headers["set-cookie"].split(";")[0]
@@ -44,9 +45,9 @@ async def make_room(relay: Container, label: str = "Smoke PC") -> tuple[str, str
         return body["id"], body["token"]
 
 
-async def rooms(relay: Container) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(base_url=relay.http) as http:
-        signed_in = await http.post("/relay-api/session", json={"secret": relay.owner_secret})
+async def rooms(target: Any) -> list[dict[str, Any]]:
+    async with httpx.AsyncClient(base_url=target.http, auth=getattr(target, "basic", None)) as http:
+        signed_in = await http.post("/relay-api/session", json={"secret": target.owner_secret})
         cookie = signed_in.headers["set-cookie"].split(";")[0]
         listed = await http.get("/relay-api/rooms", headers={"cookie": cookie})
         return list(listed.json()["rooms"])
