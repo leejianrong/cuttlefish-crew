@@ -156,6 +156,14 @@ CUT-135 creates the tables above in full, so the later cards fill in behaviour a
     every route except `/ws/daemon/*`, which is gated by the room's token instead. Remove it only when sign-up is meant to open.
   - The page is served with a Content-Security-Policy that allows scripts from the origin and the one inline theme script by
     hash, and connections to the origin only. Checked in Chromium and Firefox with no violations.
+- **CUT-144** (2026-10-18): `make test-smoke` builds `deploy/relay/Dockerfile` and runs the image as deployed (`tests/smoke/`):
+  the page and its assets load with the policy, the image runs as a non-root user, refuses an open relay on a public address
+  and refuses to start hosted with no owner secret, a daemon with the token registers and one without is refused, a room
+  survives a container restart, a real daemon (the fleet's own app and connector) registers and a browser pairs through it
+  and reads `/api/projects`, and the repository's Caddyfile asks for the password on every route but the daemon's socket,
+  including with `..`, encoded and doubled-slash paths. CI runs it on every PR (job `relay-image`); the deploy pipeline
+  (CUT-141) runs it on the image it just built, by digest. The pairing step uses the Python protocol browser, not a real
+  browser (Chromium and Firefox were checked by hand for CUT-135).
 - Not built: GitHub and Google sign-in and a room per PC from the dashboard (CUT-145), onboarding (CUT-146), the abuse switch,
   per-account quotas and the daily byte cap (CUT-147), account deletion and the terms (CUT-148). The usage table is filled but
   nothing refuses at a cap yet.

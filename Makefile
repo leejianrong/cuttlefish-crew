@@ -44,6 +44,12 @@ test: ## Unit tests only — the fast inner-loop target, no infra
 test-all: ## The FULL suite (unit + integration + e2e)
 	uv run pytest -q
 
+# The relay image, built and run as it will be deployed (CUT-144, ADR-0043): the page loads, a daemon
+# registers a room, a browser pairs, and Caddy's password gate holds. Needs docker (and pulls caddy:2).
+test-smoke: ## Build the relay image and smoke-test it (needs docker)
+	docker build -f deploy/relay/Dockerfile -t cuttlefish-relay:smoke .
+	CUTTLEFISH_SMOKE_IMAGE=cuttlefish-relay:smoke uv run pytest tests/smoke -q
+
 # Real kopicode against a real model (the `requires_live_credential` tests): cents per run, and
 # they were once spent on every `make test-all` whenever `.env` held a key.
 test-live: ## real kopicode + real model tests (OPENROUTER_API_KEY) — COSTS MONEY (cents), never in CI
