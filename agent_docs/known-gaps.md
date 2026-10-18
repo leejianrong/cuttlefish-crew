@@ -282,7 +282,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
 - **Codex reports no cost, so a project's cost ceiling (`max_cost_usd`) cannot stop it.** `cost_usd` is always `None` on a ChatGPT
   login (only tokens are known), so the budget check has nothing to add up; the token ceiling and the round time limit still apply.
-  The dashboard shows "cost unknown" but does not say the ceiling is inert for Codex.
+  The dashboard shows "cost unknown" but does not say the ceiling is inert for Codex. Since CUT-157 a Codex or Claude Code role with no figure yet reads "Tokens: not reported until the round ends (limit N, checked then)" instead of "0 tokens / N", and the limit is checked only between rounds: a Codex round can pass it (seen 2026-10-19: 1,083,519 and 1,122,062 tokens against 1,000,000, nothing stopped either).
 - **Codex over `codex exec` is a one-shot, sandbox-only backend, and does not fit the long-run loop** (spike 2026-10-08, `gpt-5.6-luna` at low effort on a
   ChatGPT login, small team on a six-module project). Seen: a round is the whole task and runs to its end (nine modules in one round: 57 s,
   454k tokens, 45 of 45 tests); concurrent roles on one root work; a read-only role stays read-only; steering works at the round boundary

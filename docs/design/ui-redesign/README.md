@@ -265,3 +265,7 @@ and this folder disagree after a slice lands, update this folder.
   time comes from `last_event_at` on the project summary, the last event of the last team's journal; the tokens are the sum of the
   roles' reported usage, so a Codex project shows none until a round ends (CUT-157 words that on the role card). No task text: the
   journal's task event begins with the role's own prompt.
+- **A role's token line says when there is no figure yet (2026-10-19, CUT-157).** Codex and Claude Code hand their token count back
+  when a round ends, so a running role on either read "0 tokens / 1,500,000" for minutes, as if nothing had been used. The role card
+  now says "Tokens: not reported until the round ends (limit 1,500,000, checked then)" until the first figure arrives, and a line
+  with a limit adds "limit checked when a round ends". kopicode and a role with a figure show the numbers as before.

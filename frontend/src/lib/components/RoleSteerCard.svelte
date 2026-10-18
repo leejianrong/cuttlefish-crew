@@ -17,6 +17,7 @@
     held = false,
     waiting = false,
     liveSteer = false,
+    usageAtRoundEnd = false,
   }: {
     client: FleetClient;
     projectId: string;
@@ -42,6 +43,8 @@
     /** The backend takes a message while a round runs (Codex's `turn/steer`, ADR-0033); the rest
      * read it at the next round boundary (ADR-0008). */
     liveSteer?: boolean;
+    /** The backend reports tokens only when a round ends, so 0 so far is "not reported yet". */
+    usageAtRoundEnd?: boolean;
   } = $props();
 
   const tokensOverBudget = $derived(
@@ -115,6 +118,13 @@
       <StatusChip {status} />
     {/if}
   </div>
+  {#if usageAtRoundEnd && usage.tokens === 0 && status !== "done"}
+    <p class="usage">
+      Tokens: not reported until the round ends{budget.max_tokens !== null
+        ? ` (limit ${budget.max_tokens.toLocaleString()}, checked then)`
+        : ""}
+    </p>
+  {:else}
   <p class="usage" class:over={tokensOverBudget || costOverBudget}>
     {usage.tokens.toLocaleString()} tokens{budget.max_tokens !== null
       ? ` / ${budget.max_tokens.toLocaleString()}`
@@ -126,7 +136,11 @@
     {:else}
       &middot; cost unknown
     {/if}
+    {#if usageAtRoundEnd && (budget.max_tokens !== null || budget.max_cost_usd !== null)}
+      &middot; limit checked when a round ends
+    {/if}
   </p>
+  {/if}
   {#if waiting}
     <p class="round-note" role="status">
       {role} is paused until you answer its request: see Needs you.

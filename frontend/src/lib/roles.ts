@@ -38,3 +38,9 @@ export function waitsForYou(
 ): boolean {
   return status === "working" && requests.some((r) => r.role === role && r.kind !== "blocked");
 }
+
+/** Codex and Claude Code run a round as one call and hand their token count back when it ends
+ * (known-gaps.md), so a figure of 0 mid-round means "not reported yet", not "nothing used". */
+export function reportsUsageAtRoundEnd(backend: string | null | undefined): boolean {
+  return backend === "codex" || backend === "claude-code";
+}
