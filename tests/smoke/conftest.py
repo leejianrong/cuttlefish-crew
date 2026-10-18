@@ -11,10 +11,8 @@ from __future__ import annotations
 import os
 import secrets
 import shutil
+import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -25,13 +23,12 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "integration" / "relay"))
 sys.path.insert(0, str(Path(__file__).parent))
 
 from smoke_rig import (
-    CADDY_IMAGE_ENV,
-    CADDYFILE,
     IMAGE_ENV,
     Container,
-    Gate,
+    Stack,
     docker,
     free_port,
+    gate_hash,
     wait_for,
 )
 
@@ -66,35 +63,51 @@ def relay(image: str) -> Iterator[Container]:
         docker("rm", "-f", name, check=False)
 
 
-@pytest.fixture(scope="session")
-def caddy(relay: Container) -> Iterator[Gate]:
-    """The repository's Caddyfile in front of the relay, with a shared password, on plain http."""
-    caddy_image = os.environ.get(CADDY_IMAGE_ENV, "caddy:2")
-    password = secrets.token_urlsafe(12)
-    hashed = docker("run", "--rm", caddy_image, "caddy", "hash-password", "--plaintext", password)
-    port = free_port()
-    name = f"cuttlefish-smoke-caddy-{secrets.token_hex(4)}"
-    docker(
-        "run", "-d", "--name", name, "--network", "host",
-        "-v", f"{CADDYFILE}:/etc/caddy/Caddyfile:ro",
-        "-e", f"RELAY_ADDRESS=:{port}",
-        "-e", "GATE_USER=owner",
-        "-e", f"GATE_PASSWORD_HASH={hashed.stdout.strip()}",
-        "-e", f"RELAY_UPSTREAM=127.0.0.1:{relay.port}",
-        caddy_image,
-    )  # fmt: skip
+def extract_bundle(image: str, into: Path) -> None:
+    """Take /app/deploy-bundle out of the image, the way `relay-deploy` does."""
+    container = docker("create", image).stdout.strip()
     try:
-        deadline = time.monotonic() + 30
-        while time.monotonic() < deadline:
-            try:
-                urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2)
-                break
-            except urllib.error.HTTPError:
-                break  # a 401 means Caddy is up and asking for the password
-            except OSError:
-                time.sleep(0.5)
-        else:
-            raise AssertionError("caddy never came up: " + docker("logs", name, check=False).stderr)
-        yield Gate(f"http://127.0.0.1:{port}", f"ws://127.0.0.1:{port}", "owner", password)
+        docker("cp", f"{container}:/app/deploy-bundle/.", str(into))
     finally:
-        docker("rm", "-f", name, check=False)
+        docker("rm", "-f", container, check=False)
+
+
+@pytest.fixture(scope="session")
+def stack(image: str, tmp_path_factory: pytest.TempPathFactory) -> Iterator[Stack]:
+    """The compose stack from the image's own bundle: the relay behind Caddy, plain http on a free
+    loopback port (RELAY_ADDRESS=:80), with a shared password made by the bootstrap's helper."""
+    work = tmp_path_factory.mktemp("stack")
+    extract_bundle(image, work)
+    password = secrets.token_urlsafe(12)
+    owner_secret = secrets.token_urlsafe(32)
+    (work / "relay.env").write_text(f"CUTTLEFISH_RELAY_OWNER_SECRET={owner_secret}\n")
+    (work / "caddy.env").write_text(
+        f"RELAY_ADDRESS=:80\nGATE_USER=owner\nGATE_PASSWORD_HASH='{gate_hash(password)}'\n"
+    )
+    http_port, https_port = free_port(), free_port()
+    project = f"cuttlefish-smoke-{secrets.token_hex(4)}"
+    env = {
+        **os.environ,
+        "RELAY_IMAGE": image,
+        "RELAY_ENV_FILE": str(work / "relay.env"),
+        "CADDY_ENV_FILE": str(work / "caddy.env"),
+        "HTTP_PORT": str(http_port),
+        "HTTPS_PORT": str(https_port),
+    }
+    compose = ["docker", "compose", "-p", project, "-f", str(work / "compose.yaml")]
+    try:
+        up = subprocess.run(
+            [*compose, "up", "-d", "--wait", "--wait-timeout", "90"],
+            env=env, capture_output=True, text=True, timeout=180,
+        )  # fmt: skip
+        assert up.returncode == 0, up.stdout + up.stderr
+        yield Stack(
+            f"http://127.0.0.1:{http_port}",
+            f"ws://127.0.0.1:{http_port}",
+            "owner",
+            password,
+            owner_secret,
+            project,
+        )
+    finally:
+        subprocess.run([*compose, "down", "-v", "--remove-orphans"], env=env, capture_output=True)

@@ -176,7 +176,8 @@ CUTTLEFISH_RELAY_ROOM=<room> CUTTLEFISH_RELAY_TOKEN=<token> cuttlefish serve --r
 
 `--relay-room` (or `CUTTLEFISH_RELAY_ROOM`) names the room; the token is read only from `CUTTLEFISH_RELAY_TOKEN`, never
 the command line. The pairing link then opens the relay's own page. `deploy/relay/` in the repository has the
-Dockerfile and the Caddyfile that puts one shared password in front of the whole site until the outside security review
+Dockerfile, the compose file (the relay and Caddy as two containers; see [Hosting the relay](hosted-relay.md)) and the
+Caddyfile that puts one shared password in front of the whole site until the outside security review
 is done; the daemon's websocket is the one route that skips it, because its room token gates it.
 
 ### Pairing a phone

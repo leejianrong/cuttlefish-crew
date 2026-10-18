@@ -1,6 +1,6 @@
 """Smoke (CUT-143): the Droplet bootstrap script, run for real in a fresh Ubuntu 24.04 container.
 
-It installs packages from Ubuntu's and Caddy's real repositories (so it needs the network and takes
+It installs packages from Ubuntu's real repositories (so it needs the network and takes
 a few minutes), then `verify.sh` checks the result, and a real sshd in the container is logged into
 as the deploy user, the admin user and root. What a container cannot show (ufw, systemd, a real
 reboot, the certificate) is not run: `BOOTSTRAP_SKIP_SERVICES=1` leaves those alone. Opt in with
@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from smoke_rig import docker, free_port
+from smoke_rig import docker, free_port, gate_hash
 
 REPO = Path(__file__).parents[2]
 DOMAIN = "relay.example.test"
@@ -40,6 +40,7 @@ class Box:
     keys: Path
     admin_public: str
     deploy_public: str
+    hash: str
 
     def sh(self, script: str, env: dict[str, str] | None = None, check: bool = False):  # type: ignore[no-untyped-def]
         args = ["docker", "exec"]
@@ -59,12 +60,14 @@ class Box:
             "ADMIN_PUBLIC_KEY": self.admin_public,
             "DEPLOY_PUBLIC_KEY": self.deploy_public,
             "BOOTSTRAP_SKIP_SERVICES": "1",
+            # There is no docker daemon in the container to make a password's hash with.
+            "GATE_PASSWORD_HASH": self.hash,
             **extra,
         }
         return self.sh("/repo/deploy/droplet/bootstrap.sh", env)
 
-    def verify(self):  # type: ignore[no-untyped-def]
-        return self.sh("/repo/deploy/droplet/verify.sh --no-services")
+    def verify(self, env: dict[str, str] | None = None):  # type: ignore[no-untyped-def]
+        return self.sh("/repo/deploy/droplet/verify.sh --no-services", env)
 
     def ssh(self, key: str, user: str, command: str, *options: str):  # type: ignore[no-untyped-def]
         return subprocess.run(
@@ -118,7 +121,7 @@ def _start(tmp: Path, name: str) -> Box:
     )
     docker("exec", name, "mkdir", "-p", "/repo")
     docker("cp", str(REPO / "deploy"), f"{name}:/repo/deploy")
-    return Box(name, port, keys, admin, deploy)
+    return Box(name, port, keys, admin, deploy, gate_hash("a-test-password"))
 
 
 @pytest.fixture(scope="module")
@@ -184,28 +187,59 @@ def test_the_same_key_for_admin_and_deploy_is_refused(scratch: Box) -> None:
     assert result.returncode != 0 and "must be different keys" in result.stderr
 
 
+# -- a machine already set up a little by hand --
+
+
+def test_a_machine_with_a_hand_made_user_docker_and_docker_config_is_adapted_to_not_replaced(
+    scratch: Box, tmp_path: Path
+) -> None:
+    """The shape of a Droplet someone has already touched: their own sudo user (with a password
+    and an older key), docker installed some other way, and a docker config of their own."""
+    old_key = _keypair(scratch.keys, "old")
+    setup = [
+        "useradd -m -s /bin/bash jian",
+        "echo 'jian:a-real-password' | chpasswd",
+        "groupadd -f sudo && usermod -aG sudo jian",
+        "install -d -m 700 -o jian -g jian /home/jian/.ssh",
+        f"echo '{old_key}' > /home/jian/.ssh/authorized_keys",
+        "chown jian:jian /home/jian/.ssh/authorized_keys",
+        # docker "installed some other way": a program on PATH that is not Ubuntu's package
+        "printf '#!/bin/sh\\nexit 0\\n' > /usr/local/bin/docker",
+        "chmod 755 /usr/local/bin/docker",
+        "mkdir -p /etc/docker",
+        'echo \'{"storage-driver": "overlay2"}\' > /etc/docker/daemon.json',
+    ]
+    scratch.sh(" && ".join(setup), check=True)
+    result = scratch.bootstrap(ADMIN_USER="jian")
+    assert result.returncode == 0, result.stdout[-2000:] + result.stderr[-2000:]
+    assert "Docker is already installed" in result.stdout
+    assert scratch.sh("dpkg -s docker.io").returncode != 0, "a second docker was installed on top"
+    # Their user keeps its old key, gains the given one, and keeps asking for its sudo password.
+    keys = scratch.read("/home/jian/.ssh/authorized_keys")
+    assert old_key.split()[1] in keys and scratch.admin_public.split()[1] in keys
+    assert scratch.sh("test -e /etc/sudoers.d/90-jian").returncode != 0
+    assert "already has a password" in result.stdout
+    # Their docker config is kept and ours merged in; the old file is saved.
+    config = scratch.read("/etc/docker/daemon.json")
+    assert '"storage-driver": "overlay2"' in config and '"log-driver": "local"' in config
+    assert "overlay2" in scratch.read("/etc/docker/daemon.json.bak")
+    # And it is still the machine verify.sh describes, with their user as the admin.
+    verified = scratch.verify({"ADMIN_USER": "jian"})
+    assert verified.returncode == 0, verified.stdout + verified.stderr
+
+
 # -- the real thing --
-
-
-def test_a_wrong_caddy_signing_key_is_refused(box: Box) -> None:
-    # Ubuntu's own archive key is a real key with another fingerprint than Caddy's.
-    box.sh(
-        "apt-get update -qq && apt-get install -y -qq gnupg ubuntu-keyring >/dev/null", check=True
-    )
-    box.sh("cp /usr/share/keyrings/ubuntu-archive-keyring.gpg /not-caddy.key", check=True)
-    result = box.bootstrap(CADDY_KEY_URL="file:///not-caddy.key")
-    assert result.returncode != 0
-    assert "refusing to trust it" in result.stderr
-    assert box.sh("test -e /etc/apt/sources.list.d/caddy-stable.list").returncode != 0
 
 
 def test_bootstrap_finishes_and_verify_passes(box: Box) -> None:
     first = box.bootstrap()
     assert first.returncode == 0, first.stdout[-2000:] + first.stderr[-2000:]
-    # The shared password is made and shown once, and only its hash is kept.
-    assert "password:" in first.stdout
-    password = next(line.split()[-1] for line in first.stdout.splitlines() if "password:" in line)
-    assert password not in box.read("/etc/caddy/relay.env")
+    # No password is made without a docker daemon: the hash was given, and only it is kept.
+    assert "password:" not in first.stdout
+    assert box.hash in box.read("/opt/cuttlefish-relay/caddy.env")
+    # Nothing of the old host-Caddy setup is installed: Caddy is a container the pipeline starts.
+    assert box.sh("test -e /etc/caddy || command -v caddy").returncode != 0
+    assert box.sh("docker compose version").returncode == 0
     verified = box.verify()
     assert verified.returncode == 0, verified.stdout + verified.stderr
     assert "all checks passed" in verified.stdout
@@ -215,7 +249,7 @@ def test_running_it_again_changes_no_secret_and_shows_no_password(box: Box) -> N
     def fingerprint() -> tuple[str, str]:
         return (
             hashlib.sha256(box.read("/opt/cuttlefish-relay/relay.env").encode()).hexdigest(),
-            hashlib.sha256(box.read("/etc/caddy/relay.env").encode()).hexdigest(),
+            hashlib.sha256(box.read("/opt/cuttlefish-relay/caddy.env").encode()).hexdigest(),
         )
 
     before = fingerprint()
@@ -228,12 +262,14 @@ def test_running_it_again_changes_no_secret_and_shows_no_password(box: Box) -> N
 
 def test_the_secrets_have_the_right_owners_and_never_appear_in_output(box: Box) -> None:
     modes = box.sh(
-        "stat -c '%U:%G %a %n' /opt/cuttlefish-relay/relay.env /etc/caddy/relay.env "
-        "/usr/local/bin/relay-deploy /home/deploy/.ssh/authorized_keys",
+        "stat -c '%U:%G %a %n' /opt/cuttlefish-relay/relay.env /opt/cuttlefish-relay/caddy.env "
+        "/usr/local/bin/relay-deploy /usr/local/lib/cuttlefish-relay/policy.py "
+        "/home/deploy/.ssh/authorized_keys",
         check=True,
     ).stdout
     assert "root:deploy 640 /opt/cuttlefish-relay/relay.env" in modes
-    assert "root:caddy 640 /etc/caddy/relay.env" in modes
+    assert "root:deploy 640 /opt/cuttlefish-relay/caddy.env" in modes
+    assert "root:root 644 /usr/local/lib/cuttlefish-relay/policy.py" in modes
     assert "root:root 755 /usr/local/bin/relay-deploy" in modes
     assert "deploy:deploy 600 /home/deploy/.ssh/authorized_keys" in modes
     secret = box.read("/opt/cuttlefish-relay/relay.env").split("=", 1)[1].strip()
@@ -328,8 +364,8 @@ def test_the_deploy_user_cannot_change_what_its_key_runs(box: Box) -> None:
     for command in (
         "echo x >> /usr/local/bin/relay-deploy",
         "echo x > /opt/cuttlefish-relay/relay.env",
-        "cat /etc/caddy/relay.env",
-        "echo x >> /etc/caddy/Caddyfile",
+        "echo x > /opt/cuttlefish-relay/caddy.env",
+        "echo x >> /usr/local/lib/cuttlefish-relay/policy.py",
     ):
         result = box.sh(f"runuser -u deploy -- bash -c '{command}'")
         assert result.returncode != 0, command

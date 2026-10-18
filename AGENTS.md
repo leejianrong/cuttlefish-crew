@@ -150,6 +150,9 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **Deploys to the DigitalOcean Droplet go only through `.github/workflows/deploy.yml`**, never by hand (Jian, 2026-10-18).
   The first Droplet setup may be by hand; the key the pipeline uses is restricted to `deploy/relay/relay-deploy.sh`. Do not
   widen that key, add a second way in, or put the deploy key anywhere but a GitHub environment secret. `docs-site/hosted-relay.md`.
+- The relay and Caddy are a docker compose stack (`deploy/relay/compose.yaml`) that ships **inside the relay image**; `relay-deploy`
+  extracts it and refuses it unless it passes `deploy/relay/policy.py`. A change to the compose file that adds a key, a mount, a
+  port or a capability needs the policy and its test (`tests/unit/test_relay_deploy_policy.py`) to say it is allowed.
 - `make test-smoke` builds the relay image (`deploy/relay/Dockerfile`) and runs `tests/smoke/` against it (needs docker; the
   tests skip without `CUTTLEFISH_SMOKE_IMAGE`). It is its own CI job (`relay-image`); `make ci` does not run it.
 - `make demo` (`scripts/demo.sh`) builds the dashboard and runs one

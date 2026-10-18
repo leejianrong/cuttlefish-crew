@@ -1,0 +1,90 @@
+# The hosted relay as a docker compose stack (CUT-153, ADR-0043): the relay and Caddy in front of it.
+#
+# `docker compose up -d` with the inputs below is the whole deployment. On the Droplet it is run only
+# by `relay-deploy`, which takes this file out of the relay image it is deploying (so config changes
+# travel through the pipeline too), checks the rendered result against deploy/relay/policy.py, and
+# rolls back to the previous release if the stack is not healthy.
+#
+# Inputs (the environment):
+#   RELAY_IMAGE      the relay image, by digest. relay-deploy sets it.
+#   RELAY_ENV_FILE   a file holding CUTTLEFISH_RELAY_OWNER_SECRET (32+ characters)
+#   CADDY_ENV_FILE   a file holding RELAY_ADDRESS, GATE_USER and GATE_PASSWORD_HASH (single-quote the
+#                    hash: it has `$` in it), and optionally ACME_CA
+#   HTTP_PORT, HTTPS_PORT   host ports for Caddy; 80 and 443 unless a local run needs others
+#
+# Locally: set RELAY_ADDRESS=:80 in the Caddy env file and HTTP_PORT to a free port for a plain-http run.
+
+name: cuttlefish-relay
+
+services:
+  relay:
+    image: ${RELAY_IMAGE:?relay-deploy sets this to the relay image by digest}
+    restart: unless-stopped
+    env_file: ${RELAY_ENV_FILE:?a file with CUTTLEFISH_RELAY_OWNER_SECRET}
+    volumes:
+      - relay-data:/data
+    networks: [internal]
+    # Never published to the host: only Caddy, on the internal network, can reach it. That is what
+    # makes it safe for the relay to believe the X-Forwarded-For header Caddy sets.
+    expose: ["8450"]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 512m
+    healthcheck:
+      # The same probe as the image's own HEALTHCHECK, but checked sooner and more often, so a release
+      # is known to be healthy (or not) in seconds.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8450/healthz', timeout=2).status == 200 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    # Pinned by digest; a new Caddy is a change to this line, reviewed and deployed like any other.
+    image: caddy:2.11.7@sha256:685ae3d7c34d9b5f8caeddc5d14051db7bbd88ff1f5a2fa0c16bd8ca328fb7af
+    restart: unless-stopped
+    depends_on:
+      relay:
+        condition: service_healthy
+    env_file: ${CADDY_ENV_FILE:?a file with RELAY_ADDRESS, GATE_USER and GATE_PASSWORD_HASH}
+    environment:
+      RELAY_UPSTREAM: relay:8450
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp" # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data # certificates: losing them means asking Let's Encrypt again
+      - caddy-config:/config
+      - caddy-logs:/var/log/caddy
+    networks: [internal, edge]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 256m
+    healthcheck:
+      # Caddy's admin endpoint answers on loopback inside the container once the config is loaded.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+networks:
+  # The relay lives here and nowhere else: no route to the internet, and nothing but Caddy to talk to.
+  internal:
+    internal: true
+  edge: {}
+
+volumes:
+  relay-data: {}
+  caddy-data: {}
+  caddy-config: {}
+  caddy-logs: {}
