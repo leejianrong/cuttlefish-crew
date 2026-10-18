@@ -337,5 +337,6 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   which browsers withhold from a page that is not a secure context, and `http://<tailscale ip>` is not one (checked in Chromium
   and Firefox on a real Tailscale address). Pairing was only ever run from `127.0.0.1`, which is exempt. The page now says
   so instead of failing obscurely; the direct password sign-in over Tailscale is unaffected. The way through is an https page: the
-  hosted relay (CUT-121), Tailscale https, or a pure-JavaScript crypto fallback (a decision, see the ADR).
+  hosted relay (CUT-121) or Tailscale https. Decided 2026-10-18 (ADR-0041): Tailscale https first, the hosted relay second, no
+  JavaScript fallback. Waiting on HTTPS being turned on in the Tailscale admin console, which Jian will do (CUT-128).
 
