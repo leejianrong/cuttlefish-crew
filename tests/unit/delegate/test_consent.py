@@ -197,6 +197,26 @@ def test_validate_allow_entry_refuses_a_launcher_that_would_allow_any_script(
         validate_allow_entry(broad)
 
 
+@pytest.mark.parametrize(
+    "broad",
+    [
+        ["git"],
+        ["uvx"],
+        ["sed"],
+        ["sed", "-n"],
+        ["awk"],
+        ["uv", "run"],
+        ["npm", "exec"],
+        ["/usr/bin/python3"],
+    ],
+)
+def test_validate_allow_entry_refuses_what_runs_any_package_script_or_subcommand(
+    broad: list[str],
+) -> None:
+    with pytest.raises(ConsentPolicyError, match="too broad"):
+        validate_allow_entry(broad)
+
+
 def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> None:
     assert validate_allow_entry(["python", "-m", "pytest"]) == ("python", "-m", "pytest")
 
@@ -210,6 +230,14 @@ def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> No
         ("npm run build", ("npm", "run", "build")),
         ("python script.py -x", ("python", "script.py")),
         ("python -c print", None),
+        ("git -c user.name=x commit -m msg", None),
+        ("git push origin main", ("git", "push", "origin")),
+        ("uv run python evil.py", ("uv", "run", "python")),
+        ("uvx --from autoflake autoflake x", None),
+        ("uvx ruff check .", ("uvx", "ruff", "check")),
+        ("sed -n 1,5p README.md", None),
+        ("/usr/bin/python3 -m pytest", None),
+        ("UV_CACHE_DIR=/tmp/c uv run pytest", None),
         ("ls && make", None),
         ("sudo make", None),
     ],

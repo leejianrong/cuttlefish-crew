@@ -23,6 +23,7 @@ import dataclasses
 import re
 import shlex
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Literal
 
 from cuttlefish.delegate.never_allowed import never_allowed_reason, unsafe_flag
@@ -150,8 +151,29 @@ _LAUNCHERS = frozenset(
 _CODE_FLAGS = frozenset({"-c", "-e", "--eval", "--command", "-exec"})
 
 
+#: Two-word forms that run any package or script (``uv run python x.py``, ``npm exec``).
+_LAUNCHER_VERBS = frozenset(
+    {
+        ("uv", "run"), ("uv", "tool"), ("npm", "exec"), ("npm", "x"),
+        ("pnpm", "exec"), ("pnpm", "dlx"), ("yarn", "exec"), ("yarn", "dlx"),
+    }
+)  # fmt: skip
+#: Programs whose arguments are a script, so no word prefix can name what they will do
+#: (``sed 'w file'``, ``awk 'BEGIN{system(...)}'``).
+_SCRIPT_RUNNERS = frozenset({"sed", "awk", "gawk", "mawk"})
+#: Programs whose first word alone covers every subcommand, including a push or a package run.
+_NEEDS_SUBCOMMAND = frozenset({"git", "uvx", "pnpx"})
+
+
 def _too_broad(words: Sequence[str]) -> bool:
-    return words[0] in _LAUNCHERS and (len(words) == 1 or words[-1] in _CODE_FLAGS)
+    """Whether a rule would approve any script: judged on the program's name, so
+    ``/usr/bin/python3`` is ``python3``."""
+    name = Path(words[0]).name
+    if name in _LAUNCHERS and (len(words) == 1 or words[-1] in _CODE_FLAGS):
+        return True
+    if name in _SCRIPT_RUNNERS or (len(words) == 1 and name in _NEEDS_SUBCOMMAND):
+        return True
+    return len(words) == 2 and (name, words[1]) in _LAUNCHER_VERBS
 
 
 def _plain_words(line: str) -> list[str] | None:
@@ -164,7 +186,12 @@ def _is_flag_or_path(word: str) -> bool:
 
 
 def _suggest_words(words: Sequence[str]) -> tuple[str, ...] | None:
-    """The leading words of one command up to its first flag or path-like word, at most three."""
+    """The leading words of one command up to its first flag or path-like word, at most three.
+
+    ``None`` for a command that starts with an assignment (``VAR=x uv run ...``): a rule cannot
+    begin with one, and the program after it is not what the person is being asked about."""
+    if "=" in words[0]:
+        return None
     for stop in (_is_flag_or_path, lambda word: word.startswith("-")):
         rule: list[str] = []
         for word in words[:3]:

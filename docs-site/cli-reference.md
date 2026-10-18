@@ -429,8 +429,8 @@ hold `$`, a backtick, `\` or `!`), and so are `2>&1`, `2>/dev/null` and `>/dev/n
 (a redirect to a file, `$(...)`, a backtick, a glob, a lone `&`) is not matched and waits for you.
 Inside a chain, `git commit` is allowed only as `git commit -m '<message>'`. When a chain waits because
 one command is not on the list, **Always allow** offers a rule for the start of the first such command
-(for example `git config user.name`), so the same chain runs unasked next time; a launcher, a
-never-allowed command or a line with a redirect or substitution can still only be allowed once.
+(for example `git config user.name`), so the same chain runs unasked next time; a launcher (`sh`, `python`, `uv run`, `npx`), a bare `git`, `sed` or `awk`, a
+never-allowed command or a line with a redirect or substitution can still only be allowed once, so no rule is offered for it.
 kopicode, Codex (over `codex app-server`) and Claude Code (over stream-json) check this live,
 command by command. Over `claude -p` (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, and inside a sandbox
 provider) the list is passed as `--allowedTools` patterns, plus deny patterns for the never-allowed
@@ -475,7 +475,7 @@ changes the library.
 The same settings over HTTP: `GET /api/permissions` (modes, presets, blocked list, backend notes),
 `PATCH /api/projects/{id}/mode`, `PATCH /api/projects/{id}/presets` (`{"presets": [...]}`, names
 from the catalogue), `PATCH /api/projects/{id}/allow` (your own commands; an entry with shell syntax, a
-never-allowed command, or a launcher on its own such as `sh` or `python` is refused with a 400
+never-allowed command, or a rule that would run any script (a launcher on its own such as `sh`, `python` or `uv run`, a bare `git`, or `sed`/`awk`) is refused with a 400
 naming the entry and the reason) and
 `PATCH /api/projects/{id}/roles` (replaces the whole list; a role may carry `"limits"`). `PATCH /api/projects/{id}/limits` sets the project's own limits (`{"limits": {"max_turns": 40}}`; `null` or an empty object inherits, an unknown key or a value out of range is a 400) and `GET /api/limits` lists the six settings with their range and what each reads now. `GET /api/projects/{id}/environment` is read-only: the ecosystems the project's files point to, each with its package tool, lockfile, the version it asks for and whether its own `.venv` or `node_modules` is there (the dashboard's Environment card), and under `prepare` the install steps a start would run now. The project root and the folders directly under it are read (a `frontend/package.json` counts, a deeper one does not, and a folder of an ecosystem the root already has is treated as a workspace member and skipped); each ecosystem reports its `path`. Nothing is run. `PATCH /api/projects/{id}/environment` with `{"prepare": "ask" | "auto" | "off"}` sets whether cuttlefish installs dependencies before a team starts (below). **Every change applies the next time
 the team starts**, not to a team already running.
