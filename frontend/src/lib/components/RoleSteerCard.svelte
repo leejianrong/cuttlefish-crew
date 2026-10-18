@@ -16,6 +16,7 @@
     lastRound = null,
     held = false,
     waiting = false,
+    liveSteer = false,
   }: {
     client: FleetClient;
     projectId: string;
@@ -38,6 +39,9 @@
     held?: boolean;
     /** The role is paused on a command or question for a person (its status still says working). */
     waiting?: boolean;
+    /** The backend takes a message while a round runs (Codex's `turn/steer`, ADR-0033); the rest
+     * read it at the next round boundary (ADR-0008). */
+    liveSteer?: boolean;
   } = $props();
 
   const tokensOverBudget = $derived(
@@ -141,8 +145,12 @@
     </button>
   </div>
   <p id="steer-hint-{role}" class="body-small muted steer-hint">
-    Takes effect at the end of {role}'s current round, and appears in the activity log as you send it.
-    Stopping the team first drops it.
+    {#if liveSteer}
+      Reaches {role} while it works; if it cannot take it now, it waits for the round to end.
+    {:else}
+      Takes effect at the end of {role}'s current round.
+    {/if}
+    It appears in the activity log as you send it. Stopping the team first drops it.
   </p>
 
   {#if status === "blocked" && awaiting}

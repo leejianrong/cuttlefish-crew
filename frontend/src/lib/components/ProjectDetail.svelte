@@ -331,6 +331,7 @@
               lastRound={latestRound(events, role)}
               held={pending.some((r) => r.kind === "blocked" && r.role === role)}
               waiting={waitsForYou(status, pending, role)}
+              liveSteer={(project.roles.find((r) => r.name === role)?.backend ?? project.backend) === "codex"}
             />
           {/each}
         </section>
