@@ -187,6 +187,16 @@ def test_register_with_no_budget_defaults_to_no_ceiling(client: TestClient, tmp_
     assert body["usage"] == {}
 
 
+def test_a_project_that_never_ran_has_no_last_event_time(
+    client: TestClient, tmp_path: Path
+) -> None:
+    """The portfolio card shows "active 12 s ago" only once a team has written something."""
+    body = client.post(
+        "/api/projects", json={"name": "demo", "root": str(tmp_path / "demo"), "roles": []}
+    ).json()
+    assert body["last_event_at"] is None
+
+
 def test_update_budget_replaces_both_fields(client: TestClient, tmp_path: Path) -> None:
     created = client.post(
         "/api/projects",

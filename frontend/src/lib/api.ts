@@ -232,6 +232,8 @@ export interface ProjectSummary {
   /** The operator asked the team to stop and its round has not ended yet. */
   stopping: boolean;
   status: Record<string, RoleStatus>;
+  /** When the last team's journal last changed (ISO 8601); null before a team has run. */
+  last_event_at?: string | null;
   budget: ProjectBudget;
   usage: Record<string, RoleUsage>;
 }

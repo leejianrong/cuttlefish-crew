@@ -166,6 +166,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "running": daemon.is_running(project.id),
         "stopping": daemon.is_stopping(project.id),
         "status": daemon.status(project.id),
+        "last_event_at": daemon.last_event_at(project.id),
         "budget": {"max_tokens": project.max_tokens, "max_cost_usd": project.max_cost_usd},
         "usage": {
             name: {"tokens": totals.tokens, "cost_usd": totals.cost_usd}

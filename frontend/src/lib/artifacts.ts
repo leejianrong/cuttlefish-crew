@@ -10,6 +10,12 @@ export function ago(modified: number, now = Date.now() / 1000): string {
   return `${Math.round(seconds / 86400)} d ago`;
 }
 
+/** `ago` for an ISO 8601 timestamp, as the daemon sends one. Empty when it is missing or unreadable. */
+export function agoIso(iso: string | null | undefined, now = Date.now() / 1000): string {
+  const ms = iso ? Date.parse(iso) : Number.NaN;
+  return Number.isNaN(ms) ? "" : ago(ms / 1000, now);
+}
+
 export function sizeText(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
