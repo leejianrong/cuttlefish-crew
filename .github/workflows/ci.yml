@@ -98,6 +98,20 @@ jobs:
       - name: build the relay image and smoke-test it
         run: make test-smoke
 
+  droplet-bootstrap:
+    name: Droplet bootstrap (fresh Ubuntu container)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      # CUT-143: run deploy/droplet/bootstrap.sh in a fresh Ubuntu 24.04 container (packages from the real
+      # apt repositories, so it needs the network) and check the result with verify.sh and a real sshd.
+      - name: bootstrap a fresh Ubuntu and verify it
+        run: make test-bootstrap
+
   frontend:
     name: Dashboard frontend (svelte-check + vitest + build)
     runs-on: ubuntu-latest

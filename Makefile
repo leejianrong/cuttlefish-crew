@@ -50,6 +50,11 @@ test-smoke: ## Build the relay image and smoke-test it (needs docker)
 	docker build -f deploy/relay/Dockerfile -t cuttlefish-relay:smoke .
 	CUTTLEFISH_SMOKE_IMAGE=cuttlefish-relay:smoke uv run pytest tests/smoke -q
 
+# The Droplet bootstrap (CUT-143), run for real in a fresh Ubuntu 24.04 container: installs packages from
+# the real apt repositories (network, a few minutes), then verify.sh and a real sshd are checked.
+test-bootstrap: ## Run deploy/droplet/bootstrap.sh in a fresh Ubuntu container and verify it (needs docker, network)
+	CUTTLEFISH_SMOKE_BOOTSTRAP=1 uv run pytest tests/smoke/test_bootstrap.py -q
+
 # Real kopicode against a real model (the `requires_live_credential` tests): cents per run, and
 # they were once spent on every `make test-all` whenever `.env` held a key.
 test-live: ## real kopicode + real model tests (OPENROUTER_API_KEY) — COSTS MONEY (cents), never in CI

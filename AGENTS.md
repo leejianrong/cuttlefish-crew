@@ -145,6 +145,8 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   sees.** Tests missed an MCP client getting no error text and log lines with no project id.
   Have sub-agents drive the browser, the CLI and MCP against a scratch copy and report; setup
   and the brief to give them are in `agent_docs/exploratory-testing.md`.
+- `make test-bootstrap` runs `deploy/droplet/bootstrap.sh` in a fresh Ubuntu container and checks it, with a real sshd (docker and
+  network; a few minutes). The bootstrap is the one by-hand step on the Droplet; `deploy/droplet/verify.sh` re-checks it any time.
 - **Deploys to the DigitalOcean Droplet go only through `.github/workflows/deploy.yml`**, never by hand (Jian, 2026-10-18).
   The first Droplet setup may be by hand; the key the pipeline uses is restricted to `deploy/relay/relay-deploy.sh`. Do not
   widen that key, add a second way in, or put the deploy key anywhere but a GitHub environment secret. `docs-site/hosted-relay.md`.
