@@ -13,6 +13,7 @@ nav = [
   { "Quickstart" = "quickstart.md" },
   { "CLI reference" = "cli-reference.md" },
   { "Architecture" = "architecture.md" },
+  { "Architecture diagrams" = "architecture-diagrams.md" },
 ]
 
 [project.theme]

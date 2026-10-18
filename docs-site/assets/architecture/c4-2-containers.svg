@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2250 1655" width="2250" height="1655" role="img" aria-label="2. Containers">
+<style>
+  svg { --bg:#ffffff; --fg:#1b2a33; --muted:#5b6b75; --line:#6b7b86; --group:#8b98a1; --deploy-fill:#f4f7f9;
+        --person:#08427b; --system:#1168bd; --container:#438dd5; --component:#85bbf0; --ext:#8c9399;
+        --on-dark:#ffffff; --on-component:#0b2540; font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) { svg { --bg:#0f1720; --fg:#e3ebf1; --muted:#9fb0bc; --line:#8fa1ad; --group:#4b5b66; --deploy-fill:#16212b;
+        --person:#0b4f94; --system:#1a73c9; --container:#2f6aa3; --component:#2b5d8f; --ext:#59626a; --on-component:#ffffff; } }
+  .bg { fill: var(--bg); }
+  .title { fill: var(--fg); font-size: 17px; font-weight: 700; }
+  .subtitle { fill: var(--muted); font-size: 12px; }
+  .shape { stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .shape-line { fill: none; stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .person { fill: var(--person); } .system { fill: var(--system); }
+  .container, .db { fill: var(--container); } .component { fill: var(--component); }
+  .ext, .ext-container, .ext-db { fill: var(--ext); }
+  .node-name { fill: var(--on-dark); font-size: 14px; font-weight: 700; }
+  .node-tech { fill: var(--on-dark); font-size: 11px; font-style: italic; opacity: 0.92; }
+  .node-desc { fill: var(--on-dark); font-size: 12px; }
+  .node-name.on-component, .node-tech.on-component, .node-desc.on-component { fill: var(--on-component); }
+  .boundary { fill: none; stroke: var(--group); stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .deploy { fill: var(--deploy-fill); stroke: var(--group); stroke-width: 1.5; }
+  .group-name { fill: var(--fg); font-size: 14px; font-weight: 700; }
+  .group-tech { fill: var(--muted); font-size: 11px; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+  .arrow { fill: var(--line); }
+  .elabel-bg { fill: var(--bg); opacity: 0.92; }
+  .elabel { fill: var(--fg); font-size: 11.5px; }
+  .elabel-tech { fill: var(--muted); font-size: 10.5px; font-style: italic; }
+  .legend-t { fill: var(--muted); font-size: 11.5px; }
+  .note { fill: var(--muted); font-size: 11.5px; }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+<rect class="bg" width="100%" height="100%"/>
+<text x="30" y="34" class="title" text-anchor="start">2. Containers</text>
+<rect class="boundary" x="103" y="330" width="2116.333333333333" height="956" rx="10"/><text x="117" y="352" class="group-name" text-anchor="start">cuttlefish-crew</text><text x="117" y="367" class="group-tech" text-anchor="start">[System]</text>
+<rect class="boundary" x="219.33333333333331" y="870" width="1104" height="209" rx="10"/><text x="233.33333333333331" y="892" class="group-name" text-anchor="start">State on disk</text><text x="233.33333333333331" y="907" class="group-tech" text-anchor="start">[SQLite files]</text>
+<path class="edge" d="M334 151 L334 274 Q334 281 341 281 L741 281 Q748 281 748.0530287813355 287.999799136286 L748.2803045519978 318.000200863714 Q748.3333333333333 325 748.3333333333333 332 L748.3333333333333 376" marker-end="url(#arrow)"/>
+<path class="edge" d="M250 151 L250 571" marker-end="url(#arrow)"/>
+<path class="edge" d="M706.6666666666666 487 L706.6666666666666 544 Q706.6666666666666 551 699.6666666666666 551 L568.6666666666666 551 Q561.6666666666666 551 561.6666666666666 556 L561.6666666666666 561" marker-end="url(#arrow)"/>
+<path class="edge" d="M790 487 L790 492 Q790 497 797 497 L1995.3333333333333 497 Q2002.3333333333333 497 2002.3333333333333 504 L2002.3333333333333 848 Q2002.3333333333333 855 2009.3333333333333 855 L2067.666666666667 855 Q2074.666666666667 855 2074.666666666667 862 L2074.666666666667 870" marker-end="url(#arrow)"/>
+<path class="edge" d="M624.1666666666667 687 L624.1666666666667 692 Q624.1666666666667 697 631.1666666666667 697 L1984.3333333333333 697 Q1991.3333333333333 697 1991.3333333333333 704 L1991.3333333333333 870" marker-end="url(#arrow)"/>
+<path class="edge" d="M478.3333333333333 487 L478.3333333333333 561" marker-end="url(#arrow)"/>
+<path class="edge" d="M561.6666666666667 687 L561.6666666666667 720 Q561.6666666666667 727 568.6666666666667 727 L1769.3333333333333 727 Q1776.3333333333333 727 1776.3291962182166 733.9999987774484 L1776.0041371151167 1284.0000012225516 Q1776 1291 1776 1298 L1776 1310 Q1776 1317 1769 1317 L1455 1317 Q1448 1317 1448 1324 L1448 1465" marker-end="url(#arrow)"/>
+<path class="edge" d="M520 687 L520 740 Q520 747 527 747 L1461.3333333333333 747 Q1468.3333333333333 747 1468.3333333333333 754 L1468.3333333333333 916.5" marker-end="url(#arrow)"/>
+<path class="edge" d="M1468.3333333333333 1027.5 L1468.3333333333333 1153" marker-end="url(#arrow)"/>
+<path class="edge" d="M1551.6666666666667 1153 L1551.6666666666667 1148 Q1551.6666666666667 1143 1558.6666666666667 1143 L1758.3333333333333 1143 Q1765.3333333333333 1143 1765.3333333333333 1136 L1765.3333333333333 744 Q1765.3333333333333 737 1758.3333333333333 737 L547.8333333333334 737 Q540.8333333333334 737 540.8333333333334 730 L540.8333333333334 687" marker-end="url(#arrow)"/>
+<path class="edge" d="M457.5 687 L457.5 770 Q457.5 777 464.5 777 L888.6666666666667 777 Q895.6666666666667 777 895.6666666666667 784 L895.6666666666667 848 Q895.6666666666667 855 888.6666666666667 855 L811.0000000000001 855 Q804.0000000000001 855 804.0000000000001 862 L804 916" marker-end="url(#arrow)"/>
+<path class="edge" d="M499.1666666666667 687 L499.1666666666667 750 Q499.1666666666667 757 506.1666666666667 757 L1166.6666666666667 757 Q1173.6666666666667 757 1173.6666666666667 764 L1173.6666666666667 848 Q1173.6666666666667 855 1180.6666666666667 855 L1196.3333333333333 855 Q1203.3333333333333 855 1203.3333333333333 862 L1203.3333333333333 916" marker-end="url(#arrow)"/>
+<path class="edge" d="M436.6666666666667 687 L436.6666666666667 848 Q436.6666666666667 855 443.6666666666667 855 L548.3333333333333 855 Q555.3333333333333 855 555.3333333333333 862 L555.3333333333333 916" marker-end="url(#arrow)"/>
+<path class="edge" d="M478.33333333333337 687 L478.33333333333337 760 Q478.33333333333337 767 485.33333333333337 767 L1039.6666666666667 767 Q1046.6666666666667 767 1046.6666666666667 774 L1046.6666666666667 848 Q1046.6666666666667 855 1039.6666666666667 855 L994.3333333333334 855 Q987.3333333333334 855 987.3333333333334 862 L987.3333333333333 916" marker-end="url(#arrow)"/>
+<path class="edge" d="M415.8333333333333 687 L415.83333333333337 848 Q415.83333333333337 855 408.83333333333337 855 L346.3333333333333 855 Q339.3333333333333 855 339.3333333333333 862 L339.3333333333333 916" marker-end="url(#arrow)"/>
+<path class="edge" d="M603.3333333333334 687 L603.3333333333334 700 Q603.3333333333334 707 610.3333333333334 707 L1791.3333333333333 707 Q1798.3333333333333 707 1798.329337900194 713.9999988597509 L1798.0039954331392 1284.0000011402492 Q1798 1291 1798 1298 L1798 1310 Q1798 1317 1805 1317 L1967 1317 Q1974 1317 1974 1324 L1974 1465" marker-end="url(#arrow)"/>
+<path class="edge" d="M582.5 687 L582.5 710 Q582.5 717 589.5 717 L1780.3333333333333 717 Q1787.3333333333333 717 1787.3292682933684 723.9999988196749 L1787.0040650399649 1284.0000011803252 Q1787 1291 1787 1298 L1787 1414 Q1787 1421 1780 1421 L1697 1421 Q1690 1421 1690 1428 L1690 1465" marker-end="url(#arrow)"/>
+<path class="edge" d="M208.33333333333331 682 L208.0038314170506 1284.0000010485542 Q208 1291 208 1298 L208 1414 Q208 1421 215 1421 L1357 1421 Q1364 1421 1364 1428 L1364 1465" marker-end="url(#arrow)"/>
+<path class="edge" d="M291.66666666666663 682 L291.66666666666663 780 Q291.66666666666663 787 298.66666666666663 787 L731.6666666666667 787 Q738.6666666666667 787 738.6666666666667 794 L738.6666666666667 916" marker-end="url(#arrow)"/>
+<rect class="shape person" x="167" y="70" width="250" height="81" rx="8"/><text x="292" y="95" class="node-name" text-anchor="middle">Operator</text><text x="292" y="111" class="node-tech" text-anchor="middle">[Person]</text><text x="292" y="130" class="node-desc" text-anchor="middle">On the PC, or a paired phone</text>
+<rect class="shape container" x="623.3333333333333" y="376" width="250" height="111" rx="8"/><text x="748.3333333333333" y="401" class="node-name" text-anchor="middle">Dashboard</text><text x="748.3333333333333" y="417" class="node-tech" text-anchor="middle">[Container: Svelte, TypeScript, Vite]</text><text x="748.3333333333333" y="436" class="node-desc" text-anchor="middle">Sprites, Needs you, Terminal,</text><text x="748.3333333333333" y="451" class="node-desc" text-anchor="middle">Devices. Served by the daemon, same</text><text x="748.3333333333333" y="466" class="node-desc" text-anchor="middle">origin.</text>
+<rect class="shape container" x="125" y="571" width="250" height="111" rx="8"/><text x="250" y="596" class="node-name" text-anchor="middle">CLI</text><text x="250" y="612" class="node-tech" text-anchor="middle">[Container: Python]</text><text x="250" y="631" class="node-desc" text-anchor="middle">run, run-team, serve, relay, init,</text><text x="250" y="646" class="node-desc" text-anchor="middle">doctor, secrets. One-shot runs</text><text x="250" y="661" class="node-desc" text-anchor="middle">happen in this process.</text>
+<rect class="shape container" x="353.3333333333333" y="391" width="250" height="96" rx="8"/><text x="478.3333333333333" y="416" class="node-name" text-anchor="middle">MCP server</text><text x="478.3333333333333" y="432" class="node-tech" text-anchor="middle">[Container: Python, stdio]</text><text x="478.3333333333333" y="451" class="node-desc" text-anchor="middle">Lets an agent drive the daemon's</text><text x="478.3333333333333" y="466" class="node-desc" text-anchor="middle">API.</text>
+<rect class="shape container" x="395" y="561" width="250" height="126" rx="8"/><text x="520" y="586" class="node-name" text-anchor="middle">Fleet daemon</text><text x="520" y="602" class="node-tech" text-anchor="middle">[Container: Python, FastAPI, satay]</text><text x="520" y="621" class="node-desc" text-anchor="middle">cuttlefish serve. Runs every</text><text x="520" y="636" class="node-desc" text-anchor="middle">project's team as asyncio tasks.</text><text x="520" y="651" class="node-desc" text-anchor="middle">Serves the API, the terminal and</text><text x="520" y="666" class="node-desc" text-anchor="middle">the relay link.</text>
+<rect class="shape container" x="1908" y="870" width="250" height="111" rx="8"/><text x="2033" y="895" class="node-name" text-anchor="middle">Relay</text><text x="2033" y="911" class="node-tech" text-anchor="middle">[Container: Python, FastAPI]</text><text x="2033" y="930" class="node-desc" text-anchor="middle">cuttlefish relay. Pairs a daemon</text><text x="2033" y="945" class="node-desc" text-anchor="middle">with browsers and copies encrypted</text><text x="2033" y="960" class="node-desc" text-anchor="middle">bytes. Cannot read them.</text>
+<rect class="shape container" x="1343.3333333333333" y="916.5" width="250" height="111" rx="8"/><text x="1468.3333333333333" y="941.5" class="node-name" text-anchor="middle">Agent session</text><text x="1468.3333333333333" y="957.5" class="node-tech" text-anchor="middle">[Container: tmux; claude, codex or</text><text x="1468.3333333333333" y="972.5" class="node-tech" text-anchor="middle">kopicode]</text><text x="1468.3333333333333" y="991.5" class="node-desc" text-anchor="middle">One interactive agent per project,</text><text x="1468.3333333333333" y="1006.5" class="node-desc" text-anchor="middle">on cuttlefish's own tmux socket.</text>
+<rect class="shape container" x="1385" y="1153" width="250" height="111" rx="8"/><text x="1510" y="1178" class="node-name" text-anchor="middle">Hook script</text><text x="1510" y="1194" class="node-tech" text-anchor="middle">[Container: Python, standard library]</text><text x="1510" y="1213" class="node-desc" text-anchor="middle">Run by Claude Code per hook. Asks</text><text x="1510" y="1228" class="node-desc" text-anchor="middle">the daemon; prints nothing if it</text><text x="1510" y="1243" class="node-desc" text-anchor="middle">cannot decide.</text>
+<path class="shape db" d="M457.3333333333333 925 a98 9 0 0 1 196 0 v93 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M457.3333333333333 925 a98 9 0 0 0 196 0"/><text x="555.3333333333333" y="949" class="node-name" text-anchor="middle">Project registry</text><text x="555.3333333333333" y="965" class="node-tech" text-anchor="middle">[Container: SQLite,</text><text x="555.3333333333333" y="980" class="node-tech" text-anchor="middle">~/.cuttlefish/projects.db]</text><text x="555.3333333333333" y="999" class="node-desc" text-anchor="middle">Each project's identity,</text><text x="555.3333333333333" y="1014" class="node-desc" text-anchor="middle">roles and settings.</text>
+<path class="shape db" d="M673.3333333333333 925 a98 9 0 0 1 196 0 v123 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M673.3333333333333 925 a98 9 0 0 0 196 0"/><text x="771.3333333333333" y="949" class="node-name" text-anchor="middle">Episodic journal</text><text x="771.3333333333333" y="965" class="node-tech" text-anchor="middle">[Container: SQLite,</text><text x="771.3333333333333" y="980" class="node-tech" text-anchor="middle">&lt;root&gt;/.cuttlefish/episodic.d</text><text x="771.3333333333333" y="995" class="node-tech" text-anchor="middle">b]</text><text x="771.3333333333333" y="1014" class="node-desc" text-anchor="middle">Append-only, redacted at</text><text x="771.3333333333333" y="1029" class="node-desc" text-anchor="middle">write time. Everything</text><text x="771.3333333333333" y="1044" class="node-desc" text-anchor="middle">shown derives from it.</text>
+<path class="shape db" d="M1105.3333333333333 925 a98 9 0 0 1 196 0 v108 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M1105.3333333333333 925 a98 9 0 0 0 196 0"/><text x="1203.3333333333333" y="949" class="node-name" text-anchor="middle">satay store</text><text x="1203.3333333333333" y="965" class="node-tech" text-anchor="middle">[Container: SQLite,</text><text x="1203.3333333333333" y="980" class="node-tech" text-anchor="middle">&lt;root&gt;/.satay]</text><text x="1203.3333333333333" y="999" class="node-desc" text-anchor="middle">Durable workflow state per</text><text x="1203.3333333333333" y="1014" class="node-desc" text-anchor="middle">project, so a restart</text><text x="1203.3333333333333" y="1029" class="node-desc" text-anchor="middle">resumes.</text>
+<path class="shape db" d="M889.3333333333333 925 a98 9 0 0 1 196 0 v123 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M889.3333333333333 925 a98 9 0 0 0 196 0"/><text x="987.3333333333333" y="949" class="node-name" text-anchor="middle">Secrets store</text><text x="987.3333333333333" y="965" class="node-tech" text-anchor="middle">[Container: SQLite,</text><text x="987.3333333333333" y="980" class="node-tech" text-anchor="middle">encrypted,</text><text x="987.3333333333333" y="995" class="node-tech" text-anchor="middle">~/.cuttlefish/secrets.db]</text><text x="987.3333333333333" y="1014" class="node-desc" text-anchor="middle">Project and shared secrets.</text><text x="987.3333333333333" y="1029" class="node-desc" text-anchor="middle">Needs</text><text x="987.3333333333333" y="1044" class="node-desc" text-anchor="middle">CUTTLEFISH_SECRETS_KEY.</text>
+<path class="shape db" d="M241.33333333333331 925 a98 9 0 0 1 196 0 v108 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M241.33333333333331 925 a98 9 0 0 0 196 0"/><text x="339.3333333333333" y="949" class="node-name" text-anchor="middle">Device store</text><text x="339.3333333333333" y="965" class="node-tech" text-anchor="middle">[Container: SQLite,</text><text x="339.3333333333333" y="980" class="node-tech" text-anchor="middle">~/.cuttlefish/devices.db]</text><text x="339.3333333333333" y="999" class="node-desc" text-anchor="middle">Paired devices, keys and</text><text x="339.3333333333333" y="1014" class="node-desc" text-anchor="middle">tiers, beside the daemon's</text><text x="339.3333333333333" y="1029" class="node-desc" text-anchor="middle">relay key.</text>
+<rect class="shape ext" x="1281" y="1465" width="250" height="81" rx="8"/><text x="1406" y="1490" class="node-name" text-anchor="middle">Coding agent CLIs</text><text x="1406" y="1506" class="node-tech" text-anchor="middle">[Software System]</text><text x="1406" y="1525" class="node-desc" text-anchor="middle">kopicode, Claude Code, Codex</text>
+<rect class="shape ext" x="1849" y="1465" width="250" height="81" rx="8"/><text x="1974" y="1490" class="node-name" text-anchor="middle">Summarising model</text><text x="1974" y="1506" class="node-tech" text-anchor="middle">[Software System]</text><text x="1974" y="1525" class="node-desc" text-anchor="middle">OpenRouter or Anthropic</text>
+<rect class="shape ext" x="1565" y="1465" width="250" height="81" rx="8"/><text x="1690" y="1490" class="node-name" text-anchor="middle">Sandbox provider</text><text x="1690" y="1506" class="node-tech" text-anchor="middle">[Software System]</text><text x="1690" y="1525" class="node-desc" text-anchor="middle">Docker or E2B</text>
+<rect class="elabel-bg" x="339" y="221" width="66" height="34" rx="3"/>
+<text x="372" y="234" class="elabel" text-anchor="middle">Uses</text>
+<text x="372" y="248" class="elabel-tech" text-anchor="middle">[browser]</text>
+<rect class="elabel-bg" x="192" y="221" width="54" height="34" rx="3"/>
+<text x="219" y="234" class="elabel" text-anchor="middle">Runs</text>
+<text x="219" y="248" class="elabel-tech" text-anchor="middle">[shell]</text>
+<rect class="elabel-bg" x="530.6666666666666" y="507" width="174" height="34" rx="3"/>
+<text x="617.6666666666666" y="520" class="elabel" text-anchor="middle">Calls</text>
+<text x="617.6666666666666" y="534" class="elabel-tech" text-anchor="middle">[JSON over HTTP, websocket]</text>
+<rect class="elabel-bg" x="2005.3333333333333" y="607" width="192" height="34" rx="3"/>
+<text x="2101.333333333333" y="620" class="elabel" text-anchor="middle">Or calls through, from a phone</text>
+<text x="2101.333333333333" y="634" class="elabel-tech" text-anchor="middle">[wss, Noise-encrypted]</text>
+<rect class="elabel-bg" x="1809.3333333333333" y="804" width="180" height="34" rx="3"/>
+<text x="1899.3333333333333" y="817" class="elabel" text-anchor="middle">Dials out to</text>
+<text x="1899.3333333333333" y="831" class="elabel-tech" text-anchor="middle">[ws or wss, Noise-encrypted]</text>
+<rect class="elabel-bg" x="368.3333333333333" y="507" width="108" height="34" rx="3"/>
+<text x="422.3333333333333" y="520" class="elabel" text-anchor="middle">Calls</text>
+<text x="422.3333333333333" y="534" class="elabel-tech" text-anchor="middle">[JSON over HTTP]</text>
+<rect class="elabel-bg" x="1453" y="1361" width="138" height="34" rx="3"/>
+<text x="1522" y="1374" class="elabel" text-anchor="middle">Delegates rounds to</text>
+<text x="1522" y="1388" class="elabel-tech" text-anchor="middle">[stdio, JSON streams]</text>
+<rect class="elabel-bg" x="1280.3333333333333" y="797" width="186" height="48" rx="3"/>
+<text x="1373.3333333333333" y="810" class="elabel" text-anchor="middle">Starts, reattaches, bridges a</text>
+<text x="1373.3333333333333" y="824" class="elabel" text-anchor="middle">terminal to</text>
+<text x="1373.3333333333333" y="838" class="elabel-tech" text-anchor="middle">[tmux, pty]</text>
+<rect class="elabel-bg" x="1352.3333333333333" y="1099" width="114" height="34" rx="3"/>
+<text x="1409.3333333333333" y="1112" class="elabel" text-anchor="middle">Runs on each hook</text>
+<text x="1409.3333333333333" y="1126" class="elabel-tech" text-anchor="middle">[process]</text>
+<rect class="elabel-bg" x="1613.3333333333333" y="955" width="150" height="34" rx="3"/>
+<text x="1688.3333333333333" y="968" class="elabel" text-anchor="middle">Asks about a permission</text>
+<text x="1688.3333333333333" y="982" class="elabel-tech" text-anchor="middle">[HTTP, hook token]</text>
+<rect class="elabel-bg" x="749.6666666666667" y="811" width="144" height="20" rx="3"/>
+<text x="821.6666666666667" y="824" class="elabel" text-anchor="middle">Appends to, reads from</text>
+<rect class="elabel-bg" x="1057.6666666666667" y="811" width="114" height="20" rx="3"/>
+<text x="1114.6666666666667" y="824" class="elabel" text-anchor="middle">Runs workflows in</text>
+<rect class="elabel-bg" x="439.6666666666667" y="811" width="108" height="20" rx="3"/>
+<text x="493.6666666666667" y="824" class="elabel" text-anchor="middle">Reads and writes</text>
+<rect class="elabel-bg" x="906.6666666666667" y="811" width="138" height="20" rx="3"/>
+<text x="975.6666666666667" y="824" class="elabel" text-anchor="middle">Resolves secrets from</text>
+<rect class="elabel-bg" x="293.83333333333337" y="811" width="120" height="20" rx="3"/>
+<text x="353.83333333333337" y="824" class="elabel" text-anchor="middle">Checks and updates</text>
+<rect class="elabel-bg" x="1802" y="1361" width="168" height="34" rx="3"/>
+<text x="1886" y="1374" class="elabel" text-anchor="middle">Summarises a handover with</text>
+<text x="1886" y="1388" class="elabel-tech" text-anchor="middle">[HTTPS]</text>
+<rect class="elabel-bg" x="1669" y="1361" width="114" height="34" rx="3"/>
+<text x="1726" y="1374" class="elabel" text-anchor="middle">Runs an agent in</text>
+<text x="1726" y="1388" class="elabel-tech" text-anchor="middle">[Docker, E2B API]</text>
+<rect class="elabel-bg" x="30" y="1361" width="174" height="34" rx="3"/>
+<text x="117" y="1374" class="elabel" text-anchor="middle">Delegates a one-shot run to</text>
+<text x="117" y="1388" class="elabel-tech" text-anchor="middle">[stdio]</text>
+<rect class="elabel-bg" x="664.6666666666667" y="811" width="72" height="20" rx="3"/>
+<text x="700.6666666666667" y="824" class="elabel" text-anchor="middle">Appends to</text>
+<rect class="shape person" x="30" y="1588" width="22" height="13" rx="3"/><text x="59" y="1598" class="legend-t" text-anchor="start">Person</text><rect class="shape container" x="118.8" y="1588" width="22" height="13" rx="3"/><text x="147.8" y="1598" class="legend-t" text-anchor="start">Container</text><rect class="shape db" x="226.5" y="1588" width="22" height="13" rx="3"/><text x="255.5" y="1598" class="legend-t" text-anchor="start">Data store</text><rect class="shape ext" x="340.5" y="1588" width="22" height="13" rx="3"/><text x="369.5" y="1598" class="legend-t" text-anchor="start">Outside the system</text><rect class="boundary" x="504.9" y="1588" width="22" height="13" rx="3"/><text x="533.9" y="1598" class="legend-t" text-anchor="start">Boundary</text>
+<text x="30" y="1624" class="note" text-anchor="start">cuttlefish.relay.protocol and frontend/src/lib/relay/ import nothing else from cuttlefish, so they can be lifted into their own repository (ADR-0037, enforced by a test).</text>
+</svg>

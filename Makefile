@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 LIVE_TOKEN_BUDGET ?= 1000000
-.PHONY: help dev demo lint type check test test-all test-sandbox-live test-live ci install-hooks \
+.PHONY: help dev demo lint type check test test-all test-sandbox-live test-live ci install-hooks diagrams \
 	install-systemd-service phone frontend-install frontend-check frontend-test frontend-build docs
 
 help: ## Show available targets
@@ -82,6 +82,9 @@ ci: check test-all frontend-check frontend-test frontend-build ## Everything CI 
 # user-facing content only, never the internal ADR/QUESTIONS/gtm material.
 docs: ## Build the docs site locally (zensical build --strict) to site/
 	uvx zensical build --clean --strict
+
+diagrams: ## Redraw the C4 diagrams from docs/architecture/model.mjs into docs-site/assets/architecture/
+	cd docs/architecture && npm install --no-audit --no-fund && node render.mjs
 
 install-hooks: ## Install the pre-push git hook
 	./scripts/install-hooks.sh
