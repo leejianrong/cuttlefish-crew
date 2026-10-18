@@ -1,6 +1,6 @@
 # Session control spike (CUT-91)
 
-Hands-on checks behind ADR-0032. Checks 1, 2, 3 and 5 are done; check 4 (the Codex desktop app) needs the app and is open.
+Hands-on checks behind ADR-0032. Checks 1, 2, 3 and 5 and the kopicode section are done; check 4 (the Codex desktop app) needs the app and a person, and is open.
 
 ## Check 2: can two clients drive one Codex thread? (done, 2026-10-16)
 
@@ -131,10 +131,82 @@ Level 1 (a "waiting in terminal" item) is the same hook without the decision, so
 - Clearing: the held hook polls the daemon; the daemon closes the item on `PostToolUse`, on the transcript's rejected
   `tool_result`, on `Stop`, on `UserPromptSubmit` and on a session that is gone.
 
-Not checked: Codex and kopicode in tmux (neither has been looked at for a hook), a hook on Claude Code's other permission
-modes (`acceptEdits`, `plan`), `permission_suggestions` for an "always allow" button, several sessions at once, and the
-600 s default.
+Not checked: Codex in tmux (not looked at for a hook; kopicode is in the next section), a hook on Claude Code's other
+permission modes (`acceptEdits`, `plan`), `permission_suggestions` for an "always allow" button, several sessions at once,
+and the 600 s default.
+
+## kopicode: serve and the REPL (done, 2026-10-18, CUT-91)
+
+kopicode `v0.5.1-0.20261017122613-5b8f4af73904` (main, v0.5.0 plus 14 commits), built with `go build` into a scratch directory.
+The kopicode checkout's `bin/kopicode` and `~/.local/bin/kopicode` were both **v0.4.0**, older than the release, so they were not
+used. Model `deepseek/deepseek-v3.2`, tiny prompts, a scratch git repo, a scratch `HOME`. The key was sourced inside the child's
+own shell and never read. About half a cent in all (the serve run's provider-reported `cost_usd` was 0.0034).
+
+### Can a second client attach to a kopicode session? Partly: it takes over, it does not share
+
+`kopicode serve --listen <sock> --consent-timeout 5m`, a 60-line Python client with two connections to the one socket.
+
+- Client A sent `session.start` (`consent_mode: remote_interactive`, `ask_mode: remote`, a prompt asking for `echo hello-c91`)
+  and received `consent.request` `c-1`, which it did not answer. `server.sessions` on A showed `state: awaiting_consent`,
+  `pending_request: "c-1"`, `turn`, `usage` (with `cost_usd`) and `last_event_at`.
+- Client B connected. **The server closed A at once, with no message** (A's next write failed with a broken pipe). That is the
+  documented "one client at a time" rule, so two clients never watch one session together, unlike the Codex `ws://` check.
+- B received the pending `consent.request` again **under the same id** (`c-1`). `server.sessions` on B showed the same
+  `awaiting_consent` row. `session.events` with `after_seq: 0` returned all 8 events A had seen (`seq` 1 to 8,
+  `session_started` to `tool_call_parsed`), `last_seq: 8`, `more: false`. So a client that reconnects loses nothing.
+- B answered `{"answer":"allow"}` to `c-1`. The turn went on, and B received the live `session.event` notifications (`seq` 9 to
+  17: `permission_requested`, `permission_decided`, `tool_result`, `turn_snapshot`, `verification`, the next provider call,
+  `assistant_message`). A got nothing, being closed. The turn's own result, the response to A's `session.start`, went to
+  nobody (the documented rule: a response stays with its connection). B reads the outcome from `server.sessions`:
+  `state: idle`, `last_stop: completed`.
+- B then sent `session.submit` with a prompt that makes the model call `ask`. It received `ask.request` `c-2`, answered
+  `{"text":"teal"}`, and got the turn result (`stop: completed`, `usage` with `cache_read`, `cost_usd`). `session.usage` answers
+  at any time. `server.shutdown` ended the process with exit 0 and a `session_ended` event.
+
+What it means for a dashboard:
+
+- The first client's pending approval is **not** resolved by the second client attaching. It is re-asked of whoever is connected
+  now, so a dashboard that reconnects can answer approvals its own earlier connection left open. A person's second tool cannot
+  watch in parallel; a supervisor and a viewer must share one connection (cuttlefish already owns the one).
+- There is **no mid-turn steer**: `session.submit` queues behind a running turn, and `session.cancel` is the only interrupt.
+  Steering lands at the turn boundary, as ADR-0008 accepted. Codex's `turn/steer` has no kopicode twin.
+- Nothing tells the old client it was replaced. A client that reconnects after a gap should call `server.sessions` and
+  `session.events` before it assumes anything.
+- The pending question is visible in `server.sessions` (`pending_request`) and in the notification stream (`consent.request`
+  and `ask.request` are requests, not events), but **not in the journal**: `permission_requested` is written only once an answer
+  exists (seq 9 after the answer, seq 8 before it). Replay therefore cannot show an approval that is still open.
+
+### The REPL in tmux
+
+`tmux -S <own socket> new-session -d -c <repo> "env -i PATH=... HOME=<scratch> bash -c 'set -a; . <key file>; set +a; exec kopicode --model deepseek/deepseek-v3.2'"`.
+
+- It asks in the terminal. `tmux send-keys "<prompt>" Enter` started a turn; the pane then showed
+  `[perm] run_shell needs your consent`, `command: /bin/sh -c echo hello-repl` and `allow? [y]es / [N]o / [a]lways ...`.
+  `tmux capture-pane -p` returned that text, so the pane is readable. `send-keys y Enter` answered it, the command ran, and the
+  pane showed `[perm] allow (user)`, `[tool] run_shell: ok, exit 0`, `[snap] refs/kopicode/<session>/1`, `Done.`
+- There is **no hook or structured signal** for a pending approval. Kopicode's hooks (ADR-0036) are `pre_tool`, `post_tool` and
+  `stop`, set in the user config, and the REPL runs them; none fires for a consent prompt. The only signals are the pane text
+  (the `[perm]` and `allow?` lines) and a quiet journal. Matching the pane is screen scraping, as `claude logs` was.
+- The record on disk is structured and tail-able: `<repo>/.kopicode/sessions/<id>/events.jsonl`, one JSON object per line with
+  `schema_version`, `session_id`, `seq`, `turn`, `type` (`ToolCallParsed`, `PermissionRequested`, `PermissionDecided`,
+  `ToolResult`, `TurnSnapshot`, `VerificationRun`, `AssistantMessage`, `SessionEnded`, ...), `ts` and `payload`. While the
+  prompt was open the file ended at `ToolCallParsed` (seq 9). `PermissionRequested` and `PermissionDecided` (seq 10, 11) appeared
+  after the answer. `/exit` wrote `SessionEnded`.
+- The REPL printed `[retry] attempt 1, try 1 of 6: http 429` twice (the provider rate-limited the cheap model), and the retries are
+  in the journal as `ProviderRetried`.
+
+For cuttlefish: a person or the dashboard driving a kopicode REPL in tmux can answer approvals with keys and read the pane, but
+cannot be told one is waiting, except by the journal going quiet after `ToolCallParsed`. The reliable path for approvals is
+`serve` with `remote_interactive` (what V4-H already uses), not tmux. If a kopicode terminal session ever needs a Needs you card,
+it needs a kopicode change: an event written when the request is raised, or a `consent` hook.
+
+Not checked: several `serve` sessions answering approvals at once, a client that never answers (the 60 s default denial is
+documented, not run), and `serve` over stdio with a replaced client (there is no replacement over stdio).
 
 ## Check 4
 
-Not run. It needs the Codex desktop app (approval cards and background threads).
+Not run, and it cannot be run from this machine. It needs the Codex desktop app (approval cards and background threads), which
+is a GUI on a logged-in desktop and not reachable from the WSL shell used for the other checks. What remains: open the app on a
+repo whose thread a `codex app-server` is also driving, start a command that needs approval, and record whether the app raises
+an approval card, whether it shows a thread started by another client, and whether answering in the app resolves the same
+`item/commandExecution/requestApproval` the server sent (`serverRequest/resolved`). A person has to do it.
