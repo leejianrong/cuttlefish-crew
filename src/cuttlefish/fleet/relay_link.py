@@ -99,6 +99,14 @@ class RelaySettings:
     key_path: Path
     #: Where paired devices are kept; next to the key when not given.
     devices_path: Path | None = None
+    #: The address a browser dials, when it differs from the daemon's own (`url`): behind
+    #: `tailscale serve` the daemon reaches the relay on loopback `ws://` and a phone must use
+    #: `wss://<machine>.<tailnet>.ts.net:<port>` (ADR-0041).
+    public_url: str | None = None
+
+    @property
+    def browser_url(self) -> str:
+        return self.public_url or self.url
 
 
 class RelayLink:
@@ -141,7 +149,7 @@ class RelayLink:
         """Open a pairing (replacing any earlier one). The payload goes in a URL fragment."""
         opened = self.pairing.open_pairing()
         return pairing_payload(
-            self.settings.url, self._daemon_key, opened.secret
+            self.settings.browser_url, self._daemon_key, opened.secret
         ), opened.expires_at
 
     async def revoke(self, device_id: str) -> Device:

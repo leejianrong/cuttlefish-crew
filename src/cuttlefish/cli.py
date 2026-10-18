@@ -34,6 +34,7 @@ import uuid
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import satay
 import satay.control
@@ -138,6 +139,57 @@ def _resolve_tailscale_host() -> str:
     if not host:
         raise RuntimeError("--tailscale: `tailscale ip -4` printed no address")
     return host
+
+
+#: `tailscale serve --https` ports for the dashboard page and for the relay's `wss` (ADR-0041).
+TAILSCALE_PAGE_PORT = 443
+TAILSCALE_RELAY_PORT = 8443
+
+
+def _resolve_tailnet_name() -> str:
+    """This machine's MagicDNS name, from the tailnet's `CertDomains` (`tailscale status --json`):
+    the name its https certificate is for. Raises `RuntimeError` saying what to do when the
+    `tailscale` CLI is missing, tailscaled is not running, or HTTPS is off for the tailnet."""
+    try:
+        result = subprocess.run(
+            ["tailscale", "status", "--json"], capture_output=True, text=True, timeout=10
+        )
+    except FileNotFoundError:
+        raise RuntimeError(
+            "--tailscale-https needs the `tailscale` CLI on PATH (https://tailscale.com/download)"
+        ) from None
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("--tailscale-https: `tailscale status --json` timed out") from None
+    if result.returncode != 0:
+        raise RuntimeError(
+            "--tailscale-https: `tailscale status --json` failed -- is tailscaled running and "
+            f"this machine logged in? stderr: {result.stderr.strip()}"
+        )
+    try:
+        domains = json.loads(result.stdout).get("CertDomains") or []
+    except ValueError:
+        raise RuntimeError("--tailscale-https: `tailscale status --json` was not JSON") from None
+    if not domains:
+        raise RuntimeError(
+            "--tailscale-https: HTTPS is not turned on for this tailnet. Turn it on under DNS, "
+            "HTTPS Certificates in the Tailscale admin console (it publishes this machine's name, "
+            "and so the tailnet's name, in public certificate logs), then try again"
+        )
+    return str(domains[0])
+
+
+def _tailscale_https_notes(name: str, port: int, relay_port: int) -> str:
+    """What to run, and why it is not run for you: `tailscale serve` changes this node's serve
+    configuration, so cuttlefish prints the commands and leaves them to a person (ADR-0041)."""
+    return (
+        f"cuttlefish serve: --tailscale-https for {name}. cuttlefish does not run `tailscale "
+        "serve` for you (it changes this node's serve configuration). Run:\n"
+        f"  tailscale serve --bg --https={TAILSCALE_PAGE_PORT} http://127.0.0.1:{port}\n"
+        f"  tailscale serve --bg --https={TAILSCALE_RELAY_PORT} http://127.0.0.1:{relay_port}\n"
+        f"  cuttlefish relay --port {relay_port}   (in another terminal; it stays on loopback)\n"
+        f"Then open https://{name}/ and pair from Account menu, Devices. Undo with "
+        "`tailscale serve reset`."
+    )
 
 
 def _mode_input(mode: str) -> dict[str, str]:
@@ -805,12 +857,41 @@ async def _serve(args: argparse.Namespace) -> int:
                     flush=True,
                 )
         host = args.host
+        tailnet_name: str | None = None
+        relay_settings: RelaySettings | None = None
+        if args.tailscale_https:
+            if args.tailscale:
+                print(
+                    "cuttlefish serve: --tailscale-https keeps the daemon on loopback, so it "
+                    "cannot be combined with --tailscale",
+                    file=sys.stderr,
+                )
+                return EXIT_CONFIG_ERROR
+            try:
+                tailnet_name = _resolve_tailnet_name()
+            except RuntimeError as exc:
+                print(f"cuttlefish serve: {exc}", file=sys.stderr)
+                return EXIT_TASK_FAILED
         if args.tailscale:
             try:
                 host = _resolve_tailscale_host()
             except RuntimeError as exc:
                 print(f"cuttlefish serve: {exc}", file=sys.stderr)
                 return EXIT_TASK_FAILED
+        relay_url = args.relay
+        if tailnet_name is not None:
+            relay_url = relay_url or f"ws://127.0.0.1:{DEFAULT_RELAY_PORT}"
+            local_relay_port = urlsplit(relay_url).port or DEFAULT_RELAY_PORT
+            print(_tailscale_https_notes(tailnet_name, args.port, local_relay_port))
+        if relay_url:
+            relay_settings = RelaySettings(
+                relay_url,
+                Path.home() / ".cuttlefish" / "relay-key",
+                Path.home() / ".cuttlefish" / "devices.db",
+                public_url=(
+                    f"wss://{tailnet_name}:{TAILSCALE_RELAY_PORT}" if tailnet_name else None
+                ),
+            )
         try:
             await run_daemon(
                 daemon,
@@ -821,15 +902,8 @@ async def _serve(args: argparse.Namespace) -> int:
                 dashboard_dir=_resolve_dashboard_dir(args.dashboard_dir),
                 browse_roots=[Path(root) for root in args.browse_root or ()],
                 token_file=default_serve_token_path(),
-                relay=(
-                    RelaySettings(
-                        args.relay,
-                        Path.home() / ".cuttlefish" / "relay-key",
-                        Path.home() / ".cuttlefish" / "devices.db",
-                    )
-                    if args.relay
-                    else None
-                ),
+                relay=relay_settings,
+                tailnet_name=tailnet_name,
             )
         except (ValueError, WeakPasswordError) as exc:
             print(f"cuttlefish serve: {exc}", file=sys.stderr)
@@ -1336,6 +1410,16 @@ def build_parser() -> argparse.ArgumentParser:
             "`tailscale serve`'s own reverse proxy (ADR-0013: it forwards the "
             "original tailnet Host header verbatim, which a loopback-bound "
             "cuttlefish serve would reject outright)."
+        ),
+    )
+    serve_parser.add_argument(
+        "--tailscale-https",
+        action="store_true",
+        help=(
+            "Keep the daemon on loopback and print the two `tailscale serve` commands that give "
+            "the dashboard an https address and the relay a wss address, so a phone can pair "
+            "(ADR-0041). Needs HTTPS turned on for the tailnet (it publishes the machine's name "
+            "in public certificate logs) and CUTTLEFISH_SERVE_PASSWORD. Turns the relay on."
         ),
     )
     serve_parser.add_argument(

@@ -501,7 +501,7 @@ def create_app(
         )
         return {
             "enabled": True,
-            "url": relay.settings.url,
+            "url": relay.settings.browser_url,
             "room": relay.room,
             "you": you.as_json() if you is not None else None,
         }
@@ -1289,6 +1289,7 @@ async def run_daemon(
     browse_roots: Sequence[Path] = (),
     token_file: Path | None = None,
     relay: RelaySettings | None = None,
+    tailnet_name: str | None = None,
 ) -> None:
     """Serve `daemon`'s HTTP surface until cancelled (`cuttlefish serve`).
 
@@ -1319,11 +1320,23 @@ async def run_daemon(
             f"--dashboard-dir {dashboard_dir} has no index.html -- "
             "build it first (`make frontend-build` / `npm run build` in frontend/)"
         )
-    resolved_port = find_free_port(host, port)
+    if tailnet_name is not None:
+        if not satay.control.is_loopback_host(host):
+            raise ValueError(
+                "behind `tailscale serve` the daemon must stay on loopback, or the page is "
+                "reachable without the certificate (ADR-0041)"
+            )
+        if not password:
+            raise ValueError(
+                "--tailscale-https needs CUTTLEFISH_SERVE_PASSWORD: the page is reachable from "
+                "the whole tailnet (ADR-0041)"
+            )
+    # Behind `tailscale serve` the port is in a command a person ran, so it is never moved.
+    resolved_port = port if tailnet_name is not None else find_free_port(host, port)
     login: SessionAuth | None = None
     security: SecurityCheck
     dashboard_note = "  (serving the dashboard build too)" if dashboard_dir is not None else ""
-    if satay.control.is_loopback_host(host):
+    if tailnet_name is None and satay.control.is_loopback_host(host):
         satay.control.ensure_loopback_bind(host)
         token = (
             load_or_create_token(token_file)
@@ -1346,10 +1359,12 @@ async def run_daemon(
                 "binding a non-loopback host requires CUTTLEFISH_SERVE_PASSWORD "
                 "(ADR-0011) -- refusing to expose the daemon with no real auth"
             )
-        login = SessionAuth(
-            password=password,
-            allowed_origins=frozenset({*cors_origins, _self_origin(host, resolved_port)}),
-        )
+        origins = {*cors_origins, _self_origin(host, resolved_port)}
+        if tailnet_name is not None:
+            # `tailscale serve` forwards the tailnet Host and the browser's https Origin (ADR-0013).
+            # The session guard ignores Host, so the Origin is the one thing to allow.
+            origins.add(f"https://{tailnet_name}")
+        login = SessionAuth(password=password, allowed_origins=frozenset(origins))
         security = login
         print(
             f"cuttlefish serve: http://{host}:{resolved_port}  "
