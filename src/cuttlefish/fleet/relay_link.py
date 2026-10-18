@@ -107,6 +107,10 @@ class RelaySettings:
     #: `tailscale serve` it is `https://<machine>.<tailnet>.ts.net`). The dashboard offers it as the
     #: address a pairing link opens, instead of whatever address the PC's own browser is on.
     page_url: str | None = None
+    #: A hosted relay (ADR-0043) gives a room an id and a registration token; both come from the
+    #: owner's account there. Without them the room is named from the daemon's key (open relay).
+    room: str | None = None
+    token: str | None = None
 
     @property
     def browser_url(self) -> str:
@@ -134,7 +138,7 @@ class RelayLink:
 
     @property
     def room(self) -> str:
-        return room_id_for(public_bytes(self._daemon_key))
+        return self.settings.room or room_id_for(public_bytes(self._daemon_key))
 
     def wrap(self, primary: SecurityCheck) -> SecurityCheck:
         return RelayAwareCheck(primary, self.internal_token)
@@ -146,6 +150,8 @@ class RelayLink:
             static=self._daemon_key,
             authority=self.authority,
             internal_token=self.internal_token,
+            room=self.settings.room,
+            token=self.settings.token,
         )
         return self._connector
 
@@ -153,7 +159,7 @@ class RelayLink:
         """Open a pairing (replacing any earlier one). The payload goes in a URL fragment."""
         opened = self.pairing.open_pairing()
         return pairing_payload(
-            self.settings.browser_url, self._daemon_key, opened.secret
+            self.settings.browser_url, self._daemon_key, opened.secret, self.settings.room
         ), opened.expires_at
 
     async def revoke(self, device_id: str) -> Device:

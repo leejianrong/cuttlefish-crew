@@ -173,7 +173,8 @@ pairing are enforced by the daemon.
     but a very large body is not paced.
 - **CUT-120** (2026-10-17): the real pairing, a device store, tiers enforced by the daemon on every route, and revocation, in
   ADR-0039. This replaced the config-only link above.
-- Not built: accounts, the relay serving the page, rate limits, Web Push (CUT-121), a WebAuthn step-up (needs https).
+- **CUT-135** (2026-10-18): accounts that own rooms, the relay serving the page and per-address limits, in ADR-0043.
+- Not built: Web Push (CUT-121), a WebAuthn step-up (needs https), public sign-up (waits for the outside review).
 
 ## Not decided here
 

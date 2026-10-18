@@ -59,8 +59,8 @@ RELAY = PACKAGE.parent
 #: The relay server and the connector may use web libraries, but may not reach into the rest of
 #: cuttlefish: the relay holds no project data (ADR-0037), and the connector is given an ASGI app
 #: instead of importing the fleet.
-SERVICE_MODULES = ("server.py", "connector.py")
-SERVICE_THIRD_PARTY = {"cryptography", "fastapi", "starlette", "uvicorn", "websockets"}
+SERVICE_MODULES = ("server.py", "connector.py", "accounts.py", "limits.py")
+SERVICE_THIRD_PARTY = {"cryptography", "fastapi", "pydantic", "starlette", "uvicorn", "websockets"}
 
 
 def test_the_relay_server_and_connector_import_nothing_from_the_rest_of_cuttlefish() -> None:

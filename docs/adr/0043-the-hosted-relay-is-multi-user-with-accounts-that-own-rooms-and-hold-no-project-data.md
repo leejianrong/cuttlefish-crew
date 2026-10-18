@@ -1,6 +1,6 @@
 # ADR-0043: The hosted relay is multi-user, with accounts that own rooms and hold no project data
 
-- Status: Proposed (waiting for Jian to accept)
+- Status: Accepted (Jian, 2026-10-18)
 - Date: 2026-10-18
 - Deciders: Jian (multi-user from the start, 2026-10-18); the choices below are mine and are open to change
 
@@ -82,7 +82,7 @@ Numbers are defaults, set by configuration, and meant to be changed once there i
 - Going over a limit closes the connection with a close code and a sentence the dashboard can show. It never drops data
   silently.
 - **An abuse switch per account:** `suspended` closes that account's live connections, refuses its rooms, and signs it out.
-  The operator sets it with a command on the server (`cuttlefish relay admin suspend <account>`), not through a web page,
+  The operator sets it with a command on the server (`cuttlefish relay-admin suspend <account>`, CUT-147), not through a web page,
   so there is no admin surface to attack. A reversal is the same command.
 - One process serves the relay and holds rooms in memory, so this is a single-instance design. Moving to several instances
   would need shared room state and is not decided here.
@@ -94,7 +94,7 @@ A SQLite file on the Droplet's disk (single instance; a move to Postgres is a mi
 | Table | Holds |
 |---|---|
 | `accounts` | id, created, status, email, display name |
-| `identities` | account id, provider, subject, created |
+| `identities` | account id, provider, subject, created, a hash of the sign-in secret (the `owner` provider only) |
 | `sessions` | session hash, account id, created, last used, expires |
 | `rooms` | id, account id, label, created, status, token hash, last online |
 | `usage_daily` | room id, day, bytes relayed, connections |
@@ -136,6 +136,29 @@ daemon's connector gains one setting, the registration token, and no account log
 | CUT-149 | The outside review, before sign-up opens |
 
 CUT-135 creates the tables above in full, so the later cards fill in behaviour and do not alter the schema.
+
+## Built so far
+
+- **CUT-135** (2026-10-18): the schema above in full (`relay/accounts.py`), the `owner` account and its sign-in, sessions,
+  rooms with registration tokens, per-address limits (`relay/limits.py`), the relay serving `frontend/dist` from its own
+  origin, and `deploy/relay/` (a Dockerfile and a Caddyfile). Choices made while building:
+  - The relay's own routes live under **`/relay-api/`** (sign-in, rooms), so they never collide with the daemon's `/api/`
+    that the dashboard sends through the tunnel. A room is made by a signed-in account (`POST /relay-api/rooms`) or on the
+    server with `cuttlefish relay-admin create-room`; either way the token is shown once.
+  - **Two modes, one code.** `cuttlefish relay --db FILE` is the hosted service. Without `--db` the relay is open (no accounts,
+    the old behaviour), and **it refuses any address that is not loopback**. The hosted image always passes `--db`.
+  - The daemon sends its token as `Authorization: Bearer` and is refused with websocket close **4401** and no reason that
+    says whether the room exists. Ten wrong tokens in a minute from one address lock that address out of the daemon route.
+  - The session cookie is `__Host-cc_session` (`Secure`, `HttpOnly`, `SameSite=Lax`), sliding to 7 days idle and 30 days hard.
+    State-changing routes also check `Origin`.
+  - The relay reads `X-Forwarded-For` only with `--trust-forwarded`, and uses the **last** entry (the one the proxy added).
+  - **A shared password in front of the whole site until the outside review** (Jian, 2026-10-18): the Caddyfile asks for it on
+    every route except `/ws/daemon/*`, which is gated by the room's token instead. Remove it only when sign-up is meant to open.
+  - The page is served with a Content-Security-Policy that allows scripts from the origin and the one inline theme script by
+    hash, and connections to the origin only. Checked in Chromium and Firefox with no violations.
+- Not built: GitHub and Google sign-in and a room per PC from the dashboard (CUT-145), onboarding (CUT-146), the abuse switch,
+  per-account quotas and the daily byte cap (CUT-147), account deletion and the terms (CUT-148). The usage table is filled but
+  nothing refuses at a cap yet.
 
 ## Alternatives considered
 

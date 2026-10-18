@@ -45,7 +45,7 @@ export const views = [
           { id: "cli", kind: "container", name: "CLI", tech: "Python", desc: "run, run-team, serve, relay, init, doctor, secrets. One-shot runs happen in this process." },
           { id: "mcp", kind: "container", name: "MCP server", tech: "Python, stdio", desc: "Lets an agent drive the daemon's API." },
           { id: "daemon", kind: "container", name: "Fleet daemon", tech: "Python, FastAPI, satay", desc: "cuttlefish serve. Runs every project's team as asyncio tasks. Serves the API, the terminal and the relay link." },
-          { id: "relay", kind: "container", name: "Relay", tech: "Python, FastAPI", desc: "cuttlefish relay. Pairs a daemon with browsers and copies encrypted bytes. Cannot read them." },
+          { id: "relay", kind: "container", name: "Relay", tech: "Python, FastAPI", desc: "cuttlefish relay. Pairs a daemon with browsers and copies encrypted bytes. Cannot read them. Hosted, it also serves the page and holds accounts and rooms." },
           { id: "session", kind: "container", name: "Agent session", tech: "tmux; claude, codex or kopicode", desc: "One interactive agent per project, on cuttlefish's own tmux socket." },
           { id: "hook", kind: "container", name: "Hook script", tech: "Python, standard library", desc: "Run by Claude Code per hook. Asks the daemon; prints nothing if it cannot decide." },
           {

@@ -152,8 +152,32 @@ bytes move. It does not see paths, commands, output or the terminal.
 
 | Flag | What it does |
 |---|---|
-| `--host HOST` | Loopback by default. It warns on anything else, because it has no accounts yet. |
+| `--host HOST` | Loopback by default. Without `--db` it refuses anything else, because an open relay has no accounts. |
 | `--port PORT` | Default 8450. |
+| `--db PATH` | Run the **hosted, multi-user** relay with its accounts in this SQLite file ([ADR-0043](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0043-the-hosted-relay-is-multi-user-with-accounts-that-own-rooms-and-hold-no-project-data.md)). The owner's sign-in secret (32 or more characters) comes from `CUTTLEFISH_RELAY_OWNER_SECRET`. Default `$CUTTLEFISH_RELAY_DB`. |
+| `--pages DIR` | Also serve this dashboard build (`frontend/dist`) from the relay's own https origin, with a Content-Security-Policy. This is what lets a phone with no VPN open the dashboard. |
+| `--trust-forwarded` | Count limits against the last `X-Forwarded-For` address. Only behind a proxy that sets it, with the relay's port reachable from nowhere else. |
+| `--insecure-cookies` | Do not mark the session cookie `Secure`. Plain http on loopback only. |
+
+### The hosted relay
+
+With `--db` a room belongs to an account, and a daemon must present the room's registration token. A second daemon with
+the wrong token cannot replace a connected one (an open relay lets it). Per address, a relay allows 40 open connections,
+60 new connections a minute, 10 sign-in attempts a minute and 10 wrong daemon tokens a minute; an account owns up to 5
+rooms. The relay keeps accounts, rooms (a hash of the token), sessions and daily byte counts, and no project data, model
+keys or agent credentials.
+
+Make a room and its token on the machine that holds the database, then give both to the PC:
+
+```bash
+cuttlefish relay-admin create-room --db /data/relay.db --label "Work PC"    # prints the room id and the token once
+CUTTLEFISH_RELAY_ROOM=<room> CUTTLEFISH_RELAY_TOKEN=<token> cuttlefish serve --relay wss://relay.example.com
+```
+
+`--relay-room` (or `CUTTLEFISH_RELAY_ROOM`) names the room; the token is read only from `CUTTLEFISH_RELAY_TOKEN`, never
+the command line. The pairing link then opens the relay's own page. `deploy/relay/` in the repository has the
+Dockerfile and the Caddyfile that puts one shared password in front of the whole site until the outside security review
+is done; the daemon's websocket is the one route that skips it, because its room token gates it.
 
 ### Pairing a phone
 
@@ -210,8 +234,9 @@ the paired path is tiered, so to test a tier, use a browser that has never signe
 
 ### What this preview is not
 
-There are no accounts, so anyone who can reach the relay can claim a room; keep it on loopback or a private network.
-The page itself is still served by the daemon, so this does not yet let a phone with no VPN reach a PC. There is no
+An open relay (no `--db`) has no accounts, so anyone who can reach it can claim a room; it runs on loopback only. The
+hosted relay above serves the page itself, but it has one account and sits behind a shared password until the outside
+security review. There is no
 WebAuthn step-up for Terminal and Admin (it needs https), so those tiers stay on until you turn them off. Devices are
 kept in `~/.cuttlefish/devices.db`, and the daemon's own key in `~/.cuttlefish/relay-key`, both mode 0600.
 
@@ -282,6 +307,8 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` and the dashboard's secrets routes are unavailable. |
 | `CUTTLEFISH_SERVE_PASSWORD` | unset | Required for any non-loopback `cuttlefish serve` bind. |
 | `CUTTLEFISH_RELAY_URL` | unset | The relay `cuttlefish serve` dials out to, as `--relay` does (preview). |
+| `CUTTLEFISH_RELAY_ROOM`, `CUTTLEFISH_RELAY_TOKEN` | unset | The room id and registration token a hosted relay gave this PC. |
+| `CUTTLEFISH_RELAY_DB`, `CUTTLEFISH_RELAY_OWNER_SECRET` | unset | For `cuttlefish relay`: the accounts file and the owner's sign-in secret. |
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |
 
 A real run also needs a model credential for whichever LLM provider and
