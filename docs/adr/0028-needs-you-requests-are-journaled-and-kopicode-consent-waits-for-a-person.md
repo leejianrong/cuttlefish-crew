@@ -350,3 +350,9 @@ checked against kopicode's source rather than a live run.
   which kopicode relays to the model as "no human is present", so expiry is not a denial. The question and
   its context are model output: capped at 2000 characters and shown as text. Not yet seen against a real
   kopicode, only the scripted fake.
+- **Update 2026-10-19 (CUT-154): the "too broad" check is wider.** A dogfood run with Codex showed Always allow
+  offering `['git']` (which also covers `git push`), `['uv','run']`, `['uvx']`, `['sed']` and
+  `['/usr/bin/python3']`, and one rule that began with an environment assignment. `_too_broad` now judges the
+  program's name (so a path does not hide `python3`), refuses `uv run`/`uv tool`/`npm exec`/`pnpm dlx`/`yarn exec`
+  on their own, a bare `git`, `uvx` or `pnpx`, and `sed`/`awk` in any form (their argument is a script). A line
+  that starts with an assignment gets no suggestion. It applies to new rules only; rules already saved keep working.
