@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1389 2036" width="1389" height="2036" role="img" aria-label="3a. Fleet daemon: running a team">
+<style>
+  svg { --bg:#ffffff; --fg:#1b2a33; --muted:#5b6b75; --line:#6b7b86; --group:#8b98a1; --deploy-fill:#f4f7f9;
+        --person:#08427b; --system:#1168bd; --container:#438dd5; --component:#85bbf0; --ext:#8c9399;
+        --on-dark:#ffffff; --on-component:#0b2540; font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) { svg { --bg:#0f1720; --fg:#e3ebf1; --muted:#9fb0bc; --line:#8fa1ad; --group:#4b5b66; --deploy-fill:#16212b;
+        --person:#0b4f94; --system:#1a73c9; --container:#2f6aa3; --component:#2b5d8f; --ext:#59626a; --on-component:#ffffff; } }
+  .bg { fill: var(--bg); }
+  .title { fill: var(--fg); font-size: 17px; font-weight: 700; }
+  .subtitle { fill: var(--muted); font-size: 12px; }
+  .shape { stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .shape-line { fill: none; stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .person { fill: var(--person); } .system { fill: var(--system); }
+  .container, .db { fill: var(--container); } .component { fill: var(--component); }
+  .ext, .ext-container, .ext-db { fill: var(--ext); }
+  .node-name { fill: var(--on-dark); font-size: 14px; font-weight: 700; }
+  .node-tech { fill: var(--on-dark); font-size: 11px; font-style: italic; opacity: 0.92; }
+  .node-desc { fill: var(--on-dark); font-size: 12px; }
+  .node-name.on-component, .node-tech.on-component, .node-desc.on-component { fill: var(--on-component); }
+  .boundary { fill: none; stroke: var(--group); stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .deploy { fill: var(--deploy-fill); stroke: var(--group); stroke-width: 1.5; }
+  .group-name { fill: var(--fg); font-size: 14px; font-weight: 700; }
+  .group-tech { fill: var(--muted); font-size: 11px; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+  .arrow { fill: var(--line); }
+  .elabel-bg { fill: var(--bg); opacity: 0.92; }
+  .elabel { fill: var(--fg); font-size: 11.5px; }
+  .elabel-tech { fill: var(--muted); font-size: 10.5px; font-style: italic; }
+  .legend-t { fill: var(--muted); font-size: 11.5px; }
+  .note { fill: var(--muted); font-size: 11.5px; }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+<rect class="bg" width="100%" height="100%"/>
+<text x="30" y="34" class="title" text-anchor="start">3a. Fleet daemon: running a team</text>
+<rect class="boundary" x="212" y="330" width="1147" height="1322" rx="10"/><text x="226" y="352" class="group-name" text-anchor="start">Fleet daemon</text><text x="226" y="367" class="group-tech" text-anchor="start">[Container]</text>
+<path class="edge" d="M470 151 L469.68007660374576 318.00001284475553 Q469.66666666666674 325 469.66666666666674 332 L469.66666666666674 376" marker-end="url(#arrow)"/>
+<path class="edge" d="M469.6666666666667 487 L469.6666666666667 561" marker-end="url(#arrow)"/>
+<path class="edge" d="M428 672 L428 732" marker-end="url(#arrow)"/>
+<path class="edge" d="M511.3333333333333 672 L511.3333333333333 677 Q511.3333333333333 682 518.3333333333333 682 L1030 682 Q1037 682 1037 689 L1037 743.25" marker-end="url(#arrow)"/>
+<path class="edge" d="M974.5 854.25 L974.5 861.125 Q974.5 868 967.5 868 L639 868 Q632 868 632 875 L632 939.5" marker-end="url(#arrow)"/>
+<path class="edge" d="M632 1050.5 L632 1118" marker-end="url(#arrow)"/>
+<path class="edge" d="M569.5 1244 L569.5 1249 Q569.5 1254 562.5 1254 L446 1254 Q439 1254 439 1261 L439 1831" marker-end="url(#arrow)"/>
+<path class="edge" d="M632 1244 L632 1304" marker-end="url(#arrow)"/>
+<path class="edge" d="M694.5 1244 L694.5 1249 Q694.5 1254 701.5 1254 L895 1254 Q902 1254 902 1261 L902 1304" marker-end="url(#arrow)"/>
+<path class="edge" d="M1037 854.25 L1037 1502 Q1037 1509 1030 1509 L722.3333333333334 1509 Q715.3333333333334 1509 715.3333333333334 1514 L715.3333333333334 1519" marker-end="url(#arrow)"/>
+<path class="edge" d="M1099.5 854.25 L1099.5 861.125 Q1099.5 868 1106.5 868 L1205 868 Q1212 868 1212 875 L1212 932" marker-end="url(#arrow)"/>
+<path class="edge" d="M632 1445 L632 1519" marker-end="url(#arrow)"/>
+<path class="edge" d="M673.6666666666667 1630 L673.9135868320284 1650.0005333942934 Q674 1657 674 1664 L674 1780 Q674 1787 681 1787 L689 1787 Q696 1787 696 1794 L696 1831" marker-end="url(#arrow)"/>
+<path class="edge" d="M1212 1058 L1212 1831" marker-end="url(#arrow)"/>
+<path class="edge" d="M428 858 L428 1676 Q428 1683 421 1683 L162 1683 Q155 1683 155 1690 L155 1831" marker-end="url(#arrow)"/>
+<rect class="shape ext-container" x="345" y="70" width="250" height="81" rx="8"/><text x="470" y="95" class="node-name" text-anchor="middle">Dashboard</text><text x="470" y="111" class="node-tech" text-anchor="middle">[Container: Svelte]</text><text x="470" y="130" class="node-desc" text-anchor="middle">Starts, stops and steers a team</text>
+<rect class="shape component" x="344.6666666666667" y="376" width="250" height="111" rx="8"/><text x="469.6666666666667" y="401" class="node-name on-component" text-anchor="middle">FleetDaemon</text><text x="469.6666666666667" y="417" class="node-tech on-component" text-anchor="middle">[Component: fleet/daemon.py]</text><text x="469.6666666666667" y="436" class="node-desc on-component" text-anchor="middle">One asyncio task and one satay</text><text x="469.6666666666667" y="451" class="node-desc on-component" text-anchor="middle">engine per project. Resumes</text><text x="469.6666666666667" y="466" class="node-desc on-component" text-anchor="middle">unfinished teams after a crash.</text>
+<rect class="shape component" x="344.6666666666667" y="561" width="250" height="111" rx="8"/><text x="469.6666666666667" y="586" class="node-name on-component" text-anchor="middle">Team and workflow</text><text x="469.6666666666667" y="602" class="node-tech on-component" text-anchor="middle">[Component: team.py, workflow.py]</text><text x="469.6666666666667" y="621" class="node-desc on-component" text-anchor="middle">The satay workflows run_task and</text><text x="469.6666666666667" y="636" class="node-desc on-component" text-anchor="middle">run_team. Roles run concurrently</text><text x="469.6666666666667" y="651" class="node-desc on-component" text-anchor="middle">under one task id.</text>
+<rect class="shape component" x="303" y="732" width="250" height="126" rx="8"/><text x="428" y="757" class="node-name on-component" text-anchor="middle">Working memory</text><text x="428" y="773" class="node-tech on-component" text-anchor="middle">[Component: handover.py, limits.py,</text><text x="428" y="788" class="node-tech on-component" text-anchor="middle">budget.py, llm/]</text><text x="428" y="807" class="node-desc on-component" text-anchor="middle">Token budget check, handover</text><text x="428" y="822" class="node-desc on-component" text-anchor="middle">summaries, turn caps and the</text><text x="428" y="837" class="node-desc on-component" text-anchor="middle">per-role spend stop.</text>
+<rect class="shape component" x="912" y="743.25" width="250" height="111" rx="8"/><text x="1037" y="768.25" class="node-name on-component" text-anchor="middle">Satay tasks</text><text x="1037" y="784.25" class="node-tech on-component" text-anchor="middle">[Component: tasks/]</text><text x="1037" y="803.25" class="node-desc on-component" text-anchor="middle">The three places effects happen:</text><text x="1037" y="818.25" class="node-desc on-component" text-anchor="middle">delegate (a side effect), journal</text><text x="1037" y="833.25" class="node-desc on-component" text-anchor="middle">append, own LLM call.</text>
+<rect class="shape component" x="507" y="939.5" width="250" height="111" rx="8"/><text x="632" y="964.5" class="node-name on-component" text-anchor="middle">AgentBackend seam</text><text x="632" y="980.5" class="node-tech on-component" text-anchor="middle">[Component: agents/]</text><text x="632" y="999.5" class="node-desc on-component" text-anchor="middle">Protocol and registry. Each backend</text><text x="632" y="1014.5" class="node-desc on-component" text-anchor="middle">turns its tool's output into a</text><text x="632" y="1029.5" class="node-desc on-component" text-anchor="middle">DelegationOutcome.</text>
+<rect class="shape component" x="548.6666666666667" y="1519" width="250" height="111" rx="8"/><text x="673.6666666666667" y="1544" class="node-name on-component" text-anchor="middle">Episodic store</text><text x="673.6666666666667" y="1560" class="node-tech on-component" text-anchor="middle">[Component: episodic/]</text><text x="673.6666666666667" y="1579" class="node-desc on-component" text-anchor="middle">Tagged-union events, secrets</text><text x="673.6666666666667" y="1594" class="node-desc on-component" text-anchor="middle">redacted at write time,</text><text x="673.6666666666667" y="1609" class="node-desc on-component" text-anchor="middle">append-only.</text>
+<rect class="shape component" x="1087" y="932" width="250" height="126" rx="8"/><text x="1212" y="957" class="node-name on-component" text-anchor="middle">Secrets and broker</text><text x="1212" y="973" class="node-tech on-component" text-anchor="middle">[Component: secrets/, broker.py]</text><text x="1212" y="992" class="node-desc on-component" text-anchor="middle">Resolves a secret inside the</text><text x="1212" y="1007" class="node-desc on-component" text-anchor="middle">delegation task. With the broker</text><text x="1212" y="1022" class="node-desc on-component" text-anchor="middle">on, leases a short-lived token</text><text x="1212" y="1037" class="node-desc on-component" text-anchor="middle">instead of the model key.</text>
+<rect class="shape component" x="507" y="1118" width="250" height="126" rx="8"/><text x="632" y="1143" class="node-name on-component" text-anchor="middle">Backend transports</text><text x="632" y="1159" class="node-tech on-component" text-anchor="middle">[Component: delegate/]</text><text x="632" y="1178" class="node-desc on-component" text-anchor="middle">kopicode serve or print, Claude</text><text x="632" y="1193" class="node-desc on-component" text-anchor="middle">Code stream-json or print, Codex</text><text x="632" y="1208" class="node-desc on-component" text-anchor="middle">app-server or exec. Live ones can</text><text x="632" y="1223" class="node-desc on-component" text-anchor="middle">pause for an answer.</text>
+<rect class="shape component" x="507" y="1304" width="250" height="141" rx="8"/><text x="632" y="1329" class="node-name on-component" text-anchor="middle">Permissions and Needs you</text><text x="632" y="1345" class="node-tech on-component" text-anchor="middle">[Component: permissions.py,</text><text x="632" y="1360" class="node-tech on-component" text-anchor="middle">requests.py,</text><text x="632" y="1375" class="node-tech on-component" text-anchor="middle">delegate/never_allowed.py]</text><text x="632" y="1394" class="node-desc on-component" text-anchor="middle">Modes, per-role access and the</text><text x="632" y="1409" class="node-desc on-component" text-anchor="middle">shared never-allowed list. A</text><text x="632" y="1424" class="node-desc on-component" text-anchor="middle">request is two journal events.</text>
+<rect class="shape component" x="777" y="1304" width="250" height="96" rx="8"/><text x="902" y="1329" class="node-name on-component" text-anchor="middle">Sandbox providers</text><text x="902" y="1345" class="node-tech on-component" text-anchor="middle">[Component: sandbox/]</text><text x="902" y="1364" class="node-desc on-component" text-anchor="middle">Container and E2B providers behind</text><text x="902" y="1379" class="node-desc on-component" text-anchor="middle">one interface.</text>
+<rect class="shape ext" x="314" y="1831" width="250" height="81" rx="8"/><text x="439" y="1856" class="node-name" text-anchor="middle">Coding agent CLIs</text><text x="439" y="1872" class="node-tech" text-anchor="middle">[Software System]</text><text x="439" y="1891" class="node-desc" text-anchor="middle">kopicode, Claude Code, Codex</text>
+<rect class="shape ext" x="30" y="1831" width="250" height="81" rx="8"/><text x="155" y="1856" class="node-name" text-anchor="middle">Summarising model</text><text x="155" y="1872" class="node-tech" text-anchor="middle">[Software System]</text><text x="155" y="1891" class="node-desc" text-anchor="middle">OpenRouter or Anthropic</text>
+<path class="shape ext-db" d="M598 1840 a98 9 0 0 1 196 0 v78 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M598 1840 a98 9 0 0 0 196 0"/><text x="696" y="1864" class="node-name" text-anchor="middle">Episodic journal</text><text x="696" y="1880" class="node-tech" text-anchor="middle">[Container: SQLite]</text><text x="696" y="1899" class="node-desc" text-anchor="middle">&lt;root&gt;/.cuttlefish/episodic</text><text x="696" y="1914" class="node-desc" text-anchor="middle">.db</text>
+<path class="shape ext-db" d="M1114 1840 a98 9 0 0 1 196 0 v78 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M1114 1840 a98 9 0 0 0 196 0"/><text x="1212" y="1864" class="node-name" text-anchor="middle">Secrets store</text><text x="1212" y="1880" class="node-tech" text-anchor="middle">[Container: SQLite,</text><text x="1212" y="1895" class="node-tech" text-anchor="middle">encrypted]</text><text x="1212" y="1914" class="node-desc" text-anchor="middle">~/.cuttlefish/secrets.db</text>
+<rect class="elabel-bg" x="292" y="221" width="174" height="34" rx="3"/>
+<text x="379" y="234" class="elabel" text-anchor="middle">start, stop, steer, approve</text>
+<text x="379" y="248" class="elabel-tech" text-anchor="middle">[HTTP]</text>
+<rect class="elabel-bg" x="335.6666666666667" y="507" width="132" height="34" rx="3"/>
+<text x="401.6666666666667" y="520" class="elabel" text-anchor="middle">Starts through satay</text>
+<text x="401.6666666666667" y="534" class="elabel-tech" text-anchor="middle">[run_app]</text>
+<rect class="elabel-bg" x="234" y="692" width="192" height="20" rx="3"/>
+<text x="330" y="705" class="elabel" text-anchor="middle">Checks budget, hands over with</text>
+<rect class="elabel-bg" x="1040" y="692" width="42" height="20" rx="3"/>
+<text x="1061" y="705" class="elabel" text-anchor="middle">Calls</text>
+<rect class="elabel-bg" x="516" y="885" width="114" height="20" rx="3"/>
+<text x="573" y="898" class="elabel" text-anchor="middle">Delegates through</text>
+<rect class="elabel-bg" x="516" y="1078" width="114" height="20" rx="3"/>
+<text x="573" y="1091" class="elabel" text-anchor="middle">Uses the selected</text>
+<rect class="elabel-bg" x="309" y="1727" width="126" height="34" rx="3"/>
+<text x="372" y="1740" class="elabel" text-anchor="middle">Spawns and talks to</text>
+<text x="372" y="1754" class="elabel-tech" text-anchor="middle">[stdio]</text>
+<rect class="elabel-bg" x="480" y="1264" width="150" height="20" rx="3"/>
+<text x="555" y="1277" class="elabel" text-anchor="middle">Asks for an answer from</text>
+<rect class="elabel-bg" x="762" y="1264" width="138" height="20" rx="3"/>
+<text x="831" y="1277" class="elabel" text-anchor="middle">Runs inside, when set</text>
+<rect class="elabel-bg" x="891" y="1171" width="144" height="20" rx="3"/>
+<text x="963" y="1184" class="elabel" text-anchor="middle">Appends events through</text>
+<rect class="elabel-bg" x="1048" y="878" width="162" height="34" rx="3"/>
+<text x="1129" y="891" class="elabel" text-anchor="middle">Resolves inside the task;</text>
+<text x="1129" y="905" class="elabel" text-anchor="middle">never returns the value</text>
+<rect class="elabel-bg" x="450" y="1465" width="180" height="34" rx="3"/>
+<text x="540" y="1478" class="elabel" text-anchor="middle">Records requests and answers</text>
+<text x="540" y="1492" class="elabel" text-anchor="middle">in</text>
+<rect class="elabel-bg" x="610" y="1727" width="60" height="34" rx="3"/>
+<text x="640" y="1740" class="elabel" text-anchor="middle">Writes</text>
+<text x="640" y="1754" class="elabel-tech" text-anchor="middle">[SQLite]</text>
+<rect class="elabel-bg" x="1148" y="1727" width="60" height="34" rx="3"/>
+<text x="1178" y="1740" class="elabel" text-anchor="middle">Reads</text>
+<text x="1178" y="1754" class="elabel-tech" text-anchor="middle">[SQLite]</text>
+<rect class="elabel-bg" x="49" y="1727" width="102" height="34" rx="3"/>
+<text x="100" y="1740" class="elabel" text-anchor="middle">Summarises with</text>
+<text x="100" y="1754" class="elabel-tech" text-anchor="middle">[HTTPS]</text>
+<rect class="shape component" x="30" y="1969" width="22" height="13" rx="3"/><text x="59" y="1979" class="legend-t" text-anchor="start">Component</text><rect class="shape ext" x="137.7" y="1969" width="22" height="13" rx="3"/><text x="166.7" y="1979" class="legend-t" text-anchor="start">Outside the system</text><rect class="boundary" x="302.09999999999997" y="1969" width="22" height="13" rx="3"/><text x="331.09999999999997" y="1979" class="legend-t" text-anchor="start">Boundary</text>
+<text x="30" y="2005" class="note" text-anchor="start">A project secret's decrypted value is never a satay task argument or return value (ADR-0006). A satay control call made by the daemon itself goes through asyncio.to_thread, because both share one event loop (ADR-0009).</text>
+</svg>

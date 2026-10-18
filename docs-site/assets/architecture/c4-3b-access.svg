@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1851 1734" width="1851" height="1734" role="img" aria-label="3b. Fleet daemon: access, devices and sessions">
+<style>
+  svg { --bg:#ffffff; --fg:#1b2a33; --muted:#5b6b75; --line:#6b7b86; --group:#8b98a1; --deploy-fill:#f4f7f9;
+        --person:#08427b; --system:#1168bd; --container:#438dd5; --component:#85bbf0; --ext:#8c9399;
+        --on-dark:#ffffff; --on-component:#0b2540; font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) { svg { --bg:#0f1720; --fg:#e3ebf1; --muted:#9fb0bc; --line:#8fa1ad; --group:#4b5b66; --deploy-fill:#16212b;
+        --person:#0b4f94; --system:#1a73c9; --container:#2f6aa3; --component:#2b5d8f; --ext:#59626a; --on-component:#ffffff; } }
+  .bg { fill: var(--bg); }
+  .title { fill: var(--fg); font-size: 17px; font-weight: 700; }
+  .subtitle { fill: var(--muted); font-size: 12px; }
+  .shape { stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .shape-line { fill: none; stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .person { fill: var(--person); } .system { fill: var(--system); }
+  .container, .db { fill: var(--container); } .component { fill: var(--component); }
+  .ext, .ext-container, .ext-db { fill: var(--ext); }
+  .node-name { fill: var(--on-dark); font-size: 14px; font-weight: 700; }
+  .node-tech { fill: var(--on-dark); font-size: 11px; font-style: italic; opacity: 0.92; }
+  .node-desc { fill: var(--on-dark); font-size: 12px; }
+  .node-name.on-component, .node-tech.on-component, .node-desc.on-component { fill: var(--on-component); }
+  .boundary { fill: none; stroke: var(--group); stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .deploy { fill: var(--deploy-fill); stroke: var(--group); stroke-width: 1.5; }
+  .group-name { fill: var(--fg); font-size: 14px; font-weight: 700; }
+  .group-tech { fill: var(--muted); font-size: 11px; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+  .arrow { fill: var(--line); }
+  .elabel-bg { fill: var(--bg); opacity: 0.92; }
+  .elabel { fill: var(--fg); font-size: 11.5px; }
+  .elabel-tech { fill: var(--muted); font-size: 10.5px; font-style: italic; }
+  .legend-t { fill: var(--muted); font-size: 11.5px; }
+  .note { fill: var(--muted); font-size: 11.5px; }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+<rect class="bg" width="100%" height="100%"/>
+<text x="30" y="34" class="title" text-anchor="start">3b. Fleet daemon: access, devices and sessions</text>
+<rect class="boundary" x="30" y="599" width="1505" height="766" rx="10"/><text x="44" y="621" class="group-name" text-anchor="start">Fleet daemon</text><text x="44" y="636" class="group-tech" text-anchor="start">[Container]</text>
+<path class="edge" d="M1412 406 L1412 425 Q1412 432 1405 432 L1270 432 Q1263 432 1263 439 L1263 830" marker-end="url(#arrow)"/>
+<path class="edge" d="M1128 151 L1128 325" marker-end="url(#arrow)"/>
+<path class="edge" d="M1128 406 L1128 645" marker-end="url(#arrow)"/>
+<path class="edge" d="M1086.3333333333333 756 L1086.3333333333333 761 Q1086.3333333333333 766 1079.3333333333333 766 L1000 766 Q993 766 993 773 L993 830" marker-end="url(#arrow)"/>
+<path class="edge" d="M1169.6666666666667 756 L1169.6666666666665 813 Q1169.6666666666665 820 1176.6666666666665 820 L1193.5 820 Q1200.5 820 1200.5 825 L1200.5 830" marker-end="url(#arrow)"/>
+<path class="edge" d="M1263 941 L1263 964 Q1263 971 1256 971 L585 971 Q578 971 578 978 L578 1031" marker-end="url(#arrow)"/>
+<path class="edge" d="M1346.3333333333335 941 L1346.3333333333335 1031" marker-end="url(#arrow)"/>
+<path class="edge" d="M1388 1157 L1388 1217" marker-end="url(#arrow)"/>
+<path class="edge" d="M1304.6666666666667 1157 L1304.6666666666667 1162 Q1304.6666666666667 1167 1297.6666666666667 1167 L1125 1167 Q1118 1167 1118 1174 L1118 1224.5" marker-end="url(#arrow)"/>
+<path class="edge" d="M1118 1335.5 L1118 1544" marker-end="url(#arrow)"/>
+<path class="edge" d="M1179.6666666666667 941 L1179.6666666666667 946 Q1179.6666666666667 951 1172.6666666666667 951 L169 951 Q162 951 162 958 L162 1200 Q162 1207 169 1207 L217.66666666666652 1207 Q224.66666666666652 1207 224.66666666666652 1212 L224.66666666666652 1217" marker-end="url(#arrow)"/>
+<path class="edge" d="M1221.3333333333333 941 L1221.3333333333333 954 Q1221.3333333333333 961 1214.3333333333333 961 L315 961 Q308 961 308 968 L308 1038.5" marker-end="url(#arrow)"/>
+<path class="edge" d="M308 1149.5 L307.9999999999999 1217" marker-end="url(#arrow)"/>
+<path class="edge" d="M1696 406 L1696 543 Q1696 550 1689 550 L1333 550 Q1326 550 1325.9204596808981 556.9995480809577 L1325.5795403191019 587.0004519190423 Q1325.5 594 1325.5 601 L1325.5 830" marker-end="url(#arrow)"/>
+<path class="edge" d="M1304.6666666666667 941 L1304.6666666666667 974 Q1304.6666666666667 981 1297.6666666666667 981 L855 981 Q848 981 848 988 L848 1031" marker-end="url(#arrow)"/>
+<path class="edge" d="M848 1157 L848 1217" marker-end="url(#arrow)"/>
+<rect class="shape person" x="1287" y="325" width="250" height="81" rx="8"/><text x="1412" y="350" class="node-name" text-anchor="middle">Operator</text><text x="1412" y="366" class="node-tech" text-anchor="middle">[Person]</text><text x="1412" y="385" class="node-desc" text-anchor="middle">PC dashboard</text>
+<rect class="shape ext-container" x="1003" y="70" width="250" height="81" rx="8"/><text x="1128" y="95" class="node-name" text-anchor="middle">Paired browser</text><text x="1128" y="111" class="node-tech" text-anchor="middle">[Container: Dashboard on a phone]</text><text x="1128" y="130" class="node-desc" text-anchor="middle">Holds its own device key</text>
+<rect class="shape ext-container" x="1003" y="325" width="250" height="81" rx="8"/><text x="1128" y="350" class="node-name" text-anchor="middle">Relay</text><text x="1128" y="366" class="node-tech" text-anchor="middle">[Container: FastAPI]</text><text x="1128" y="385" class="node-desc" text-anchor="middle">Passes encrypted bytes</text>
+<rect class="shape ext-container" x="1571" y="325" width="250" height="81" rx="8"/><text x="1696" y="350" class="node-name" text-anchor="middle">Agent session</text><text x="1696" y="366" class="node-tech" text-anchor="middle">[Container: tmux, claude]</text><text x="1696" y="385" class="node-desc" text-anchor="middle">Runs the hook script</text>
+<rect class="shape component" x="1138" y="830" width="250" height="111" rx="8"/><text x="1263" y="855" class="node-name on-component" text-anchor="middle">HTTP surface</text><text x="1263" y="871" class="node-tech on-component" text-anchor="middle">[Component: fleet/server.py]</text><text x="1263" y="890" class="node-desc on-component" text-anchor="middle">Projects, requests, devices,</text><text x="1263" y="905" class="node-desc on-component" text-anchor="middle">secrets, artifacts, the terminal</text><text x="1263" y="920" class="node-desc on-component" text-anchor="middle">websocket and the hook route.</text>
+<rect class="shape component" x="453" y="1031" width="250" height="126" rx="8"/><text x="578" y="1056" class="node-name on-component" text-anchor="middle">Auth guards</text><text x="578" y="1072" class="node-tech on-component" text-anchor="middle">[Component: fleet/auth.py,</text><text x="578" y="1087" class="node-tech on-component" text-anchor="middle">serve_token.py]</text><text x="578" y="1106" class="node-desc on-component" text-anchor="middle">Loopback token, or password</text><text x="578" y="1121" class="node-desc on-component" text-anchor="middle">sessions that slide forward while</text><text x="578" y="1136" class="node-desc on-component" text-anchor="middle">used. Chosen by the bind.</text>
+<rect class="shape component" x="1221.3333333333335" y="1031" width="250" height="126" rx="8"/><text x="1346.3333333333335" y="1056" class="node-name on-component" text-anchor="middle">Relay link</text><text x="1346.3333333333335" y="1072" class="node-tech on-component" text-anchor="middle">[Component: fleet/relay_link.py]</text><text x="1346.3333333333335" y="1091" class="node-desc on-component" text-anchor="middle">The daemon's relay key, pairing,</text><text x="1346.3333333333335" y="1106" class="node-desc on-component" text-anchor="middle">and the guard that applies a</text><text x="1346.3333333333335" y="1121" class="node-desc on-component" text-anchor="middle">device's tier. The third security</text><text x="1346.3333333333335" y="1136" class="node-desc on-component" text-anchor="middle">check.</text>
+<rect class="shape component" x="1003" y="645" width="250" height="111" rx="8"/><text x="1128" y="670" class="node-name on-component" text-anchor="middle">Relay connector</text><text x="1128" y="686" class="node-tech on-component" text-anchor="middle">[Component: relay/connector.py]</text><text x="1128" y="705" class="node-desc on-component" text-anchor="middle">Dials out, runs a Noise handshake</text><text x="1128" y="720" class="node-desc on-component" text-anchor="middle">per browser, calls the daemon's own</text><text x="1128" y="735" class="node-desc on-component" text-anchor="middle">app in process.</text>
+<rect class="shape component" x="1263" y="1217" width="250" height="111" rx="8"/><text x="1388" y="1242" class="node-name on-component" text-anchor="middle">Tiers</text><text x="1388" y="1258" class="node-tech on-component" text-anchor="middle">[Component: fleet/tiers.py]</text><text x="1388" y="1277" class="node-desc on-component" text-anchor="middle">What each paired device may do, per</text><text x="1388" y="1292" class="node-desc on-component" text-anchor="middle">route. A route with no tier is</text><text x="1388" y="1307" class="node-desc on-component" text-anchor="middle">Admin only.</text>
+<rect class="shape component" x="993" y="1224.5" width="250" height="111" rx="8"/><text x="1118" y="1249.5" class="node-name on-component" text-anchor="middle">Device store and pairing</text><text x="1118" y="1265.5" class="node-tech on-component" text-anchor="middle">[Component: fleet/devices.py]</text><text x="1118" y="1284.5" class="node-desc on-component" text-anchor="middle">Paired devices, the one-time</text><text x="1118" y="1299.5" class="node-desc on-component" text-anchor="middle">pairing secret, the six-digit</text><text x="1118" y="1314.5" class="node-desc on-component" text-anchor="middle">confirm on the PC, revocation.</text>
+<rect class="shape component" x="868" y="830" width="250" height="111" rx="8"/><text x="993" y="855" class="node-name on-component" text-anchor="middle">Relay protocol</text><text x="993" y="871" class="node-tech on-component" text-anchor="middle">[Component: relay/protocol/]</text><text x="993" y="890" class="node-desc on-component" text-anchor="middle">Noise IKpsk2, frames, streams.</text><text x="993" y="905" class="node-desc on-component" text-anchor="middle">Imports nothing else from</text><text x="993" y="920" class="node-desc on-component" text-anchor="middle">cuttlefish.</text>
+<rect class="shape component" x="141.33333333333326" y="1217" width="250" height="126" rx="8"/><text x="266.33333333333326" y="1242" class="node-name on-component" text-anchor="middle">Session manager</text><text x="266.33333333333326" y="1258" class="node-tech on-component" text-anchor="middle">[Component: sessions/manager.py,</text><text x="266.33333333333326" y="1273" class="node-tech on-component" text-anchor="middle">tmux.py]</text><text x="266.33333333333326" y="1292" class="node-desc on-component" text-anchor="middle">One tmux session per project on a</text><text x="266.33333333333326" y="1307" class="node-desc on-component" text-anchor="middle">socket of its own. Starts,</text><text x="266.33333333333326" y="1322" class="node-desc on-component" text-anchor="middle">reattaches, relaunches.</text>
+<rect class="shape component" x="183" y="1038.5" width="250" height="111" rx="8"/><text x="308" y="1063.5" class="node-name on-component" text-anchor="middle">Terminal bridge</text><text x="308" y="1079.5" class="node-tech on-component" text-anchor="middle">[Component: sessions/terminal.py]</text><text x="308" y="1098.5" class="node-desc on-component" text-anchor="middle">A pty running tmux attach, bridged</text><text x="308" y="1113.5" class="node-desc on-component" text-anchor="middle">to a websocket. The first message</text><text x="308" y="1128.5" class="node-desc on-component" text-anchor="middle">carries the token.</text>
+<rect class="shape component" x="723" y="1031" width="250" height="126" rx="8"/><text x="848" y="1056" class="node-name on-component" text-anchor="middle">Claude hook handler</text><text x="848" y="1072" class="node-tech on-component" text-anchor="middle">[Component: fleet/claude_hooks.py,</text><text x="848" y="1087" class="node-tech on-component" text-anchor="middle">hook_files.py]</text><text x="848" y="1106" class="node-desc on-component" text-anchor="middle">Decides a PermissionRequest like a</text><text x="848" y="1121" class="node-desc on-component" text-anchor="middle">stream-json one and holds it until</text><text x="848" y="1136" class="node-desc on-component" text-anchor="middle">a person answers.</text>
+<rect class="shape component" x="723" y="1217" width="250" height="96" rx="8"/><text x="848" y="1242" class="node-name on-component" text-anchor="middle">Needs you broker</text><text x="848" y="1258" class="node-tech on-component" text-anchor="middle">[Component: requests.py]</text><text x="848" y="1277" class="node-desc on-component" text-anchor="middle">The inbox of requests agents</text><text x="848" y="1292" class="node-desc on-component" text-anchor="middle">raised, shared with the team view.</text>
+<path class="shape ext-db" d="M1020 1553 a98 9 0 0 1 196 0 v63 a98 9 0 0 1 -196 0 z"/><path class="shape-line" d="M1020 1553 a98 9 0 0 0 196 0"/><text x="1118" y="1577" class="node-name" text-anchor="middle">Device store</text><text x="1118" y="1593" class="node-tech" text-anchor="middle">[Container: SQLite]</text><text x="1118" y="1612" class="node-desc" text-anchor="middle">~/.cuttlefish/devices.db</text>
+<rect class="elabel-bg" x="1145" y="483" width="114" height="34" rx="3"/>
+<text x="1202" y="496" class="elabel" text-anchor="middle">Uses, same origin</text>
+<text x="1202" y="510" class="elabel-tech" text-anchor="middle">[HTTP, websocket]</text>
+<rect class="elabel-bg" x="950" y="221" width="174" height="34" rx="3"/>
+<text x="1037" y="234" class="elabel" text-anchor="middle">Sends encrypted requests to</text>
+<text x="1037" y="248" class="elabel-tech" text-anchor="middle">[wss]</text>
+<rect class="elabel-bg" x="1022" y="483" width="102" height="34" rx="3"/>
+<text x="1073" y="496" class="elabel" text-anchor="middle">Passes bytes to</text>
+<text x="1073" y="510" class="elabel-tech" text-anchor="middle">[ws]</text>
+<rect class="elabel-bg" x="955" y="783" width="36" height="20" rx="3"/>
+<text x="973" y="796" class="elabel" text-anchor="middle">Uses</text>
+<rect class="elabel-bg" x="1005.6666666666666" y="776" width="162" height="34" rx="3"/>
+<text x="1086.6666666666665" y="789" class="elabel" text-anchor="middle">Calls in process, with an</text>
+<text x="1086.6666666666665" y="803" class="elabel" text-anchor="middle">internal token</text>
+<rect class="elabel-bg" x="420" y="991" width="156" height="20" rx="3"/>
+<text x="498" y="1004" class="elabel" text-anchor="middle">Checks each request with</text>
+<rect class="elabel-bg" x="1164.3333333333335" y="991" width="180" height="20" rx="3"/>
+<text x="1254.3333333333335" y="1004" class="elabel" text-anchor="middle">Checks relayed requests with</text>
+<rect class="elabel-bg" x="1248" y="1177" width="138" height="20" rx="3"/>
+<text x="1317" y="1190" class="elabel" text-anchor="middle">Looks the route up in</text>
+<rect class="elabel-bg" x="990" y="1177" width="126" height="20" rx="3"/>
+<text x="1053" y="1190" class="elabel" text-anchor="middle">Finds the device in</text>
+<rect class="elabel-bg" x="1006" y="1440" width="108" height="34" rx="3"/>
+<text x="1060" y="1453" class="elabel" text-anchor="middle">Reads and writes</text>
+<text x="1060" y="1467" class="elabel-tech" text-anchor="middle">[SQLite]</text>
+<rect class="elabel-bg" x="52" y="1084" width="108" height="20" rx="3"/>
+<text x="106" y="1097" class="elabel" text-anchor="middle">Starts and stops</text>
+<rect class="elabel-bg" x="180" y="991" width="126" height="20" rx="3"/>
+<text x="243" y="1004" class="elabel" text-anchor="middle">Opens a terminal on</text>
+<rect class="elabel-bg" x="228" y="1177" width="78" height="20" rx="3"/>
+<text x="267" y="1190" class="elabel" text-anchor="middle">Attaches to</text>
+<rect class="elabel-bg" x="1548" y="476" width="144" height="48" rx="3"/>
+<text x="1620" y="489" class="elabel" text-anchor="middle">Hook script posts to</text>
+<text x="1620" y="503" class="elabel" text-anchor="middle">/api/hooks/claude-code</text>
+<text x="1620" y="517" class="elabel-tech" text-anchor="middle">[HTTP, hook token]</text>
+<rect class="elabel-bg" x="726" y="991" width="120" height="20" rx="3"/>
+<text x="786" y="1004" class="elabel" text-anchor="middle">Hands each hook to</text>
+<rect class="elabel-bg" x="720" y="1177" width="126" height="20" rx="3"/>
+<text x="783" y="1190" class="elabel" text-anchor="middle">Raises a request in</text>
+<rect class="shape person" x="30" y="1667" width="22" height="13" rx="3"/><text x="59" y="1677" class="legend-t" text-anchor="start">Person</text><rect class="shape component" x="118.8" y="1667" width="22" height="13" rx="3"/><text x="147.8" y="1677" class="legend-t" text-anchor="start">Component</text><rect class="shape ext" x="226.5" y="1667" width="22" height="13" rx="3"/><text x="255.5" y="1677" class="legend-t" text-anchor="start">Outside the system</text><rect class="boundary" x="390.9" y="1667" width="22" height="13" rx="3"/><text x="419.9" y="1677" class="legend-t" text-anchor="start">Boundary</text>
+<text x="30" y="1703" class="note" text-anchor="start">A device is trusted only after its first transport message decrypts, and a device the owner has not confirmed on the PC is served nothing (ADR-0037, ADR-0039). A held hook is released at shutdown, so uvicorn is not left waiting on a person (ADR-0040).</text>
+</svg>

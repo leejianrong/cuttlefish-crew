@@ -4,6 +4,9 @@ icon: lucide/network
 
 # Architecture
 
+For the whole system as pictures (context, containers, the fleet daemon's components and a Tailscale deployment), see
+[Architecture diagrams](architecture-diagrams.md). This page explains the decisions behind them.
+
 ## The core loop: a durable workflow, not a wrapped function
 
 Every task cuttlefish-crew runs is a [satay](https://github.com/leejianrong/satay-runtime)

@@ -1,0 +1,9 @@
+{
+  "name": "cuttlefish-architecture-diagrams",
+  "private": true,
+  "type": "module",
+  "description": "Draws the C4 views in model.mjs to SVG with ELK. Run: make diagrams",
+  "dependencies": {
+    "elkjs": "0.12.0"
+  }
+}

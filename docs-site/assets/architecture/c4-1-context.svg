@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2008 565" width="2008" height="565" role="img" aria-label="1. System context">
+<style>
+  svg { --bg:#ffffff; --fg:#1b2a33; --muted:#5b6b75; --line:#6b7b86; --group:#8b98a1; --deploy-fill:#f4f7f9;
+        --person:#08427b; --system:#1168bd; --container:#438dd5; --component:#85bbf0; --ext:#8c9399;
+        --on-dark:#ffffff; --on-component:#0b2540; font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) { svg { --bg:#0f1720; --fg:#e3ebf1; --muted:#9fb0bc; --line:#8fa1ad; --group:#4b5b66; --deploy-fill:#16212b;
+        --person:#0b4f94; --system:#1a73c9; --container:#2f6aa3; --component:#2b5d8f; --ext:#59626a; --on-component:#ffffff; } }
+  .bg { fill: var(--bg); }
+  .title { fill: var(--fg); font-size: 17px; font-weight: 700; }
+  .subtitle { fill: var(--muted); font-size: 12px; }
+  .shape { stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .shape-line { fill: none; stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .person { fill: var(--person); } .system { fill: var(--system); }
+  .container, .db { fill: var(--container); } .component { fill: var(--component); }
+  .ext, .ext-container, .ext-db { fill: var(--ext); }
+  .node-name { fill: var(--on-dark); font-size: 14px; font-weight: 700; }
+  .node-tech { fill: var(--on-dark); font-size: 11px; font-style: italic; opacity: 0.92; }
+  .node-desc { fill: var(--on-dark); font-size: 12px; }
+  .node-name.on-component, .node-tech.on-component, .node-desc.on-component { fill: var(--on-component); }
+  .boundary { fill: none; stroke: var(--group); stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .deploy { fill: var(--deploy-fill); stroke: var(--group); stroke-width: 1.5; }
+  .group-name { fill: var(--fg); font-size: 14px; font-weight: 700; }
+  .group-tech { fill: var(--muted); font-size: 11px; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+  .arrow { fill: var(--line); }
+  .elabel-bg { fill: var(--bg); opacity: 0.92; }
+  .elabel { fill: var(--fg); font-size: 11.5px; }
+  .elabel-tech { fill: var(--muted); font-size: 10.5px; font-style: italic; }
+  .legend-t { fill: var(--muted); font-size: 11.5px; }
+  .note { fill: var(--muted); font-size: 11.5px; }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+<rect class="bg" width="100%" height="100%"/>
+<text x="30" y="34" class="title" text-anchor="start">1. System context</text>
+<path class="edge" d="M280 252 L299 252 Q306 252 306 245 L306 205 Q306 198 313 198 L1095 198 Q1102 198 1102 205 L1102 245 Q1102 252 1109 252 L1146 252" marker-end="url(#arrow)"/>
+<path class="edge" d="M1396 243 L1415 243 Q1422 243 1422 236 L1422 133 Q1422 126 1429 126 L1728 126" marker-end="url(#arrow)"/>
+<path class="edge" d="M1396 271 L1728 271" marker-end="url(#arrow)"/>
+<path class="edge" d="M1396 298 L1415 298 Q1422 298 1422 305 L1422 401 Q1422 408 1429 408 L1728 408" marker-end="url(#arrow)"/>
+<path class="edge" d="M280 289 L594 289" marker-end="url(#arrow)"/>
+<path class="edge" d="M844 289 L1146 289" marker-end="url(#arrow)"/>
+<rect class="shape person" x="30" y="215" width="250" height="111" rx="8"/><text x="155" y="240" class="node-name" text-anchor="middle">Operator</text><text x="155" y="256" class="node-tech" text-anchor="middle">[Person]</text><text x="155" y="275" class="node-desc" text-anchor="middle">Owns the PC and the projects.</text><text x="155" y="290" class="node-desc" text-anchor="middle">Watches teams, answers Needs you,</text><text x="155" y="305" class="node-desc" text-anchor="middle">steers.</text>
+<rect class="shape system" x="1146" y="215" width="250" height="111" rx="8"/><text x="1271" y="240" class="node-name" text-anchor="middle">cuttlefish-crew</text><text x="1271" y="256" class="node-tech" text-anchor="middle">[Software System]</text><text x="1271" y="275" class="node-desc" text-anchor="middle">Fleet manager for small teams of</text><text x="1271" y="290" class="node-desc" text-anchor="middle">coding sub-agents across many</text><text x="1271" y="305" class="node-desc" text-anchor="middle">projects, with a dashboard.</text>
+<rect class="shape ext" x="1728" y="70" width="250" height="111" rx="8"/><text x="1853" y="95" class="node-name" text-anchor="middle">Coding agent CLIs</text><text x="1853" y="111" class="node-tech" text-anchor="middle">[Software System]</text><text x="1853" y="130" class="node-desc" text-anchor="middle">kopicode, Claude Code and Codex.</text><text x="1853" y="145" class="node-desc" text-anchor="middle">Each does the coding through its</text><text x="1853" y="160" class="node-desc" text-anchor="middle">own headless surface.</text>
+<rect class="shape ext" x="1728" y="215" width="250" height="111" rx="8"/><text x="1853" y="240" class="node-name" text-anchor="middle">Summarising model</text><text x="1853" y="256" class="node-tech" text-anchor="middle">[Software System]</text><text x="1853" y="275" class="node-desc" text-anchor="middle">OpenRouter or Anthropic. Writes</text><text x="1853" y="290" class="node-desc" text-anchor="middle">handover summaries only, never the</text><text x="1853" y="305" class="node-desc" text-anchor="middle">coding.</text>
+<rect class="shape ext" x="1728" y="360" width="250" height="96" rx="8"/><text x="1853" y="385" class="node-name" text-anchor="middle">Sandbox provider</text><text x="1853" y="401" class="node-tech" text-anchor="middle">[Software System]</text><text x="1853" y="420" class="node-desc" text-anchor="middle">Docker or E2B. Optional containment</text><text x="1853" y="435" class="node-desc" text-anchor="middle">for an agent's commands.</text>
+<rect class="shape ext" x="594" y="233" width="250" height="111" rx="8"/><text x="719" y="258" class="node-name" text-anchor="middle">Tailscale</text><text x="719" y="274" class="node-tech" text-anchor="middle">[Software System]</text><text x="719" y="293" class="node-desc" text-anchor="middle">Private network and https</text><text x="719" y="308" class="node-desc" text-anchor="middle">certificates between the PC and the</text><text x="719" y="323" class="node-desc" text-anchor="middle">phone.</text>
+<rect class="elabel-bg" x="632" y="145" width="174" height="48" rx="3"/>
+<text x="719" y="158" class="elabel" text-anchor="middle">Starts teams, answers</text>
+<text x="719" y="172" class="elabel" text-anchor="middle">requests, reads the journal</text>
+<text x="719" y="186" class="elabel-tech" text-anchor="middle">[dashboard, CLI, MCP]</text>
+<rect class="elabel-bg" x="1472" y="131" width="180" height="34" rx="3"/>
+<text x="1562" y="144" class="elabel" text-anchor="middle">Delegates a round of work to</text>
+<text x="1562" y="158" class="elabel-tech" text-anchor="middle">[stdio, JSON streams]</text>
+<rect class="elabel-bg" x="1475" y="276" width="174" height="34" rx="3"/>
+<text x="1562" y="289" class="elabel" text-anchor="middle">Asks for a handover summary</text>
+<text x="1562" y="303" class="elabel-tech" text-anchor="middle">[HTTPS API]</text>
+<rect class="elabel-bg" x="1466" y="413" width="192" height="34" rx="3"/>
+<text x="1562" y="426" class="elabel" text-anchor="middle">Runs an agent inside, when set</text>
+<text x="1562" y="440" class="elabel-tech" text-anchor="middle">[Docker, E2B API]</text>
+<rect class="elabel-bg" x="350" y="294" width="174" height="48" rx="3"/>
+<text x="437" y="307" class="elabel" text-anchor="middle">Reaches the PC from a phone</text>
+<text x="437" y="321" class="elabel" text-anchor="middle">over</text>
+<text x="437" y="335" class="elabel-tech" text-anchor="middle">[WireGuard]</text>
+<rect class="elabel-bg" x="914" y="294" width="162" height="34" rx="3"/>
+<text x="995" y="307" class="elabel" text-anchor="middle">Forwards https and wss to</text>
+<text x="995" y="321" class="elabel-tech" text-anchor="middle">[tailscale serve]</text>
+<rect class="shape person" x="30" y="498" width="22" height="13" rx="3"/><text x="59" y="508" class="legend-t" text-anchor="start">Person</text><rect class="shape system" x="118.8" y="498" width="22" height="13" rx="3"/><text x="147.8" y="508" class="legend-t" text-anchor="start">This system</text><rect class="shape ext" x="239.1" y="498" width="22" height="13" rx="3"/><text x="268.1" y="508" class="legend-t" text-anchor="start">Outside the system</text>
+<text x="30" y="534" class="note" text-anchor="start">Not shown: satay-runtime (a library inside the daemon, not a system) and the model providers the coding agents call themselves.</text>
+</svg>

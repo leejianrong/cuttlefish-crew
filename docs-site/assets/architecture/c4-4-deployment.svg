@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 803 1716" width="803" height="1716" role="img" aria-label="4. Deployment: Tailscale https">
+<style>
+  svg { --bg:#ffffff; --fg:#1b2a33; --muted:#5b6b75; --line:#6b7b86; --group:#8b98a1; --deploy-fill:#f4f7f9;
+        --person:#08427b; --system:#1168bd; --container:#438dd5; --component:#85bbf0; --ext:#8c9399;
+        --on-dark:#ffffff; --on-component:#0b2540; font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+  @media (prefers-color-scheme: dark) { svg { --bg:#0f1720; --fg:#e3ebf1; --muted:#9fb0bc; --line:#8fa1ad; --group:#4b5b66; --deploy-fill:#16212b;
+        --person:#0b4f94; --system:#1a73c9; --container:#2f6aa3; --component:#2b5d8f; --ext:#59626a; --on-component:#ffffff; } }
+  .bg { fill: var(--bg); }
+  .title { fill: var(--fg); font-size: 17px; font-weight: 700; }
+  .subtitle { fill: var(--muted); font-size: 12px; }
+  .shape { stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .shape-line { fill: none; stroke: rgba(0,0,0,0.25); stroke-width: 1; }
+  .person { fill: var(--person); } .system { fill: var(--system); }
+  .container, .db { fill: var(--container); } .component { fill: var(--component); }
+  .ext, .ext-container, .ext-db { fill: var(--ext); }
+  .node-name { fill: var(--on-dark); font-size: 14px; font-weight: 700; }
+  .node-tech { fill: var(--on-dark); font-size: 11px; font-style: italic; opacity: 0.92; }
+  .node-desc { fill: var(--on-dark); font-size: 12px; }
+  .node-name.on-component, .node-tech.on-component, .node-desc.on-component { fill: var(--on-component); }
+  .boundary { fill: none; stroke: var(--group); stroke-width: 1.5; stroke-dasharray: 7 5; }
+  .deploy { fill: var(--deploy-fill); stroke: var(--group); stroke-width: 1.5; }
+  .group-name { fill: var(--fg); font-size: 14px; font-weight: 700; }
+  .group-tech { fill: var(--muted); font-size: 11px; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.4; }
+  .arrow { fill: var(--line); }
+  .elabel-bg { fill: var(--bg); opacity: 0.92; }
+  .elabel { fill: var(--fg); font-size: 11.5px; }
+  .elabel-tech { fill: var(--muted); font-size: 10.5px; font-style: italic; }
+  .legend-t { fill: var(--muted); font-size: 11.5px; }
+  .note { fill: var(--muted); font-size: 11.5px; }
+</style>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker></defs>
+<rect class="bg" width="100%" height="100%"/>
+<text x="30" y="34" class="title" text-anchor="start">4. Deployment: Tailscale https</text>
+<rect class="deploy" x="395" y="70" width="338" height="237" rx="10"/><text x="409" y="92" class="group-name" text-anchor="start">Phone</text><text x="409" y="107" class="group-tech" text-anchor="start">[iOS or Android, on the tailnet]</text>
+<rect class="deploy" x="417" y="116" width="294" height="164" rx="10"/><text x="431" y="138" class="group-name" text-anchor="start">Browser</text><text x="431" y="153" class="group-tech" text-anchor="start">[Chrome or Safari]</text>
+<rect class="deploy" x="30" y="505" width="702.5" height="709" rx="10"/><text x="44" y="527" class="group-name" text-anchor="start">PC</text><text x="44" y="542" class="group-tech" text-anchor="start">[Linux, WSL2 or macOS]</text>
+<rect class="deploy" x="416.5" y="556" width="294" height="179" rx="10"/><text x="430.5" y="578" class="group-name" text-anchor="start">tailscaled</text><text x="430.5" y="593" class="group-tech" text-anchor="start">[tailscale serve ends TLS here]</text>
+<rect class="deploy" x="52" y="843" width="564" height="349" rx="10"/><text x="66" y="865" class="group-name" text-anchor="start">Loopback only</text><text x="66" y="880" class="group-tech" text-anchor="start">[127.0.0.1]</text>
+<rect class="deploy" x="479" y="1398" width="294" height="194" rx="10"/><text x="493" y="1420" class="group-name" text-anchor="start">Tailscale</text><text x="493" y="1435" class="group-tech" text-anchor="start">[Control plane]</text>
+<path class="edge" d="M564 258 L563.5144627790478 493.0000149408715 Q563.5 500 563.5 507 L563.5 602" marker-end="url(#arrow)"/>
+<path class="edge" d="M563.5 713 L563.5 753 Q563.5 760 556.5 760 L351 760 Q344 760 344 767 L344 889" marker-end="url(#arrow)"/>
+<path class="edge" d="M501 713 L501 743 Q501 750 494 750 L340 750 Q333 750 333 757 L333 821 Q333 828 326 828 L164.33333333333331 828 Q157.33333333333331 828 157.33333333333331 835 L157.33333333333331 1074" marker-end="url(#arrow)"/>
+<path class="edge" d="M302.3333333333333 1000 L302.3333333333333 1057 Q302.3333333333333 1064 295.3333333333333 1064 L247.66666666666666 1064 Q240.66666666666666 1064 240.66666666666666 1069 L240.66666666666666 1074" marker-end="url(#arrow)"/>
+<path class="edge" d="M385.66666666666663 1000 L385.66666666666663 1005 Q385.66666666666663 1010 392.66666666666663 1010 L462 1010 Q469 1010 469 1017 L469 1074" marker-end="url(#arrow)"/>
+<path class="edge" d="M626 713 L626 1444" marker-end="url(#arrow)"/>
+<rect class="shape container" x="439" y="162" width="250" height="96" rx="8"/><text x="564" y="187" class="node-name" text-anchor="middle">Dashboard page</text><text x="564" y="203" class="node-tech" text-anchor="middle">[Container: Svelte, WebCrypto]</text><text x="564" y="222" class="node-desc" text-anchor="middle">Opened from the pairing link. Holds</text><text x="564" y="237" class="node-desc" text-anchor="middle">the device key in IndexedDB.</text>
+<rect class="shape container" x="438.5" y="602" width="250" height="111" rx="8"/><text x="563.5" y="627" class="node-name" text-anchor="middle">Serve forwards</text><text x="563.5" y="643" class="node-tech" text-anchor="middle">[Container: https :443 and :8443]</text><text x="563.5" y="662" class="node-desc" text-anchor="middle">443 to the dashboard, 8443 to the</text><text x="563.5" y="677" class="node-desc" text-anchor="middle">relay as wss. Holds the</text><text x="563.5" y="692" class="node-desc" text-anchor="middle">certificate.</text>
+<rect class="shape container" x="219" y="889" width="250" height="111" rx="8"/><text x="344" y="914" class="node-name" text-anchor="middle">Fleet daemon</text><text x="344" y="930" class="node-tech" text-anchor="middle">[Container: cuttlefish serve</text><text x="344" y="945" class="node-tech" text-anchor="middle">--tailscale-https, :8431]</text><text x="344" y="964" class="node-desc" text-anchor="middle">Password sessions. Allows exactly</text><text x="344" y="979" class="node-desc" text-anchor="middle">the https name as an Origin.</text>
+<rect class="shape container" x="74" y="1074" width="250" height="96" rx="8"/><text x="199" y="1099" class="node-name" text-anchor="middle">Relay</text><text x="199" y="1115" class="node-tech" text-anchor="middle">[Container: cuttlefish relay, :8432]</text><text x="199" y="1134" class="node-desc" text-anchor="middle">Headless. The daemon dials it as</text><text x="199" y="1149" class="node-desc" text-anchor="middle">ws.</text>
+<rect class="shape container" x="344" y="1074" width="250" height="81" rx="8"/><text x="469" y="1099" class="node-name" text-anchor="middle">Agent session</text><text x="469" y="1115" class="node-tech" text-anchor="middle">[Container: tmux]</text><text x="469" y="1134" class="node-desc" text-anchor="middle">On cuttlefish's own socket.</text>
+<rect class="shape container" x="501" y="1444" width="250" height="126" rx="8"/><text x="626" y="1469" class="node-name" text-anchor="middle">Certificates</text><text x="626" y="1485" class="node-tech" text-anchor="middle">[Container: Let's Encrypt via</text><text x="626" y="1500" class="node-tech" text-anchor="middle">Tailscale]</text><text x="626" y="1519" class="node-desc" text-anchor="middle">Issues the name's certificate. The</text><text x="626" y="1534" class="node-desc" text-anchor="middle">name goes into public certificate</text><text x="626" y="1549" class="node-desc" text-anchor="middle">logs.</text>
+<rect class="elabel-bg" x="368" y="382" width="192" height="48" rx="3"/>
+<text x="464" y="395" class="elabel" text-anchor="middle">Opens the page, then dials the</text>
+<text x="464" y="409" class="elabel" text-anchor="middle">relay</text>
+<text x="464" y="423" class="elabel-tech" text-anchor="middle">[https, wss over WireGuard]</text>
+<rect class="elabel-bg" x="347" y="777" width="180" height="34" rx="3"/>
+<text x="437" y="790" class="elabel" text-anchor="middle">Forwards the page and API to</text>
+<text x="437" y="804" class="elabel-tech" text-anchor="middle">[http, 127.0.0.1:8431]</text>
+<rect class="elabel-bg" x="139" y="770" width="192" height="48" rx="3"/>
+<text x="235" y="783" class="elabel" text-anchor="middle">Forwards the relay websocket</text>
+<text x="235" y="797" class="elabel" text-anchor="middle">to</text>
+<text x="235" y="811" class="elabel-tech" text-anchor="middle">[http upgrade, 127.0.0.1:8432]</text>
+<rect class="elabel-bg" x="168.33333333333331" y="1020" width="132" height="34" rx="3"/>
+<text x="234.33333333333331" y="1033" class="elabel" text-anchor="middle">Dials out to</text>
+<text x="234.33333333333331" y="1047" class="elabel-tech" text-anchor="middle">[ws, 127.0.0.1:8432]</text>
+<rect class="elabel-bg" x="413" y="1020" width="54" height="34" rx="3"/>
+<text x="440" y="1033" class="elabel" text-anchor="middle">Manages</text>
+<text x="440" y="1047" class="elabel-tech" text-anchor="middle">[tmux]</text>
+<rect class="elabel-bg" x="454" y="1289" width="168" height="34" rx="3"/>
+<text x="538" y="1302" class="elabel" text-anchor="middle">Fetches a certificate from</text>
+<text x="538" y="1316" class="elabel-tech" text-anchor="middle">[HTTPS]</text>
+<rect class="shape container" x="30" y="1634" width="22" height="13" rx="3"/><text x="59" y="1644" class="legend-t" text-anchor="start">Container</text><rect class="deploy" x="137.7" y="1634" width="22" height="13" rx="3"/><text x="166.7" y="1644" class="legend-t" text-anchor="start">Deployment node</text>
+<text x="30" y="1670" class="note" text-anchor="start">Plain cuttlefish serve --tailscale binds the tailnet address over http (ADR-0013): a phone can sign in with the password but</text><text x="30" y="1685" class="note" text-anchor="start">cannot pair, because browsers withhold WebCrypto from a plain-http page.</text>
+</svg>
