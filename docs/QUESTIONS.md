@@ -81,6 +81,7 @@ None. Both forks raised in round 1 were resolved the same round.
 | Q68 | Is the hosted service single-user first or multi-user from the start? | DECIDED | Multi-user from the start, because the same service becomes public (sign-up, GitHub or Google sign-in, onboarding, 20 to 100 agents on the user's PC watched from a phone). Public use stays behind the outside review of ADR-0037. Jian, 2026-10-18. | CUT-142, epic CUT-E19 |
 | Q69 | Do voice and video calls stay in the dashboard, or use Meet or Zoom? | DEFERRED | Deferred. cuttlefish should not recreate Zoom, Meet or Discord. Pictures and clips in updates continue. Revisit once the manager is in daily use. Jian, 2026-10-18. | CUT-139, CUT-138 |
 | Q70 | Where does the hosted relay run? | ASSUMED | A plain DigitalOcean Droplet with Caddy for the certificate. App Platform is not used because websocket support was not confirmed. Jian creates the Droplet later. | CUT-143 |
+| Q71 | What is the hosted relay's tenancy model: who owns a room, who may join, what is stored, how is an account deleted? | PROPOSED | Accounts own rooms through a registration token; joining needs no account (the daemon's pairing is the gate); no project data, keys or credentials; sign-up closed until the outside review; deletion is complete within 7 days. Waiting for Jian. | ADR-0043, CUT-142 |
 
 ## Coverage
 
