@@ -181,6 +181,9 @@ when it exists. On the PC itself, `http://localhost` works.
 4. Open `https://<machine>.<tailnet>.ts.net/` on the PC, sign in, and make a pairing link. The link carries the https page
    and a `wss://<machine>.<tailnet>.ts.net:8443` relay address. The phone needs the Tailscale app on the same tailnet.
 
+`make phone HTTPS=1` does steps 2 and 3 for you against a scratch home and a fake agent, asking before it changes the
+Tailscale serve configuration.
+
 The dashboard's port is the one you asked for: with `--tailscale-https` it is never moved to a free one, because the
 `tailscale serve` command names it. Checked in Chromium and Firefox through real `tailscale serve` addresses (pair, match the
 codes, confirm, use the dashboard through the relay). Not yet checked on a real phone or in Safari.

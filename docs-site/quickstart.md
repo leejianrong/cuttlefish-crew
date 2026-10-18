@@ -180,6 +180,11 @@ checkout. It checks that Tailscale and tmux are ready, then serves one sample pr
 (port 8431, or `PORT=n`) with a fake agent in tmux, and prints the URL and a scratch password. State lives in
 `/tmp/cuttlefish-phone`; `make phone RESET=1` starts over.
 
+To pair a phone, run `make phone HTTPS=1` instead. It starts the relay and the daemon on loopback, shows the two
+`tailscale serve` commands and runs them only if you say yes (with `sudo` if Tailscale asks for root), prints the https
+address and the password, and offers to remove the two entries when you stop it. It needs HTTPS turned on for the tailnet
+([details](cli-reference.md#pairing-over-tailscale-https)).
+
 ### Preview: pair a phone through a relay
 
 To use the encrypted relay path on one machine, run `cuttlefish relay` in one terminal and
