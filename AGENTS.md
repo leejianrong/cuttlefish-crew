@@ -145,6 +145,9 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   sees.** Tests missed an MCP client getting no error text and log lines with no project id.
   Have sub-agents drive the browser, the CLI and MCP against a scratch copy and report; setup
   and the brief to give them are in `agent_docs/exploratory-testing.md`.
+- **Deploys to the DigitalOcean Droplet go only through `.github/workflows/deploy.yml`**, never by hand (Jian, 2026-10-18).
+  The first Droplet setup may be by hand; the key the pipeline uses is restricted to `deploy/relay/relay-deploy.sh`. Do not
+  widen that key, add a second way in, or put the deploy key anywhere but a GitHub environment secret. `docs-site/hosted-relay.md`.
 - `make test-smoke` builds the relay image (`deploy/relay/Dockerfile`) and runs `tests/smoke/` against it (needs docker; the
   tests skip without `CUTTLEFISH_SMOKE_IMAGE`). It is its own CI job (`relay-image`); `make ci` does not run it.
 - `make demo` (`scripts/demo.sh`) builds the dashboard and runs one

@@ -1,0 +1,72 @@
+name: Deploy the relay to the Droplet
+description: >
+  Runs the Droplet's one allowed command (relay-deploy, CUT-141) over SSH with the image reference, by
+  digest, then checks the public address answers. Used by the deploy and redeploy jobs.
+inputs:
+  image:
+    description: The image to deploy, as ghcr.io/<owner>/cuttlefish-relay@sha256:<digest>
+    required: true
+  host:
+    required: true
+  user:
+    required: true
+  ssh-key:
+    description: The private deploy key. The Droplet restricts it to relay-deploy.
+    required: true
+  known-hosts:
+    description: The Droplet's pinned SSH host key line(s). Never trust-on-first-use.
+    required: true
+  public-url:
+    description: The relay's public https address, for the last check. Optional.
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Deploy over SSH
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image }}
+        HOST: ${{ inputs.host }}
+        DEPLOY_USER: ${{ inputs.user }}
+        SSH_KEY: ${{ inputs.ssh-key }}
+        KNOWN_HOSTS: ${{ inputs.known-hosts }}
+      run: |
+        set -uo pipefail
+        key="$RUNNER_TEMP/deploy_key"
+        hosts="$RUNNER_TEMP/known_hosts"
+        trap 'rm -f "$key" "$hosts"' EXIT
+        install -m 600 /dev/null "$key"
+        printf '%s\n' "$SSH_KEY" >"$key"
+        printf '%s\n' "$KNOWN_HOSTS" >"$hosts"
+        # The image reference is the command; the Droplet's authorized_keys forces relay-deploy and
+        # hands it this text, so nothing else can be run with this key.
+        ssh -i "$key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes \
+          -o UserKnownHostsFile="$hosts" -o ConnectTimeout=20 \
+          "$DEPLOY_USER@$HOST" "$IMAGE" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+        status=${PIPESTATUS[0]}
+        {
+          echo "### Deploy"
+          echo '```'
+          cat "$RUNNER_TEMP/deploy.log"
+          echo '```'
+        } >>"$GITHUB_STEP_SUMMARY"
+        case "$status" in
+          0) ;;
+          1) echo "::error::The new image was not healthy. The Droplet restored the previous one (see the log above)." ;;
+          2) echo "::error::The new image was not healthy and the previous one did not come back. Look at the Droplet now." ;;
+          *) echo "::error::relay-deploy exited with $status" ;;
+        esac
+        exit "$status"
+    - name: Check the public address answers
+      if: inputs.public-url != ''
+      shell: bash
+      env:
+        URL: ${{ inputs.public-url }}
+      run: |
+        # Until the outside review the whole site sits behind Caddy's password, so a healthy
+        # deploy answers 401 here; 200 is what it will answer once the gate is removed. Anything
+        # else (a TLS error, a 502 from Caddy, no answer) means the service is not reachable.
+        code="$(curl -sS --max-time 20 --retry 5 --retry-delay 3 --retry-all-errors -o /dev/null -w '%{http_code}' "$URL/healthz")"
+        echo "GET $URL/healthz answered $code"
+        case "$code" in 200 | 401) ;; *) echo "::error::$URL answered $code"; exit 1 ;; esac
