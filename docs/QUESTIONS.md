@@ -72,6 +72,15 @@ None. Both forks raised in round 1 were resolved the same round.
 | Q59 | Where does the operational log live? | DECIDED | `~/.cuttlefish/logs/cuttlefish.log`, rotating, always on, with the project id on every line. Not per project root, so the daemon's log is one place whatever it manages. `make demo LOG=` still copies output to another file. | ADR-0029, V5-E1 |
 | Q60 | Is the log its own record of what happened? | ASSUMED | No. Lifecycle lines are a projection of the journal made inside `EpisodicStore.append` after redaction, so there is no parallel transcript (ADR-0004) and the log is redacted at write time. Events that are never journaled (daemon start and stop, backend resolution, HTTP errors, failed starts) are logged directly. Correct this if you want a separate verbose trace. | ADR-0029, V5-E1 |
 | Q61 | On WSL the daemon's `PATH` carries `/mnt/c/...` (Windows Python and Node): should an agent see them? | ASSUMED | No by default; they are dropped from the child `PATH` unless a project opts in. Correct this if you rely on Windows tools from inside a project. **Landed (V5-E4):** process-wide, not per project: `CUTTLEFISH_KEEP_WINDOWS_PATH=1` keeps them. | ADR-0029, V5-E4 |
+| Q62 | Who writes a handoff when an agent's session runs out of room: cuttlefish's model or the agent? | DECIDED | The agent, always. cuttlefish decides when, asks, and carries the document. kopicode first through its own `session.handoff`; Claude Code and Codex by a prompt in the live session. Jian, 2026-10-18. | ADR-0042, CUT-134, CUT-140 |
+| Q63 | Must the agent's handoff be compared with cuttlefish's summary on real tasks before the summary is retired? | DECIDED | No. The agent has all the context. Quality shows up in the soak harness instead. Jian, 2026-10-18. | ADR-0042, CUT-136 |
+| Q64 | One manager per project or one across all projects? | DECIDED | One across all projects (about 20), consolidating progress and reporting to the human. Jian, 2026-10-18. | CUT-137, epic CUT-E18 |
+| Q65 | What model and spend cap does the manager run on? | DECIDED | A cheap OpenRouter model (deepseek flash class), $1 a day in total across all projects. Jian, 2026-10-18. | CUT-137, CUT-151 |
+| Q66 | Whose credentials do the coding agents use? | DECIDED | The user's own subscriptions on their PC, one per project. The manager and the hosted service never hold them. Anthropic's terms on subscription use are still to be read (CUT-104). Jian, 2026-10-18. | CUT-104 |
+| Q67 | How does anything reach the DigitalOcean Droplet? | DECIDED | Only through a CI/CD pipeline with a health check and rollback. The first Droplet setup may be by hand. Jian, 2026-10-18. | CUT-141, CUT-143 |
+| Q68 | Is the hosted service single-user first or multi-user from the start? | DECIDED | Multi-user from the start, because the same service becomes public (sign-up, GitHub or Google sign-in, onboarding, 20 to 100 agents on the user's PC watched from a phone). Public use stays behind the outside review of ADR-0037. Jian, 2026-10-18. | CUT-142, epic CUT-E19 |
+| Q69 | Do voice and video calls stay in the dashboard, or use Meet or Zoom? | DEFERRED | Deferred. cuttlefish should not recreate Zoom, Meet or Discord. Pictures and clips in updates continue. Revisit once the manager is in daily use. Jian, 2026-10-18. | CUT-139, CUT-138 |
+| Q70 | Where does the hosted relay run? | ASSUMED | A plain DigitalOcean Droplet with Caddy for the certificate. App Platform is not used because websocket support was not confirmed. Jian creates the Droplet later. | CUT-143 |
 
 ## Coverage
 
@@ -95,3 +104,4 @@ None. Both forks raised in round 1 were resolved the same round.
 | Dashboard and fleet daemon (slice D1) | Q31, Q38, Q47, Q48, Q49, Q50, Q53, Q54 |
 | Pixel-art dashboard skin (slice D2) | Q51, Q52 |
 | Project environment and observability (V5) | Q56, Q57, Q58, Q59, Q60, Q61 |
+| Handoff, manager and hosted service (V7, V8) | Q62, Q63, Q64, Q65, Q66, Q67, Q68, Q69, Q70 |
