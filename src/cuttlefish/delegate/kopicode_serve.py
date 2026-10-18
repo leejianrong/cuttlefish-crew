@@ -100,6 +100,9 @@ _SHUTDOWN_GRACE = 15.0
 
 #: How long a ``session.usage`` reply may take; it answers inline, even mid-turn.
 _USAGE_TIMEOUT = 10.0
+#: One model call over the whole history, so longer than a usage read. A draft that is not back by
+#: then is given up on and the caller falls back to its own summary.
+_HANDOFF_TIMEOUT = 240.0
 
 #: How long ``session.close`` may take: it queues behind the session's in-flight turn, so
 #: this also bounds a cancelled turn's unwinding.
@@ -195,6 +198,11 @@ async def serve_supports_usage(binary: str) -> bool:
     """Whether ``binary`` answers ``session.usage`` with the context in use and its window."""
     features = await serve_features(binary)
     return {"session.usage", "usage.context", "usage.context_window"} <= features
+
+
+async def serve_supports_handoff(binary: str) -> bool:
+    """Whether ``binary`` drafts a handoff document on ``session.handoff`` (kopicode ADR-0026)."""
+    return "session.handoff" in await serve_features(binary)
 
 
 async def serve_supports_consent_timeout(binary: str) -> bool:
@@ -831,6 +839,31 @@ def _with_reported_cost(outcome: DelegationOutcome, result: Mapping[str, Any]) -
     return dataclasses.replace(outcome, **changes) if changes else outcome
 
 
+def _stopped_for_room(result: Mapping[str, Any], context_full: bool) -> bool:
+    """Whether a finished turn ran out of room (so a handoff is worth asking for): the turn cap, the
+    token budget, or a context cuttlefish ended because it was nearly full. A finished task, a
+    failure and a cancel for any other reason are not."""
+    return context_full or result.get("stop") in ("max_turns", "budget_exhausted")
+
+
+async def _request_handoff(child: ServeChild, session: str, goal: str) -> str | None:
+    """Ask the open session for its handoff document (``session.handoff``: one model call, no tools,
+    from the session's own history). ``None`` when it cannot be had, for any reason: the round has
+    already ended and the caller has its own way to write a summary (ADR-0042)."""
+    try:
+        pending = await child.request("session.handoff", {"session": session, "goal": goal})
+        reply = await asyncio.wait_for(pending, _HANDOFF_TIMEOUT)
+    except Exception:
+        _LOG.warning("no handoff from session %s", session, exc_info=True)
+        return None
+    result = reply.get("result")
+    document = result.get("document") if isinstance(result, dict) else None
+    if not isinstance(document, str) or not document.strip():
+        _LOG.warning("session %s answered session.handoff without a document: %s", session, reply)
+        return None
+    return document
+
+
 def _pressure_outcome(
     outcome: DelegationOutcome, tokens: int, window: int, consents: list[ConsentDecisionRecord]
 ) -> DelegationOutcome:
@@ -947,11 +980,18 @@ async def run_kopicode_serve(
     ask: AskHandler | None = None,
     session_limits: Mapping[str, int] | None = None,
     context_limit: float | None = None,
+    handoff_goal: str | None = None,
     resume: str | None = None,
     provider_url: str | None = None,
     model: str | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as its own session and classify what it did.
+
+    ``handoff_goal`` (ADR-0042) asks the agent to draft its own handoff document when the round
+    stopped for room (a turn cap, the token budget, or a full context), before the session is
+    closed, with this text as what the next session is for. The document comes back as the
+    outcome's ``handoff``; any failure to get one leaves it ``None``. The caller passes it only for
+    a kopicode that advertises ``session.handoff`` (:func:`serve_supports_handoff`).
 
     ``provider_url`` (CUT-116) starts a child spawned here or in the pool with ``--provider-url``
     (kopicode ADR-0027, feature ``provider_url.flag``), and ``model`` is sent on ``session.start``:
@@ -1033,6 +1073,7 @@ async def run_kopicode_serve(
             extra_args=extra_args,
         )
     timed_out = False
+    handoff_document: str | None = None
     child.register(session, decide, ask)
     if context_limit is not None:
         child.watch_context(session, context_limit)
@@ -1068,7 +1109,10 @@ async def run_kopicode_serve(
                 f"{exc}; stderr: {_redacted_stderr_tail(tail, env) or '<empty>'}"
             ) from exc
         else:
-            if isinstance(response.get("result"), dict):
+            turn = response.get("result")
+            if isinstance(turn, dict):
+                if handoff_goal is not None and _stopped_for_room(turn, session in child.pressure):
+                    handoff_document = await _request_handoff(child, session, handoff_goal)
                 await asyncio.shield(child.end_session(session))
     finally:
         events = child.forget(session)
@@ -1126,6 +1170,7 @@ async def run_kopicode_serve(
     record = result.get("record")
     return dataclasses.replace(
         outcome,
+        handoff=handoff_document,
         consent_decisions=consents,
         record=record if isinstance(record, str) and record else None,
     )

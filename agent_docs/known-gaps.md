@@ -264,7 +264,11 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   legitimately spends rounds reading (a reviewer), can hit the no-progress stop; it counts only after a round
   ran out of room, and `CUTTLEFISH_MAX_IDLE_ROUNDS=0` turns it off. It does not notice an agent that edits the
   same file back and forth. The wall-clock limit counts time spent waiting for you in Needs you.
-- **A continuation's handover needs the summariser.** Each auto-continued round writes one (ADR-0030's fourth update), so a
+- **The handoff is written by the agent for kopicode only (ADR-0042, CUT-134).** At a checkpoint kopicode is asked for its own
+  handoff (`session.handoff`) and the next round gets it as it is; Claude Code and Codex still use cuttlefish's own summary,
+  and kopicode falls back to it when the draft cannot be had. Retiring the summary for them is CUT-140. A real model's handoff
+  quality on a real task is not measured (Jian chose not to compare first).
+- **A continuation's handover needs the summariser** unless the agent wrote the handoff (ADR-0042). Each auto-continued round writes one (ADR-0030's fourth update), so a
   long team now needs `OPENROUTER_API_KEY` (or `CUTTLEFISH_LLM_PROVIDER=replay`, placeholder text); without one the write
   fails, is logged, and the next round gets the list of changed files only.
 - **Limits apply to kopicode.** `cuttlefish run-team` takes `--limit`/`--role-limit`, `run` reads the environment only; Claude Code

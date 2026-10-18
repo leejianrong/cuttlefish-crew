@@ -524,7 +524,12 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 forget_conversations(root, name)
                 try:
                     if await maybe_handover(
-                        team_id, token_budget=token_budget, role=name, force=True, root=root
+                        team_id,
+                        token_budget=token_budget,
+                        role=name,
+                        force=True,
+                        root=root,
+                        agent_document=outcome.handoff,
                     ):
                         round_summaries[name].clear()
                 except Exception:

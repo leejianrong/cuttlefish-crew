@@ -33,12 +33,14 @@ from cuttlefish.delegate.kopicode_serve import (
     serve_features,
     serve_supports_ask,
     serve_supports_consent_timeout,
+    serve_supports_handoff,
     serve_supports_limits,
     serve_supports_resume,
     serve_supports_usage,
 )
 from cuttlefish.delegate.policy import write_policy_file
 from cuttlefish.limits import (
+    agent_handoff_enabled,
     context_limit_for,
     max_turns_for,
     round_timeout_for,
@@ -184,6 +186,7 @@ class KopicodeBackend:
             ask = await self._ask_handler(asker, consent_timeout)
             session_limits = await self._session_limits(limits)
             context_limit = await self._context_limit(limits)
+            handoff_goal = await self._handoff_goal(task_text)
 
             async def attempt(resume: str | None) -> DelegationOutcome:
                 return await run_kopicode_serve(
@@ -197,6 +200,7 @@ class KopicodeBackend:
                     ask=ask,
                     session_limits=session_limits,
                     context_limit=context_limit,
+                    handoff_goal=handoff_goal,
                     timeout=round_timeout_for(limits),
                     resume=resume,
                     provider_url=provider_url,
@@ -284,6 +288,14 @@ class KopicodeBackend:
                 "this kopicode has no --provider-url (needs the provider_url.flag feature)"
             )
         return url, model
+
+    async def _handoff_goal(self, task_text: str) -> str | None:
+        """What the next session is for, when the agent should write the handoff itself (ADR-0042):
+        always, unless ``CUTTLEFISH_HANDOFF=summary``, and only for a kopicode with
+        ``session.handoff``."""
+        if not agent_handoff_enabled() or not await serve_supports_handoff(self._binary):
+            return None
+        return f"Carry on with this work in a fresh session: {task_text.strip()[:600]}"
 
     async def _context_limit(self, limits: Mapping[str, int] | None = None) -> float | None:
         """How much of the model's window a round may fill, when this kopicode reports it (v0.4.0);

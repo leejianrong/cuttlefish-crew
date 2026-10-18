@@ -1221,3 +1221,99 @@ async def test_the_token_total_kopicode_reports_replaces_the_sum_of_response_siz
     )
     outcome = await run(binary, tmp_path)
     assert outcome.tokens == 20887
+
+
+# -- the agent writes its own handoff when a round runs out of room (ADR-0042) ----------------
+
+_DOC = {
+    "document": "## Goal\nFinish the parser.\n## Facts\nWrote a.py.",
+    "path": ".kopicode/handoff/x.md",
+}
+
+
+def _turn_cap(*, handoff: dict[str, Any]) -> list[Any]:
+    """A round that stopped at the turn cap and is asked for a handoff before it is closed."""
+    return [
+        {"start": True},
+        {"emit": event({"kind": "edit_applied", "path": "a.py"})},
+        {"emit": respond("max_turns", 1)},
+        handoff,
+        {"close": [ended("max_turns", 1)]},
+        {"eof": []},
+    ]
+
+
+async def test_a_round_that_hit_the_turn_cap_returns_the_agents_own_handoff(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(_turn_cap(handoff={"handoff": _DOC}))
+    outcome = await run(binary, tmp_path, handoff_goal="Carry on with the parser")
+    assert outcome.failure_kind == "max_turns"
+    assert outcome.handoff == _DOC["document"]
+    asked = [m for m in sent(tmp_path) if m.get("method") == "session.handoff"]
+    assert len(asked) == 1 and asked[0]["params"]["goal"] == "Carry on with the parser"
+    methods = [m.get("method") for m in sent(tmp_path)]
+    assert methods.index("session.handoff") < methods.index("session.close")  # asked while open
+
+
+async def test_a_round_ended_for_a_full_context_asks_for_a_handoff_too(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        pressure_scenario(
+            210_000,
+            262_144,
+            then=[
+                {"wait_for": "session.cancel"},
+                {"emit": respond("cancelled", 1)},
+                {"handoff": _DOC},
+                {"close": [ended("cancelled", 1)]},
+                {"eof": []},
+            ],
+        )
+    )
+    outcome = await run(binary, tmp_path, context_limit=0.75, handoff_goal="go on")
+    assert outcome.failure_kind == "context_pressure"
+    assert outcome.handoff == _DOC["document"]
+
+
+async def test_a_finished_round_is_not_asked_for_a_handoff(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake([{"start": True}, {"emit": respond()}, {"close": [ended()]}, {"eof": []}])
+    outcome = await run(binary, tmp_path, handoff_goal="go on")
+    assert outcome.kind == "completed" and outcome.handoff is None
+    assert not any(m.get("method") == "session.handoff" for m in sent(tmp_path))
+
+
+async def test_no_goal_means_no_handoff_is_asked_for(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(
+        [
+            {"start": True},
+            {"emit": respond("max_turns", 1)},
+            {"close": [ended("max_turns", 1)]},
+            {"eof": []},
+        ]
+    )
+    outcome = await run(binary, tmp_path)
+    assert outcome.failure_kind == "max_turns" and outcome.handoff is None
+    assert not any(m.get("method") == "session.handoff" for m in sent(tmp_path))
+
+
+async def test_a_handoff_that_fails_leaves_the_outcome_as_it_was(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(_turn_cap(handoff={"handoff_error": -32603}))
+    outcome = await run(binary, tmp_path, handoff_goal="go on")
+    assert outcome.kind == "failed" and outcome.failure_kind == "max_turns"
+    assert outcome.handoff is None  # the caller falls back to its own summary
+
+
+async def test_a_blank_handoff_is_not_used(
+    fake: Callable[[list[Any]], str], tmp_path: Path
+) -> None:
+    binary = fake(_turn_cap(handoff={"handoff": {"document": "   ", "path": "x"}}))
+    outcome = await run(binary, tmp_path, handoff_goal="go on")
+    assert outcome.handoff is None
