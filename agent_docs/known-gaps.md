@@ -68,8 +68,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   working-directory-inside-the-root check are the only guard, and the text-matching gap named for
   Auto applies to every mode. Codex's `ask`-style user questions (`item/tool/requestUserInput`, behind
   an unfinished feature flag) are not wired: it never receives the tool. A file edit is accepted
-  when every path is inside the root, and declined otherwise; `turn/steer` is not used, so steering
-  is still at the round boundary. The protocol is experimental, written against codex-cli 0.155.1 to
+  when every path is inside the root, and declined otherwise; a steer from the dashboard reaches a running turn
+  at once through `turn/steer` (CUT-92, ADR-0033; seen 2026-10-19: Codex acted on it minutes before its round ended), and
+  waits for the round boundary only when Codex refuses it. The protocol is experimental, written against codex-cli 0.155.1 to
   0.161.0. The unanswered-approval wait on Codex's side was not measured; the round time limit
   (`turn/interrupt`) is the backstop for a stalled turn (openai/codex#21982).
 - **A kopicode `ask` question is live only on kopicode v0.4.0 or later**, and only where a person can
@@ -80,12 +81,14 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Always allow, and the `ask` event shape and the live `ask.request` answer (read from kopicode's source, never seen live). The
   hold past kopicode's default 60 seconds and the answers reaching kopicode were checked live
   (`test_kopicode_serve_needs_you_live.py`, kopicode v0.3.0).
-- **Stop lands when the round ends, not at once.** satay's cancel is delivered between
-  rounds, so a role mid-round keeps working (and editing) until that round finishes, which can
-  take minutes. Since KAN-1896 the dashboard says "Stopping" immediately, a stopped team asks
-  for nothing more (every later Needs-you request is refused), and a role cut off reads
-  "stopped" instead of "blocked". Interrupting a round in flight would need kopicode's own
-  `session.cancel` driven from the daemon, which is not built.
+- **Stop lands when the round ends, not at once, on every backend, Codex included** (CUT-155).
+  satay's cancel is delivered between rounds, so a role mid-round keeps working (and editing) until that round
+  finishes, which can take minutes (seen 2026-10-19 on Codex: about 106 s). Since KAN-1896 the dashboard says
+  "Stopping" immediately, a stopped team asks for nothing more (every later Needs-you request is refused), and a role
+  cut off reads "stopped" instead of "blocked". A round that ends this way is journalled as a normal completion whose
+  summary is the agent's own words (Codex said "Blocked by the workspace execution gate", because we refused
+  everything), so the round's row is not marked as stopped. Interrupting a round in flight would need kopicode's own
+  `session.cancel` or Codex's `turn/interrupt` driven from the daemon, which is not built for a person's Stop.
 - **A pending request does not survive a restart** and is not re-asked: it is journaled as
   abandoned, and a resumed run asks again if it needs to. The window is daemon-wide, not per
   project.
@@ -292,8 +295,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   (`cost_usd` null). The UI wording that said Codex "refuses" a command was wrong and is corrected. Making Codex first-class would need:
   journalling its final message, an external round timeout and kill, a commit path, and resuming its session.
   V4-L (`docs/research/codex-app-server-spike.md`) found `codex app-server` answers each of those. V4-M built the
-  command list, the Needs-you cards, the refusal signal, the round time limit and Stop-by-interrupt on it (the default
-  transport now); still open on Codex: the final message is not journaled, resume of its thread, the turn, token and
+  command list, the Needs-you cards, the refusal signal and the round time limit on it (the default
+  transport now; its interrupt fires on a round time limit, but a person's Stop still waits for the round, see "Stop lands"
+  above: seen 2026-10-19, Stop took about 106 s and Codex kept working meanwhile); still open on Codex: the final message is not journaled, resume of its thread, the turn, token and
   context limits, and the handover.
 
 - **An agent's commands can read its harness's login file, and Claude Code's commands can see its API key** (CUT-78). All three

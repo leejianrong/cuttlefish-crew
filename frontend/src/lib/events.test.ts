@@ -107,6 +107,9 @@ describe("summarize", () => {
     );
     expect(text).toBe("did the thing");
     expect(summarize(event("TeamResumed", { resumed_from_seq: 12 }))).not.toContain("12");
+    // A round in flight at the crash starts again (known-gaps.md); never claim it continued.
+    expect(summarize(event("TeamResumed", {}))).toContain("starts again from its beginning");
+    expect(summarize(event("TeamResumed", {}))).not.toContain("where it left off");
     expect(eventLabel("TeamStopped")).toBe("Stopped");
     expect(summarize(event("TeamStopped", {}))).toContain("You stopped the team");
     expect(eventLabel("StopRequested")).toBe("Stop asked");
