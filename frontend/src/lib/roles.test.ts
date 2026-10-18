@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { awaitingDecision, isFinishing, waitsForYou } from "./roles";
+import { awaitingDecision, isFinishing, reportsUsageAtRoundEnd, waitsForYou } from "./roles";
 
 const done = { kind: "completed", text: "ok" } as const;
 const none = { max_tokens: null, max_cost_usd: null };
@@ -38,5 +38,17 @@ describe("waitsForYou", () => {
     expect(waitsForYou("working", [{ kind: "blocked", role: "builder" }], "builder")).toBe(false);
     expect(waitsForYou("blocked", [ask], "builder")).toBe(false);
     expect(waitsForYou("working", [], "builder")).toBe(false);
+  });
+});
+
+describe("reportsUsageAtRoundEnd", () => {
+  it("is true for the backends that hand tokens back when a round ends", () => {
+    expect(reportsUsageAtRoundEnd("codex")).toBe(true);
+    expect(reportsUsageAtRoundEnd("claude-code")).toBe(true);
+  });
+  it("is false for kopicode and for no backend", () => {
+    expect(reportsUsageAtRoundEnd("kopicode")).toBe(false);
+    expect(reportsUsageAtRoundEnd(null)).toBe(false);
+    expect(reportsUsageAtRoundEnd(undefined)).toBe(false);
   });
 });
