@@ -35,8 +35,39 @@ Prices are US dollars per million tokens, input / output. They move; re-pull the
 | `z-ai/glm-4.7-flash` | 0.061 / 0.400 | 200k | reasoning |
 | `mistralai/devstral-2512` | 0.40 / 2.00 | 262k | coding-tuned, dearer |
 
-kopicode reaches only OpenRouter today (its base URL is a test hook, not a flag), so Ollama or a self-hosted server needs a
-small kopicode change first, and a CPU-sized model is unlikely to be a reliable tool-calling coder.
+kopicode reaches OpenRouter by default; `--provider-url` (kopicode ADR-0027, used here through `CUTTLEFISH_KOPICODE_PROVIDER_URL` and
+`CUTTLEFISH_KOPICODE_MODEL`) points it at any OpenAI-compatible endpoint, so Ollama or a self-hosted server needs no kopicode change. A
+CPU-sized model is unlikely to be a reliable tool-calling coder.
+
+### What was measured, 2026-10-18 (CUT-75, and the first half of CUT-74)
+
+The task: a nine-module Python package (`textkit`), five unittest tests per module (45 in all), one module at a time with a commit after
+each, `max_turns=12` per round so rounds hand over, `--mode auto`, kopicode v0.5.0+14 (`5b8f4af`), run through `cuttlefish run-team`. One
+run per arm, and every arm was cut short when the OpenRouter key's weekly limit ($1.00, resets Monday 00:00 UTC) was reached, so these
+are partial runs, not finished ones. Each arm used the custom-URL path (unpinned), so all three are like for like; none anchors a benchmark.
+
+| Arm | Rounds | Tokens | Cost | Modules committed | Tests on disk |
+| --- | --- | --- | --- | --- | --- |
+| `qwen/qwen3-coder-next` (default), pinned path | 11 | 1.43M | $0.131 | 3 of 9 | 104 (8 failing, 1 error) |
+| `qwen/qwen3-coder-next` through the URL | 8 | 1.09M | $0.101 | 7 of 9 | 139 (6 failing, 1 error) |
+| `deepseek/deepseek-v4.1-flash` ($0.065 / $0.144) | 6 | 0.63M | $0.038 | 9 of 9 | 45 (all passing) |
+
+What it says, and what it does not: on this one task the cheaper model finished the work in about a third of the spend, and followed the
+"five tests, one module at a time, commit each" instruction where the default did not (it wrote far more tests than asked and committed
+late). That is one run per arm and a cap-truncated one, so it is a lead, not a ranking. **Recommendation: use `deepseek/deepseek-v4.1-flash`
+as the cheap kopicode model for cuttlefish rounds, set through the URL path, and repeat the task three times when the key has room.** The
+account's OpenRouter guardrail only allows a few models (see below), and `deepseek/deepseek-v4.1-flash` is on that list.
+
+### This key's guardrail, and its weekly limit
+
+- The account's OpenRouter guardrail (set to stop an expensive model being used by accident) blocks most models. Of 18 tried, these
+  answered: `qwen/qwen3-coder-next`, `deepseek/deepseek-v3.2`, `deepseek/deepseek-v4.1-flash`. Blocked: the pinned summariser
+  `qwen/qwen3-30b-a3b-instruct-2507`, `qwen/qwen3-coder-30b-a3b-instruct`, `deepseek/deepseek-v4-flash`, `openai/gpt-oss-120b`,
+  `minimax/minimax-m2`, `z-ai/glm-5.2` and others. A blocked model is a 404 ("0 endpoints ... matching your guardrail restrictions").
+  With the pinned summariser blocked, a handover silently falls back to carrying the previous summary, so a run against this key must set
+  `CUTTLEFISH_LLM_MODEL` to an allowed model or it tests nothing.
+- The key has a $1.00 weekly limit. A full 16-round run is about $0.13, so two or three runs in one week use it up; the third arm of this
+  session ended on it. A rerun needs the limit raised or the reset.
 
 ## Cheaper without changing the model
 
