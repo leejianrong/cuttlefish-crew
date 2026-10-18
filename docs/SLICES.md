@@ -915,3 +915,30 @@ and the approval slices already shipped (CUT-87, 88, 90, 99) are the first part 
 
 **Open:** whether a session-first path is still a satay workflow (ADR-0001 holds for the paths that use
 the workflow; ADR-0032 leaves this open).
+
+
+## V7: One manager across all projects, and the agent writes the handoff (decided 2026-10-18)
+
+**Why:** Jian wants agents to keep working for days with a person checking in about once a day (`docs/plans/2026-10-18-manager-and-hosted-service.md`).
+Two parts: the agent, not cuttlefish's model, writes the handoff when a session runs out of room (ADR-0042), and one
+cheap-model manager across all projects supervises, reports and talks to the human.
+
+**Cards (board CUT):** epic CUT-E17: CUT-134 (kopicode, done) and CUT-140 (Claude Code, Codex, delete the summariser).
+Epic CUT-E18: CUT-136 soak harness, CUT-150 what a digest may contain, CUT-137 the manager, CUT-151 the $1 a day cap,
+CUT-138 media in updates, CUT-139 voice (deferred).
+
+**Open:** whether handoff quality holds on real tasks (the soak harness decides); what a digest may expose to a
+third-party model.
+
+## V8: A hosted multi-user service on DigitalOcean (decided 2026-10-18, not started)
+
+**Why:** a phone away from home needs an https page and a relay with no Tailscale, and the same service becomes the
+public one. Deploys go only through CI/CD; the service holds accounts and rooms, never project data, model keys or agent
+credentials (ADR-0037, ADR-0041).
+
+**Cards (board CUT):** epic CUT-E19: CUT-142 the tenancy ADR first, then CUT-135 relay serving the page with room
+ownership, CUT-141 the pipeline, CUT-143 Droplet bootstrap, CUT-144 deploy smoke test, CUT-147 limits, CUT-145 sign-in,
+CUT-146 onboarding, CUT-148 terms and deletion, CUT-149 the outside security review. CUT-121 (accounts, push, install) stays
+on epic CUT-E16.
+
+**Open:** a simple sign-in for the single-user phase; approval on every deploy or only at first.
