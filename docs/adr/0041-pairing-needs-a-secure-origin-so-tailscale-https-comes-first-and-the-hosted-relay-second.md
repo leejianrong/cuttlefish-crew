@@ -61,8 +61,16 @@ CUT-128 asked which way to get an https page. Three routes were set out: Tailsca
 | Daemon as its own relay now | Simpler for a self-hoster, but a larger change before the first one has been tried. Kept as the thing to revisit. |
 | A self-signed certificate | The phone would have to trust it by hand, which is the friction this is meant to remove, and some browsers refuse to run WebCrypto features on it. |
 
-## Open
+## Settled by the build (CUT-128, 2026-10-18)
 
-- The exact `tailscale serve` commands and ports, and whether the daemon or `tailscale serve` terminates TLS (`tailscale cert`
-  with the daemon serving https itself avoids the Host-header problem and the serve config change, at the cost of renewal),
-  are for the build to settle against a tailnet with HTTPS on. Not tested yet.
+- **`tailscale serve` terminates TLS**, not the daemon. No certificate code or renewal in cuttlefish.
+- **The Host problem is avoided, not worked around:** with `cuttlefish serve --tailscale-https` the daemon stays on loopback
+  but uses password sessions (`SessionAuth`), which do not check `Host`, and allows `https://<machine>.<tailnet>.ts.net` as
+  an Origin. It refuses to start without `CUTTLEFISH_SERVE_PASSWORD` or on a non-loopback bind. The daemon's port is never
+  moved to a free one in this mode, since the printed `tailscale serve` command names it.
+- **The relay** runs on loopback; the daemon dials `ws://127.0.0.1:<port>` while the pairing link and `/api/relay` carry
+  `wss://<machine>.<tailnet>.ts.net:8443` (`RelaySettings.public_url`).
+- **cuttlefish prints the two `tailscale serve` commands and does not run them.** On this machine they needed `sudo`.
+- Checked in Chromium and Firefox over the real addresses: sign in, make a link, pair, matching codes, confirm, and the
+  paired page loads through the relay. Not checked: a real phone, Safari, Web Push.
+- Still open: whether the daemon should be its own relay endpoint (point 4 above).

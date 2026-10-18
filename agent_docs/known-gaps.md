@@ -217,6 +217,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   own loopback `Host` check (ADR-0014) rejects. None of ADR-0013 has been
   checked against a real, live tailnet in this environment (no `tailscale`
   binary/account available here) — named honestly, not glossed over.
+  (`--tailscale-https`, ADR-0041, is the supported way to put https in front: it keeps the daemon on loopback with
+  password auth, so the Host check is not the guard.)
 - **Environment detection reads the root and the folders directly under it, and runs nothing** (V5-E2, V5-E6b,
   ADR-0029). `frontend/package.json` and `backend/pyproject.toml` are found; `services/api/pyproject.toml` is not
   (two levels), nor anything under a hidden folder, `node_modules`, `vendor`, `target`, `dist`, `build` and the
@@ -336,7 +338,12 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **A phone cannot pair from the plain-http Tailscale dashboard** (found 2026-10-18, ADR-0039). Pairing needs `crypto.subtle`,
   which browsers withhold from a page that is not a secure context, and `http://<tailscale ip>` is not one (checked in Chromium
   and Firefox on a real Tailscale address). Pairing was only ever run from `127.0.0.1`, which is exempt. The page now says
-  so instead of failing obscurely; the direct password sign-in over Tailscale is unaffected. The way through is an https page: the
-  hosted relay (CUT-121) or Tailscale https. Decided 2026-10-18 (ADR-0041): Tailscale https first, the hosted relay second, no
-  JavaScript fallback. Waiting on HTTPS being turned on in the Tailscale admin console, which Jian will do (CUT-128).
+  so instead of failing obscurely; the direct password sign-in over Tailscale is unaffected. The way through is an https page.
+  Decided 2026-10-18 (ADR-0041): Tailscale https first, the hosted relay second (CUT-121), no JavaScript fallback.
+  **Built (CUT-128): `cuttlefish serve --tailscale-https`**, with the page and the relay each behind `tailscale serve`, proven
+  in Chromium and Firefox against real `https://<machine>.<tailnet>.ts.net` and `wss://…:8443` addresses. Not run: a real
+  phone, Safari or WebKit (no system libraries here), Web Push. cuttlefish prints the `tailscale serve` commands and never
+  runs them; they need root or `tailscale set --operator`. The machine and tailnet names go into public certificate logs.
+  A daemon behind `tailscale serve` needs `CUTTLEFISH_SERVE_PASSWORD` and an exact port (never moved). The dashboard's
+  sign-in screen still asks for a Base URL even when served from the daemon's own https address; not changed here.
 

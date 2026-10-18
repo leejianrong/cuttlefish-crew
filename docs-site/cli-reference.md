@@ -134,6 +134,7 @@ Sessions do not survive a restart: the dashboard asks you to sign in again and c
 |---|---|
 | `--host HOST` | Loopback by default. A non-loopback host (LAN IP, Tailscale address, `0.0.0.0`) requires `CUTTLEFISH_SERVE_PASSWORD` and switches to password/session auth. |
 | `--port PORT` | Auto-picks a free port if the default is taken. |
+| `--tailscale-https` | Keep the daemon on loopback and print the two `tailscale serve` commands that give the dashboard an https address and the relay a `wss` address, so a phone can pair (see [Pairing over Tailscale https](#pairing-over-tailscale-https)). Needs `CUTTLEFISH_SERVE_PASSWORD`. Turns the relay on. Cannot be combined with `--tailscale`. |
 | `--tailscale` | Bind directly to this machine's own Tailscale IPv4 address — the recommended remote-access path. Overrides `--host`. |
 | `--relay URL` | Also dial out to a relay (`ws://host:port`, run by `cuttlefish relay`) and print a link that opens the dashboard through it, end-to-end encrypted. Preview, loopback only: see [the relay](#cuttlefish-relay). Default: `$CUTTLEFISH_RELAY_URL`. |
 | `--allow-origin ORIGIN` | A browser origin the dashboard may be served from in non-loopback mode. Repeatable. |
@@ -163,8 +164,26 @@ code that work once and expire after five minutes. Open the link on the device, 
 uses the browser's WebCrypto, which browsers switch off on plain http, so a plain-http address such as
 `http://100.x.y.z:8431` (a Tailscale address) **cannot pair**: the page says so. Checked in Chromium and Firefox on a real
 Tailscale address. A phone on Tailscale can still sign in with the password over that address, as before. Pairing from a
-phone needs an https page (the hosted relay will serve one), or Tailscale's own https addresses once the daemon supports
-them. On the PC itself, `http://localhost` works, which is how the pairing was tested.
+phone needs an https page: Tailscale's own https addresses ([below](#pairing-over-tailscale-https)), or the hosted relay
+when it exists. On the PC itself, `http://localhost` works.
+
+#### Pairing over Tailscale https
+
+1. In the Tailscale admin console, under DNS, turn on **HTTPS Certificates**. This publishes the machine's name, and so
+   your tailnet's name, in public certificate transparency logs.
+2. Start `CUTTLEFISH_SERVE_PASSWORD=… cuttlefish serve --tailscale-https`. It reads the machine's name from
+   `tailscale status --json` (and says what to do if HTTPS is off), keeps the daemon on `127.0.0.1`, turns the relay on and
+   prints the commands below. It does not run them, because `tailscale serve` changes this machine's Tailscale serve
+   configuration.
+3. Run `cuttlefish relay` (it stays on loopback), then `tailscale serve --bg --https=443 http://127.0.0.1:8431` and
+   `tailscale serve --bg --https=8443 http://127.0.0.1:<relay port>`. Tailscale needs root for this, or `sudo tailscale set
+   --operator=$USER` once. `tailscale serve reset` undoes it.
+4. Open `https://<machine>.<tailnet>.ts.net/` on the PC, sign in, and make a pairing link. The link carries the https page
+   and a `wss://<machine>.<tailnet>.ts.net:8443` relay address. The phone needs the Tailscale app on the same tailnet.
+
+The dashboard's port is the one you asked for: with `--tailscale-https` it is never moved to a free one, because the
+`tailscale serve` command names it. Checked in Chromium and Firefox through real `tailscale serve` addresses (pair, match the
+codes, confirm, use the dashboard through the relay). Not yet checked on a real phone or in Safari.
 
 When the device taps Pair, it and the PC both show the same six-digit code. **Confirm on the PC only if they match.**
 Until you do, the device can reach nothing. After that the phone keeps its own key and

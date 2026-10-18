@@ -106,6 +106,11 @@ here) or pointing `tailscale serve` at nothing at all and using Shape A's own
 plain-HTTP tailnet address directly instead, which is this ADR's own
 recommendation.
 
+**Update, ADR-0041 (CUT-128):** `cuttlefish serve --tailscale-https` does put `tailscale serve` in front, and works with
+the Host check because it does not use the loopback guard: the daemon stays on loopback but uses password sessions, which
+ignore `Host`, and allows exactly `https://<machine>.<tailnet>.ts.net` as an Origin. The recommendation above stands for
+plain access; this is the route for pairing a phone.
+
 ## Alternatives considered
 
 | Option | Why not |
