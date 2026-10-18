@@ -240,3 +240,12 @@ each call's cost (`usage.include`), which is journaled on `LlmCallCompleted.cost
 estimated. Not yet seen against the live API (the key's weekly limit): the first real handover will show whether the slug and the
 `reasoning` and `usage` request fields are accepted. If a call fails the handover falls back to the previous summary.
 
+## Update: a partial rerun against this code (CUT-74, 2026-10-18)
+
+Three partial runs (kopicode v0.5.0+14, a nine-module task, 12 turns a round) were cut off by the OpenRouter key's weekly limit
+at 11, 8 and 6 rounds. Across the 25 handovers written (10, 7 and 5): none was empty, none narrated, all carried the Done, Remaining, Failed and
+Open questions headings, and each ended with a repository block read from git. A stale claim to watch for did not appear in the one summary
+read in full (the sixth-round one, which wrote "unconfirmed" where a test result was not in the log). Every summariser call was journaled with its
+cost (about $0.0004 to $0.0008 each). The summariser here was `qwen/qwen3-coder-next`, because the pinned `qwen/qwen3-30b-a3b-instruct-2507` is blocked
+by the account's guardrail (`agent_docs/model-costs.md`). Not seen: rounds 12 to 16, the no-edit loop, whether the token totals equal kopicode's
+`usage.total`, and the pinned summariser. CUT-74 stays open for a full run once the key has room and the pinned model is allowed.
