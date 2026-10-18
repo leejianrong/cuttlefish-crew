@@ -73,8 +73,9 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   cuttlefish** (standard library and `cryptography` in Python, `@noble/curves` in the browser). They
   are meant to be lifted into their own repository later. Tests enforce it, and a device is trusted
   only after its first transport message decrypts, and a device the owner has not confirmed on the PC is served nothing. Every
-  route needs a tier in `fleet/tiers.py` (a test fails if one is missing; unlisted means Admin). `cuttlefish.relay.server` and `.connector` may use web libraries but
-  import nothing else from cuttlefish: the relay holds no project data, and the connector is handed an ASGI app. ADR-0037.
+  route needs a tier in `fleet/tiers.py` (a test fails if one is missing; unlisted means Admin). `cuttlefish.relay.server`, `.accounts`, `.limits` and `.connector` may use web libraries
+  but import nothing else from cuttlefish: the relay holds no project data, and the connector is handed an ASGI app. ADR-0037, ADR-0043.
+  A relay without `--db` is open and refuses a non-loopback address; the hosted image always passes `--db`.
 - **With `CUTTLEFISH_CREDENTIAL_BROKER=1` an agent never holds its model key.**
   The daemon's broker keeps it and leases a short-lived token; the real key is
   removed from the secrets handed to the backend, and the lease is revoked in a

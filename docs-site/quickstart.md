@@ -194,7 +194,8 @@ this encryption on a plain-http address, so a Tailscale `http://100.x.y.z` addre
 (see the [CLI reference](cli-reference.md#cuttlefish-relay)); to pair a phone over Tailscale, use
 [`--tailscale-https`](cli-reference.md#pairing-over-tailscale-https). Both screens show a six-digit code; confirm on the PC if they match. A new device
 may read, answer Needs you, steer, start and stop; you give it the terminal or admin rights under Devices. Details and
-limits are in the [CLI reference](cli-reference.md#cuttlefish-relay).
+limits are in the [CLI reference](cli-reference.md#cuttlefish-relay). The hosted, multi-user relay (accounts, rooms, the page
+served from its own address) is described there too.
 
 See [CLI reference](cli-reference.md) for every command and flag, and
 [Architecture](architecture.md) for how the pieces fit together.

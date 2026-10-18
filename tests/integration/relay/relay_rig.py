@@ -43,7 +43,14 @@ class Server:
     def __init__(self, app: ASGIApp, port: int | None = None) -> None:
         self.port = port or free_port()
         self._server = uvicorn.Server(
-            uvicorn.Config(app, host="127.0.0.1", port=self.port, log_level="warning")
+            uvicorn.Config(
+                app,
+                host="127.0.0.1",
+                port=self.port,
+                log_level="warning",
+                # As `run_relay` does: the relay reads the proxy's address itself, when told to.
+                proxy_headers=False,
+            )
         )
         self._task: asyncio.Task[None] | None = None
 

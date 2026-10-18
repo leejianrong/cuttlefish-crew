@@ -879,6 +879,21 @@ async def _serve(args: argparse.Namespace) -> int:
                 print(f"cuttlefish serve: {exc}", file=sys.stderr)
                 return EXIT_TASK_FAILED
         relay_url = args.relay
+        relay_room = args.relay_room
+        relay_token = os.environ.get(RELAY_TOKEN_ENV) or None
+        if bool(relay_room) != bool(relay_token):
+            print(
+                f"cuttlefish serve: a hosted relay needs both --relay-room (${RELAY_ROOM_ENV}) "
+                f"and ${RELAY_TOKEN_ENV}; make them with `cuttlefish relay-admin create-room`",
+                file=sys.stderr,
+            )
+            return EXIT_CONFIG_ERROR
+        if relay_room and not (relay_url or tailnet_name):
+            print(
+                "cuttlefish serve: --relay-room needs --relay wss://<your relay> to dial",
+                file=sys.stderr,
+            )
+            return EXIT_CONFIG_ERROR
         if tailnet_name is not None:
             relay_url = relay_url or f"ws://127.0.0.1:{DEFAULT_RELAY_PORT}"
             local_relay_port = urlsplit(relay_url).port or DEFAULT_RELAY_PORT
@@ -891,7 +906,9 @@ async def _serve(args: argparse.Namespace) -> int:
                 public_url=(
                     f"wss://{tailnet_name}:{TAILSCALE_RELAY_PORT}" if tailnet_name else None
                 ),
-                page_url=f"https://{tailnet_name}" if tailnet_name else None,
+                page_url=_relay_page_url(relay_url, tailnet_name, relay_room),
+                room=relay_room,
+                token=relay_token,
             )
         try:
             await run_daemon(
@@ -922,22 +939,103 @@ MCP_BASE_URL_ENV = "CUTTLEFISH_MCP_BASE_URL"
 MCP_TOKEN_ENV = "CUTTLEFISH_MCP_TOKEN"
 
 
+RELAY_DB_ENV = "CUTTLEFISH_RELAY_DB"
+RELAY_OWNER_SECRET_ENV = "CUTTLEFISH_RELAY_OWNER_SECRET"
+RELAY_ROOM_ENV = "CUTTLEFISH_RELAY_ROOM"
+RELAY_TOKEN_ENV = "CUTTLEFISH_RELAY_TOKEN"
+
+
 def _relay(args: argparse.Namespace) -> int:
-    """Run the relay (ADR-0037, CUT-119). Loopback unless told otherwise; it has no accounts yet,
-    so it must not be put on a public address."""
+    """Run the relay (ADR-0037, ADR-0043). With `--db` it is the hosted, multi-user service: rooms
+    belong to accounts and a daemon needs its room's token. Without it the relay is open (no
+    accounts, a room is claimed by connecting first), which is only for loopback and a tailnet."""
+    from cuttlefish.relay.accounts import AccountError, AccountStore
     from cuttlefish.relay.server import run_relay
 
-    if not satay.control.is_loopback_host(args.host):
+    store: AccountStore | None = None
+    if args.db:
+        secret = os.environ.get(RELAY_OWNER_SECRET_ENV, "")
+        try:
+            store = AccountStore.open(args.db)
+            store.ensure_owner(secret)
+        except AccountError as exc:
+            print(f"cuttlefish relay: {RELAY_OWNER_SECRET_ENV}: {exc}", file=sys.stderr)
+            return EXIT_CONFIG_ERROR
+    elif not satay.control.is_loopback_host(args.host):
         print(
-            "cuttlefish relay: warning: this relay has no accounts, and anyone who can reach it "
-            "can claim a room. Keep it on loopback or a private network.",
+            "cuttlefish relay: without --db this relay has no accounts, and anyone who can "
+            "reach it could claim a room, so it only runs on loopback. Pass --db to host it.",
             file=sys.stderr,
         )
-    print(f"cuttlefish relay: ws://{args.host}:{args.port}", flush=True)
+        return EXIT_CONFIG_ERROR
+    pages = Path(args.pages) if args.pages else None
+    if pages is not None and not (pages / "index.html").exists():
+        print(
+            f"cuttlefish relay: {pages} has no index.html (run `make frontend-build`)",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+    mode = "hosted, accounts on" if store else "open, no accounts"
+    print(f"cuttlefish relay: ws://{args.host}:{args.port} ({mode})", flush=True)
     try:
-        asyncio.run(run_relay(args.host, args.port))
+        asyncio.run(
+            run_relay(
+                args.host,
+                args.port,
+                store=store,
+                pages_dir=pages,
+                trust_forwarded=args.trust_forwarded,
+                secure_cookies=not args.insecure_cookies,
+            )
+        )
     except KeyboardInterrupt:
         print("\ncuttlefish relay: stopped", flush=True)
+    finally:
+        if store is not None:
+            store.close()
+    return EXIT_OK
+
+
+def _relay_page_url(relay_url: str, tailnet_name: str | None, relay_room: str | None) -> str | None:
+    """Where a phone opens the dashboard: behind `tailscale serve` the daemon's own https name,
+    and on a hosted relay the relay itself, which serves the page from the same origin."""
+    if tailnet_name:
+        return f"https://{tailnet_name}"
+    if relay_room:
+        parts = urlsplit(relay_url)
+        scheme = "https" if parts.scheme == "wss" else "http"
+        return f"{scheme}://{parts.netloc}"
+    return None
+
+
+def _relay_admin(args: argparse.Namespace) -> int:
+    """Operator commands on a hosted relay's own database (ADR-0043). Run on the machine that
+    holds it; there is no admin web page."""
+    from cuttlefish.relay.accounts import AccountError, AccountStore
+
+    store = AccountStore.open(args.db)
+    try:
+        owner = store.owner()
+        if owner is None:
+            print(
+                "cuttlefish relay-admin: no owner yet; start `cuttlefish relay --db` once with "
+                f"{RELAY_OWNER_SECRET_ENV} set",
+                file=sys.stderr,
+            )
+            return EXIT_CONFIG_ERROR
+        try:
+            room, token = store.create_room(owner.id, args.label)
+        except AccountError as exc:
+            print(f"cuttlefish relay-admin: {exc}", file=sys.stderr)
+            return EXIT_CONFIG_ERROR
+        print(f"room:  {room.id}")
+        print(f"token: {token}")
+        print(
+            "\nThe token is shown once. On the PC, set "
+            f"{RELAY_ROOM_ENV} and {RELAY_TOKEN_ENV} and run `cuttlefish serve --relay wss://<host>`."
+        )
+    finally:
+        store.close()
     return EXIT_OK
 
 
@@ -1435,6 +1533,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     serve_parser.add_argument(
+        "--relay-room",
+        default=os.environ.get(RELAY_ROOM_ENV),
+        metavar="ID",
+        help=(
+            "The room id a hosted relay gave this PC (`cuttlefish relay-admin create-room`). Its "
+            f"registration token is read from ${RELAY_TOKEN_ENV}, never from the command line. "
+            f"Default: ${RELAY_ROOM_ENV}."
+        ),
+    )
+    serve_parser.add_argument(
         "--allow-origin",
         action="append",
         metavar="ORIGIN",
@@ -1475,6 +1583,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     relay_parser.add_argument("--host", default="127.0.0.1")
     relay_parser.add_argument("--port", type=int, default=DEFAULT_RELAY_PORT)
+    relay_parser.add_argument(
+        "--db",
+        default=os.environ.get(RELAY_DB_ENV),
+        metavar="PATH",
+        help=(
+            "Run the hosted, multi-user relay with its accounts in this SQLite file (ADR-0043). "
+            f"The owner's sign-in secret comes from ${RELAY_OWNER_SECRET_ENV} (32+ characters). "
+            f"Default: ${RELAY_DB_ENV}. Without it the relay is open and loopback-only."
+        ),
+    )
+    relay_parser.add_argument(
+        "--pages",
+        metavar="DIR",
+        help="Also serve this dashboard build (frontend/dist) from the relay's own origin.",
+    )
+    relay_parser.add_argument(
+        "--trust-forwarded",
+        action="store_true",
+        help=(
+            "Count a request against the last X-Forwarded-For address. Only behind a proxy that "
+            "sets it, and only when nothing else can reach the relay's port."
+        ),
+    )
+    relay_parser.add_argument(
+        "--insecure-cookies",
+        action="store_true",
+        help="Do not mark the session cookie Secure. For http on loopback only, never hosted.",
+    )
+
+    relay_admin_parser = subparsers.add_parser(
+        "relay-admin",
+        help="Operator commands on a hosted relay's database (create a room and its token)",
+    )
+    relay_admin_parser.add_argument("action", choices=["create-room"])
+    relay_admin_parser.add_argument(
+        "--db", default=os.environ.get(RELAY_DB_ENV), required=not os.environ.get(RELAY_DB_ENV)
+    )
+    relay_admin_parser.add_argument("--label", required=True, help="e.g. 'Work PC'")
 
     mcp_parser = subparsers.add_parser(
         "mcp",
@@ -1559,6 +1705,8 @@ def main(argv: list[str] | None = None) -> int:
         return _run_serve(args)
     if args.command == "relay":
         return _relay(args)
+    if args.command == "relay-admin":
+        return _relay_admin(args)
     if args.command == "mcp":
         return _mcp(args)
     return _show(args)

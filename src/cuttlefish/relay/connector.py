@@ -58,6 +58,7 @@ from cuttlefish.relay.protocol.envelope import (
     CLIENT_CLOSE,
     CLIENT_OPEN,
     CLOSE_CLIENT,
+    CLOSE_UNAUTHORISED,
     EnvelopeError,
     control,
     parse_control,
@@ -134,14 +135,19 @@ def load_or_create_daemon_key(path: Path) -> X25519PrivateKey:
     return key
 
 
-def pairing_payload(relay_url: str, daemon_key: X25519PrivateKey, pairing_secret: bytes) -> str:
+def pairing_payload(
+    relay_url: str,
+    daemon_key: X25519PrivateKey,
+    pairing_secret: bytes,
+    room: str | None = None,
+) -> str:
     """What a browser needs to pair with this daemon through the relay, as one base64url string for
     a URL fragment (a fragment never reaches a server's logs). The secret in it works once."""
     public = public_bytes(daemon_key)
     body = {
         "v": 2,
         "relay": relay_url,
-        "room": room_id_for(public),
+        "room": room or room_id_for(public),
         "daemon": b64u(public),
         "pairing": b64u(pairing_secret),
     }
@@ -452,6 +458,17 @@ class _Session:
             )
 
 
+def _explain(exc: Exception) -> str:
+    """The relay closes a refused daemon with 4401; say what that means rather than a bare code."""
+    closed = getattr(exc, "rcvd", None)
+    if getattr(closed, "code", None) == CLOSE_UNAUTHORISED:
+        return (
+            "the relay did not accept this room's registration token "
+            "(check CUTTLEFISH_RELAY_ROOM and CUTTLEFISH_RELAY_TOKEN)"
+        )
+    return str(exc)
+
+
 def _json_head(payload: bytes) -> dict[str, Any]:
     try:
         head = json.loads(payload)
@@ -560,6 +577,8 @@ class RelayConnector:
         static: X25519PrivateKey,
         authority: Authority,
         internal_token: str | None = None,
+        room: str | None = None,
+        token: str | None = None,
         reconnect_delays: tuple[float, ...] = (0.5, 1.0, 2.0, 5.0, 10.0),
     ) -> None:
         self.app = app
@@ -567,7 +586,10 @@ class RelayConnector:
         self.authority = authority
         self.internal_token = internal_token or secrets.token_urlsafe(32)
         self._relay_url = relay_url.rstrip("/")
-        self.room = room_id_for(public_bytes(static))
+        # A hosted relay gives a room an id and a registration token (ADR-0043); an open one takes
+        # a name derived from the daemon's key.
+        self.room = room or room_id_for(public_bytes(static))
+        self._token = token
         self._delays = reconnect_delays
         self._socket: Any = None
         self._sessions: dict[int, _Session] = {}
@@ -597,6 +619,9 @@ class RelayConnector:
             try:
                 async with websockets.connect(
                     f"{self._relay_url}/ws/daemon/{self.room}",
+                    additional_headers=(
+                        {"Authorization": f"Bearer {self._token}"} if self._token else None
+                    ),
                     max_size=MAX_MESSAGE_LEN + 8,
                     ping_interval=20,
                 ) as socket:
@@ -608,7 +633,7 @@ class RelayConnector:
             except asyncio.CancelledError:
                 raise
             except (OSError, websockets.WebSocketException) as exc:
-                _LOG.warning("relay connection failed: %s", exc)
+                _LOG.warning("relay connection failed: %s", _explain(exc))
             finally:
                 self._socket = None
                 self.connected.clear()

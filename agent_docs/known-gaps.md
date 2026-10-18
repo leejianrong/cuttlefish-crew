@@ -322,8 +322,16 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   no launch flag we checked, so it must be asked. HTML, charts and rendered block types are CUT-114 and CUT-115. A
   file is shown only if the daemon can read it from `<root>/.cuttlefish/artifacts/`, so a project run in a sandbox
   provider's own checkout shows nothing there.
-- **The relay is a preview** (CUT-119, CUT-120, ADR-0037, ADR-0039). No accounts: anyone who can reach it can claim a
-  room, so it must stay on loopback or a private network. The page is still served by the daemon, not the relay. There is
+- **The hosted relay has one account and is not open to the public** (CUT-135, ADR-0043). Only the `owner` account exists
+  (GitHub and Google sign-in are CUT-145). The Caddy password in front of it is shared and has no rate limit of its own
+  beyond Caddy's. Limits are per address and in memory, so a restart forgets them and a distributed flood is not stopped.
+  Usage is counted but nothing refuses at a byte cap yet, and there is no abuse switch or account deletion (CUT-147,
+  CUT-148). A visitor with the gate password but no pairing link sees the dashboard's connect screen, which asks for a
+  daemon address that the relay does not answer; onboarding (CUT-146) replaces it. The relay is one process with rooms in
+  memory, so it is one instance. The deploy path and the Droplet are untested (CUT-141, CUT-143). Never run an open relay
+  (no `--db`) on a public address: the CLI refuses it.
+- **The relay path is a preview** (CUT-119, CUT-120, ADR-0037, ADR-0039). An open relay (no `--db`) has no accounts: anyone who
+  can reach it can claim a room, so it must stay on loopback or a private network. There is
   no WebAuthn step-up for Terminal and Admin (it needs an https origin, CUT-121); they are simply off until the owner turns
   them on. A stolen unlocked Approve phone can answer Needs you and start or stop teams, and can remove the owner's other
   devices (revoking needs only Approve so a lost phone can be cut off from another), until the owner removes it. A wrong or

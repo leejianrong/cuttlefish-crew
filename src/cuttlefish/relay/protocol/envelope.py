@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 import struct
 
+#: The websocket close code a hosted relay answers a daemon with when its token is not accepted.
+CLOSE_UNAUTHORISED = 4401
 CLIENT_ID_LEN = 4
 MAX_CLIENT_ID = 2**32 - 1
 
