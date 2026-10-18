@@ -1117,6 +1117,12 @@ class FleetDaemon:
         payloads = [event.payload for event in events]
         return {name: cumulative_usage(payloads, role=name) for name in names}
 
+    def last_event_at(self, project_id: str) -> str | None:
+        """When `project_id`'s last team's journal last changed (ISO 8601), for the portfolio
+        card's "active 12 s ago"; `None` before a team has ever run."""
+        events = self._last_team_events(self._projects.get(project_id))
+        return events[-1].ts.isoformat() if events else None
+
     def events(self, project_id: str) -> list[EpisodicEvent]:
         """`project_id`'s last team's full episodic record, in order -- the same
         journal `cuttlefish show` reads, for the dashboard's own event-tail view."""

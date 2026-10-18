@@ -259,3 +259,9 @@ and this folder disagree after a slice lands, update this folder.
   ("only allows pairing from an https address"). A page opened from a pairing link at an address with no WebCrypto shows that
   explanation instead of the Pair screen, with the Connect screen's password sign-in still there. Neutral text, no coral.
 
+- **Portfolio card says what is going on (2026-10-19, CUT-156).** Each project card shows one state word per role (it printed it
+  twice), a "N waiting for you" pill when requests of that project are open (from the same list the Needs-you badge polls; a failure
+  there never hides the projects), and a line "Active 12 s ago · 1,083,519 tokens" (or "Last active …" when nothing is running). The
+  time comes from `last_event_at` on the project summary, the last event of the last team's journal; the tokens are the sum of the
+  roles' reported usage, so a Codex project shows none until a round ends (CUT-157 words that on the role card). No task text: the
+  journal's task event begins with the role's own prompt.

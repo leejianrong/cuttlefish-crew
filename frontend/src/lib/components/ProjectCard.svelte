@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ProjectSummary, RoleStatus } from "../api";
+  import { agoIso } from "../artifacts";
   import RoleSprite from "./RoleSprite.svelte";
 
   let {
@@ -7,8 +8,11 @@
     onOpen,
     onStop,
     onRemove,
+    waiting = 0,
   }: {
     project: ProjectSummary;
+    /** Requests of this project waiting for a person (the Needs-you list). */
+    waiting?: number;
     onOpen: () => void;
     onStop: () => void;
     onRemove: () => void;
@@ -21,6 +25,15 @@
   const statusWord = (status: RoleStatus): string =>
     status === "queued" && !project.running && hasRun ? "not run" : status;
   let confirming = $state<"stop" | "remove" | null>(null);
+
+  // The card's one line of "what is going on", from what the summary already carries.
+  const tokens = $derived(Object.values(project.usage ?? {}).reduce((sum, u) => sum + u.tokens, 0));
+  let now = $state(Date.now() / 1000);
+  $effect(() => {
+    const tick = setInterval(() => (now = Date.now() / 1000), 5000);
+    return () => clearInterval(tick);
+  });
+  const active = $derived(agoIso(project.last_event_at, now));
 </script>
 
 <article class="card filled project">
@@ -32,19 +45,30 @@
   </header>
   <p class="root mono">{project.root}</p>
 
+  {#if waiting > 0}
+    <p class="waiting body-small" role="status">{waiting} waiting for you</p>
+  {/if}
+
   {#if roleEntries.length > 0}
     <div class="roles">
       {#each roleEntries as [role, status] (role)}
         <div class="role-row">
           <RoleSprite {status} size={2.5} label={statusWord(status)} />
           <span class="role-name">{role}</span>
-          <span class="role-status">{status === "queued" && !project.running && hasRun ? "not run" : status}</span>
           <span class="role-status">{statusWord(status)}</span>
         </div>
       {/each}
     </div>
   {:else}
     <p class="empty">no roles registered yet</p>
+  {/if}
+
+  {#if active || tokens > 0}
+    <p class="facts body-small">
+      {#if active}{project.running ? "Active" : "Last active"} {active}{/if}
+      {#if active && tokens > 0} &middot; {/if}
+      {#if tokens > 0}{tokens.toLocaleString("en-GB")} tokens{/if}
+    </p>
   {/if}
 
   <footer>
@@ -150,9 +174,19 @@
     color: var(--text-faint);
   }
 
-  .role-status {
-    font-size: 0.68rem;
-    color: var(--text-faint);
+  .waiting {
+    align-self: flex-start;
+    margin: 0;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: var(--status-blocked-bg);
+    color: var(--status-blocked-fg);
+    font-weight: 600;
+  }
+
+  .facts {
+    margin: 0;
+    color: var(--text-muted);
   }
 
   .empty {

@@ -15,6 +15,7 @@
   } = $props();
 
   let projects = $state<ProjectSummary[]>([]);
+  let waitingBy = $state<Record<string, number>>({});
   let loaded = $state(false);
   let unreachable = $state(false);
 
@@ -22,10 +23,24 @@
     try {
       const result = await client.listProjects();
       projects = keepIfSame(projects, result.projects);
+      waitingBy = await waitingCounts();
       unreachable = false;
       loaded = true;
     } catch {
       unreachable = true;
+    }
+  }
+
+  /** How many requests each project has waiting; a failure here must not hide the projects. */
+  async function waitingCounts(): Promise<Record<string, number>> {
+    try {
+      const counts: Record<string, number> = {};
+      for (const request of (await client.listRequests()).requests) {
+        counts[request.project_id] = (counts[request.project_id] ?? 0) + 1;
+      }
+      return counts;
+    } catch {
+      return waitingBy;
     }
   }
 
@@ -80,6 +95,7 @@
     {#each projects as project (project.id)}
       <ProjectCard
         {project}
+        waiting={waitingBy[project.id] ?? 0}
         onOpen={() => onOpenProject(project.id)}
         onStop={() => stop(project.id)}
         onRemove={() => remove(project.id)}
