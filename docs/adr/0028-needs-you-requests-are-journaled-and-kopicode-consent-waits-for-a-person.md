@@ -364,4 +364,8 @@ checked against kopicode's source rather than a live run.
   the project, and anything outside it is refused anyway.
   The rule `command -v` (and `-V`) is exempt from the wrapper check: it only asks the shell where a program is, and the first
   CUT-158 change refused it by mistake (found setting up the third dogfood run).
+- **Update 2026-10-19 (CUT-163): a launcher verb is judged by what it launches.** The third dogfood run was offered
+  `['uv','run','python']`, any script through `uv run`. `_too_broad` now looks past `uv run`, `uv tool`, `npm exec`, `pnpm dlx`
+  and the like at the words after them: `uv run pytest` is a rule, `uv run python` (and `env A=1 uv run python3`) is not.
+  A line like `uv run python -m tally` therefore gets no Always allow suggestion; Allow once is the answer.
 

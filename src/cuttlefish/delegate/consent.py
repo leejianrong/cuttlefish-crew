@@ -202,7 +202,10 @@ def _too_broad(words: Sequence[str]) -> bool:
         return True
     if name in _SCRIPT_RUNNERS or (len(words) == 1 and name in _NEEDS_SUBCOMMAND):
         return True
-    return len(words) == 2 and (name, words[1]) in _LAUNCHER_VERBS
+    if len(words) >= 2 and (name, words[1]) in _LAUNCHER_VERBS:
+        # `uv run` alone runs anything, `uv run python` any script, `uv run pytest` only pytest.
+        return len(words) == 2 or _too_broad(words[2:])
+    return False
 
 
 def _plain_words(line: str) -> list[str] | None:
