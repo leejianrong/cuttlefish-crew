@@ -54,6 +54,7 @@ from cuttlefish.episodic.events import (
     TeamStopped,
 )
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
+from cuttlefish.fleet import gitexclude
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
@@ -683,6 +684,7 @@ class FleetDaemon:
                 f"this project's roles are: {', '.join(known)}"
             )
 
+        await asyncio.to_thread(gitexclude.ensure_excluded, project.root)
         spec = await asyncio.to_thread(environment.detect, project.root)
         steps = await self._environment_steps(project, prepare, spec)
         env_note = environment.brief(spec, installing={step.ecosystem for step in steps})

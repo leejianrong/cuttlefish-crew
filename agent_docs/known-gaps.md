@@ -368,3 +368,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   open the terminal. So a phone check that signs in with the password first does not exercise tiers or revocation of the paired
   path; use a browser with no password session. Accepted for now: ending a particular password session would need a session list,
   which does not exist. A lost phone that ever signed in with the password needs the password changed and the daemon restarted.
+
+- **cuttlefish keeps its own folders out of a project's git status only for a team the daemon starts, in a plain `.git`
+  directory** (CUT-159). `fleet/gitexclude.py` adds `.cuttlefish/` and `.satay/` to `.git/info/exclude` when a team starts.
+  `cuttlefish run` and `run-team` do not (add them to your own `.gitignore`), a linked worktree or submodule (`.git` is a file)
+  is skipped, and a file the agent already committed from there stays tracked: excluding does not untrack.
+

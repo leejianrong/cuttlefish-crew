@@ -182,7 +182,8 @@ uv run cuttlefish show <task-id>          # the id `run` prints
 ```
 
 State is written to `.cuttlefish/` and `.satay/` in the directory you run from
-(both are in this repo's `.gitignore`; add them to yours). Not sure your setup is
+(both are in this repo's `.gitignore`; add them to yours. A team the dashboard starts
+adds them to the project's `.git/info/exclude` itself, so they stay out of its `git status`). Not sure your setup is
 right? `uv run cuttlefish init` checks the agent CLI and its login, registers the
 repo as a project, and prints the next command.
 
