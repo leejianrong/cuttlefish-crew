@@ -182,11 +182,17 @@ def _unwrapped(words: Sequence[str]) -> Sequence[str]:
     return rest
 
 
+def _is_lookup_rule(words: Sequence[str]) -> bool:
+    """``command -v`` / ``command -V``: asks the shell where a program is and runs nothing, so the
+    rule is as narrow as it looks even though ``command`` is a wrapper."""
+    return list(words) in (["command", "-v"], ["command", "-V"])
+
+
 def _too_broad(words: Sequence[str]) -> bool:
     """Whether a rule would approve any script: judged on the program's name, so
     ``/usr/bin/python3`` is ``python3``, and through a wrapper, so ``env A=1 uv`` is ``uv``."""
     name = Path(words[0]).name
-    if name in WRAPPER_PROGRAMS:
+    if name in WRAPPER_PROGRAMS and not _is_lookup_rule(words):
         rest = _unwrapped(words)
         if not rest or _too_broad(rest):
             return True
