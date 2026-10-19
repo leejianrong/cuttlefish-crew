@@ -356,3 +356,10 @@ checked against kopicode's source rather than a live run.
   program's name (so a path does not hide `python3`), refuses `uv run`/`uv tool`/`npm exec`/`pnpm dlx`/`yarn exec`
   on their own, a bare `git`, `uvx` or `pnpx`, and `sed`/`awk` in any form (their argument is a script). A line
   that starts with an assignment gets no suggestion. It applies to new rules only; rules already saved keep working.
+- **Update 2026-10-19 (CUT-158): wrappers and mutators.** The second dogfood run was offered
+  `['env','UV_CACHE_DIR=...','uv']` and `['rm']`. `_too_broad` now looks through a wrapper (`env`, `nohup`,
+  `timeout`, `xargs`, ... from `never_allowed.WRAPPER_PROGRAMS`) past its flags, assignments and duration, and refuses
+  the rule when nothing is left or what is left is itself too broad; and a bare `rm`, `mv`, `cp`, `chmod`, `chown`,
+  `ln`, `dd`, `kill`, `tee` or `shred` is refused. `mkdir` and `touch` stay allowed bare: they only add paths inside
+  the project, and anything outside it is refused anyway.
+

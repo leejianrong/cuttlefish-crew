@@ -26,7 +26,11 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
-from cuttlefish.delegate.never_allowed import never_allowed_reason, unsafe_flag
+from cuttlefish.delegate.never_allowed import (
+    WRAPPER_PROGRAMS,
+    never_allowed_reason,
+    unsafe_flag,
+)
 
 Answer = Literal["allow", "deny"]
 
@@ -165,10 +169,29 @@ _SCRIPT_RUNNERS = frozenset({"sed", "awk", "gawk", "mawk"})
 _NEEDS_SUBCOMMAND = frozenset({"git", "uvx", "pnpx"})
 
 
+#: Programs that change or delete what they are given. A bare rule for one would cover every use of
+#: it inside the project (``rm -r src``), so "Always allow" names what it may do or asks each time.
+_MUTATORS = frozenset({"rm", "mv", "cp", "chmod", "chown", "ln", "dd", "kill", "tee", "shred"})
+
+
+def _unwrapped(words: Sequence[str]) -> Sequence[str]:
+    """What follows a wrapper's own flags, assignments and duration (``env A=1 uv`` -> ``uv``)."""
+    rest = list(words[1:])
+    while rest and (rest[0].startswith("-") or "=" in rest[0] or rest[0][:1].isdigit()):
+        rest.pop(0)
+    return rest
+
+
 def _too_broad(words: Sequence[str]) -> bool:
     """Whether a rule would approve any script: judged on the program's name, so
-    ``/usr/bin/python3`` is ``python3``."""
+    ``/usr/bin/python3`` is ``python3``, and through a wrapper, so ``env A=1 uv`` is ``uv``."""
     name = Path(words[0]).name
+    if name in WRAPPER_PROGRAMS:
+        rest = _unwrapped(words)
+        if not rest or _too_broad(rest):
+            return True
+    if len(words) == 1 and name in _MUTATORS:
+        return True
     if name in _LAUNCHERS and (len(words) == 1 or words[-1] in _CODE_FLAGS):
         return True
     if name in _SCRIPT_RUNNERS or (len(words) == 1 and name in _NEEDS_SUBCOMMAND):

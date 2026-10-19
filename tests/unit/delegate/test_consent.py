@@ -217,6 +217,11 @@ def test_validate_allow_entry_refuses_what_runs_any_package_script_or_subcommand
         validate_allow_entry(broad)
 
 
+def test_validate_allow_entry_accepts_what_names_the_program_behind_a_wrapper() -> None:
+    assert validate_allow_entry(["env", "A=1", "uvx", "pytest"]) == ("env", "A=1", "uvx", "pytest")
+    assert validate_allow_entry(["rm", "-r", ".pytest_cache"]) == ("rm", "-r", ".pytest_cache")
+
+
 def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> None:
     assert validate_allow_entry(["python", "-m", "pytest"]) == ("python", "-m", "pytest")
 
@@ -238,6 +243,11 @@ def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> No
         ("sed -n 1,5p README.md", None),
         ("/usr/bin/python3 -m pytest", None),
         ("UV_CACHE_DIR=/tmp/c uv run pytest", None),
+        ("env UV_CACHE_DIR=/tmp/c UV_TOOL_DIR=/tmp/t uvx pytest -q", None),
+        ("env A=1 uv build --out-dir /tmp/d", None),
+        ("rm -r .pytest_cache tally.egg-info", None),
+        ("chmod +x bin/palette.js", ("chmod", "+x")),
+        ("mkdir -p .cuttlefish/artifacts", ("mkdir",)),
         ("ls && make", None),
         ("sudo make", None),
     ],
@@ -428,4 +438,4 @@ def test_a_chain_with_nothing_safe_to_suggest_offers_nothing() -> None:
 
 def test_a_chain_rule_for_a_command_not_in_the_line_is_refused() -> None:
     with pytest.raises(ConsentPolicyError, match="start of the command"):
-        validate_always_rule("make test && ls", ["rm"])
+        validate_always_rule("make test && ls", ["cat"])

@@ -41,6 +41,8 @@ _WRAPPERS = frozenset(
         "xargs", "stdbuf", "setsid", "unbuffer",
     }
 )  # fmt: skip
+#: The same set, for rules elsewhere that must see through a wrapper (``consent._too_broad``).
+WRAPPER_PROGRAMS = _WRAPPERS
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh"})
 _ASSIGNMENT = re.compile(r"[A-Za-z_]\w*=")
 _DURATION = re.compile(r"\d+(?:\.\d+)?[smhd]?")
