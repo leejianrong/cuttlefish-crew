@@ -220,6 +220,8 @@ def test_validate_allow_entry_refuses_what_runs_any_package_script_or_subcommand
 def test_validate_allow_entry_accepts_what_names_the_program_behind_a_wrapper() -> None:
     assert validate_allow_entry(["env", "A=1", "uvx", "pytest"]) == ("env", "A=1", "uvx", "pytest")
     assert validate_allow_entry(["rm", "-r", ".pytest_cache"]) == ("rm", "-r", ".pytest_cache")
+    # A lookup runs nothing, so it stays a rule a person can type.
+    assert validate_allow_entry(["command", "-v"]) == ("command", "-v")
 
 
 def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> None:

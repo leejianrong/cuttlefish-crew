@@ -362,4 +362,6 @@ checked against kopicode's source rather than a live run.
   the rule when nothing is left or what is left is itself too broad; and a bare `rm`, `mv`, `cp`, `chmod`, `chown`,
   `ln`, `dd`, `kill`, `tee` or `shred` is refused. `mkdir` and `touch` stay allowed bare: they only add paths inside
   the project, and anything outside it is refused anyway.
+  The rule `command -v` (and `-V`) is exempt from the wrapper check: it only asks the shell where a program is, and the first
+  CUT-158 change refused it by mistake (found setting up the third dogfood run).
 
