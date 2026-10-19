@@ -222,6 +222,8 @@ def test_validate_allow_entry_accepts_what_names_the_program_behind_a_wrapper() 
     assert validate_allow_entry(["rm", "-r", ".pytest_cache"]) == ("rm", "-r", ".pytest_cache")
     # A lookup runs nothing, so it stays a rule a person can type.
     assert validate_allow_entry(["command", "-v"]) == ("command", "-v")
+    # ...and a launcher verb is fine once it names what it runs.
+    assert validate_allow_entry(["uv", "run", "python", "-m", "pytest"])
 
 
 def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> None:
@@ -239,7 +241,10 @@ def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> No
         ("python -c print", None),
         ("git -c user.name=x commit -m msg", None),
         ("git push origin main", ("git", "push", "origin")),
-        ("uv run python evil.py", ("uv", "run", "python")),
+        ("uv run python evil.py", None),
+        ("uv run python -m tally", None),
+        ("env A=1 uv run python -m tally", None),
+        ("uv run ruff check .", ("uv", "run", "ruff")),
         ("uvx --from autoflake autoflake x", None),
         ("uvx ruff check .", ("uvx", "ruff", "check")),
         ("sed -n 1,5p README.md", None),
