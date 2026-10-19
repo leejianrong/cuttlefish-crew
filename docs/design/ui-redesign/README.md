@@ -269,3 +269,7 @@ and this folder disagree after a slice lands, update this folder.
   when a round ends, so a running role on either read "0 tokens / 1,500,000" for minutes, as if nothing had been used. The role card
   now says "Tokens: not reported until the round ends (limit 1,500,000, checked then)" until the first figure arrives, and a line
   with a limit adds "limit checked when a round ends". kopicode and a role with a figure show the numbers as before.
+- **A long folder path on the portfolio card loses its start (2026-10-19, CUT-160).** The path is cut with the ellipsis on the
+  left ("…e/jianlee/projects/scratch-testing/ledger") so the project's own folder name, the part that tells two cards apart, is
+  always visible; the full path is the card's tooltip. Plain CSS (`direction: rtl` on the line, `<bdi>` around the text); the
+  project page still shows the whole path.

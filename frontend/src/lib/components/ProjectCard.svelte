@@ -43,7 +43,7 @@
       <span class="running-dot" title="a team is running"></span>
     {/if}
   </header>
-  <p class="root mono">{project.root}</p>
+  <p class="root mono" title={project.root}><bdi>{project.root}</bdi></p>
 
   {#if waiting > 0}
     <p class="waiting body-small" role="status">{waiting} waiting for you</p>
@@ -144,6 +144,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    /* A long folder path loses its start, not the project name at its end; <bdi> keeps the text
+     * itself left to right. */
+    direction: rtl;
+    text-align: left;
   }
 
   .roles {
