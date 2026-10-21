@@ -437,6 +437,29 @@ export function repeatedFinishes(events: readonly EpisodicEventView[]): Set<numb
 }
 
 export const REPEATED_FINISH_TEXT = "The task is finished. Its last round's summary is above.";
+const ROUND_END_TYPES = new Set(["DelegationCompleted", "DelegationRefused", "DelegationFailed"]);
+
+/** The seqs of round-end rows (done, refused, failed) for a round that was still running when Stop
+ * was pressed (CUT-166). Such a round ends because it was cut off, not because the agent judged
+ * the task done, and what the agent said last can read like a normal finish ("Blocked by the
+ * workspace execution gate": Stop refuses every later request). Read from the journal's order:
+ * a `StopRequested` between the role's latest `DelegationStarted` and the row. */
+export function stoppedRounds(events: readonly EpisodicEventView[]): Set<number> {
+  const found = new Set<number>();
+  const started = new Map<string, number>();
+  let lastStop = -1;
+  events.forEach((event, index) => {
+    const role = String(event.payload.role ?? "");
+    if (event.event_type === "DelegationStarted") started.set(role, index);
+    else if (event.event_type === "StopRequested") lastStop = index;
+    else if (ROUND_END_TYPES.has(event.event_type) && lastStop > (started.get(role) ?? Infinity)) {
+      found.add(event.seq);
+    }
+  });
+  return found;
+}
+
+export const STOPPED_ROUND_NOTE = "You pressed Stop while this round ran.";
 
 export const STEER_FATE_TEXT: Record<SteerFate, string> = {
   waiting: "sent; applies when the round ends",

@@ -349,7 +349,7 @@
         </section>
         {#if project.stopping}
           <p class="banner" role="status">
-            Stopping. The agent finishes the step it is on first, which can take a minute or two.
+            Stopping. A Codex agent is interrupted at once; other agents finish the step they are on first, which can take a minute or two.
             Anything it asks for in the meantime is refused.
           </p>
         {:else if confirmingStop}

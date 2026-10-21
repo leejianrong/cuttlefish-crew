@@ -276,6 +276,28 @@ async def test_stop_journals_that_it_was_asked_once_the_cancel_is_accepted(
     store.close()
 
 
+async def test_stop_interrupts_a_running_codex_turn_in_that_projects_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CUT-166: Stop ends a Codex turn with turn/interrupt, not at the round boundary."""
+    daemon = _new_daemon(tmp_path)
+    project = daemon.projects.register(name="alpha", root=str(tmp_path / "alpha"))
+    running = SimpleNamespace(team_id="team-1", base_url="http://x", token="t")
+    monkeypatch.setattr(daemon, "running", lambda _project_id: running)
+    monkeypatch.setattr("cuttlefish.fleet.daemon.cancel_run", lambda **_kwargs: None)
+    asked: list[str] = []
+
+    async def interrupt(root: str) -> int:
+        asked.append(root)
+        return 1
+
+    monkeypatch.setattr("cuttlefish.fleet.daemon.codex_live.interrupt_root", interrupt)
+
+    await daemon.stop(project.id)
+
+    assert asked == [project.root]
+
+
 async def test_a_stop_that_fails_to_deliver_is_not_journaled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

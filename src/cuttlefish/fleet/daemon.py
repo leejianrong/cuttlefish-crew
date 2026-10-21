@@ -1028,8 +1028,12 @@ class FleetDaemon:
         # (ADR-0028); `is_stopping` lets the dashboard say "stopping" at once, not "working".
         self._stopping.add(running.team_id)
         self.requests.end_team(running.team_id, "cancelled")
+        # A Codex role mid-turn is told to end the turn now (`turn/interrupt`, CUT-166), so Stop
+        # does not wait out a round that can run for minutes. A turn that does not confirm in time
+        # is left to the round boundary, where satay's cancel lands as before.
+        interrupted = await codex_live.interrupt_root(self._projects.get(project_id).root)
         with logsetup.bind(project=project_id, team=running.team_id):
-            logger.info("stop requested")
+            logger.info("stop requested (%d codex turn(s) interrupted)", interrupted)
 
     async def steer(self, project_id: str, role: str, text: str) -> None:
         """See `stop`'s own docstring -- `asyncio.to_thread` for the identical

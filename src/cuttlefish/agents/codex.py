@@ -29,7 +29,7 @@ from cuttlefish.delegate.codex import (
     run_codex_in_sandbox,
 )
 from cuttlefish.delegate.codex_app_server import run_codex_app_server
-from cuttlefish.limits import round_timeout_for
+from cuttlefish.limits import round_timeout_for, session_token_budget_for
 from cuttlefish.requests import ShellAsker
 from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
 
@@ -132,6 +132,7 @@ class CodexBackend:
                 env=_env(secrets, lease),
                 env_passthrough=ENV_PASSTHROUGH,
                 timeout=round_timeout_for(limits),
+                token_budget=session_token_budget_for(limits) or None,
                 lease=lease,
                 thread_key=(session or conversations.DEFAULT_KEY)
                 if conversations.resume_enabled("codex")

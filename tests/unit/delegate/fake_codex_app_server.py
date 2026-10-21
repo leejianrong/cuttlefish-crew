@@ -11,6 +11,7 @@ is appended to ``<log>``. The scenario is a JSON object:
   ``item/fileChange/requestApproval`` for it, completing it if the reply accepts;
   ``{"request": "<method>", "params": {...}}`` sends that server request and waits for the reply;
   ``{"steer": true}`` waits for ``turn/steer`` and answers it with the turn's id;
+  ``{"usage": {"total": N, "last": M}}`` sends a ``thread/tokenUsage/updated`` (input tokens only);
   ``{"hang": true}`` waits for ``turn/interrupt``, answers it and ends the turn ``interrupted``.
 ``resume_fails``: answer ``thread/resume`` with an error, then expect ``thread/start``.
 ``final``: the final answer text (default ``done``). ``crash``: exit at once after the handshake.
@@ -74,6 +75,7 @@ answer(
     {"turn": {"id": "tu1", "status": "inProgress", "items": []}},
 )
 status = "completed"
+usage_sent = False
 for step in scenario.get("steps", []):
     if "command" in step:
         command = step["command"]
@@ -133,18 +135,35 @@ for step in scenario.get("steps", []):
         ask(step["request"], step.get("params", {}))
     elif step.get("steer"):
         answer(read_until(lambda m: m.get("method") == "turn/steer"), {"turnId": "tu1"})
+    elif "usage" in step:
+        usage = step["usage"]
+        usage_sent = True
+        send(
+            {
+                "method": "thread/tokenUsage/updated",
+                "params": {
+                    "tokenUsage": {
+                        "total": {"inputTokens": usage["total"], "outputTokens": 0},
+                        "last": {"inputTokens": usage["last"], "outputTokens": 0},
+                    }
+                },
+            }
+        )
     elif step.get("hang"):
         interrupt = read_until(lambda m: m.get("method") == "turn/interrupt")
         answer(interrupt, {})
         status = "interrupted"
-send(
-    {
-        "method": "thread/tokenUsage/updated",
-        "params": {
-            "tokenUsage": {"total": {"inputTokens": 100, "outputTokens": 20, "totalTokens": 120}}
-        },
-    }
-)
+if not usage_sent:
+    send(
+        {
+            "method": "thread/tokenUsage/updated",
+            "params": {
+                "tokenUsage": {
+                    "total": {"inputTokens": 100, "outputTokens": 20, "totalTokens": 120}
+                }
+            },
+        }
+    )
 send(
     {
         "method": "item/completed",

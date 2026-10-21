@@ -266,7 +266,7 @@ async def test_an_unlisted_command_waits_for_a_person_and_their_answer_reaches_c
     asker = RequestContext(broker, "p1", "t1", 30.0).asker(role="builder", backend="codex")
     backend = fake.script({"steps": [{"command": bash("make lint"), "cwd": str(fake.root)}]})
     run = asyncio.create_task(fake.run(backend, asker=asker))
-    for _ in range(100):
+    for _ in range(400):  # a loaded machine can take over ten seconds to start the fake server
         if broker.pending():
             break
         await asyncio.sleep(0.05)
@@ -450,3 +450,48 @@ async def test_a_steer_with_no_running_turn_is_not_taken(fake: Fake) -> None:
     assert await codex_live.steer(str(fake.root), "dev", "hello") is False
     await fake.run(fake.script({}), live_role="dev")
     assert await codex_live.steer(str(fake.root), "dev", "late") is False
+
+
+async def test_a_round_over_its_token_budget_is_interrupted_at_once(fake: Fake) -> None:
+    # CUT-168: usage arrives after every model call, so the limit is enforced mid-turn.
+    backend = fake.script({"steps": [{"usage": {"total": 600, "last": 600}}, {"hang": True}]})
+    outcome = await fake.run(backend, limits={"session_token_budget": 500})
+    assert outcome.kind == "failed"
+    assert outcome.failure_kind == "budget_exhausted"
+    assert "600" in (outcome.reason or "") and "500" in (outcome.reason or "")
+    assert len(fake.sent("turn/interrupt")) == 1
+
+
+async def test_tokens_a_resumed_thread_already_held_do_not_count_against_the_round(
+    fake: Fake,
+) -> None:
+    # The thread's total is 1,000 but this call only added 100: well inside a 500 budget.
+    backend = fake.script({"steps": [{"usage": {"total": 1000, "last": 100}}]})
+    outcome = await fake.run(backend, limits={"session_token_budget": 500})
+    assert outcome.kind == "completed"
+    assert fake.sent("turn/interrupt") == []
+
+
+async def test_stop_ends_a_running_turn_with_turn_interrupt(fake: Fake) -> None:
+    # CUT-166: a person's Stop interrupts Codex instead of waiting for the round to end.
+    from cuttlefish.delegate import codex_live
+
+    backend = fake.script({"steps": [{"hang": True}]})
+    root = str(fake.root)
+    task = asyncio.create_task(fake.run(backend, live_role="dev"))
+    for _ in range(200):
+        if codex_live.is_live(root, "dev"):
+            break
+        await asyncio.sleep(0.05)
+    assert await codex_live.interrupt_root(root) == 1
+    outcome = await task
+    assert outcome.kind == "failed"
+    assert outcome.failure_kind == "cancelled"
+    assert outcome.summary.startswith("Codex was interrupted")
+    assert len(fake.sent("turn/interrupt")) == 1
+
+
+async def test_stop_with_no_running_turn_interrupts_nothing(fake: Fake) -> None:
+    from cuttlefish.delegate import codex_live
+
+    assert await codex_live.interrupt_root(str(fake.root)) == 0
