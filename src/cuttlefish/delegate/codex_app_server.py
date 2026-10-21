@@ -39,7 +39,7 @@ import inspect
 import json
 import logging
 import shlex
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -111,6 +111,11 @@ class _Round:
     consents: list[ConsentDecisionRecord] = dataclasses.field(default_factory=list)
     declined: int = 0
     tokens: int | None = None
+    #: Tokens the thread already held when this turn began (a resumed thread's total includes its
+    #: earlier turns); read from the first usage update as ``total - last``.
+    baseline: int | None = None
+    #: Told the turn's own tokens after every usage update; the round's token limit rides on it.
+    on_tokens: Callable[[int], None] | None = None
     final_answer: str = ""
     status: str | None = None
     error: str | None = None
@@ -160,7 +165,14 @@ class _Round:
         usage = params.get("tokenUsage")
         total = usage.get("total") if isinstance(usage, Mapping) else None
         if isinstance(total, Mapping):
-            self.tokens = int(total.get("inputTokens") or 0) + int(total.get("outputTokens") or 0)
+            self.tokens = _io_tokens(total)
+            if self.baseline is None:
+                last = usage.get("last") if isinstance(usage, Mapping) else None
+                self.baseline = (
+                    max(self.tokens - _io_tokens(last), 0) if isinstance(last, Mapping) else 0
+                )
+            if self.on_tokens is not None:
+                self.on_tokens(self.tokens - self.baseline)
 
     def _said(self, summary: str) -> str:
         """``summary`` followed by what Codex said last (its final answer), so a person or an
@@ -193,14 +205,21 @@ class _Round:
             return DelegationOutcome(
                 kind="completed", summary=self._said("Codex finished with no edit needed"), **common
             )
+        interrupted = self.status == "interrupted"
         return DelegationOutcome(
             kind="failed",
-            summary="Codex did not finish cleanly",
+            summary="Codex was interrupted before it finished"
+            if interrupted
+            else "Codex did not finish cleanly",
             reason=self.error or f"the turn ended {self.status or 'without a status'}",
             edited_paths=self.edited_paths,
             failure_kind="cancelled" if self.status == "interrupted" else None,
             **common,
         )
+
+
+def _io_tokens(counts: Mapping[str, Any]) -> int:
+    return int(counts.get("inputTokens") or 0) + int(counts.get("outputTokens") or 0)
 
 
 def _change_paths(item: Mapping[str, Any]) -> list[str]:
@@ -448,6 +467,7 @@ async def run_codex_app_server(
     env: Mapping[str, str] | None = None,
     env_passthrough: tuple[str, ...] = (),
     timeout: float | None = None,
+    token_budget: int | None = None,
     lease: Lease | None = None,
     thread_key: str | None = None,
     live_role: str | None = None,
@@ -458,8 +478,13 @@ async def run_codex_app_server(
     for it, the turn runs on that thread (``thread/resume``); otherwise, or when Codex no longer
     has it, a new one is started and remembered. ``None`` always starts a new thread.
 
-    ``live_role`` (CUT-92, ADR-0033) makes the running turn steerable by that role's name
-    (``cuttlefish.delegate.codex_live``).
+    ``live_role`` (CUT-92, ADR-0033) makes the running turn steerable by that role's name, and
+    lets the fleet daemon end it when a person presses Stop (``cuttlefish.delegate.codex_live``).
+
+    ``token_budget`` (CUT-168) is the most tokens (input and output) this turn may spend. Codex
+    reports usage after every model call, so a turn that passes it is interrupted at once and
+    reported as a ``budget_exhausted`` failure, which a team treats as a checkpoint, instead of
+    being found over only when the round ends.
 
     ``lease`` (ADR-0031) points Codex at the credential broker through a provider of its own.
 
@@ -491,7 +516,12 @@ async def run_codex_app_server(
     thread_id: str | None = None
     turn_id: str | None = None
     timed_out = False
+    over_budget = False
     live: codex_live.LiveTurn | None = None
+    budget_hit = asyncio.Event()
+    if token_budget:
+        round_.on_tokens = lambda used: budget_hit.set() if used >= token_budget else None
+    budget_watch: asyncio.Task[bool] | None = None
     try:
         await connection.request(
             "initialize", {"clientInfo": {"name": "cuttlefish-crew", "version": "0"}}
@@ -537,11 +567,21 @@ async def run_codex_app_server(
         turn_id = started_turn.get("id") if isinstance(started_turn, Mapping) else None
         if live_role and isinstance(turn_id, str):
             live = _register_live(connection, root, live_role, thread_id, turn_id)
+        budget_watch = asyncio.ensure_future(budget_hit.wait())
+        waiting: set[asyncio.Future[Any]] = {connection.turn_done, budget_watch}
         try:
-            await asyncio.wait_for(asyncio.shield(connection.turn_done), timeout)
+            await asyncio.wait_for(
+                asyncio.wait(waiting, return_when=asyncio.FIRST_COMPLETED), timeout
+            )
         except TimeoutError:
             timed_out = True
             await _interrupt(connection, thread_id, turn_id)
+        else:
+            if connection.turn_done.done():
+                await connection.turn_done  # raises when the server died before the turn ended
+            else:
+                over_budget = True
+                await _interrupt(connection, thread_id, turn_id)
     except asyncio.CancelledError:
         await asyncio.shield(_interrupt(connection, thread_id, turn_id))
         raise
@@ -551,6 +591,8 @@ async def run_codex_app_server(
             process.kill()
         raise DelegationError(f"{exc}; stderr: {tail or '<empty>'}" if tail else str(exc)) from exc
     finally:
+        if budget_watch is not None:
+            budget_watch.cancel()
         if live is not None and live_role:
             codex_live.unregister(root, live_role, live)
         await asyncio.shield(connection.close())
@@ -564,6 +606,15 @@ async def run_codex_app_server(
             summary="Codex was stopped: the round ran past its time limit (round_timeout)",
             reason=f"stopped: the round ran longer than {limit}",
             failure_kind="round_timeout",
+        )
+    if over_budget:
+        used = (round_.tokens or 0) - (round_.baseline or 0)
+        return dataclasses.replace(
+            outcome,
+            kind="failed",
+            summary="Codex was stopped: the round used up its token budget (budget_exhausted)",
+            reason=f"stopped: the round spent {used:,} tokens, over its limit of {token_budget:,}",
+            failure_kind="budget_exhausted",
         )
     return outcome
 
@@ -581,7 +632,11 @@ def _register_live(
             },
         )
 
-    live = codex_live.LiveTurn(send=send, loop=asyncio.get_running_loop())
+    async def interrupt() -> object:
+        await _interrupt(connection, thread_id, turn_id)
+        return None
+
+    live = codex_live.LiveTurn(send=send, loop=asyncio.get_running_loop(), interrupt=interrupt)
     codex_live.register(root, role, live)
     return live
 

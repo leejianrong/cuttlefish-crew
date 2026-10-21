@@ -169,6 +169,10 @@ and this folder disagree after a slice lands, update this folder.
   boundary is hidden when the queued row before it already says "(applied)" (a steer sent from the command line has no queued row, so it
   stays). A "Finished" row whose result is the same text as that role's last "Round done" says "The task is finished. Its last round's
   summary is above." The journal is unchanged; both are read-time choices in `lib/events.ts`.
+- **A round ended by Stop is labelled (CUT-166).** In the activity log a round-end row (done, refused or failed) for a round that was running when
+  Stop was pressed reads "Round stopped" and starts "You pressed Stop while this round ran.", so an agent's last words ("Blocked by the workspace
+  execution gate") are not mistaken for a normal finish. Read from the order of events, not stored. On Codex the daemon now interrupts the turn
+  on Stop (0.3 s seen live), so its round is a failed, cancelled one.
 
 - **Project Secrets tab shipped (CUT-80, 2026-10-10).** A fifth project tab, after Team. Two cards of sealed rows (a lock, the name in mono, twelve
   dots whatever the value's length, an "Agent key" tag where a backend runs on it, a line saying whether its commands can see it), Replace and Remove

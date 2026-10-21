@@ -81,14 +81,18 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Always allow, and the `ask` event shape and the live `ask.request` answer (read from kopicode's source, never seen live). The
   hold past kopicode's default 60 seconds and the answers reaching kopicode were checked live
   (`test_kopicode_serve_needs_you_live.py`, kopicode v0.3.0).
-- **Stop lands when the round ends, not at once, on every backend, Codex included** (CUT-155).
-  satay's cancel is delivered between rounds, so a role mid-round keeps working (and editing) until that round
-  finishes, which can take minutes (seen 2026-10-19 on Codex: about 106 s). Since KAN-1896 the dashboard says
-  "Stopping" immediately, a stopped team asks for nothing more (every later Needs-you request is refused), and a role
-  cut off reads "stopped" instead of "blocked". A round that ends this way is journalled as a normal completion whose
-  summary is the agent's own words (Codex said "Blocked by the workspace execution gate", because we refused
-  everything), so the round's row is not marked as stopped. Interrupting a round in flight would need kopicode's own
-  `session.cancel` or Codex's `turn/interrupt` driven from the daemon, which is not built for a person's Stop.
+- **Stop lands when the round ends on kopicode and Claude Code; on Codex it interrupts the turn** (CUT-155, CUT-166). satay's cancel is
+  delivered between rounds, so a kopicode or Claude Code role mid-round keeps working (and editing) until that round finishes, which can
+  take minutes. Since KAN-1896 the dashboard says "Stopping" immediately, a stopped team asks for nothing more (every later Needs-you
+  request is refused), and a role cut off reads "stopped" instead of "blocked". On Codex's default transport the daemon also sends
+  `turn/interrupt` to every running turn under the project's root (`codex_live.interrupt_root`, from `FleetDaemon.stop`): seen live
+  2026-10-21, a turn ended 0.3 s after Stop (it took about 106 s on 2026-10-19), journalled as a failed round with `failure_kind`
+  `cancelled`. A turn Codex does not confirm within 20 s is left to the round boundary, and `codex exec`, a sandbox provider and the
+  other two backends still wait for the round. Such a round's own words can read like a normal finish ("Blocked by the workspace
+  execution gate", because we refused everything), so the dashboard labels any round that ended after a Stop pressed during it "Round
+  stopped" with a note, read from the order of events (`stoppedRounds` in `lib/events.ts`); the journal row itself stays a normal
+  completion on kopicode and Claude Code. Interrupting those two would need kopicode's `session.cancel` or Claude Code's stream-json
+  interrupt driven from the daemon, which is not built.
 - **A pending request does not survive a restart** and is not re-asked: it is journaled as
   abandoned, and a resumed run asks again if it needs to. The window is daemon-wide, not per
   project.
@@ -275,14 +279,15 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   long team now needs `OPENROUTER_API_KEY` (or `CUTTLEFISH_LLM_PROVIDER=replay`, placeholder text); without one the write
   fails, is logged, and the next round gets the list of changed files only.
 - **Limits apply to kopicode.** `cuttlefish run-team` takes `--limit`/`--role-limit`, `run` reads the environment only; Claude Code
-  and Codex ignore turns, tokens, context and time (they have no such controls), so a role on them only honours its
+  ignores turns, tokens, context and time (it has no such controls), and Codex over `app-server` honours only the round time
+  limit and, since CUT-168, tokens per round (not turns or context), so a role on them otherwise only honours its
   continuation and no-change counters. A change to a project's or role's limits applies at the next start (ADR-0030).
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
 - **Codex reports no cost, so a project's cost ceiling (`max_cost_usd`) cannot stop it.** `cost_usd` is always `None` on a ChatGPT
   login (only tokens are known), so the budget check has nothing to add up; the token ceiling and the round time limit still apply.
-  The dashboard shows "cost unknown" but does not say the ceiling is inert for Codex. Since CUT-157 a Codex or Claude Code role with no figure yet reads "Tokens: not reported until the round ends (limit N, checked then)" instead of "0 tokens / N", and the limit is checked only between rounds: a Codex round can pass it (seen 2026-10-19: 1,083,519 and 1,122,062 tokens against 1,000,000, nothing stopped either).
+  The dashboard shows "cost unknown" but does not say the ceiling is inert for Codex. Since CUT-157 a Codex or Claude Code role with no figure yet reads "Tokens: not reported until the round ends (limit N, checked then)" instead of "0 tokens / N", and the limit is checked only between rounds: a Codex round can pass the *project* ceiling (seen 2026-10-19: 1,083,519 and 1,122,062 tokens against 1,000,000, nothing stopped either). Since CUT-168 the per-round `Tokens per round` limit (`session_token_budget`, default 5,000,000) is enforced mid-turn on Codex's default transport: usage arrives after every model call, and a turn over it is interrupted as `budget_exhausted` (a checkpoint). A limit below one model call's own cost (about 17,000 tokens for a first call seen live 2026-10-21) acts only after that call, and the project ceiling is still checked between rounds.
 - **Codex over `codex exec` is a one-shot, sandbox-only backend, and does not fit the long-run loop** (spike 2026-10-08, `gpt-5.6-luna` at low effort on a
   ChatGPT login, small team on a six-module project). Seen: a round is the whole task and runs to its end (nine modules in one round: 57 s,
   454k tokens, 45 of 45 tests); concurrent roles on one root work; a read-only role stays read-only; steering works at the round boundary
@@ -291,7 +296,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   sandbox stops reads "completed" or "no edit needed", never refused, and the agent's reply is never journaled, so a person cannot see why;
   **no Needs-you card is ever raised**; **commits sometimes fail** (`.git` is read-only in the sandbox: two of nine landed); none of the
   limits (turns, tokens, context, time) applies, so a round is never cut or continued and no handover is written; **Stop waits for the
-  whole round** (the process is not killed); a resume reruns the round from scratch; tokens appear only after the round, cost never
+  whole round** (the process is not killed; over `app-server` it is, CUT-166); a resume reruns the round from scratch; tokens appear only after the round, cost never
   (`cost_usd` null). The UI wording that said Codex "refuses" a command was wrong and is corrected. Making Codex first-class would need:
   journalling its final message, an external round timeout and kill, a commit path, and resuming its session.
   V4-L (`docs/research/codex-app-server-spike.md`) found `codex app-server` answers each of those. V4-M built the

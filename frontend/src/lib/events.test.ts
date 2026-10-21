@@ -11,6 +11,7 @@ import {
   appliedSteerRows,
   failureText,
   repeatedFinishes,
+  stoppedRounds,
   installOutput,
   formatWhen,
   isPinnedToBottom,
@@ -480,5 +481,35 @@ describe("rows that repeat another row (CUT-165, CUT-167)", () => {
       ev(5, "TaskCompleted", { role: "b", result: "something else" }),
     ];
     expect([...repeatedFinishes(events)]).toEqual([3]);
+  });
+});
+
+describe("stoppedRounds (CUT-166)", () => {
+  const ev = (seq: number, event_type: string, payload: Record<string, unknown> = {}) => ({
+    seq,
+    ts: "2026-10-20T10:00:00Z",
+    event_type,
+    payload,
+  });
+
+  it("marks a round that ended after Stop was pressed during it, not one that ended before", () => {
+    const events = [
+      ev(1, "DelegationStarted", { role: "a" }),
+      ev(2, "DelegationCompleted", { role: "a", summary: "fine" }),
+      ev(3, "DelegationStarted", { role: "a" }),
+      ev(4, "StopRequested"),
+      ev(5, "DelegationCompleted", { role: "a", summary: "Blocked by the workspace execution gate" }),
+      ev(6, "DelegationFailed", { role: "b", reason: "x" }),
+    ];
+    expect([...stoppedRounds(events)]).toEqual([5]);
+  });
+
+  it("does not mark a round that started after the Stop", () => {
+    const events = [
+      ev(1, "StopRequested"),
+      ev(2, "DelegationStarted", { role: "a" }),
+      ev(3, "DelegationCompleted", { role: "a" }),
+    ];
+    expect(stoppedRounds(events).size).toBe(0);
   });
 });

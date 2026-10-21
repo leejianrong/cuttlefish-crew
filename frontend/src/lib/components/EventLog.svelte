@@ -15,6 +15,8 @@
     REPEATED_FINISH_TEXT,
     repeatedFinishes,
     STEER_FATE_TEXT,
+    STOPPED_ROUND_NOTE,
+    stoppedRounds,
     steerFates,
     summarize,
     summarizeWith,
@@ -33,6 +35,7 @@
     const hidden = appliedSteerRows(events);
     return events.filter((event) => !hidden.has(event.seq));
   });
+  const stoppedRound = $derived(stoppedRounds(events));
 
   // Newest-last, like a chat: stay pinned to the bottom while the reader is there, stop following
   // once they scroll up to read, and offer a way back down.
@@ -83,7 +86,11 @@
         <span class="ts mono" title={event.ts}>{formatWhen(event.ts)}</span>
         <!-- Always a cell, so a row with no role keeps the label and text in their own columns. -->
         <span class="role mono">{eventRole(event, raised)}</span>
-        <span class="type" title="{event.event_type}, #{event.seq}">{checkpointed.has(event.seq) ? "Round ended" : eventLabelFor(event)}</span>
+        <span class="type" title="{event.event_type}, #{event.seq}">{checkpointed.has(event.seq)
+            ? "Round ended"
+            : stoppedRound.has(event.seq)
+              ? "Round stopped"
+              : eventLabelFor(event)}</span>
         <span class="text">
           {#if event.event_type === "DelegationStarted" && summarize(event).length > LONG_TEXT}
             {summarize(event).slice(0, LONG_TEXT)}…
