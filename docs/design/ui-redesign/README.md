@@ -165,6 +165,11 @@ and this folder disagree after a slice lands, update this folder.
   and a failed role's reason in plain words (CUT-162: the journal's `failure_kind`, `agent_error` when the agent program died or never started; the raw text follows in brackets) with a tonal "Try again with the same task" button that starts the failed roles again with the task each was given (the form is filled first, so a refused start leaves the text to edit), then a "<role> said" block per role that completed (CUT-63): its last delegation summary, which now carries
   the model's last message for kopicode, Claude Code and Codex alike (capped at 600 characters, scrolls past about 12 lines); it sits above Start a team. Neutral surface, an error-coloured edge only when it failed. Not in the mockups.
 
+- **The activity log no longer repeats itself (CUT-165, CUT-167).** A steer is one "You" row: the message the dashboard applied at the round
+  boundary is hidden when the queued row before it already says "(applied)" (a steer sent from the command line has no queued row, so it
+  stays). A "Finished" row whose result is the same text as that role's last "Round done" says "The task is finished. Its last round's
+  summary is above." The journal is unchanged; both are read-time choices in `lib/events.ts`.
+
 - **Project Secrets tab shipped (CUT-80, 2026-10-10).** A fifth project tab, after Team. Two cards of sealed rows (a lock, the name in mono, twelve
   dots whatever the value's length, an "Agent key" tag where a backend runs on it, a line saying whether its commands can see it), Replace and Remove
   as text buttons, Add secret as the one filled button. Add and Replace are a modal `<dialog>` with outlined fields (the value is a password field

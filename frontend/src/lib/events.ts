@@ -400,6 +400,44 @@ export function steerFates(events: readonly EpisodicEventView[]): Map<number, St
   return fates;
 }
 
+/** The seqs of `SteeringMessage` rows that repeat a `SteeringQueued` row already in the log: the
+ * queued row says "(applied)", so a second "You" row with the same words adds nothing (CUT-167).
+ * A message with no queued row before it (sent from the command line) is not in the set. */
+export function appliedSteerRows(events: readonly EpisodicEventView[]): Set<number> {
+  const hidden = new Set<number>();
+  events.forEach((event, index) => {
+    if (event.event_type !== "SteeringQueued") return;
+    const match = events
+      .slice(index + 1)
+      .find(
+        (later) =>
+          later.event_type === "SteeringMessage" &&
+          !hidden.has(later.seq) &&
+          later.payload.role === event.payload.role &&
+          later.payload.text === event.payload.text,
+      );
+    if (match) hidden.add(match.seq);
+  });
+  return hidden;
+}
+
+/** The seqs of `TaskCompleted` rows whose result is the very text its role's last round already
+ * showed as "Round done" (CUT-165). The row says so instead of printing it twice. */
+export function repeatedFinishes(events: readonly EpisodicEventView[]): Set<number> {
+  const repeated = new Set<number>();
+  const lastSummary = new Map<string, string>();
+  for (const event of events) {
+    const role = String(event.payload.role ?? "");
+    if (event.event_type === "DelegationCompleted") lastSummary.set(role, String(event.payload.summary));
+    if (event.event_type === "TaskCompleted" && lastSummary.get(role) === String(event.payload.result)) {
+      repeated.add(event.seq);
+    }
+  }
+  return repeated;
+}
+
+export const REPEATED_FINISH_TEXT = "The task is finished. Its last round's summary is above.";
+
 export const STEER_FATE_TEXT: Record<SteerFate, string> = {
   waiting: "sent; applies when the round ends",
   applied: "applied",
