@@ -282,6 +282,11 @@ and this folder disagree after a slice lands, update this folder.
   reads "Tokens: none reported yet; the figure updates as <role> works" until the first call finishes, then the running figure (seen
   live: 16,557, then 33,457 within half a minute). The daemon journals it as `RoundUsageUpdated` (first figure, then at most one every
   5 s, only when it changed); the activity log hides those rows. Claude Code still reads "not reported until the round ends".
+- **Phone view, second pass (CUT-98).** Measured in Chromium at 390 px with touch against a real daemon and real Codex requests: no screen
+  scrolls sideways. Below 640 px every button is 44 px high (the small Stop, Remove and Always-allow buttons were 32), the project card's
+  name and the Settings sub-tabs are 44 px tall, and the project tab bar fits all five tabs with the Needs-you badge showing (it clipped
+  Settings by 23 px). A permission card's Allow once, Deny and Always allow work by touch. Not done: a real phone (Safari, Android), the
+  Terminal on a phone keyboard, and a push or badge outside the app.
 
 - **A long folder path on the portfolio card loses its start (2026-10-19, CUT-160).** The path is cut with the ellipsis on the
   left ("…e/jianlee/projects/scratch-testing/ledger") so the project's own folder name, the part that tells two cards apart, is
