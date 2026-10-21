@@ -18,6 +18,7 @@ from cuttlefish.agents.claude_code import ClaudeCodeBackend
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.broker import Lease
 from cuttlefish.delegate.claude_code_live import build_live_argv, run_claude_code_live
+from cuttlefish.delegate.consent import ConsentPolicy
 from cuttlefish.episodic.events import EventPayload
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.requests import RequestBroker, RequestContext
@@ -355,3 +356,58 @@ def test_session_exists_looks_in_every_project_folder(
     assert not session_exists("abc")
     _claude_has(tmp_path, monkeypatch, "abc")
     assert session_exists("abc") and not session_exists("abd")
+
+
+DOCUMENT = (
+    "## Done\n- notes.md written\n\n## Remaining\n- the last paragraph\n\n"
+    "## Failed or refused\nnothing\n\n## Open questions\nnone"
+)
+
+
+async def _timed_out_round(fake: Fake, **scenario: Any) -> DelegationOutcome:
+    fake.script({"steps": [{"hang": True}], **scenario})
+    return await run_claude_code_live(
+        binary=str(fake.binary),
+        task_text="x",
+        root=str(fake.root),
+        decide=ConsentPolicy().decide,  # nothing is allowed
+        timeout=0.3,
+        handoff_goal="The next session carries on with this work: x",
+    )
+
+
+async def test_a_round_that_ran_out_of_time_is_asked_for_its_handoff(fake: Fake) -> None:
+    # CUT-140: another user message on the same process; tools are denied; the reply is the
+    # document.
+    outcome = await _timed_out_round(fake, handoff=DOCUMENT, handoff_bash="make lint")
+    assert outcome.failure_kind == "round_timeout"
+    assert outcome.handoff == DOCUMENT
+    users = [m for m in fake.lines() if m.get("type") == "user" and "message" in m]
+    assert len(users) == 2
+    prompt = users[1]["message"]["content"]
+    assert "Open questions" in prompt and "carries on with this work" in prompt
+    # The first turn's own pending command and the handoff turn's are both denied; only the first
+    # is the round's, so the handoff turn's refusal is not journaled as a consent decision.
+    assert fake.decisions() == ["deny", "deny"]
+    assert [c.detail for c in outcome.consent_decisions] == ["/bin/sh -c sleep 100"]
+    assert outcome.tokens == 15 + 28  # the asking is counted
+    assert outcome.cost_usd == pytest.approx(0.03)
+
+
+async def test_a_reply_without_the_sections_is_not_a_handoff_for_claude_code(fake: Fake) -> None:
+    outcome = await _timed_out_round(fake, handoff="Sure, I will carry on tomorrow.")
+    assert outcome.failure_kind == "round_timeout"
+    assert outcome.handoff is None
+
+
+async def test_a_finished_round_is_not_asked_for_a_handoff(fake: Fake) -> None:
+    fake.script({"handoff": DOCUMENT})
+    outcome = await run_claude_code_live(
+        binary=str(fake.binary),
+        task_text="x",
+        root=str(fake.root),
+        decide=lambda kind, detail: None,  # type: ignore[arg-type,return-value]
+        handoff_goal="carry on",
+    )
+    assert outcome.kind == "completed" and outcome.handoff is None
+    assert len([m for m in fake.lines() if m.get("type") == "user" and "message" in m]) == 1

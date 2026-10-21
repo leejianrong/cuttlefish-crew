@@ -38,7 +38,6 @@ import dataclasses
 import inspect
 import json
 import logging
-import re
 import shlex
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -55,6 +54,7 @@ from cuttlefish.broker import Lease
 from cuttlefish.delegate import codex_live, conversations
 from cuttlefish.delegate.codex import codex_provider_args, codex_shell_policy_args
 from cuttlefish.delegate.consent import ConsentDecision
+from cuttlefish.delegate.handoff import HANDOFF_PROMPT, HANDOFF_TIMEOUT, handoff_is_usable
 from cuttlefish.delegate.kopicode_serve import Decider
 from cuttlefish.delegate.subprocess_env import merge_env
 
@@ -62,31 +62,6 @@ _LOG = logging.getLogger(__name__)
 
 #: How long ``turn/interrupt`` and the process's own exit may take before it is killed.
 _INTERRUPT_GRACE = 15.0
-
-#: How long the agent has to write its handoff once asked (ADR-0042).
-_HANDOFF_TIMEOUT = 240.0
-
-#: What the agent is asked for at a checkpoint (CUT-140): a document under fixed headings, written
-#: from its own history, with no commands run. Read back as its final message.
-_HANDOFF_PROMPT = (
-    "Your round has ended because it ran out of room. A new session will take over with no "
-    "memory of this one, so write the handoff now. Do not run any command or edit any file: "
-    "answer in text only. Use exactly these four headings, in this order, each on its own line "
-    "starting with '## ': Done, Remaining, Failed or refused, Open questions. Done: what you "
-    "finished, naming the files. Remaining: what is left, most important first. Failed or "
-    "refused: anything that failed or was declined, and why. Open questions: anything the next "
-    "session must decide or check. State only what you saw; say 'unconfirmed' when you did not "
-    "see a test pass or a commit land. {goal}"
-)
-
-
-def handoff_is_usable(text: str) -> bool:
-    """Whether a reply is a handoff document: it has the Done and the Remaining headings. A reply
-    without them is the agent talking, and the caller falls back to its digest (ADR-0042)."""
-    return all(
-        re.search(rf"^\s*#{{1,4}}\s*{name}\b", text, re.IGNORECASE | re.MULTILINE)
-        for name in ("Done", "Remaining")
-    )
 
 
 _STDERR_CAP = 64 * 1024
@@ -739,13 +714,13 @@ async def _request_handoff(
             "turn/start",
             {
                 "threadId": thread_id,
-                "input": [{"type": "text", "text": _HANDOFF_PROMPT.format(goal=goal)}],
+                "input": [{"type": "text", "text": HANDOFF_PROMPT.format(goal=goal)}],
                 **({"effort": effort} if effort else {}),
             },
         )
         started_turn = turn.get("turn")
         turn_id = started_turn.get("id") if isinstance(started_turn, Mapping) else None
-        await asyncio.wait_for(asyncio.shield(connection.turn_done), _HANDOFF_TIMEOUT)
+        await asyncio.wait_for(asyncio.shield(connection.turn_done), HANDOFF_TIMEOUT)
     except (TimeoutError, DelegationError):
         _LOG.warning("no handoff from codex thread %s", thread_id, exc_info=True)
         await _interrupt(connection, thread_id, turn_id)

@@ -10,6 +10,9 @@ after the first user message is read:
   ``{"api_call": true}``       POST ``$ANTHROPIC_BASE_URL/v1/messages`` with ``$ANTHROPIC_API_KEY``
   ``{"hang": true}``           waits for an ``interrupt`` request, acknowledges it, ends the turn
 ``crash``: exit with a message on stderr after reading the first message.
+``handoff``: another user message (the handoff ask) is answered with this as the result text
+(default: a reply that is not a document); ``handoff_bash`` first asks to run that command, so a
+test can see it denied.
 """
 
 import json
@@ -189,4 +192,24 @@ send(
     }
 )
 while True:
-    read()
+    message = read()
+    if message.get("type") != "user":
+        continue
+    if scenario.get("handoff_bash"):
+        command = {"command": scenario["handoff_bash"]}
+        ask(tool_use("Bash", command), "Bash", command)
+    text = scenario.get("handoff", "No handoff written.")
+    send({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}})
+    send(
+        {
+            "type": "result",
+            "subtype": "success",
+            "is_error": False,
+            "result": text,
+            "stop_reason": "end_turn",
+            "permission_denials": [],
+            "session_id": "s1",
+            "total_cost_usd": 0.02,
+            "usage": {"input_tokens": 20, "output_tokens": 8},
+        }
+    )
