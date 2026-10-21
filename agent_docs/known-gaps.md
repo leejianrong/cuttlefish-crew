@@ -374,3 +374,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   `cuttlefish run` and `run-team` do not (add them to your own `.gitignore`), a linked worktree or submodule (`.git` is a file)
   is skipped, and a file the agent already committed from there stays tracked: excluding does not untrack.
 
+- **The text filters are checked on the live path only** (CUT-161). `sort`, `uniq` and `sed -n` are in the `inspect` preset, held to
+  their read-only forms by `never_allowed.unsafe_flag` and `sed_print_is_pure` (only `sed -n 'A,Bp' FILE`; `A,$p` too). A Claude Code
+  `--allowedTools` prefix pattern cannot say that, so over `claude -p` (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, a sandbox provider)
+  those three are left out and asked about. The check reads text: a `sort` abbreviation beyond GNU's prefix rule, or a file whose name
+  starts with a dash, is not modelled, and it over-refuses a `sort -k` definition that contains an `o` or `T`. A declared bare `sed`
+  rule still allows any script, as before; only the preset's `sed -n` is narrowed.

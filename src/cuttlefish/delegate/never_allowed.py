@@ -171,6 +171,44 @@ def never_allowed_reason(line: str, _depth: int = 0) -> str | None:
     return None
 
 
+#: ``sort`` options that write a file or run a program. GNU ``sort`` accepts any unambiguous
+#: prefix of a long option (``--out=f``), so those are matched as prefixes.
+_SORT_LONG_UNSAFE = ("output", "compress-program", "temporary-directory")
+#: ``uniq`` options that take a value in the next word, which is not a file name.
+_UNIQ_VALUE_FLAGS = frozenset({"-f", "-s", "-w", "--skip-fields", "--skip-chars", "--check-chars"})
+
+
+def _sort_unsafe(words: list[str]) -> str | None:
+    for word in words[1:]:
+        if word == "--":
+            return None
+        if word.startswith("--"):
+            name = word[2:].split("=", 1)[0]
+            if name and any(long.startswith(name) for long in _SORT_LONG_UNSAFE):
+                return word
+        elif word.startswith("-") and any(flag in word[1:] for flag in "oT"):
+            # -o FILE and -T DIR, alone or in a cluster (-ro, -uofile). Over-refuses a key
+            # definition that contains an o or T; that is only asked about, never allowed.
+            return word
+    return None
+
+
+def _uniq_unsafe(words: list[str]) -> str | None:
+    """``uniq INPUT OUTPUT`` writes OUTPUT, so more than one file word is the unsafe form."""
+    positional: list[str] = []
+    value = False
+    for word in words[1:]:
+        if value:
+            value = False
+        elif word in _UNIQ_VALUE_FLAGS or (
+            word.startswith("-") and not word.startswith("--") and word[-1] in "fsw"
+        ):
+            value = True
+        elif not word.startswith("-") or word == "-":
+            positional.append(word)
+    return positional[1] if len(positional) > 1 else None
+
+
 def unsafe_flag(words: list[str]) -> str | None:
     """The first unsafe flag in `words` (a split command line), or ``None``."""
     for prefix, flags in UNSAFE_FLAGS.items():
@@ -179,7 +217,30 @@ def unsafe_flag(words: list[str]) -> str | None:
         for word in words[len(prefix) :]:
             if word in flags or word.split("=", 1)[0] in flags:
                 return word
+    if words[:1] == ["sort"]:
+        return _sort_unsafe(words)
+    if words[:1] == ["uniq"]:
+        return _uniq_unsafe(words)
     return None
+
+
+#: ``sed -n 'A,Bp'``: print a line range, nothing else. Any other script can write a file
+#: (``w``), run a command (``e``) or edit in place, so only this exact form is read as safe.
+_SED_LINE_RANGE = re.compile(r"\d+(?:,(?:\d+|\$))?p")
+
+#: The rule entries that only mean something with the check below: a bare prefix match on
+#: ``sed -n`` would allow any script.
+SED_PRINT_ENTRY: tuple[str, ...] = ("sed", "-n")
+
+
+def sed_print_is_pure(words: list[str]) -> bool:
+    """``sed -n <line range> [FILE...]`` and nothing else (no other flag, no second script)."""
+    return (
+        tuple(words[:2]) == SED_PRINT_ENTRY
+        and len(words) >= 3
+        and _SED_LINE_RANGE.fullmatch(words[2]) is not None
+        and not any(word.startswith("-") and word != "-" for word in words[3:])
+    )
 
 
 #: The list as the dashboard shows it: a command-shaped label and a plain line each. One place,

@@ -60,6 +60,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome, ToolCallRecord
+from cuttlefish.delegate.never_allowed import SED_PRINT_ENTRY
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.sandbox.provider import SandboxError, SandboxHandle, SandboxProvider
 
@@ -92,6 +93,10 @@ _NEVER_ALLOWED_BASH_PREFIXES = (
     "git push -f",
     "git push --force-with-lease",
 )
+
+#: Allow entries that are only safe with ``never_allowed``'s argument checks, which a Claude Code
+#: ``Bash(<prefix>:*)`` pattern cannot express: ``sort -o FILE``, ``uniq IN OUT``, ``sed -n 'w f'``.
+_FORM_CHECKED = frozenset({("sort",), ("uniq",), SED_PRINT_ENTRY})
 
 #: Auto mode hands Claude Code every Bash command, and a deny pattern cannot say "a download
 #: piped into a shell", so downloads are denied outright there. Cruder than kopicode's check;
@@ -138,9 +143,15 @@ def build_claude_code_argv(
             f"Bash({prefix}:*)"
             for prefix in (*_NEVER_ALLOWED_BASH_PREFIXES, *_AUTO_EXTRA_DENIED_BASH_PREFIXES)
         )
-    elif allow:
+    elif patterns := [
+        f"Bash({shlex.join(command)}:*)"
+        for command in allow or ()
+        # A prefix pattern cannot say "sort without -o" or "sed -n with a line range", so the
+        # text filters whose safety is a check on the arguments are left to the live path.
+        if tuple(command) not in _FORM_CHECKED
+    ]:
         args.append("--allowedTools")
-        args.extend(f"Bash({shlex.join(command)}:*)" for command in allow)
+        args.extend(patterns)
         denied.extend(f"Bash({prefix}:*)" for prefix in _NEVER_ALLOWED_BASH_PREFIXES)
     else:
         denied.append("Bash")

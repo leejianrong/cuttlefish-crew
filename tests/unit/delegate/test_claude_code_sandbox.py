@@ -63,6 +63,21 @@ def test_build_claude_code_argv_with_a_declared_allowlist_allows_only_those_comm
     assert "Bash" not in denied
 
 
+def test_text_filters_that_need_an_argument_check_are_not_passed_as_prefix_patterns() -> None:
+    # `Bash(sort:*)` would allow `sort -o file` and `Bash(sed -n:*)` any sed script (CUT-161).
+    argv = build_claude_code_argv(
+        "claude", "x", allow=[["sort"], ["uniq"], ["sed", "-n"], ["cut"], ["go", "test"]]
+    )
+    allowed = argv[argv.index("--allowedTools") + 1 : argv.index("--disallowedTools")]
+    assert allowed == ["Bash(cut:*)", "Bash(go test:*)"]
+
+
+def test_an_allowlist_of_only_argument_checked_filters_leaves_bash_denied() -> None:
+    argv = build_claude_code_argv("claude", "x", allow=[["sort"], ["sed", "-n"]])
+    assert "--allowedTools" not in argv
+    assert argv[argv.index("--disallowedTools") + 1 :] == ["Bash"]
+
+
 async def test_run_claude_code_in_sandbox_execs_the_right_argv_at_the_right_cwd() -> None:
     result_event = '{"type": "result", "is_error": false, "subtype": "success", "result": "ok"}\n'
     provider = _FakeProvider(ExecResult(exit_code=0, stdout=result_event, stderr=""))

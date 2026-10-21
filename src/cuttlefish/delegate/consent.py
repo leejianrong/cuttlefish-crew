@@ -27,8 +27,10 @@ from pathlib import Path
 from typing import Literal
 
 from cuttlefish.delegate.never_allowed import (
+    SED_PRINT_ENTRY,
     WRAPPER_PROGRAMS,
     never_allowed_reason,
+    sed_print_is_pure,
     unsafe_flag,
 )
 
@@ -449,6 +451,8 @@ class ConsentPolicy:
         for pattern in self._patterns:
             if tuple(words[: len(pattern)]) != pattern:
                 continue
+            if pattern == SED_PRINT_ENTRY and not sed_print_is_pure(words):
+                continue
             if unsafe_flag(words) is not None:
                 return _deny("unsafe_flag")
             if any(_escapes_root(word) for word in words[len(pattern) :]):
@@ -508,6 +512,8 @@ class ConsentPolicy:
             if pattern == _GIT_COMMIT:
                 # Inside a chain a bare ``git commit`` entry opens only the message form
                 # above: the unquoted words cannot say whether an argument was quoted.
+                continue
+            if pattern == SED_PRINT_ENTRY and not sed_print_is_pure(words):
                 continue
             if unsafe_flag(words) is not None:
                 return _deny("unsafe_flag")
