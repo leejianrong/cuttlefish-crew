@@ -28,7 +28,6 @@ from cuttlefish.episodic.events import (
     TaskSubmitted,
 )
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.provider import LlmResponse
 from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.sandbox.container import ContainerSandboxProvider
 from cuttlefish.workflow import run_task
@@ -195,12 +194,7 @@ async def test_handover_fires_and_is_readable_from_the_journal(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider(
-                [
-                    LlmResponse(model="replay", text="Done: handover after submission"),
-                    LlmResponse(model="replay", text="Done: handover after delegation failure"),
-                ]
-            ),
+            llm_provider=ReplayLlmProvider([]),  # a handover makes no model call (CUT-140)
             kopicode_binary="kopicode",
         )
     )
@@ -228,27 +222,25 @@ async def test_handover_fires_and_is_readable_from_the_journal(
     kinds = [type(event.payload).__name__ for event in events]
     assert kinds == [
         "TaskSubmitted",
-        "LlmCallCompleted",  # the summariser's own call, journaled for its cost
         "HandoverWritten",
         "DelegationStarted",
         "DelegationFailed",
-        "LlmCallCompleted",
         "HandoverWritten",
         "TaskFailed",
     ]
-    first_handover = events[2].payload
+    first_handover = events[1].payload
     assert isinstance(first_handover, HandoverWritten)
-    assert first_handover.summary == "Done: handover after submission"
+    assert "A digest read from the journal" in first_handover.summary
     assert first_handover.covers_seq_from == 1
     assert first_handover.covers_seq_to == 1
 
     # Covers both DelegationStarted (seq 3) and DelegationFailed (seq 4) -- the
     # whole window since the first handover.
-    second_handover = events[6].payload
+    second_handover = events[4].payload
     assert isinstance(second_handover, HandoverWritten)
-    assert second_handover.summary == "Done: handover after delegation failure"
-    assert second_handover.covers_seq_from == 4
-    assert second_handover.covers_seq_to == 5
+    assert second_handover.covers_seq_from == 3
+    assert second_handover.covers_seq_to == 4
+    assert "## Failed or refused" in second_handover.summary
 
     episodic_store.close()
     satay_store.close()

@@ -8,7 +8,7 @@ from cuttlefish.episodic.events import (
     TaskSubmitted,
     ToolCallRecorded,
 )
-from cuttlefish.handover import _build_summary_prompt, estimate_event_tokens, estimate_tokens
+from cuttlefish.handover import _digest, _texts, estimate_event_tokens, estimate_tokens
 
 
 def test_estimate_tokens_is_roughly_length_over_four() -> None:
@@ -43,7 +43,7 @@ def test_task_submitted_text_counts() -> None:
     assert estimate_event_tokens(payload) == 3
 
 
-def test_a_rounds_tool_calls_and_edits_count_and_reach_the_summary_prompt() -> None:
+def test_a_rounds_tool_calls_and_edits_count_toward_the_window() -> None:
     window = [
         (1, DelegationFailed(reason="stop=max_turns exit_code=4", role="b", detail="boom")),
         (
@@ -54,25 +54,23 @@ def test_a_rounds_tool_calls_and_edits_count_and_reach_the_summary_prompt() -> N
         (4, ConsentDecided(kind="run_shell", detail="ls", answer="allow", rule="ok", role="b")),
         (5, DelegationCompleted(summary="done", edited_paths=["a.py", "b.py"], role="b")),
     ]
-    prompt = _build_summary_prompt(window)
-    assert "boom" in prompt
-    assert 'write_file ok: {"path":"one.txt"}' in prompt
-    assert "refused: rm x" in prompt
-    assert "4. ConsentDecided" not in prompt  # an allow says nothing, so it is left out
-    assert "edited: a.py, b.py" in prompt
-    assert "Done (name the files and modules)" in prompt
+    assert _texts(window[0][1]) == ("stop=max_turns exit_code=4", "boom")
+    assert _texts(window[1][1]) == ('write_file ok: {"path":"one.txt"}',)
+    assert _texts(window[2][1]) == ("refused: rm x",)
+    assert _texts(window[4][1]) == ("done", "edited: a.py, b.py")
     assert all(estimate_event_tokens(payload) > 0 for _, payload in window[:3] + window[4:])
     assert estimate_event_tokens(window[3][1]) == 0  # an allowed command is not progress
+    assert "Files changed: a.py, b.py." in _digest(window, None)
 
 
-def test_a_round_that_ran_out_of_room_is_not_summarised_as_a_failure() -> None:
-    from cuttlefish.episodic.events import DelegationFailed
-
-    prompt = _build_summary_prompt(
-        [
-            (1, DelegationFailed(reason="stop=max_turns exit_code=4", failure_kind="max_turns")),
-            (2, DelegationFailed(reason="boom", failure_kind="provider_auth")),
-        ]
+def test_a_round_that_ran_out_of_room_is_not_counted_or_digested_as_a_failure() -> None:
+    window = [
+        (1, DelegationFailed(reason="stop=max_turns exit_code=4", failure_kind="max_turns")),
+        (2, DelegationFailed(reason="boom", failure_kind="provider_auth")),
+    ]
+    assert _texts(window[0][1]) == (
+        "the round ended because it ran out of room (max_turns); the work continues",
     )
-    assert "ran out of room (max_turns); the work continues" in prompt
-    assert "stop=max_turns" not in prompt and "boom" in prompt
+    digest = _digest(window, None)
+    assert "ran out of room (max_turns)" in digest and "boom" in digest
+    assert "stop=max_turns" not in digest

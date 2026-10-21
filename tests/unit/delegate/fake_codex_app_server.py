@@ -13,6 +13,10 @@ is appended to ``<log>``. The scenario is a JSON object:
   ``{"steer": true}`` waits for ``turn/steer`` and answers it with the turn's id;
   ``{"usage": {"total": N, "last": M}}`` sends a ``thread/tokenUsage/updated`` (input tokens only);
   ``{"hang": true}`` waits for ``turn/interrupt``, answers it and ends the turn ``interrupted``.
+``handoff``: after the first turn ends, a second ``turn/start`` (the handoff ask) is answered with
+  this text as the final message (default: a reply that is not a document); ``handoff_command``
+  first sends that command's approval request and waits for the reply, so a test can see it
+  declined; ``handoff_tokens`` sends a usage update for that turn.
 ``resume_fails``: answer ``thread/resume`` with an error, then expect ``thread/start``.
 ``final``: the final answer text (default ``done``). ``crash``: exit at once after the handshake.
 """
@@ -183,4 +187,56 @@ send(
         "params": {"threadId": "th1", "turn": {"id": "tu1", "status": status, "error": None}},
     }
 )
+if True:  # a second turn (the handoff ask) is always answered, so no test waits out its timeout
+    second = read_until(lambda m: m.get("method") == "turn/start")
+    answer(second, {"turn": {"id": "tu2", "status": "inProgress", "items": []}})
+    if scenario.get("handoff_command"):
+        ask(
+            "item/commandExecution/requestApproval",
+            {
+                "threadId": "th1",
+                "turnId": "tu2",
+                "itemId": "h",
+                "command": scenario["handoff_command"],
+                "cwd": ".",
+                "availableDecisions": ["accept", "cancel"],
+            },
+        )
+    if scenario.get("handoff_tokens"):
+        send(
+            {
+                "method": "thread/tokenUsage/updated",
+                "params": {
+                    "tokenUsage": {
+                        "total": {
+                            "inputTokens": 1000 + scenario["handoff_tokens"],
+                            "outputTokens": 0,
+                        },
+                        "last": {"inputTokens": scenario["handoff_tokens"], "outputTokens": 0},
+                    }
+                },
+            }
+        )
+    send(
+        {
+            "method": "item/completed",
+            "params": {
+                "item": {
+                    "type": "agentMessage",
+                    "id": "m2",
+                    "phase": "final_answer",
+                    "text": scenario.get("handoff", "No handoff written."),
+                }
+            },
+        }
+    )
+    send(
+        {
+            "method": "turn/completed",
+            "params": {
+                "threadId": "th1",
+                "turn": {"id": "tu2", "status": "completed", "error": None},
+            },
+        }
+    )
 read_until(lambda m: False)
