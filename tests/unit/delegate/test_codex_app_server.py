@@ -495,3 +495,14 @@ async def test_stop_with_no_running_turn_interrupts_nothing(fake: Fake) -> None:
     from cuttlefish.delegate import codex_live
 
     assert await codex_live.interrupt_root(str(fake.root)) == 0
+
+
+async def test_the_usage_sink_hears_the_rounds_tokens_and_the_outcome_excludes_the_threads_history(
+    fake: Fake,
+) -> None:
+    # CUT-102: the thread already held 900 tokens; this round added 100 (total 1,000, last 100).
+    backend = fake.script({"steps": [{"usage": {"total": 1000, "last": 100}}]})
+    heard: list[int] = []
+    outcome = await fake.run(backend, usage_sink=heard.append)
+    assert heard == [100]
+    assert outcome.tokens == 100

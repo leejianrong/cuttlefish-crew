@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { awaitingDecision, isFinishing, reportsUsageAtRoundEnd, waitsForYou } from "./roles";
+import {
+  awaitingDecision,
+  isFinishing,
+  reportsUsageAtRoundEnd,
+  reportsUsageLive,
+  waitsForYou,
+} from "./roles";
 
 const done = { kind: "completed", text: "ok" } as const;
 const none = { max_tokens: null, max_cost_usd: null };
@@ -42,11 +48,13 @@ describe("waitsForYou", () => {
 });
 
 describe("reportsUsageAtRoundEnd", () => {
-  it("is true for the backends that hand tokens back when a round ends", () => {
-    expect(reportsUsageAtRoundEnd("codex")).toBe(true);
+  it("is true for the backend that hands tokens back when a round ends", () => {
     expect(reportsUsageAtRoundEnd("claude-code")).toBe(true);
   });
-  it("is false for kopicode and for no backend", () => {
+  it("is false for Codex (live, CUT-102), kopicode and for no backend", () => {
+    expect(reportsUsageAtRoundEnd("codex")).toBe(false);
+    expect(reportsUsageLive("codex")).toBe(true);
+    expect(reportsUsageLive("claude-code")).toBe(false);
     expect(reportsUsageAtRoundEnd("kopicode")).toBe(false);
     expect(reportsUsageAtRoundEnd(null)).toBe(false);
     expect(reportsUsageAtRoundEnd(undefined)).toBe(false);

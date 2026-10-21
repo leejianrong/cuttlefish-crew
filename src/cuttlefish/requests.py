@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import dataclasses
+import time
 import uuid
 from collections.abc import Callable, Iterable, Sequence
 from datetime import UTC, datetime, timedelta
@@ -31,7 +32,12 @@ from cuttlefish.delegate.consent import (
     suggest_rule,
     validate_always_rule,
 )
-from cuttlefish.episodic.events import EventPayload, RequestRaised, RequestResolved
+from cuttlefish.episodic.events import (
+    EventPayload,
+    RequestRaised,
+    RequestResolved,
+    RoundUsageUpdated,
+)
 from cuttlefish.episodic.store import EpisodicEvent
 
 Answer = Literal["allow_once", "allow_always", "deny"]
@@ -76,6 +82,9 @@ _ANSWER_RESOLUTION: dict[str, Resolution] = {
 }
 
 #: The most of a model's question, or of the context it gives, a card carries.
+#: The least time between two live token figures a round journals (CUT-102).
+USAGE_EVERY_SECONDS = 5.0
+
 _QUESTION_CHARS = 2000
 
 
@@ -331,6 +340,10 @@ class RequestBroker:
             if p.team_id == team_id and p.record.kind == "blocked" and p.record.role == role
         ]
 
+    def journal(self, team_id: str, payload: EventPayload) -> None:
+        """Write one event for ``team_id`` through the same append the requests use."""
+        self._append(team_id, payload)
+
     def _raise(
         self,
         project_id: str,
@@ -565,6 +578,26 @@ class RequestContext:
 
     def asker(self, *, role: str | None, backend: str) -> ShellAsker:
         return ShellAsker(self, role, backend)
+
+    def usage_sink(
+        self, role: str | None, *, every_s: float = USAGE_EVERY_SECONDS
+    ) -> Callable[[int], None]:
+        """A function a backend calls with the round's tokens so far (CUT-102). It journals a
+        ``RoundUsageUpdated`` for the first figure and then at most one every ``every_s``
+        seconds, and only when the figure changed, so a long round writes tens of rows and not
+        one per model call. The last figure may go unwritten; the round's own event carries it."""
+        last_at = -every_s
+        last_tokens = -1
+
+        def report(tokens: int) -> None:
+            nonlocal last_at, last_tokens
+            now = time.monotonic()
+            if tokens == last_tokens or now - last_at < every_s:
+                return
+            last_at, last_tokens = now, tokens
+            self.broker.journal(self.team_id, RoundUsageUpdated(tokens=tokens, role=role))
+
+        return report
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

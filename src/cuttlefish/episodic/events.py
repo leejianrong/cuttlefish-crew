@@ -402,6 +402,21 @@ class StopRequested:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class RoundUsageUpdated:
+    """The tokens a running round has used so far (CUT-102). Codex reports usage after every
+    model call, so the daemon journals it while the turn runs, not only when the round ends: the
+    dashboard shows a live figure and the budget check has something to read. ``tokens`` is the
+    round's own (input and output), not the thread's. Numbers only, no text. The round's own
+    ``DelegationCompleted``/``Refused``/``Failed`` carries the final figure and replaces this one
+    in a role's total (``budget.cumulative_usage``), so nothing is counted twice."""
+
+    EVENT_TYPE: ClassVar[str] = "RoundUsageUpdated"
+
+    tokens: int
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TeamResumed:
     """A daemon restart found this run still non-terminal and re-drove it via
     satay's own resume-by-run_id primitive (ADR-0010/KAN-1703) — journaled once,
@@ -495,6 +510,7 @@ EventPayload = (
     | RoundContinued
     | TeamStopped
     | StopRequested
+    | RoundUsageUpdated
     | EnvironmentPrepareStarted
     | EnvironmentPrepared
     | UnknownPayload
@@ -525,6 +541,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         RoundContinued,
         TeamStopped,
         StopRequested,
+        RoundUsageUpdated,
         EnvironmentPrepareStarted,
         EnvironmentPrepared,
     )

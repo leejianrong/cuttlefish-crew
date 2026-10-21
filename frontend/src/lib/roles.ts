@@ -39,8 +39,14 @@ export function waitsForYou(
   return status === "working" && requests.some((r) => r.role === role && r.kind !== "blocked");
 }
 
-/** Codex and Claude Code run a round as one call and hand their token count back when it ends
+/** Claude Code runs a round as one call and hands its token count back when it ends
  * (known-gaps.md), so a figure of 0 mid-round means "not reported yet", not "nothing used". */
 export function reportsUsageAtRoundEnd(backend: string | null | undefined): boolean {
-  return backend === "codex" || backend === "claude-code";
+  return backend === "claude-code";
+}
+
+/** Codex over `app-server` reports usage after every model call and the daemon journals it as the
+ * round runs (CUT-102): a figure of 0 means no model call has finished yet. */
+export function reportsUsageLive(backend: string | null | undefined): boolean {
+  return backend === "codex";
 }

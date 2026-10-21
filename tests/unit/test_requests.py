@@ -8,7 +8,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from cuttlefish.episodic.events import EventPayload, RequestRaised, RequestResolved
+from cuttlefish.episodic.events import (
+    EventPayload,
+    RequestRaised,
+    RequestResolved,
+    RoundUsageUpdated,
+)
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.requests import (
     AlreadyResolvedError,
@@ -331,3 +336,24 @@ async def test_a_question_keeps_a_few_short_options_for_buttons() -> None:
     options = pending.record.options
     assert len(options) == 6
     assert options[0] == "pytest" and len(options[1]) == 80 and options[1].endswith("…")
+
+
+def test_usage_sink_journals_the_first_figure_then_at_most_one_per_interval() -> None:
+    # CUT-102: a long Codex round writes tens of rows, not one per model call.
+    written: list[tuple[str, EventPayload]] = []
+
+    def append(team_id: str, payload: EventPayload) -> EpisodicEvent:
+        written.append((team_id, payload))
+        return EpisodicEvent(team_id, len(written), 1, datetime.now(UTC), payload)
+
+    context = RequestContext(RequestBroker(append), "p1", "t1", 30.0)
+    report = context.usage_sink("builder", every_s=3600.0)
+    report(100)
+    report(250)  # inside the interval: dropped
+    assert written == [("t1", RoundUsageUpdated(tokens=100, role="builder"))]
+
+    everything = context.usage_sink("builder", every_s=0.0)
+    everything(7)
+    everything(7)  # unchanged: dropped
+    everything(9)
+    assert [p.tokens for _, p in written[1:]] == [7, 9]  # type: ignore[union-attr]

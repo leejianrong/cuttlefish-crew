@@ -22,7 +22,13 @@
   import NeedsYouTab from "./NeedsYouTab.svelte";
   import RequestCard from "./RequestCard.svelte";
   import PrepareConfirm from "./PrepareConfirm.svelte";
-  import { awaitingDecision, isFinishing, reportsUsageAtRoundEnd, waitsForYou } from "../roles";
+  import {
+    awaitingDecision,
+    isFinishing,
+    reportsUsageAtRoundEnd,
+    reportsUsageLive,
+    waitsForYou,
+  } from "../roles";
   import OfficeScene from "./OfficeScene.svelte";
   import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
@@ -342,6 +348,9 @@
               waiting={waitsForYou(status, pending, role)}
               liveSteer={(project.roles.find((r) => r.name === role)?.backend ?? project.backend) === "codex"}
               usageAtRoundEnd={reportsUsageAtRoundEnd(
+                project.roles.find((r) => r.name === role)?.backend ?? project.backend,
+              )}
+              usageLive={reportsUsageLive(
                 project.roles.find((r) => r.name === role)?.backend ?? project.backend,
               )}
             />

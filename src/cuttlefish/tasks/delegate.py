@@ -120,6 +120,9 @@ async def delegate_to_agent_backend(
             mode_kwargs["session"] = role
         if backend_name == "codex" and role:
             mode_kwargs["live_role"] = role
+        if backend_name == "codex" and requests is not None:
+            # CUT-102: Codex reports usage after every model call; journal it while the turn runs.
+            mode_kwargs["usage_sink"] = requests.usage_sink(role)
     if limits and backend.NAME in ("kopicode", "codex", "claude-code"):
         mode_kwargs["limits"] = limits
     # ADR-0031: when the daemon runs a broker, the agent is leased its model key instead of
