@@ -108,7 +108,7 @@
     }
   }
 
-  /* Keep each tab on one line and let the bar scroll if it must (five fit a 390px phone, more than that did not); the open tab is scrolled into view (see the script). */
+  /* Keep each tab on one line and let the bar scroll if it must (five fit a 390px phone with the Needs you badge showing, more than that did not); the open tab is scrolled into view (see the script). */
   @media (max-width: 400px) {
     .tabs {
       gap: 0;
@@ -117,7 +117,7 @@
 
     .tab {
       flex: 0 0 auto;
-      padding: 12px 6px;
+      padding: 12px 3px;
     }
   }
 
@@ -132,6 +132,13 @@
     margin-bottom: 0;
     border: 1px solid var(--md-sys-color-outline);
     border-radius: 8px;
+  }
+
+  /* A thumb needs 44px (CUT-98). */
+  @media (max-width: 640px) {
+    .segmented .tab {
+      min-height: 44px;
+    }
   }
 
   .segmented .tab.active {

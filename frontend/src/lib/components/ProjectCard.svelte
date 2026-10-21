@@ -119,6 +119,13 @@
     color: var(--accent);
   }
 
+  /* A thumb needs 44px (CUT-98): the name is the way into the project. */
+  @media (max-width: 640px) {
+    .title {
+      min-height: 44px;
+    }
+  }
+
   .running-dot {
     width: 0.5rem;
     height: 0.5rem;
