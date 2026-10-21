@@ -277,6 +277,14 @@ async def _dispatch_round(
     )
 
 
+def _failure_kind(outcome: BaseException) -> str | None:
+    """`agent_error` for a `DelegationError` (the agent program died or never started), so the
+    dashboard can say so in words; any other exception has no kind and shows its own text."""
+    if isinstance(outcome, satay.TaskFailedError) and outcome.error_type == "DelegationError":
+        return "agent_error"
+    return None
+
+
 def _failure_reason(outcome: BaseException) -> str:
     """A journalable reason string for a collected `gather` failure (ADR-0027).
 
@@ -379,7 +387,14 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
                 # never steered around, the same boundary `run_task` holds for its
                 # own uncollected `DelegationError` (ADR-0008) -- finalize now.
                 reason = _failure_reason(outcome)
-                await journal(team_id, DelegationFailed(reason=reason, role=name))
+                await journal(
+                    team_id,
+                    DelegationFailed(
+                        reason=reason,
+                        role=name,
+                        failure_kind=_failure_kind(outcome),
+                    ),
+                )
                 final_outcome[name] = outcome
                 continue
 

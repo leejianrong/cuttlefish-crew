@@ -140,6 +140,7 @@ const FAILURE_KINDS: Record<string, string> = {
   provider_outage: "The model provider had an outage",
   provider_other: "The model provider could not be reached or refused the request",
   harness_error: "The agent program itself failed",
+  agent_error: "The agent program stopped before the round finished, or could not start",
   open_failed: "The agent could not start its session (a bad model or a missing credential)",
   protocol_error: "The agent program and cuttlefish stopped understanding each other",
 };
@@ -148,6 +149,7 @@ const FAILURE_KINDS: Record<string, string> = {
  * an older event has none, so fall back to the `stop=` word in the reason. The raw reason
  * follows in brackets so nothing is hidden. */
 export function failureText(kind: unknown, reason: string): string {
+  reason = reason.replace(/^DelegationError: /, "");
   const stop = /^stop=(\w+)/.exec(reason)?.[1];
   const known = FAILURE_KINDS[typeof kind === "string" ? kind : (stop ?? "")];
   return known ? `${known}. (${reason})` : reason;
