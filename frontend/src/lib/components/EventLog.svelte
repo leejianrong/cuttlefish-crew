@@ -2,6 +2,7 @@
   import { tick } from "svelte";
   import type { EpisodicEventView } from "../api";
   import {
+    appliedSteerRows,
     checkpointedRounds,
     eventLabelFor,
     eventRole,
@@ -11,6 +12,8 @@
     isRefusedCommand,
     LONG_TEXT,
     raisedRequests,
+    REPEATED_FINISH_TEXT,
+    repeatedFinishes,
     STEER_FATE_TEXT,
     steerFates,
     summarize,
@@ -25,6 +28,11 @@
   const checkpointed = $derived(checkpointedRounds(events));
   const steerFate = $derived(steerFates(events));
   const raised = $derived(raisedRequests(events));
+  const repeatedFinish = $derived(repeatedFinishes(events));
+  const shown = $derived.by(() => {
+    const hidden = appliedSteerRows(events);
+    return events.filter((event) => !hidden.has(event.seq));
+  });
 
   // Newest-last, like a chat: stay pinned to the bottom while the reader is there, stop following
   // once they scroll up to read, and offer a way back down.
@@ -52,10 +60,10 @@
 
 <div class="log-wrap">
 <div class="log" bind:this={log} onscroll={onScroll}>
-  {#if events.length === 0}
+  {#if shown.length === 0}
     <p class="empty">Nothing has happened yet.</p>
   {/if}
-  {#each events as event (event.seq)}
+  {#each shown as event (event.seq)}
     {#if event.event_type === "TeamResumed"}
       <div class="row resumed">
         <span class="ts mono" title={event.ts}>{formatWhen(event.ts)}</span>
@@ -83,6 +91,8 @@
               <summary>Whole prompt</summary>
               <pre class="mono">{summarize(event)}</pre>
             </details>
+          {:else if repeatedFinish.has(event.seq)}
+            {REPEATED_FINISH_TEXT}
           {:else}
             {summarizeWith(event, raised)}
           {/if}

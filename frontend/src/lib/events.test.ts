@@ -8,7 +8,9 @@ import {
   eventLabel,
   eventLabelFor,
   eventRole,
+  appliedSteerRows,
   failureText,
+  repeatedFinishes,
   installOutput,
   formatWhen,
   isPinnedToBottom,
@@ -439,5 +441,44 @@ describe("steerFates", () => {
       at(3, "TaskCompleted", { role: "reviewer" }),
     ];
     expect(steerFates([queued, ...other]).get(1)).toBe("waiting");
+  });
+});
+
+describe("rows that repeat another row (CUT-165, CUT-167)", () => {
+  const ev = (seq: number, event_type: string, payload: Record<string, unknown>) => ({
+    seq,
+    ts: "2026-10-20T10:00:00Z",
+    event_type,
+    payload,
+  });
+
+  it("hides the applied steer that repeats its queued row, once each", () => {
+    const events = [
+      ev(1, "SteeringQueued", { role: "builder", text: "use tabs" }),
+      ev(2, "SteeringQueued", { role: "builder", text: "use tabs" }),
+      ev(3, "SteeringMessage", { role: "builder", text: "use tabs" }),
+      ev(4, "SteeringMessage", { role: "builder", text: "use tabs" }),
+      ev(5, "SteeringMessage", { role: "builder", text: "from the CLI" }),
+    ];
+    expect([...appliedSteerRows(events)].sort()).toEqual([3, 4]);
+  });
+
+  it("keeps a steer applied for another role, or with no queued row", () => {
+    const events = [
+      ev(1, "SteeringQueued", { role: "builder", text: "x" }),
+      ev(2, "SteeringMessage", { role: "reviewer", text: "x" }),
+    ];
+    expect(appliedSteerRows(events).size).toBe(0);
+  });
+
+  it("marks a Finished row whose result is its role's last round summary", () => {
+    const events = [
+      ev(1, "DelegationCompleted", { role: "a", summary: "first" }),
+      ev(2, "DelegationCompleted", { role: "a", summary: "done: 3 tests" }),
+      ev(3, "TaskCompleted", { role: "a", result: "done: 3 tests" }),
+      ev(4, "DelegationCompleted", { role: "b", summary: "b said this" }),
+      ev(5, "TaskCompleted", { role: "b", result: "something else" }),
+    ];
+    expect([...repeatedFinishes(events)]).toEqual([3]);
   });
 });
