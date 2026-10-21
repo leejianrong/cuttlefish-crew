@@ -39,7 +39,6 @@ def _fake_claude(
     binary.write_text(f'#!/bin/sh\nexec {sys.executable} {FAKE} {scenario} {log} "$@"\n')
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("CUTTLEFISH_CLAUDE_CODE_BIN", str(binary))
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
     monkeypatch.setenv("ANTHROPIC_API_KEY", REAL)  # the daemon's own, as `cuttlefish serve` has it
     monkeypatch.setenv("ANTHROPIC_BASE_URL", upstream.base)
     return log

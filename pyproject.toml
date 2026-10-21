@@ -32,27 +32,21 @@ classifiers = [
 # behave against" an open question on every bug report. The `[studio]` extra
 # pulls in FastAPI/uvicorn for `satay.control.run_app` (ADR-0046) — `cuttlefish
 # run --steerable`'s own control API (ADR-0008) needs it unconditionally, not as
-# an opt-in extra of cuttlefish's own. openai backs the default
-# real LlmProvider, OpenRouterLlmProvider, over OpenRouter's OpenAI-compatible
-# endpoint (QUESTIONS.md Q11's "an OpenAI-compatible endpoint"); anthropic backs
-# ClaudeLlmProvider for a direct Anthropic credential. Both floated, since they're
-# well-behaved, actively maintained SDKs and cuttlefish has no reason to pin its
-# own external LLM dependencies as tightly as its own runtime. python-dotenv
+# an opt-in extra of cuttlefish's own. (cuttlefish makes no model call of its own
+# since CUT-140, so there is no openai or anthropic SDK here.) python-dotenv
 # loads `.env` at CLI startup so an operator's credential doesn't need to be
 # exported into the shell by hand. e2b backs E2bSandboxProvider (ADR-0002: the
-# only sandbox backend this project builds), floated for the same reason as
-# anthropic/openai — a well-behaved, actively maintained SDK cuttlefish doesn't
-# own and has no reason to pin as tightly as satay. cryptography backs
+# only sandbox backend this project builds), floated because it is a
+# well-behaved, actively maintained SDK cuttlefish doesn't own and has no reason
+# to pin as tightly as satay. cryptography backs
 # SecretsStore's Fernet encryption (ADR-0006) — floated for the same reason,
 # a well-audited, actively maintained SDK this project has no standing to pin
 # tightly, since it owns no cryptographic primitives of its own. mcp backs
 # `cuttlefish mcp` (KAN-1764, ADR-0020) — the official Model Context Protocol
 # SDK, floated for the identical "well-behaved, actively maintained, not
-# cuttlefish's own to pin tightly" reason as anthropic/openai/e2b.
+# cuttlefish's own to pin tightly" reason as e2b.
 dependencies = [
     "satay[studio]==0.2.0",
-    "anthropic>=0.40",
-    "openai>=3.3.1",
     "python-dotenv>=1.2.3",
     "e2b>=2.0",
     "cryptography>=42",

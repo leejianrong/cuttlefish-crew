@@ -16,7 +16,6 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.handover import latest_handover_summary, maybe_handover
-from cuttlefish.llm.replay import ReplayLlmProvider
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +29,6 @@ def _configure(tmp_path: Path) -> EpisodicStore:
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),  # a handover makes no model call (CUT-140)
             kopicode_binary="kopicode",
         )
     )

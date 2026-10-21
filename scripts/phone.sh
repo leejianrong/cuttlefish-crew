@@ -88,7 +88,7 @@ uv_cache="$(uv cache dir)"
 run() {
 	env HOME="$home" PATH="$home/bin:$PATH" UV_CACHE_DIR="$uv_cache" \
 		CUTTLEFISH_SECRETS_KEY="$(cat "$home/secrets.key")" CUTTLEFISH_SERVE_PASSWORD="$password" \
-		CUTTLEFISH_LLM_PROVIDER=replay CUTTLEFISH_AGENT_BACKEND=claude-code \
+		CUTTLEFISH_AGENT_BACKEND=claude-code \
 		uv run cuttlefish "$@"
 }
 
@@ -101,7 +101,7 @@ if [ "$https" = "1" ]; then
 	[ -x "$cuttlefish_bin" ] || fail "no $cuttlefish_bin (run: uv sync)"
 	env_run() {
 		env HOME="$home" PATH="$home/bin:$PATH" CUTTLEFISH_SECRETS_KEY="$(cat "$home/secrets.key")" \
-			CUTTLEFISH_SERVE_PASSWORD="$password" CUTTLEFISH_LLM_PROVIDER=replay \
+			CUTTLEFISH_SERVE_PASSWORD="$password" \
 			CUTTLEFISH_AGENT_BACKEND=claude-code "$@"
 	}
 	# `tailscale serve` changes this machine's Tailscale configuration, so a person says yes first.

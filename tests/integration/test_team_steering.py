@@ -23,7 +23,6 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import runtime
 from cuttlefish.episodic.events import DelegationStarted, SteeringMessage
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.steering import steering_key
 from cuttlefish.team import RoleInput, run_team
 
@@ -48,7 +47,6 @@ async def test_steering_one_role_gives_it_a_second_round_without_touching_the_ot
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )

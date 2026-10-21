@@ -2,13 +2,12 @@
 (ADR-0030), against real kopicode and a real model.
 
 What the scripted fake cannot show: that a real kopicode accepts ``max_turns`` on ``session.start``,
-really stops on it, that cuttlefish then opens a *new* kopicode session (a new context window), that
-the handover it writes with its own summarising model reaches that session's prompt, and that the
-agent, told nothing but the task and the handover, finishes the job. The task is four small files
-with a three-turn limit, so the work cannot fit in one round. Costs cents per run, and only with a
-real ``OPENROUTER_API_KEY`` (kopicode's model and cuttlefish's own summariser both use it) and a
-kopicode v0.4.0 or later: set ``CUTTLEFISH_TEST_KOPICODE_BIN`` to one if ``kopicode`` on ``PATH`` is
-older.
+really stops on it, that cuttlefish then opens a *new* kopicode session (a new context window),
+that the handover (kopicode's own, or a digest read from the journal) reaches that session's
+prompt, and that the agent, told nothing but the task and the handover, finishes the job. The task
+is four small files with a three-turn limit, so the work cannot fit in one round. Costs cents per
+run, and only with a real ``OPENROUTER_API_KEY`` (kopicode's model) and a kopicode v0.4.0 or later:
+set ``CUTTLEFISH_TEST_KOPICODE_BIN`` to one if ``kopicode`` on ``PATH`` is older.
 """
 
 from __future__ import annotations
@@ -32,7 +31,6 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.handover import estimate_tokens
-from cuttlefish.llm.openrouter import OpenRouterLlmProvider
 from cuttlefish.team import run_team
 
 pytestmark = [pytest.mark.requires_kopicode, pytest.mark.requires_live_credential]
@@ -66,11 +64,7 @@ async def test_a_round_that_runs_out_of_turns_continues_in_a_fresh_session_with_
     root.mkdir()
     _repo(root)
     store = EpisodicStore.open(tmp_path / "episodic.db")
-    runtime.configure(
-        runtime.Runtime(
-            episodic_store=store, llm_provider=OpenRouterLlmProvider(), kopicode_binary=binary
-        )
-    )
+    runtime.configure(runtime.Runtime(episodic_store=store, kopicode_binary=binary))
     result = await start(
         run_team,
         {

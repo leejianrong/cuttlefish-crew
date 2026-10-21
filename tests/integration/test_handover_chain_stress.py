@@ -33,7 +33,6 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import runtime
 from cuttlefish.episodic.events import DelegationStarted, HandoverWritten, SteeringMessage
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.workflow import run_task
 
 #: See the module docstring -- real session, no real cost, no real credential.
@@ -62,7 +61,6 @@ async def test_ten_chained_handovers_reach_every_round_and_size_stays_bounded(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )

@@ -44,7 +44,6 @@ async def test_resume_pending_redrives_a_team_a_simulated_daemon_restart_left_ru
 ) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
     monkeypatch.delenv("CUTTLEFISH_SECRETS_KEY", raising=False)
 
     root = tmp_path / "alpha"

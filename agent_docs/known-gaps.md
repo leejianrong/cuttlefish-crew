@@ -271,13 +271,16 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   legitimately spends rounds reading (a reviewer), can hit the no-progress stop; it counts only after a round
   ran out of room, and `CUTTLEFISH_MAX_IDLE_ROUNDS=0` turns it off. It does not notice an agent that edits the
   same file back and forth. The wall-clock limit counts time spent waiting for you in Needs you.
-- **The handoff is written by the agent for kopicode only (ADR-0042, CUT-134).** At a checkpoint kopicode is asked for its own
-  handoff (`session.handoff`) and the next round gets it as it is; Claude Code and Codex still use cuttlefish's own summary,
-  and kopicode falls back to it when the draft cannot be had. Retiring the summary for them is CUT-140. A real model's handoff
-  quality on a real task is not measured (Jian chose not to compare first).
-- **A continuation's handover needs the summariser** unless the agent wrote the handoff (ADR-0042). Each auto-continued round writes one (ADR-0030's fourth update), so a
-  long team now needs `OPENROUTER_API_KEY` (or `CUTTLEFISH_LLM_PROVIDER=replay`, placeholder text); without one the write
-  fails, is logged, and the next round gets the list of changed files only.
+- **The handoff is written by the agent for kopicode and Codex, not yet Claude Code** (ADR-0042, CUT-134, CUT-140). At a checkpoint
+  kopicode is asked for its own handoff (`session.handoff`) and Codex over `app-server` gets a second turn on the same thread (prompt with
+  fixed headings, every command and edit declined, the reply kept only if it has the Done and Remaining headings; seen live 2026-10-22: a
+  real Codex wrote one after a token-limit stop, the ask counted in the round's tokens). The next round gets it as it is. A round that
+  ends for another reason (finished, failed, Stopped) is not asked. Claude Code, `codex exec`, `claude -p` and a sandbox provider cannot
+  take a second prompt, and everything falls back to a **digest read from the journal** (`handover._digest`): files changed, the agent's
+  last words, failures and refusals, what the person said, over the whole history and bounded, with an agent-written earlier handoff carried
+  (clipped). It names no remaining work and says so. cuttlefish makes no model call of its own, so a continuation needs no key; the
+  summariser, `CUTTLEFISH_LLM_*` and the `anthropic` and `openai` dependencies are gone. A real model's handoff quality on a real task is not
+  measured (Jian chose not to compare first). A Codex that does not answer the ask holds the round's end for up to 240 s.
 - **Limits apply to kopicode.** `cuttlefish run-team` takes `--limit`/`--role-limit`, `run` reads the environment only; Claude Code
   ignores turns, tokens, context and time (it has no such controls), and Codex over `app-server` honours only the round time
   limit and, since CUT-168, tokens per round (not turns or context), so a role on them otherwise only honours its

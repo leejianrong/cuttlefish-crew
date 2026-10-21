@@ -1,7 +1,7 @@
 """``cuttlefish init`` -- guided first-run setup (KAN-1808).
 
-Checks what a first run needs (an agent CLI on ``PATH`` and plausibly logged in, and
-whether cuttlefish's own optional summarising key is set), registers the current
+Checks what a first run needs (an agent CLI on ``PATH`` and plausibly logged in; cuttlefish
+needs no key of its own), registers the current
 repo as a :class:`~cuttlefish.projects.store.Project`, proposes roles, and prints the
 exact next command. Everything environment-dependent (``PATH`` lookup, env, home
 directory) is passed in so the checks are testable without a real machine.
@@ -25,7 +25,6 @@ from cuttlefish.config import (
     DEFAULT_CODEX_BIN,
     DEFAULT_KOPICODE_BIN,
     KOPICODE_BIN_ENV,
-    LLM_PROVIDER_ENV,
 )
 from cuttlefish.projects.store import Project, ProjectStore, RoleDefinition
 from cuttlefish.roles import template_roles
@@ -107,20 +106,6 @@ def check_prerequisites(
         ),
         _login_hint(backend, env, home),
     ]
-    has_key = bool(env.get("OPENROUTER_API_KEY"))
-    replay = env.get(LLM_PROVIDER_ENV) == "replay"
-    checks.append(
-        Check(
-            "summarising key (optional)",
-            True,
-            "OPENROUTER_API_KEY set"
-            if has_key
-            else "replay provider"
-            if replay
-            else "not set: only needed if a long run reaches a handover summary "
-            "(or set CUTTLEFISH_LLM_PROVIDER=replay)",
-        )
-    )
     return checks
 
 

@@ -22,7 +22,6 @@ from cuttlefish.projects.store import ProjectStore
 @pytest.fixture(autouse=True)
 def _env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CUTTLEFISH_KOPICODE_BIN", "cuttlefish-test-missing-kopicode-binary")
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
     monkeypatch.delenv("CUTTLEFISH_SECRETS_KEY", raising=False)
 
 

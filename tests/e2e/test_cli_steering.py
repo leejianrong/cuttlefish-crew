@@ -50,7 +50,6 @@ async def test_steer_redirects_a_real_running_steerable_task(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", _INVALID_OPENROUTER_KEY)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
 
     run_parser = cli.build_parser()
     run_args = run_parser.parse_args(["run", "--steerable", "add a .gitignore entry"])

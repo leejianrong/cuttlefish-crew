@@ -23,7 +23,6 @@ from cuttlefish.episodic.events import (
     RoundContinued,
 )
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.requests import RequestBroker, RequestContext
 from cuttlefish.team import run_team
 
@@ -100,11 +99,7 @@ def _sent(tmp_path: Path) -> list[dict[str, Any]]:
 
 async def _run(tmp_path: Path, binary: str, **team: Any) -> tuple[dict[str, Any], list[Any]]:
     store = EpisodicStore.open(tmp_path / "episodic.db")
-    runtime.configure(
-        runtime.Runtime(
-            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary=binary
-        )
-    )
+    runtime.configure(runtime.Runtime(episodic_store=store, kopicode_binary=binary))
     root = tmp_path / "root"
     root.mkdir()
     result = await start(
@@ -213,7 +208,6 @@ async def test_a_held_role_raises_a_card_that_says_nothing_is_waiting(tmp_path: 
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=_wrapper(tmp_path, stops=99),
             requests=RequestContext(broker, "p1", "t", 600.0),
         )
@@ -244,7 +238,6 @@ async def test_a_role_held_after_refusals_gets_a_card_that_says_what_was_refused
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=binary,
             requests=RequestContext(broker, "p1", "t", 600.0),
         )
@@ -338,7 +331,6 @@ async def test_a_continuation_writes_a_handover_even_when_the_journal_is_small(
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=_wrapper(tmp_path, stops=1),
         )
     )
@@ -430,7 +422,6 @@ async def test_agent_handoff_falls_back_to_the_digest_when_kopicode_cannot_write
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=_wrapper(tmp_path, stops=1),  # no session.handoff feature
         )
     )

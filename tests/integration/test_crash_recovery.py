@@ -56,7 +56,6 @@ from cuttlefish.episodic.events import (
     TaskSubmitted,
 )
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.tasks.delegate import delegate_to_agent_backend
 from cuttlefish.workflow import run_task
 
@@ -124,7 +123,6 @@ async def test_delegation_is_not_invoked_twice_after_a_crash(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=wrapper,
         )
     )
@@ -170,7 +168,6 @@ async def test_full_workflow_resumes_to_the_same_terminal_state_after_a_crash(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )

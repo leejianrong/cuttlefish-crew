@@ -18,7 +18,6 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.episodic.events import DelegationStarted, SteeringMessage
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.steering import steering_key
 from cuttlefish.team import run_team
 
@@ -57,7 +56,6 @@ async def test_a_stuck_role_outlasts_the_steering_grace_and_resumes_on_a_steer(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )

@@ -24,7 +24,6 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import runtime
 from cuttlefish.episodic.events import DelegationStarted, TaskCompleted
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.sandbox.container import ContainerSandboxProvider
 from cuttlefish.tasks.delegate import delegate_to_agent_backend
 from cuttlefish.workflow import run_task
@@ -57,7 +56,6 @@ async def test_a_real_write_lands_through_the_container_sandbox(tmp_path: Path) 
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             sandbox_provider=ContainerSandboxProvider(),
         )
@@ -118,7 +116,6 @@ async def test_delegate_to_agent_backend_forwards_the_kopicode_credential_into_t
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             sandbox_provider=ContainerSandboxProvider(),
         )

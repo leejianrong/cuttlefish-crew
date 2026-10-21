@@ -12,7 +12,6 @@ import asyncio
 import pytest
 
 from cuttlefish import runtime
-from cuttlefish.llm.replay import ReplayLlmProvider
 
 
 def _runtime(kopicode_binary: str) -> runtime.Runtime:
@@ -20,7 +19,6 @@ def _runtime(kopicode_binary: str) -> runtime.Runtime:
 
     return runtime.Runtime(
         episodic_store=MagicMock(),
-        llm_provider=ReplayLlmProvider([]),
         kopicode_binary=kopicode_binary,
     )
 

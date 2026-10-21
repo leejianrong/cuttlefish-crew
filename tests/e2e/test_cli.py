@@ -36,7 +36,6 @@ def test_run_reaches_a_terminal_state_and_prints_json(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
 
     exit_code = cli.main(["run", "add a .gitignore entry"])
 
@@ -54,7 +53,6 @@ def test_show_renders_the_full_sequence_matching_the_journal(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
 
     cli.main(["run", "add a .gitignore entry"])
     run_result = json.loads(capsys.readouterr().out)

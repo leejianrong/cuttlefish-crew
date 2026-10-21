@@ -19,7 +19,6 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import runtime
 from cuttlefish.episodic.events import ToolCallRecorded
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.workflow import run_task
 
 
@@ -33,7 +32,6 @@ def _configure_runtime(episodic_store: EpisodicStore) -> None:
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )

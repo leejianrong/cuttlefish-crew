@@ -42,17 +42,14 @@ backend and reasoning provider you select (see
 [Configuration](cli-reference.md#configuration)). `cuttlefish` checks for
 the binary before accepting a task, not mid-run.
 
-## Try it without an OpenRouter key
+## Try it
 
 ```bash
-CUTTLEFISH_LLM_PROVIDER=replay uv run cuttlefish run "add a .gitignore entry for build artifacts"
+uv run cuttlefish run "add a .gitignore entry for build artifacts"
 uv run cuttlefish show <task-id>   # printed by `run`, above
 ```
 
-`CUTTLEFISH_LLM_PROVIDER=replay` swaps in a keyless, deterministic provider
-for cuttlefish's own reasoning calls (handover summaries become a
-placeholder) — useful for trying the CLI without an OpenRouter key. The
-actual coding work still goes through your configured backend, which needs
+cuttlefish needs no key of its own: the coding work goes through your configured backend, which needs
 its own login or key (`codex login`, `claude`, or kopicode's API key).
 
 Next: [Quickstart](quickstart.md) walks through registering a real project

@@ -54,7 +54,6 @@ async def test_require_approval_alone_still_opens_the_control_api(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", _INVALID_OPENROUTER_KEY)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
 
     run_parser = cli.build_parser()
     run_args = run_parser.parse_args(["run", "--require-approval", "add a .gitignore entry"])
@@ -95,7 +94,6 @@ async def test_reject_redirects_a_real_running_require_approval_task(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OPENROUTER_API_KEY", _INVALID_OPENROUTER_KEY)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
 
     run_parser = cli.build_parser()
     run_args = run_parser.parse_args(["run", "--require-approval", "add a .gitignore entry"])

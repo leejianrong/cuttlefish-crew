@@ -28,7 +28,6 @@ from cuttlefish.episodic.events import (
     TaskSubmitted,
 )
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.sandbox.container import ContainerSandboxProvider
 from cuttlefish.workflow import run_task
 
@@ -50,7 +49,6 @@ async def test_a_refused_delegation_is_a_journaled_failure(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )
@@ -95,7 +93,6 @@ async def test_a_declared_allowlist_is_recorded_on_the_journaled_delegation(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )
@@ -146,7 +143,6 @@ async def test_a_sandboxed_delegation_is_recorded_and_still_reaches_the_real_bin
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             sandbox_provider=ContainerSandboxProvider(),
         )
@@ -194,7 +190,6 @@ async def test_handover_fires_and_is_readable_from_the_journal(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),  # a handover makes no model call (CUT-140)
             kopicode_binary="kopicode",
         )
     )
