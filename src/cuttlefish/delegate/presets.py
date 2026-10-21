@@ -37,6 +37,16 @@ PRESETS: Mapping[str, tuple[Command, ...]] = {
         ("stat",),
         ("tree",),
         ("diff",),
+        # Text filters (CUT-161): output only. `sort` and `uniq` are held to their read-only
+        # forms by `never_allowed.unsafe_flag`, and `sed -n` to a pure line range by
+        # `never_allowed.sed_print_is_pure`.
+        ("echo",),
+        ("printf",),
+        ("tr",),
+        ("cut",),
+        ("sort",),
+        ("uniq",),
+        ("sed", "-n"),
     ),
     "git-read": (
         ("git", "status"),
@@ -127,7 +137,11 @@ def read_only_allow() -> list[list[str]]:
 
 #: What each preset is, for the dashboard's Permissions tab: a title and one plain line.
 PRESET_INFO: Mapping[str, tuple[str, str]] = {
-    "inspect": ("Inspect files", "Read and search files and folders."),
+    "inspect": (
+        "Inspect files",
+        "Read and search files and folders, and filter text (echo, printf, tr, cut, sort, uniq, "
+        "sed -n with a line range).",
+    ),
     "git-read": ("Git, read only", "Look at status, history and diffs."),
     "git-save": ("Git, save work", "Stage and commit. Never pushes."),
     "python": ("Python", "Run tests, linters and type checks with uv."),

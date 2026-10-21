@@ -369,8 +369,8 @@ def test_a_chain_of_allowed_commands_is_allowed(line: str) -> None:
         ("git status &&& git diff", "not_a_plain_word_list", True),
         ("git status  && git diff", "not_a_plain_word_list", True),
         # A command's own rules still apply inside a chain.
-        ("git status && sed -n p /etc/passwd", "argument_escapes_root", False),
-        ("git status && sed -n p ../x", "argument_escapes_root", False),
+        ("git status && sed -n 5p /etc/passwd", "argument_escapes_root", False),
+        ("git status && sed -n 5p ../x", "argument_escapes_root", False),
         ("ls && sudo ls", "never_allowed:privilege_escalation", False),
         ("git log && git push --force", "never_allowed:force_push", False),
     ],

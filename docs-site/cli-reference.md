@@ -412,7 +412,8 @@ or a separate user stops that. The checks behind this are in `docs/research/harn
 
 A delegation with nothing declared is not shell-less: it gets the built-in presets, and
 `--allow` (or a project's own allow list) adds to them. Enabled by default: **inspect**
-(`ls`, `cat`, `grep`, `rg`, `find`, ...), **git-read** (`git status|diff|log|show`),
+(`ls`, `cat`, `grep`, `rg`, `find`, ... and the text filters `echo`, `printf`, `tr`, `cut`, `sort`, `uniq`
+and `sed -n '<from>,<to>p' FILE`), **git-read** (`git status|diff|log|show`),
 **git-save** (`git add`, `git commit -m '<message>'`, `git switch -c`), **python**
 (`uv run pytest|ruff|mypy`, `uv sync`), **javascript** (`npm test|ci`, `npm run
 test|build|lint|check`, `npx tsc`) and **make** (`make test|check|lint|build|ci`). **go-rust**
@@ -420,7 +421,9 @@ and **containers** exist but are off unless declared.
 
 Never approved, whatever is declared: `sudo`/`su`/`doas`, a forced `git push`, a
 download piped into a shell (`curl ... | sh`), and arguments that reach outside `--root`.
-`find -delete`/`-exec`, `rg --pre` and `git commit --no-verify` are refused too.
+`find -delete`/`-exec`, `rg --pre` and `git commit --no-verify` are refused too, and so are the forms of a
+text filter that write or run something: `sort -o`/`--output`/`--compress-program`/`-T`, `uniq IN OUT`
+(its second file is written to), and any `sed` script other than a plain line range.
 
 Matching is by argv prefix on a plain word list. A line that chains commands (`a && b`, `a | b`,
 `a; b`, one command a line, `cmd || true`) is read one command at a time and runs when every
