@@ -2,6 +2,7 @@
 // the journal and the per-role status the daemon already sends; no second source.
 
 import type { EpisodicEventView, RoleStatus, RoleUsage } from "./api";
+import { failureText } from "./events";
 
 export interface LastRun {
   /** `failed` wins over `stopped`, which wins over `finished`. */
@@ -15,6 +16,8 @@ export interface LastRun {
   cost_usd: number | null;
   /** Why each failed role failed, from the journal. */
   failures: { role: string; error: string }[];
+  /** The task each failed role was given, for "Try again with the same task". */
+  retry: { role: string; text: string }[];
   /** What each role said when its last delegation completed (its `DelegationCompleted.summary`),
    * in the order roles first finished. Empty for a role that never completed. */
   answers: { role: string; text: string }[];
@@ -57,6 +60,8 @@ export function lastRun(
   const paths = new Set<string>();
   const errors = new Map<string, string>();
   const said = new Map<string, string>();
+  const reasons = new Map<string, string>();
+  const tasks = new Map<string, string>();
   for (const event of events) {
     if (event.event_type === "DelegationCompleted") {
       const edited = event.payload.edited_paths;
@@ -64,6 +69,19 @@ export function lastRun(
       const { role, summary } = event.payload;
       const words = typeof summary === "string" ? modelWords(summary) : "";
       if (typeof role === "string" && words !== "") said.set(role, words);
+    }
+    if (event.event_type === "TaskSubmitted") {
+      const { role, text } = event.payload;
+      if (typeof role === "string" && typeof text === "string") tasks.set(role, text);
+    }
+    if (event.event_type === "DelegationStarted") {
+      // A new round for this role: an earlier failure was continued past, not the final one.
+      const { role } = event.payload;
+      if (typeof role === "string") reasons.delete(role);
+    }
+    if (event.event_type === "DelegationFailed") {
+      const { role, reason, failure_kind: kind } = event.payload;
+      if (typeof role === "string") reasons.set(role, failureText(kind, String(reason ?? "")));
     }
     if (event.event_type === "TaskFailed") {
       const role = event.payload.role;
@@ -73,7 +91,11 @@ export function lastRun(
 
   const failures = Object.entries(status)
     .filter(([, s]) => s === "failed")
-    .map(([role]) => ({ role, error: errors.get(role) ?? "" }));
+    .map(([role]) => ({ role, error: reasons.get(role) ?? errors.get(role) ?? "" }));
+  const retry = failures.flatMap(({ role }) => {
+    const text = tasks.get(role);
+    return text === undefined ? [] : [{ role, text }];
+  });
   const outcome = states.includes("failed")
     ? "failed"
     : states.includes("stopped")
@@ -95,6 +117,7 @@ export function lastRun(
     tokens: totals.reduce((sum, u) => sum + u.tokens, 0),
     cost_usd: costs.length > 0 ? costs.reduce((sum, c) => sum + c, 0) : null,
     failures,
+    retry,
     answers: [...said].map(([role, text]) => ({ role, text })),
     notRun,
   };

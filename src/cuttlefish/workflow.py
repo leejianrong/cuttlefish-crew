@@ -177,7 +177,7 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
             # steered around (ADR-0008) -- it fails the task immediately, the same as
             # it always has.
             reason = str(exc)
-            await journal(task_id, DelegationFailed(reason=reason))
+            await journal(task_id, DelegationFailed(reason=reason, failure_kind="agent_error"))
             await maybe_handover(task_id, token_budget=token_budget, root=root)
             await journal(task_id, TaskFailed(error=reason))
             return {"status": "failed", "error": reason}

@@ -69,6 +69,23 @@ describe("lastRun", () => {
     expect(run?.failures).toEqual([{ role: "reviewer", error: "boom" }]);
   });
 
+  it("says why a role failed in words and keeps its task for a retry (CUT-162)", () => {
+    const died = [
+      event("2026-10-10T10:00:00Z", "TaskSubmitted", { role: "builder", text: "add remove()" }),
+      event("2026-10-10T10:01:00Z", "DelegationStarted", { role: "builder" }),
+      event("2026-10-10T10:02:00Z", "DelegationFailed", {
+        role: "builder",
+        failure_kind: "agent_error",
+        reason: "DelegationError: Codex app-server exited before the turn finished; stderr: <empty>",
+      }),
+      event("2026-10-10T10:02:00Z", "TaskFailed", { role: "builder", error: "DelegationError: raw" }),
+    ];
+    const run = lastRun(died, { builder: "failed" }, usage);
+    expect(run?.failures[0].error).toMatch(/^The agent program stopped before the round finished/);
+    expect(run?.failures[0].error).not.toContain("DelegationError");
+    expect(run?.retry).toEqual([{ role: "builder", text: "add remove()" }]);
+  });
+
   it("is stopped when a role was stopped and none failed", () => {
     expect(lastRun(events, { builder: "done", reviewer: "stopped" }, usage)?.outcome).toBe("stopped");
   });

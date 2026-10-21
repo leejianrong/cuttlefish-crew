@@ -252,6 +252,15 @@
     }
   }
 
+  // Start the failed roles again with the task each was given. The form is filled first, so a
+  // refused start (or the install question) leaves the same text in the boxes to edit.
+  async function retryFailed(retry: { role: string; text: string }[]) {
+    if (!project) return;
+    const names = new Set(project.roles.map((role) => role.name));
+    for (const { role, text } of retry) if (names.has(role)) taskTexts[role] = text;
+    await start();
+  }
+
   function useExample(text: string) {
     const first = project?.roles[0];
     if (first) taskTexts[first.name] = text;
@@ -368,6 +377,16 @@
             {#each ended.failures as failure (failure.role)}
               <p class="body-medium"><strong>{failure.role}</strong>{failure.error ? `: ${failure.error}` : ""}</p>
             {/each}
+            {#if ended.outcome === "failed" && ended.retry.length > 0}
+              <div class="retry">
+                <button class="btn btn-tonal" onclick={() => retryFailed(ended.retry)} disabled={starting}>
+                  Try again with the same task
+                </button>
+                <span class="body-small muted">
+                  Starts {ended.retry.map((r) => r.role).join(", ")} again with {ended.retry.length === 1 ? "its" : "their"} original task.
+                </span>
+              </div>
+            {/if}
             {#each ended.answers as answer (answer.role)}
               <div class="answer">
                 <p class="label-medium muted">
@@ -689,6 +708,12 @@
     gap: 8px;
   }
 
+  .retry {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
   .task {
     display: flex;
     flex-direction: column;

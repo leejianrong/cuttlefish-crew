@@ -162,7 +162,7 @@ and this folder disagree after a slice lands, update this folder.
 - **Question buttons and last-run card shipped (2026-10-10).** A question card shows the agent's choices as tonal buttons above the text box
   ("Or write your own answer"); one click sends that choice. When nothing is running and the last run ended, Overview opens with a card
   "The last run finished / failed / was stopped" with files changed, minutes, tokens and cost (cost left out when no backend reported one),
-  and a failed role's reason, then a "<role> said" block per role that completed (CUT-63): its last delegation summary, which now carries
+  and a failed role's reason in plain words (CUT-162: the journal's `failure_kind`, `agent_error` when the agent program died or never started; the raw text follows in brackets) with a tonal "Try again with the same task" button that starts the failed roles again with the task each was given (the form is filled first, so a refused start leaves the text to edit), then a "<role> said" block per role that completed (CUT-63): its last delegation summary, which now carries
   the model's last message for kopicode, Claude Code and Codex alike (capped at 600 characters, scrolls past about 12 lines); it sits above Start a team. Neutral surface, an error-coloured edge only when it failed. Not in the mockups.
 
 - **Project Secrets tab shipped (CUT-80, 2026-10-10).** A fifth project tab, after Team. Two cards of sealed rows (a lock, the name in mono, twelve

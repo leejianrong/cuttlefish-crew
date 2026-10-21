@@ -125,6 +125,7 @@ async def test_a_role_name_appears_on_every_event_it_writes(tmp_path: Path) -> N
     assert submitted.payload.role == "builder"
     assert started.payload.role == "builder"
     assert failed.payload.role == "builder"
+    assert failed.payload.failure_kind == "agent_error"
     assert task_failed.payload.role == "builder"
 
     episodic_store.close()
