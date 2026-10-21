@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import ClassVar, Literal
 
 from cuttlefish.agents.deciders import command_decider
@@ -109,11 +109,13 @@ class CodexBackend:
         lease: Lease | None = None,
         session: str | None = None,
         live_role: str | None = None,
+        usage_sink: Callable[[int], None] | None = None,
     ) -> DelegationOutcome:
         """``session`` (CUT-92) is the conversation to continue, normally the role's name; it takes
         effect only with ``CUTTLEFISH_RESUME=1`` and only over ``app-server``, and the
         thread id is kept in the project root (``cuttlefish.delegate.conversations``).
         ``live_role`` (ADR-0033) names the role whose running turn the fleet daemon may steer.
+        ``usage_sink`` (CUT-102) is told the round's tokens so far after every model call.
         ``lease`` (ADR-0031) is the broker's stand-in for the key, taken by a delegation that
         runs on the host; a sandbox cannot reach the daemon's loopback and is given none.
         ``asker`` (ADR-0028) lets a command nothing approves be put to a person; only the
@@ -138,6 +140,7 @@ class CodexBackend:
                 if conversations.resume_enabled("codex")
                 else None,
                 live_role=live_role,
+                usage_sink=usage_sink,
             )
         if sandbox_provider is None:
             return await run_codex(

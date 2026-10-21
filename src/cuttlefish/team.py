@@ -344,6 +344,8 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
         max_idle_by_role[role["name"]] = team_idle if own_idle is None else own_idle
     idle_rounds: dict[str, int] = {role["name"]: 0 for role in roles}
     final_outcome: dict[str, DelegationOutcome | BaseException] = {}
+    #: Roles whose round ended after a person pressed Stop (CUT-166).
+    stopped_roles: set[str] = set()
 
     # Round-boundary steering (ADR-0008): each round still gathers only plain
     # delegation calls, the exact proven `satay.gather` shape this workflow
@@ -481,6 +483,7 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             ]
             stop_requested = any(isinstance(payload, StopRequested) for payload in decoded_payloads)
             if stop_requested:
+                stopped_roles.add(name)
                 # CUT-107: Stop was pressed while this round ran. satay's cancel only lands once
                 # a round ends, and a steer already queued would be consumed right here, starting
                 # one more round. End the role as it is, before any steer, approval wait or
@@ -611,6 +614,16 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     for role in roles:
         name = role["name"]
         outcome = final_outcome[name]
+        if (
+            name in stopped_roles
+            and isinstance(outcome, DelegationOutcome)
+            and outcome.kind == "failed"
+            and outcome.failure_kind == "cancelled"
+        ):
+            # A Codex turn the daemon interrupted for a person's Stop (CUT-166): no TaskFailed, so
+            # the role stays open and `TeamStopped` reads it as stopped, not failed.
+            role_results[name] = {"status": "stopped"}
+            continue
         if isinstance(outcome, BaseException):
             reason = _failure_reason(outcome)
             await journal(team_id, TaskFailed(error=reason, role=name))

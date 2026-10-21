@@ -17,10 +17,12 @@ from satay.journal.store import SQLiteStore
 
 from cuttlefish import runtime
 from cuttlefish.episodic.events import (
+    DelegationFailed,
     DelegationStarted,
     SteeringMessage,
     StopRequested,
     TaskCompleted,
+    TaskFailed,
 )
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.llm.replay import ReplayLlmProvider
@@ -39,26 +41,26 @@ def _event(body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _completed_round() -> list[Any]:
+def _completed_round(stop: str = "completed", exit_code: int = 0) -> list[Any]:
     result = {
         "jsonrpc": "2.0",
         "id": "$start_id",
         "result": {
             "session": "$session",
             "record": "/r",
-            "stop": "completed",
-            "exit_code": 0,
+            "stop": stop,
+            "exit_code": exit_code,
             "turns": 1,
         },
     }
-    ended = _event({"kind": "session_ended", "reason": "completed", "exit_code": 0})
+    ended = _event({"kind": "session_ended", "reason": stop, "exit_code": exit_code})
     return [{"start": True}, {"emit": result}, {"close": [ended]}]
 
 
-def _binary(tmp_path: Path) -> str:
+def _binary(tmp_path: Path, *, first: list[Any] | None = None) -> str:
     """A kopicode whose every session completes at once; two are scripted so a second round,
     were one started, would run rather than fail."""
-    rounds = [*_completed_round(), *_completed_round(), {"eof": []}]
+    rounds = [*(first or _completed_round()), *_completed_round(), {"eof": []}]
     (tmp_path / "scenario.json").write_text(json.dumps(rounds))
     binary = tmp_path / "kopicode"
     binary.write_text(
@@ -73,13 +75,15 @@ FAKE_KOPICODE_SCENARIO={tmp_path}/scenario.json FAKE_KOPICODE_LOG={tmp_path}/sen
     return str(binary)
 
 
-async def _run_with_queued_steer(tmp_path: Path, *, stop_pressed: bool) -> list[Any]:
+async def _run_with_queued_steer(
+    tmp_path: Path, *, stop_pressed: bool, first: list[Any] | None = None
+) -> list[Any]:
     store = EpisodicStore.open(tmp_path / "episodic.db")
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
             llm_provider=ReplayLlmProvider([]),
-            kopicode_binary=_binary(tmp_path),
+            kopicode_binary=_binary(tmp_path, first=first),
         )
     )
     root = tmp_path / "root"
@@ -127,3 +131,17 @@ async def test_a_steer_queued_when_stop_was_pressed_is_dropped_and_no_round_foll
     assert len([p for p in payloads if isinstance(p, DelegationStarted)]) == 1
     assert not any(isinstance(p, SteeringMessage) for p in payloads)
     assert any(isinstance(p, TaskCompleted) for p in payloads)
+
+
+async def test_a_round_cancelled_by_stop_leaves_the_role_open_so_the_team_reads_it_as_stopped(
+    tmp_path: Path,
+) -> None:
+    # CUT-166: Codex's interrupted turn is a failed, cancelled round. Writing TaskFailed for it
+    # would pin the role as failed; without one, TeamStopped marks it stopped.
+    payloads = await _run_with_queued_steer(
+        tmp_path, stop_pressed=True, first=_completed_round("cancelled", 130)
+    )
+
+    failed = [p for p in payloads if isinstance(p, DelegationFailed)]
+    assert len(failed) == 1 and failed[0].failure_kind == "cancelled"
+    assert not any(isinstance(p, TaskFailed | TaskCompleted) for p in payloads)

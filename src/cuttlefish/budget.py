@@ -29,6 +29,7 @@ from cuttlefish.episodic.events import (
     DelegationFailed,
     DelegationRefused,
     EventPayload,
+    RoundUsageUpdated,
 )
 
 #: Every event type a delegation's own usage can land on -- a round finalizes
@@ -63,16 +64,24 @@ def cumulative_usage(payloads: Iterable[EventPayload], *, role: str | None) -> U
     """
     tokens = 0
     cost_usd: float | None = None
+    # A round in flight (CUT-102): the latest `RoundUsageUpdated` since this role's last
+    # round-ending event. That event carries the final figure, so it replaces the live one.
+    live = 0
     for payload in payloads:
+        if isinstance(payload, RoundUsageUpdated):
+            if payload.role == role:
+                live = payload.tokens
+            continue
         if not isinstance(payload, _USAGE_TYPES):
             continue
         if payload.role != role:
             continue
+        live = 0
         if payload.tokens is not None:
             tokens += payload.tokens
         if payload.cost_usd is not None:
             cost_usd = (cost_usd or 0.0) + payload.cost_usd
-    return UsageTotals(tokens=tokens, cost_usd=cost_usd)
+    return UsageTotals(tokens=tokens + live, cost_usd=cost_usd)
 
 
 def exceeded(totals: UsageTotals, *, max_tokens: int | None, max_cost_usd: float | None) -> bool:

@@ -182,7 +182,9 @@ class _Round:
 
     def outcome(self) -> DelegationOutcome:
         common: dict[str, Any] = {
-            "tokens": self.tokens,
+            # The round's own tokens: a resumed thread's total also holds its earlier turns,
+            # which their own rounds already reported (CUT-102).
+            "tokens": None if self.tokens is None else self.tokens - (self.baseline or 0),
             "tool_calls": self.tool_calls,
             "consent_decisions": self.consents,
         }
@@ -468,6 +470,7 @@ async def run_codex_app_server(
     env_passthrough: tuple[str, ...] = (),
     timeout: float | None = None,
     token_budget: int | None = None,
+    usage_sink: Callable[[int], None] | None = None,
     lease: Lease | None = None,
     thread_key: str | None = None,
     live_role: str | None = None,
@@ -480,6 +483,8 @@ async def run_codex_app_server(
 
     ``live_role`` (CUT-92, ADR-0033) makes the running turn steerable by that role's name, and
     lets the fleet daemon end it when a person presses Stop (``cuttlefish.delegate.codex_live``).
+
+    ``usage_sink`` (CUT-102) is called with the turn's own tokens so far after every usage update.
 
     ``token_budget`` (CUT-168) is the most tokens (input and output) this turn may spend. Codex
     reports usage after every model call, so a turn that passes it is interrupted at once and
@@ -519,8 +524,15 @@ async def run_codex_app_server(
     over_budget = False
     live: codex_live.LiveTurn | None = None
     budget_hit = asyncio.Event()
-    if token_budget:
-        round_.on_tokens = lambda used: budget_hit.set() if used >= token_budget else None
+    if token_budget or usage_sink:
+
+        def on_tokens(used: int) -> None:
+            if usage_sink is not None:
+                usage_sink(used)
+            if token_budget and used >= token_budget:
+                budget_hit.set()
+
+        round_.on_tokens = on_tokens
     budget_watch: asyncio.Task[bool] | None = None
     try:
         await connection.request(

@@ -18,6 +18,7 @@
     waiting = false,
     liveSteer = false,
     usageAtRoundEnd = false,
+    usageLive = false,
   }: {
     client: FleetClient;
     projectId: string;
@@ -45,6 +46,7 @@
     liveSteer?: boolean;
     /** The backend reports tokens only when a round ends, so 0 so far is "not reported yet". */
     usageAtRoundEnd?: boolean;
+    usageLive?: boolean;
   } = $props();
 
   const tokensOverBudget = $derived(
@@ -118,7 +120,13 @@
       <StatusChip {status} />
     {/if}
   </div>
-  {#if usageAtRoundEnd && usage.tokens === 0 && status !== "done"}
+  {#if usageLive && usage.tokens === 0 && status !== "done"}
+    <p class="usage">
+      Tokens: none reported yet; the figure updates as {role} works{budget.max_tokens !== null
+        ? ` (limit ${budget.max_tokens.toLocaleString()}, checked when a round ends)`
+        : ""}
+    </p>
+  {:else if usageAtRoundEnd && usage.tokens === 0 && status !== "done"}
     <p class="usage">
       Tokens: not reported until the round ends{budget.max_tokens !== null
         ? ` (limit ${budget.max_tokens.toLocaleString()}, checked then)`
@@ -136,7 +144,7 @@
     {:else}
       &middot; cost unknown
     {/if}
-    {#if usageAtRoundEnd && (budget.max_tokens !== null || budget.max_cost_usd !== null)}
+    {#if (usageAtRoundEnd || usageLive) && (budget.max_tokens !== null || budget.max_cost_usd !== null)}
       &middot; limit checked when a round ends
     {/if}
   </p>

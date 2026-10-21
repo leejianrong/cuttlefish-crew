@@ -35,6 +35,7 @@ from cuttlefish.episodic.events import (
     RequestRaised,
     RequestResolved,
     RoundContinued,
+    RoundUsageUpdated,
     StopRequested,
     TaskCompleted,
     TaskFailed,
@@ -142,6 +143,8 @@ def _describe(payload: EventPayload) -> tuple[int, str]:
             )
         case RoundContinued(reason=reason, count=count, limit=limit):
             return logging.INFO, f"{reason}: continuing ({count} of {limit})"
+        case RoundUsageUpdated(tokens=tokens):
+            return logging.DEBUG, f"{tokens} tokens so far"
         case TeamStopped() | TeamResumed() | StopRequested():
             return logging.INFO, ""
         case ToolCallRecorded(tool=tool, status=status, detail=detail):

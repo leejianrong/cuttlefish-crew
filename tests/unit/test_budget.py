@@ -8,6 +8,7 @@ from cuttlefish.episodic.events import (
     DelegationFailed,
     DelegationRefused,
     DelegationStarted,
+    RoundUsageUpdated,
     TaskCompleted,
 )
 
@@ -70,3 +71,26 @@ def test_exceeded_trips_on_cost_reaching_the_ceiling() -> None:
 
 def test_exceeded_a_zero_ceiling_trips_immediately_rather_than_reading_as_unset() -> None:
     assert exceeded(UsageTotals(tokens=0), max_tokens=0, max_cost_usd=None)
+
+
+def test_a_round_in_flight_counts_its_latest_live_figure() -> None:
+    # CUT-102: the totals include the running round, so a person sees tokens while it works.
+    payloads = [
+        DelegationCompleted(summary="one", tokens=100, role="a"),
+        RoundUsageUpdated(tokens=40, role="a"),
+        RoundUsageUpdated(tokens=70, role="a"),
+        RoundUsageUpdated(tokens=900, role="b"),
+    ]
+    assert cumulative_usage(payloads, role="a").tokens == 170
+    assert cumulative_usage(payloads, role="b").tokens == 900
+
+
+def test_the_rounds_own_event_replaces_its_live_figure() -> None:
+    payloads = [
+        RoundUsageUpdated(tokens=70, role="a"),
+        DelegationCompleted(summary="done", tokens=75, role="a"),
+    ]
+    assert cumulative_usage(payloads, role="a").tokens == 75
+    # A figure that arrives for the next round starts from zero again.
+    payloads.append(RoundUsageUpdated(tokens=5, role="a"))
+    assert cumulative_usage(payloads, role="a").tokens == 80

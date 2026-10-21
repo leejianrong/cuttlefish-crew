@@ -33,7 +33,10 @@
   const repeatedFinish = $derived(repeatedFinishes(events));
   const shown = $derived.by(() => {
     const hidden = appliedSteerRows(events);
-    return events.filter((event) => !hidden.has(event.seq));
+    // `RoundUsageUpdated` feeds a role's live token figure; it is not something that happened.
+    return events.filter(
+      (event) => !hidden.has(event.seq) && event.event_type !== "RoundUsageUpdated",
+    );
   });
   const stoppedRound = $derived(stoppedRounds(events));
 
@@ -98,6 +101,8 @@
               <summary>Whole prompt</summary>
               <pre class="mono">{summarize(event)}</pre>
             </details>
+          {:else if stoppedRound.has(event.seq)}
+            {STOPPED_ROUND_NOTE} {summarizeWith(event, raised)}
           {:else if repeatedFinish.has(event.seq)}
             {REPEATED_FINISH_TEXT}
           {:else}
