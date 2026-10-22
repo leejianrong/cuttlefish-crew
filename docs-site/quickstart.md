@@ -60,6 +60,11 @@ the goal it was given and takes you to the Terminal tab; it does not type a seco
 kopicode's interactive session cannot take a first message yet (the box says so); kopicode projects start work
 with the round workflow below. `GET`/`POST /api/projects/{id}/goal` is the same thing for a script (Approve tier).
 
+What a builder leaves in `.cuttlefish/artifacts/` shows on the Chat tab's canvas and the Artifacts tab: markdown, images,
+`mp4` or `webm` video, and self-contained `.html` designs. A design runs in a sandbox with scripts on and everything else
+off (no network, no access to the dashboard, your files or its storage), so one that loads a library or font from a CDN shows
+without it; inline style, script and `data:` images work.
+
 The project's **Chat** tab shows the builder's conversation as a thread, read live from Claude Code's own
 session record (`~/.claude/projects/<folder>/<session>.jsonl`; nothing is stored a second time). Tool calls are
 folded into one line each run ("Ran 4 commands, edited 2 files") that opens to the calls and their output, a context

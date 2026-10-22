@@ -24,6 +24,7 @@
   } from "../chat";
   import { parseMarkdown } from "../markdown";
   import Icon from "./Icon.svelte";
+  import ArtifactCanvas from "./ArtifactCanvas.svelte";
   import Markdown from "./Markdown.svelte";
   import PlanCard from "./PlanCard.svelte";
   import PlanRail from "./PlanRail.svelte";
@@ -38,6 +39,7 @@
     onAnswered,
     offline,
     onOpenTerminal,
+    onOpenArtifacts,
   }: {
     client: FleetClient;
     projectId: string;
@@ -47,6 +49,7 @@
     onAnswered: () => void;
     offline: boolean;
     onOpenTerminal: () => void;
+    onOpenArtifacts: () => void;
   } = $props();
 
   let thread = $state<ChatState>(EMPTY_CHAT);
@@ -127,12 +130,22 @@
   let controlBusy = $state(false);
   let controlError = $state<string | null>(null);
   let wide = $state(typeof window !== "undefined" && window.matchMedia("(min-width: 62rem)").matches);
+  // Three columns (rail, thread, canvas) need more room than the rest of the page allows.
+  let huge = $state(typeof window !== "undefined" && window.matchMedia("(min-width: 84rem)").matches);
 
   $effect(() => {
     const media = window.matchMedia("(min-width: 62rem)");
-    const follow = () => (wide = media.matches);
+    const big = window.matchMedia("(min-width: 84rem)");
+    const follow = () => {
+      wide = media.matches;
+      huge = big.matches;
+    };
     media.addEventListener("change", follow);
-    return () => media.removeEventListener("change", follow);
+    big.addEventListener("change", follow);
+    return () => {
+      media.removeEventListener("change", follow);
+      big.removeEventListener("change", follow);
+    };
   });
 
   $effect(() => {
@@ -369,13 +382,18 @@
     type there appears here.
   </p>
 </section>
+
+<details class="canvas-wrap" open={huge}>
+  <summary class="rail-summary body-medium">Artifacts</summary>
+  <ArtifactCanvas {client} {projectId} {active} onOpenAll={onOpenArtifacts} />
+</details>
 </div>
 
 <style>
   .layout {
     display: grid;
     gap: 1.5rem;
-    max-width: 78rem;
+    max-width: 96rem;
   }
 
   .layout.with-rail {
@@ -390,6 +408,28 @@
 
     .rail-wrap > .rail-summary {
       display: none;
+    }
+  }
+
+  /* The canvas is a third column on a wide screen; below that it folds under the thread. */
+  @media (min-width: 84rem) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr) 22rem;
+      align-items: start;
+    }
+
+    .layout.with-rail {
+      grid-template-columns: 17rem minmax(0, 1fr) 22rem;
+    }
+
+    .canvas-wrap > .rail-summary {
+      display: none;
+    }
+  }
+
+  @media (min-width: 62rem) and (max-width: 83.99rem) {
+    .layout.with-rail > .canvas-wrap {
+      grid-column: 2;
     }
   }
 

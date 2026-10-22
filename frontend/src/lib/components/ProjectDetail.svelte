@@ -276,7 +276,7 @@
   }
 </script>
 
-<div class="page" class:terminal-tab={tab === "terminal"}>
+<div class="page" class:terminal-tab={tab === "terminal"} class:chat-tab={tab === "chat"}>
   <button class="btn btn-text back" onclick={onBack}><Icon name="back" size={18} />Projects</button>
 
   {#if missing}
@@ -527,6 +527,7 @@
         onAnswered={refresh}
         offline={unreachable}
         onOpenTerminal={() => onTabChange("terminal")}
+        onOpenArtifacts={() => onTabChange("artifacts")}
       />
     </div>
 
@@ -586,6 +587,11 @@
     max-width: 72rem;
     margin: 0 auto;
     padding: 2rem 1.5rem 4rem;
+  }
+
+  /* The chat has a rail, a thread and a canvas (CUT-174, CUT-175): more room than the other tabs. */
+  .page.chat-tab {
+    max-width: 96rem;
   }
 
   [role="tabpanel"][hidden] {

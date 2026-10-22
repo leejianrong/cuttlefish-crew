@@ -232,6 +232,12 @@ and this folder disagree after a slice lands, update this folder.
   Codex and kopicode builders get no box (their input is not wired in). The foot says the Terminal tab is the same
   session. The plan rail and canvas of `Main.dc.html` arrive with CUT-174 and CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
   say their record is not wired in yet.
+- **Artifact canvas (CUT-175, 2026-10-22).** The Chat tab's right column (22rem at 84rem and up; below that a native `details` row
+  named Artifacts under the thread): chips for the builder's newest images, video and HTML designs (up to eight, the plan file
+  left to the rail), one shown at a time and following the newest until you pick another, then **All artifacts** to the
+  Artifacts tab. An image is a blob URL, a video a `<video controls>`, an HTML design a bordered sandboxed frame (white
+  background, 24rem) with a note under it that scripts run but nothing can reach the network, the dashboard or your files.
+  The Artifacts tab shows the same viewer, so a file looks the same in both. The page is 96rem wide on the Chat tab.
 - **Plan rail, plan card and Autopilot (CUT-174, 2026-10-22).** On a wide screen (62rem and up) the Chat tab is two columns: a
   17rem **plan rail** (Goal; Plan with a progress bar and the checklist as done, now and to do with a text mark, not colour
   alone; Run with the state in words, nudges, tokens and time against their limits, and the controls) and the thread. Under

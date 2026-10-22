@@ -1,8 +1,10 @@
 """Files an agent leaves in ``<root>/.cuttlefish/artifacts/`` for a person to read (CUT-97).
 
 Every backend can write a file, so a plain folder is the one way to show a result that does not
-depend on which agent made it (ADR-0032). Only data is served: markdown and images. Nothing here
-runs code, so there is no sandbox to get wrong; HTML is a separate, later slice.
+depend on which agent made it (ADR-0032). Markdown, images and video are data. An HTML file
+(CUT-175) is code, so this module only serves its bytes, as ``text/plain``: the dashboard fetches
+them with its token and runs them in a sandboxed iframe that has an opaque origin and no network
+(``frontend/src/lib/artifacts.ts``, ADR-0044), never in the page and never from this server.
 
 The folder is the agent's to write, so every path is treated as hostile: a name is resolved first
 (``..`` and symlinks followed) and refused unless the result is still inside the folder.
@@ -32,15 +34,21 @@ _KINDS: dict[str, tuple[str, str, int]] = {
     ".gif": ("image", "image/gif", 10_000_000),
     ".webp": ("image", "image/webp", 10_000_000),
     ".svg": ("image", "image/svg+xml", 2_000_000),
+    ".mp4": ("video", "video/mp4", 100_000_000),
+    ".webm": ("video", "video/webm", 100_000_000),
+    # Served as text, not text/html: the browser never renders it from this server's origin.
+    ".html": ("html", "text/plain; charset=utf-8", 2_000_000),
+    ".htm": ("html", "text/plain; charset=utf-8", 2_000_000),
 }
 
 #: What an agent is told, appended to a round's task and to a session's system prompt.
 AGENT_NOTE = (
     "To show a person a result (a plan, a review, a summary, a diagram as an image), write it as a "
     "markdown file under .cuttlefish/artifacts/ in the project root, for example "
-    ".cuttlefish/artifacts/review.md. Markdown and png, jpg, gif, webp or svg images are shown in "
-    "the dashboard's Artifacts tab, and an image is referenced from markdown by its relative path. "
-    "Raw HTML and scripts in markdown are not shown."
+    ".cuttlefish/artifacts/review.md. Markdown, png, jpg, gif, webp or svg images, mp4 or webm "
+    "video and self-contained .html designs (inline CSS and JavaScript, no external files or "
+    "network) are shown in the dashboard, and an image is referenced from markdown by its relative "
+    "path. Raw HTML and scripts inside markdown are not shown."
 )
 
 
@@ -65,7 +73,7 @@ class Artifact:
     #: Relative to the artifacts folder, with ``/`` separators.
     path: str
     name: str
-    #: ``markdown``, ``image`` or ``other`` (listed by name only).
+    #: ``markdown``, ``image``, ``video``, ``html`` or ``other`` (listed by name only).
     kind: str
     size: int
     #: Seconds since the epoch; the dashboard sorts and detects change on it.
