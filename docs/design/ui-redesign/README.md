@@ -232,6 +232,15 @@ and this folder disagree after a slice lands, update this folder.
   Codex and kopicode builders get no box (their input is not wired in). The foot says the Terminal tab is the same
   session. The plan rail and canvas of `Main.dc.html` arrive with CUT-174 and CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
   say their record is not wired in yet.
+- **Chat on a phone (CUT-179, 2026-10-22).** At 640px and under the Chat tab is one column, from `Phone.dc.html`: a **plan strip**
+  (the step it is on, "3 of 6", a 6px bar; tap it for the full rail) with Pause or Approve and Stop under it as 44px buttons;
+  the thread, which scrolls with the page (no second scroll area); a permission as the same coral-edged card inline; and the
+  message box **pinned just above the bottom bar** (its height is measured, `#shell-nav`). Whatever a Write call left in the
+  artifacts folder (an image, video or design) shows as a card in the thread, even when the run of calls is folded; tapping it
+  opens the canvas, which folds under the thread, on that file. Deviation from the board: its bottom bar lists project tabs, but
+  the shipped bottom bar is the app's (Needs you, Projects, Role library, Shared secrets), so the project's tabs stay in the bar
+  at the top, which scrolls sideways once six tabs and the badge no longer fit. Checked in emulation at 390 px with touch, not on
+  a phone (CUT-98 is still open for that).
 - **Mission control on the Overview (CUT-176, 2026-10-22).** Above the goal card, in `MissionControl.svelte`, from
   `docs/design/chat-rework/MissionControl.dc.html` and nothing when there is nothing to say. (1) A **goal banner** when
   Autopilot is on: a 64px progress ring (steps done of total, set in the `primary` role), the goal, one line of "Now: ..." from

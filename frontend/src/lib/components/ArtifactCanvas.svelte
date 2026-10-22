@@ -11,8 +11,16 @@
     client,
     projectId,
     active,
+    pinned: wanted = null,
     onOpenAll,
-  }: { client: FleetClient; projectId: string; active: boolean; onOpenAll: () => void } = $props();
+  }: {
+    client: FleetClient;
+    projectId: string;
+    active: boolean;
+    /** A file the thread asked to be shown (CUT-179). */
+    pinned?: string | null;
+    onOpenAll: () => void;
+  } = $props();
 
   let files = $state<Artifact[]>([]);
   let pinned = $state<string | null>(null);
@@ -21,6 +29,10 @@
 
   const shown = $derived(canvasFiles(files));
   const current = $derived(shown.find((f) => f.path === pinned) ?? shown[0] ?? null);
+
+  $effect(() => {
+    if (wanted) pinned = wanted;
+  });
 
   $effect(() => {
     const id = projectId;

@@ -103,6 +103,8 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
   the thread). State is the journal's last `AutopilotUpdated`. Checked with a fake builder and a synthetic transcript through
   the real hook script, the daemon and the browser; **not** with a real Claude Code, and not over hours.
 
+- CUT-176 mission control on the Overview and CUT-179 the phone layout (see `docs/design/ui-redesign/README.md`).
+
 ## Build order (cards)
 
 1. CUT-169 terminal theme, CUT-170 shell terminal (small, independent).
