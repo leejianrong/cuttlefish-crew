@@ -42,6 +42,10 @@ def test_nothing_or_too_much_is_refused() -> None:
         " Do you want to proceed?\n \u276f 1. Yes\n   2. No, tell Claude what to do instead",
         "Do you trust the files in this folder?\n> 1. Yes, I trust this folder",
         "Edit file\n  Esc to cancel",
+        # The trust-folder dialog as Claude Code 2.1.308 drew it: unnumbered options.
+        "Quick safety check: Is this a project you created or one you trust?\n"
+        " \u276f No, exit\n   Yes, I trust this folder\n Enter to confirm \u00b7 Esc to cancel",
+        " \u276f No, exit\n   Yes, I trust this folder",
         "Do you want to make this edit to cli.py?",
     ],
 )

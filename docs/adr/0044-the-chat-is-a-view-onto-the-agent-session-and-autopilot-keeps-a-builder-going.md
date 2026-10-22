@@ -94,5 +94,5 @@ These were the open questions of the first version of this ADR.
 ## Open
 
 - Whether the agent's messages are also journaled (so history survives a deleted transcript).
-- Autopilot has not been run against a real long Claude Code session; everything above is built and tested against a fake
-  builder and a synthetic transcript. See `agent_docs/known-gaps.md`.
+- Autopilot has been run against two short real Claude Code sessions (2026-10-23: plan-first followed, checklist ticked, `Stop`
+  hook fired, "continue" worked) but not a long one. See `agent_docs/known-gaps.md`.

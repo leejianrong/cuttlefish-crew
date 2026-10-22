@@ -48,3 +48,17 @@ Include the setup rules above verbatim.
 Triage: fix what the change caused on the branch it belongs to, give UI work its own small PR,
 and note anything that was already there. An agent's report is evidence, not a verdict: read
 the code it points at before acting on a claim.
+
+## A real Claude Code run from a scratch daemon (2026-10-23)
+
+Done once, with Jian's yes (it uses his subscription): a separate `cuttlefish serve` on its own port with a scratch `HOME`, a scratch
+git repo as the project, and `CLAUDE_CONFIG_DIR=$HOME_REAL/.claude` plus `CUTTLEFISH_AGENT_ENV_PASSTHROUGH=CLAUDE_CONFIG_DIR` so
+Claude finds its login. Know before repeating it:
+
+- A fresh `HOME` makes Claude show its first-run theme and security screens, then the trust-folder dialog; each needs one Enter in
+  the tmux session (`tmux -S <socket> send-keys -t cf-<project id> ...`). Claude also creates `.claude.json` and backups under the
+  real config directory and a project folder under `~/.claude/projects`: delete those afterwards (leave the real `~/.claude.json` and
+  its newest backup, which are Jian's).
+- `ANTHROPIC_MODEL` is not honoured through the passthrough here (it ran Sonnet 5.5); a Write-only task costs a few thousand tokens.
+- Keep the task to the Write tool: a Bash call raises a Needs you card, and approving it by script is not allowed.
+- To fire a hook by hand use `sessions/hook_script.py --project <id>` with the scratch `HOME`; it reads the token itself.

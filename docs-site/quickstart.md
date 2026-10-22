@@ -88,6 +88,9 @@ A Codex session is shown there too, read from Codex's own session record (`~/.co
 it is read-only, so type to a Codex builder in the Terminal tab. A kopicode session is shown there too, from `<project>/.kopicode/sessions/*/events.jsonl`, also read-only. A device paired through the relay needs the Approve level to read it, because it shows what the
 agent's tools printed. `GET /api/projects/{id}/chat?after=<cursor>` is the same thing for a script, and `POST /api/projects/{id}/chat` with `{"text": ...}` sends a message.
 
+A builder started in a folder Claude Code has not seen before first shows Claude's own "trust this folder" dialog in the
+terminal. The dashboard sees it as a dialog: the message box is disabled and a send is refused, so answer it in the Terminal tab.
+
 **Autopilot** is on by default for a builder given a goal from the dashboard. The builder is told to plan first: to write
 a checklist (`- [ ] step`) to `.cuttlefish/artifacts/plan.md` and wait. The Chat tab shows the plan as a card with **Approve
 the plan**, and a rail with the goal, the checklist and the run's figures. Once you approve, the builder works through the

@@ -315,23 +315,29 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   nothing loaded from outside the file, so a design that pulls a library, font or image from a URL renders without it. That
   is deliberate (ADR-0036's update); do not add `allow-same-origin` or a `connect-src` to fix a design, tell the agent to
   inline. Video is held in memory (100 MB cap) and played from a blob. Checked in Chromium only, not Safari or Firefox.
-- **Autopilot has not run against a real Claude Code, and not for hours (CUT-174).** Built and tested against a fake builder,
-  a synthetic transcript and the real hook script. Unverified: that Claude Code follows the plan-first instruction (it is in
-  the appended system prompt; Codex gets it on the end of the goal), that it ticks `plan.md` as it goes (no ticks means "stuck"
-  after three nudges, by design), that a `Stop` hook fires at every end of turn and not on an Esc interrupt, and that
-  "continue" pasted at the next stop behaves like a person's message. Known limits: the supervisor reacts to the `Stop`
-  hook, so a builder that went idle while the daemon was down, or whose hooks failed, waits for the next stop or the
-  **Nudge now** button; the time limit is only checked when the builder stops, so a
-  turn that never ends is not cut short; "stuck" does not use `stuck.py`'s environment signatures yet and does not raise a
-  Needs you card, so nothing outside the page tells a person away from it; the token figure leaves out cache reads and is a
-  guard, not a bill; the daemon restarting between an approval message and its journal line could send it twice.
-- **The Chat message box is built on assumptions about Claude Code's TUI that have not been checked live (CUT-173).**
-  Verified: the bytes tmux sends (a bracketed paste, line feeds kept, then Enter) against a fake raw-mode program. Not
-  verified against a real Claude Code: that 0.3 s between the paste and Enter is enough for a large paste (Claude Code
-  collapses one into "[Pasted text]"), that a message sent mid-turn is queued and not lost, and the dialog wording the
-  screen check matches (`sessions/chat_input.py`). Busy shows only for hooks the session was launched with; a session
-  started before this change, or one whose hooks fail, reads "unknown" and the screen check is the only guard. A dialog
-  the terminal's own user refused fires no hook, so the daemon trusts the screen over its own flag.
+- **Autopilot has had two short real Claude Code runs, not a long one (CUT-174).** Verified 2026-10-23 on Claude Code 2.1.308
+  (Sonnet 5.5, a scratch repo, Write-only tasks, a few thousand tokens each): Claude follows the plan-first instruction in the
+  appended system prompt (it wrote `plan.md` and stopped for approval both times), ticks the checklist after approval, the `Stop`
+  hook fires at the end of each turn (Autopilot moved to "waiting for you" and then to "done"), and "continue" pasted at a stop
+  made the builder carry on (told to stop after each step, it stopped after step 1, was nudged twice and finished 3 of 3).
+  Not verified: a run of hours; several nudges in a row; the stuck path against real Claude; a permission card in a real run
+  (the tasks needed none); that `Stop` does not fire on an Esc interrupt; Codex's plan-first via the end of the goal. Known
+  limits: the supervisor reacts to the `Stop` hook, so a builder that went idle while the daemon was down, or whose hooks
+  failed, waits for the next stop or the **Nudge now** button; the time limit is only checked when the builder stops, so a turn
+  that never ends is not cut short; "stuck" does not use `stuck.py`'s environment signatures yet and does not raise a Needs you
+  card, so nothing outside the page tells a person away from it; the token figure leaves out cache reads and is a guard, not a
+  bill; the daemon restarting between an approval message and its journal line could send it twice. A real run in a fresh
+  `HOME` also meets Claude's first-run theme and security screens before the trust dialog (see the next entry).
+- **The Chat message box has been checked against a real Claude Code for the short case only (CUT-173).** Verified 2026-10-23
+  (2.1.308): a bracketed paste then Enter 0.3 s later is submitted (both the approval and the "continue" were acted on); the
+  trust-folder dialog is recognised and a message to it is refused, but only because of its "Esc to cancel" footer, since its
+  options are unnumbered ("Yes, I trust this folder" and "No, exit", the cursor on No), so the numbered-choice pattern did not
+  match it. Not verified: a large paste (Claude Code collapses one into "[Pasted text]", and 0.3 s may not be enough), a message
+  sent mid-turn (assumed queued, not lost), the wording of a permission dialog or an `AskUserQuestion`, and Claude's first-run
+  screens (theme, security notes), which show no "Esc to cancel" and are not recognised as dialogs. Busy shows only for hooks the
+  session was launched with; a session started before this change, or one whose hooks fail, reads "unknown" and the screen check
+  is the only guard. A dialog the terminal's own user refused fires no hook, so the daemon trusts the screen over its own flag.
+  Claude may show a dim suggested next prompt in its input box; it is not typed text.
 - **The Chat tab's parser is Claude Code's undocumented format (CUT-172).** It reads the transcript JSONL as seen on
   2.1.300 to 2.1.308 and ignores what it does not know, counting lines it cannot parse (the thread says how many were left
   out). A first read of a big file starts from its end and widens (1 MB, then 4, up to 32 MB) until it holds about 120 items
