@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Terminal: dark by default</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4fafa}
+.t{font-family:'Figtree',system-ui,sans-serif;color:#161d1d}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.seg{display:inline-flex;border:1px solid #6f7979;border-radius:20px;overflow:hidden}
+.seg button{height:36px;padding:0 16px;border:0;background:transparent;font:500 13px 'Figtree',sans-serif;color:#243030;cursor:pointer}
+.seg button.on{background:#c9f3f6;color:#00363a;font-weight:600}
+.pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:500;background:#e1ebeb;color:#243030}
+</style>
+</helmet>
+<div class="t" style="width:1040px;height:640px;box-sizing:border-box;padding:24px 28px;background:#f4fafa;display:flex;flex-direction:column;gap:14px">
+
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="font:600 20px 'Bricolage Grotesque',sans-serif">Terminal</div>
+    <div class="seg" role="group" aria-label="Which terminal">
+      <button class="on">Agent</button>
+      <button>Shell</button>
+    </div>
+    <span class="pill">Agent session running</span>
+    <div style="flex-grow:1"></div>
+    <div style="font-size:12px;color:#3a4747">Terminal theme</div>
+    <div class="seg" role="group" aria-label="Terminal theme">
+      <button>Match app</button>
+      <button class="on">Dark</button>
+      <button>Light</button>
+    </div>
+  </div>
+
+  <!-- the terminal, in the light app -->
+  <div class="mono" style="flex-grow:1;min-height:0;background:#1d2426;border:1px solid #3a4647;border-radius:16px;padding:16px 18px;font-size:13.5px;line-height:1.65;color:#e4efef;overflow:hidden">
+    <div><span style="color:#8bd49c">ledger</span> <span style="color:#7fd6dc">feat/ledger-summary</span> <span style="color:#8fa3a3">$</span> cat README.md | head -4</div>
+    <div># ledger</div>
+    <div>Summarise a bank CSV by month: income, spend, net.</div>
+    <div>Usage: ledger summary FILE [--chart]</div>
+    <div>&nbsp;</div>
+    <div><span style="color:#8bd49c">ledger</span> <span style="color:#7fd6dc">feat/ledger-summary</span> <span style="color:#8fa3a3">$</span> uv run pytest -q</div>
+    <div>.........................................</div>
+    <div><span style="color:#8bd49c">41 passed</span> in 0.62s</div>
+    <div>&nbsp;</div>
+    <div><span style="color:#8bd49c">ledger</span> <span style="color:#7fd6dc">feat/ledger-summary</span> <span style="color:#8fa3a3">$</span> git status --short</div>
+    <div><span style="color:#e6c07b"> M</span> ledger/cli.py</div>
+    <div><span style="color:#ff8f8f">??</span> examples/2026.csv</div>
+    <div><span style="color:#8bd49c">ledger</span> <span style="color:#7fd6dc">feat/ledger-summary</span> <span style="color:#8fa3a3">$</span> <span style="background:#e4efef;color:#1d2426">&nbsp;</span></div>
+  </div>
+
+  <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:stretch">
+    <div style="flex:1 1 300px;border:1px solid #bfc9c9;border-radius:16px;background:#ffffff;padding:12px 14px">
+      <div style="font-size:12px;font-weight:600;color:#3a4747;margin-bottom:8px">In the light app</div>
+      <div style="background:#f4fafa;border-radius:10px;padding:10px"><div style="background:#1d2426;border:1px solid #3a4647;border-radius:8px;height:34px"></div></div>
+      <div class="mono" style="font-size:11.5px;margin-top:6px;color:#3a4747">terminal #1d2426 on app #f4fafa</div>
+    </div>
+    <div style="flex:1 1 300px;border:1px solid #bfc9c9;border-radius:16px;background:#ffffff;padding:12px 14px">
+      <div style="font-size:12px;font-weight:600;color:#3a4747;margin-bottom:8px">In the dark app</div>
+      <div style="background:#0e1415;border-radius:10px;padding:10px"><div style="background:#070b0c;border:1px solid #3f4849;border-radius:8px;height:34px"></div></div>
+      <div class="mono" style="font-size:11.5px;margin-top:6px;color:#3a4747">terminal #070b0c on app #0e1415</div>
+    </div>
+    <div style="flex:1 1 300px;border:1px solid #bfc9c9;border-radius:16px;background:#ffffff;padding:12px 14px;font-size:13px;line-height:1.5">
+      <div style="font-size:12px;font-weight:600;color:#3a4747;margin-bottom:6px">The Shell terminal</div>
+      Opens in the project folder with the same filtered environment as the agents, and no project secrets. It needs no agent session.
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1040,"height":640}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

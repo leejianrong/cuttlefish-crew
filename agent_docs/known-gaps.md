@@ -275,9 +275,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   kopicode is asked for its own handoff (`session.handoff`) and Codex over `app-server` gets a second turn on the same thread (prompt with
   fixed headings, every command and edit declined, the reply kept only if it has the Done and Remaining headings; seen live 2026-10-22: a
   real Codex wrote one after a token-limit stop, the ask counted in the round's tokens). The next round gets it as it is. Claude Code over stream-json is asked the same way, as another user
-  message on the same process, but only when a round ends on its time limit (its one limit), and it was **tested against the scripted
-  fake only, never a real `claude`** (whether a second user message in one stream-json process behaves is unverified; the spike notes
-  never tried it). A round that ends for another reason (finished, failed, Stopped) is not asked. `codex exec`, `claude -p` and a
+  message on the same process, but only when a round ends on its time limit (its one limit), and it was tested against the scripted
+  fake and then run once against a real `claude` by another agent before merge (Jian, 2026-10-22). **That run's result was not
+  written down here**, so how a real second user message behaves in one stream-json process is not recorded in the repo. A round that ends for another reason (finished, failed, Stopped) is not asked. `codex exec`, `claude -p` and a
   sandbox provider cannot take a second prompt, and everything falls back to a **digest read from the journal** (`handover._digest`): files changed, the agent's
   last words, failures and refusals, what the person said, over the whole history and bounded, with an agent-written earlier handoff carried
   (clipped). It names no remaining work and says so. cuttlefish makes no model call of its own, so a continuation needs no key; the

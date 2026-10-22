@@ -1,0 +1,18 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-22T10:30:00Z" },
+  "title": "Cuttlefish chat redesign",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1360, "h": 920, "expand": "fill", "title": "Recommended: one thread, a plan rail and a canvas" },
+    "MissionControl.dc.html": { "x": 1440, "y": 0, "w": 1360, "h": 920, "expand": "fill", "title": "Alternative: mission control for days-long runs" },
+    "Phone.dc.html": { "x": 0, "y": 1040, "w": 390, "h": 844, "title": "Phone: the same thread" },
+    "Terminal.dc.html": { "x": 470, "y": 1040, "w": 1040, "h": 640, "title": "Terminal: dark by default, Agent | Shell, theme switch" }
+  },
+  "order": ["Main.dc.html", "MissionControl.dc.html", "Phone.dc.html", "Terminal.dc.html"],
+  "notes": {
+    "title": { "x": 0, "y": -300, "text": "Chat rework: the long-running builder", "kind": "title1", "maxW": 2800 }
+  },
+  "designSystems": []
+}

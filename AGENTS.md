@@ -178,6 +178,10 @@ own doc comment all beat a paragraph). Start reading at
   object (decided, not built; V6 in `docs/SLICES.md`), so read it before
   changing how a round or a delegation starts. ADR-0037 (accepted, not built; build order in CUT-E16) is the
   end-to-end encrypted relay for a public web app; read it, ADR-0039 (pairing and tiers) and ADR-0041 (pairing needs an https page: Tailscale https first, the hosted relay second), before touching remote access.
+- [`docs/design/chat-rework/`](docs/design/chat-rework/README.md) and ADR-0044 — the agreed rework of how a person works with an agent:
+  a chat thread onto the project's agent session, Autopilot, a canvas, and "Give the builder a goal" replacing Start team (decided
+  2026-10-22, not built; V9 in `docs/SLICES.md`, epic CUT-E20). Read it before any change to the project page, the chat box or
+  the terminal.
 - [`docs/QUESTIONS.md`](docs/QUESTIONS.md) — every decision, who made it, and
   where it landed; [`docs/SLICES.md`](docs/SLICES.md) — the build order.
 - [`docs/research/`](docs/research/) — the hands-on Paperclip comparison.

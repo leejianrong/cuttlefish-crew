@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Alternative: mission control</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4fafa}
+.t{font-family:'Figtree',system-ui,sans-serif;color:#161d1d}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:500;background:#e1ebeb;color:#243030}
+.pill.teal{background:#c9f3f6;color:#00363a}
+.pill.coral{background:#ffdbcf;color:#6e2a10}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;padding:0 20px;border-radius:22px;border:0;font:500 14px 'Figtree',sans-serif;cursor:pointer}
+.btn.fill{background:#00696f;color:#ffffff}
+.btn.tonal{background:#c9f3f6;color:#00363a}
+.btn.outline{background:transparent;color:#00696f;border:1px solid #6f7979}
+.btn.sm{height:36px;padding:0 14px;font-size:13px}
+.ev{display:flex;gap:14px;align-items:flex-start}
+.dot{flex:0 0 12px;width:12px;height:12px;border-radius:6px;margin-top:5px;background:#00696f}
+.when{flex:0 0 52px;font-size:12px;color:#3a4747;padding-top:3px}
+</style>
+</helmet>
+<div class="t" style="min-height:920px;display:flex;flex-direction:column;background:#f4fafa">
+
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:10px 20px;border-bottom:1px solid #bfc9c9">
+    <div style="font:700 20px 'Bricolage Grotesque',sans-serif;color:#00696f">ledger</div>
+    <span class="pill">Claude Code</span>
+    <span class="pill teal"><span style="width:8px;height:8px;border-radius:4px;background:#00696f"></span>Working, 6 h 12 m</span>
+    <span class="pill coral">1 needs you</span>
+    <div style="flex-grow:1"></div>
+    <div style="display:flex;gap:4px">
+      <a href="#overview" style="padding:10px 14px;border-radius:18px;background:#c9f3f6;color:#00363a;font-weight:600;font-size:14px;text-decoration:none">Overview</a>
+      <a href="#terminal" style="padding:10px 14px;color:#243030;font-size:14px;text-decoration:none">Terminal</a>
+      <a href="#artifacts" style="padding:10px 14px;color:#243030;font-size:14px;text-decoration:none">Artifacts</a>
+      <a href="#settings" style="padding:10px 14px;color:#243030;font-size:14px;text-decoration:none">Settings</a>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-wrap:wrap;flex-grow:1;min-height:0">
+
+    <main style="flex:999 1 620px;min-width:0;box-sizing:border-box;padding:24px 28px;display:flex;flex-direction:column;gap:20px">
+
+      <!-- goal banner -->
+      <section style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;background:#ffffff;border:1px solid #bfc9c9;border-radius:24px;padding:22px 26px">
+        <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="3 of 6 plan steps done" style="flex:0 0 96px">
+          <circle cx="48" cy="48" r="40" fill="none" stroke="#d5e0e0" stroke-width="10"/>
+          <circle cx="48" cy="48" r="40" fill="none" stroke="#00696f" stroke-width="10" stroke-linecap="round" stroke-dasharray="125.6 251.2" transform="rotate(-90 48 48)"/>
+          <text x="48" y="54" text-anchor="middle" font-family="Figtree,sans-serif" font-size="22" font-weight="600" fill="#161d1d">3/6</text>
+        </svg>
+        <div style="flex:1 1 320px;min-width:0">
+          <div style="font:700 24px 'Bricolage Grotesque',sans-serif;line-height:1.2">Build the ledger CSV summary library and CLI</div>
+          <div style="font-size:14px;color:#3a4747;margin-top:6px;line-height:1.5">Now: CLI with summary and chart output. Next checkpoint in about 40 minutes. It will only stop for you if it is blocked.</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+            <span class="pill">Time limit 24 h</span><span class="pill">Tokens 3.2M of 5M</span><span class="pill">Refreshes 3 of 20</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <button class="btn outline sm">Pause</button>
+          <button class="btn outline sm">Stop</button>
+        </div>
+      </section>
+
+      <!-- away digest -->
+      <section style="background:#c9f3f6;border-radius:24px;padding:20px 24px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap">
+          <div style="font:600 18px 'Bricolage Grotesque',sans-serif;color:#00363a">While you were away</div>
+          <div style="font-size:12px;color:#00363a">Since 18:00 yesterday</div>
+        </div>
+        <ul style="margin:10px 0 0;padding-left:20px;font-size:14px;line-height:1.6;color:#00363a">
+          <li>4 commits on <span class="mono" style="font-size:13px">feat/ledger-summary</span>, 41 tests passing.</li>
+          <li>Decided that a month with no rows prints as zero, so charts have no gaps.</li>
+          <li>Refreshed its context 3 times and wrote its own handoff each time.</li>
+          <li>One thing is waiting for you: a git push.</li>
+        </ul>
+      </section>
+
+      <!-- timeline -->
+      <section style="background:#ffffff;border:1px solid #bfc9c9;border-radius:24px;padding:22px 26px">
+        <div style="font:600 18px 'Bricolage Grotesque',sans-serif;margin-bottom:16px">Timeline</div>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div class="ev"><div class="when mono">15:20</div><div class="dot" style="background:#9c4234"></div><div style="font-size:14px;line-height:1.5"><b>Needs you:</b> run <span class="mono" style="font-size:13px">git push origin feat/ledger-summary</span> <button class="btn tonal sm" style="margin-left:8px">Review</button></div></div>
+          <div class="ev"><div class="when mono">14:58</div><div class="dot" style="background:#6f7979"></div><div style="font-size:14px;line-height:1.5">Context refresh 3. The builder wrote its own handoff. <a href="#handoff" style="color:#00696f">Read it</a></div></div>
+          <div class="ev"><div class="when mono">14:31</div><div class="dot"></div><div style="font-size:14px;line-height:1.5">Produced an image: <a href="#chart" style="color:#00696f">monthly-totals.png</a></div></div>
+          <div class="ev"><div class="when mono">13:40</div><div class="dot"></div><div style="font-size:14px;line-height:1.5">Tests: 41 passed, none failing. Plan step 3 done.</div></div>
+          <div class="ev"><div class="when mono">11:20</div><div class="dot" style="background:#6f7979"></div><div style="font-size:14px;line-height:1.5">Context refresh 1. Handoff written.</div></div>
+          <div class="ev"><div class="when mono">10:02</div><div class="dot"></div><div style="font-size:14px;line-height:1.5">Commit: <span class="mono" style="font-size:13px">core: parse and group by month</span></div></div>
+          <div class="ev"><div class="when mono">09:12</div><div class="dot"></div><div style="font-size:14px;line-height:1.5">You approved the plan. Autonomous run started.</div></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- chat drawer -->
+    <aside style="flex:1 1 360px;max-width:400px;min-width:320px;box-sizing:border-box;border-left:1px solid #bfc9c9;background:#eef5f5;display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid #d1dcdc;display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:600;font-size:15px">Chat with the builder</div>
+        <span class="pill">Same session as the Terminal</span>
+      </div>
+      <div style="flex-grow:1;padding:16px 18px;display:flex;flex-direction:column;gap:14px;font-size:14px;line-height:1.55">
+        <div style="background:#e1ebeb;border-radius:14px;padding:10px 12px"><div style="font-size:12px;font-weight:600;color:#3a4747;margin-bottom:2px">You, 09:04</div>Build the ledger library and CLI. Plan first, then keep going.</div>
+        <div><div style="font-size:12px;font-weight:600;color:#00696f;margin-bottom:2px">Builder, 14:31</div>The CLI prints a summary and can draw a chart. All 41 tests pass.</div>
+        <div style="border:1px solid #bfc9c9;border-radius:14px;padding:10px 12px;background:#ffffff;font-size:13px">Image: monthly-totals.png</div>
+      </div>
+      <div style="padding:12px 18px 18px">
+        <div style="border:1px solid #6f7979;border-radius:18px;background:#ffffff;padding:10px 12px">
+          <label for="msg2" style="position:absolute;left:-9999px">Message the builder</label>
+          <textarea id="msg2" rows="2" placeholder="Message the builder" style="width:100%;border:0;outline:0;resize:none;font:14px 'Figtree',sans-serif;background:transparent"></textarea>
+          <div style="display:flex;justify-content:flex-end"><button class="btn fill sm">Send</button></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":920}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
