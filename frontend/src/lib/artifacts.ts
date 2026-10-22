@@ -34,6 +34,42 @@ export function sameArtifacts(a: Artifact[], b: Artifact[]): boolean {
 export const EMPTY_TEXT =
   "Nothing here yet. An agent shows a result by writing a markdown file to .cuttlefish/artifacts/ in the project.";
 
+/** The policy an agent's HTML runs under (CUT-175, ADR-0044): nothing may be fetched, framed,
+ * submitted or navigated to, and nothing outside the document itself is loaded. Inline style and
+ * script and `data:` or `blob:` images, media and fonts work, so a self-contained design does. */
+export const FRAME_CSP = [
+  "default-src 'none'",
+  "script-src 'unsafe-inline'",
+  "style-src 'unsafe-inline'",
+  "img-src data: blob:",
+  "media-src data: blob:",
+  "font-src data:",
+  "form-action 'none'",
+  "base-uri 'none'",
+  "frame-src 'none'",
+].join("; ");
+
+/** The `sandbox` attribute: scripts, and nothing else. Without `allow-same-origin` the frame has an
+ * opaque origin, so it can read neither the dashboard's storage nor its token; without
+ * `allow-top-navigation`, `allow-forms`, `allow-popups` or `allow-downloads` it can leave nowhere. */
+export const FRAME_SANDBOX = "allow-scripts";
+
+/** An agent's HTML as the frame's `srcdoc`: the policy first, so nothing in the file can come before
+ * it, then the file. The policy is also set by the sandbox's own limits, not only by this tag. */
+export function htmlFrameDoc(html: string): string {
+  return `<!doctype html><meta http-equiv="Content-Security-Policy" content="${FRAME_CSP}">${html}`;
+}
+
+/** Whether the dashboard can show this kind of file (the rest are listed by name). */
+export function isViewable(kind: string): boolean {
+  return kind === "markdown" || kind === "image" || kind === "video" || kind === "html";
+}
+
+/** The files worth a place on the canvas, newest first, at most `limit`. */
+export function canvasFiles(files: readonly Artifact[], limit = 8): Artifact[] {
+  return files.filter((f) => isViewable(f.kind) && f.path !== "plan.md").slice(0, limit);
+}
+
 export function refusalText(status: number): string {
   if (status === 413) return "This file is too large to show.";
   if (status === 415) return "This kind of file is listed but not shown.";

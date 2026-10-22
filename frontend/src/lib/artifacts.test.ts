@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { ago, agoIso, refusalText, sameArtifacts, sizeText } from "./artifacts";
+import type { Artifact } from "./api";
+import {
+  FRAME_CSP,
+  FRAME_SANDBOX,
+  ago,
+  agoIso,
+  canvasFiles,
+  htmlFrameDoc,
+  isViewable,
+  refusalText,
+  sameArtifacts,
+  sizeText,
+} from "./artifacts";
 
 const file = (path: string, modified: number) => ({
   path, name: path, kind: "markdown" as const, size: 1, modified,
@@ -32,5 +44,36 @@ describe("artifacts helpers", () => {
   it("explains a refusal", () => {
     expect(refusalText(413)).toMatch(/too large/);
     expect(refusalText(415)).toMatch(/not shown/);
+  });
+});
+
+describe("the sandboxed frame (CUT-175)", () => {
+  it("puts the policy before the agent's markup, which cannot load or send anything", () => {
+    const doc = htmlFrameDoc("<p>hi</p><script>fetch('https://x')</script>");
+    expect(doc.startsWith("<!doctype html><meta http-equiv=\"Content-Security-Policy\"")).toBe(true);
+    expect(doc.indexOf("Content-Security-Policy")).toBeLessThan(doc.indexOf("<p>hi</p>"));
+    expect(FRAME_CSP).toContain("default-src 'none'");
+    expect(FRAME_CSP).not.toMatch(/connect-src|https?:/);
+    expect(FRAME_CSP).toContain("form-action 'none'");
+  });
+
+  it("lets scripts run and nothing else out: no same origin, no navigation, no forms", () => {
+    expect(FRAME_SANDBOX).toBe("allow-scripts");
+    expect(FRAME_SANDBOX).not.toContain("allow-same-origin");
+    expect(FRAME_SANDBOX).not.toContain("top-navigation");
+  });
+
+  it("shows what can be shown and leaves the plan to the rail", () => {
+    const file = (path: string, kind: Artifact["kind"]): Artifact => ({ path, name: path, kind, size: 1, modified: 1 });
+    const shown = canvasFiles([
+      file("a.png", "image"),
+      file("plan.md", "markdown"),
+      file("x.bin", "other"),
+      file("v.mp4", "video"),
+      file("d.html", "html"),
+    ]);
+    expect(shown.map((f) => f.path)).toEqual(["a.png", "v.mp4", "d.html"]);
+    expect(canvasFiles(Array.from({ length: 20 }, (_, i) => file(`${i}.png`, "image")))).toHaveLength(8);
+    expect(isViewable("other")).toBe(false);
   });
 });

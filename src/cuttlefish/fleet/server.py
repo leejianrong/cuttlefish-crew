@@ -994,8 +994,8 @@ def create_app(
 
     @app.get("/api/projects/{project_id}/artifacts/file")
     async def read_artifact(project_id: str, path: str) -> Response:
-        """One markdown or image file, as data: nothing here is rendered by the browser itself, and
-        the headers say so, so a file opened directly still runs nothing."""
+        """One artifact file, as data. The browser renders nothing itself (HTML goes out as text)
+        and the headers say so, so a file opened directly still runs nothing."""
         try:
             body, content_type = await daemon.read_artifact(project_id, path)
         except ProjectNotFoundError as exc:

@@ -421,8 +421,8 @@ export interface SharedSecrets {
 export interface Artifact {
   path: string;
   name: string;
-  /** `other` is listed by name only; the daemon will not serve it. */
-  kind: "markdown" | "image" | "other";
+  /** `other` is listed by name only; the daemon will not serve it. `html` is served as text and run only in the dashboard's sandboxed frame. */
+  kind: "markdown" | "image" | "video" | "html" | "other";
   size: number;
   /** Seconds since the epoch. */
   modified: number;

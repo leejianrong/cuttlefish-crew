@@ -290,6 +290,10 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **An HTML design runs with scripts but no network (CUT-175).** The frame has an opaque origin and a policy that allows
+  nothing loaded from outside the file, so a design that pulls a library, font or image from a URL renders without it. That
+  is deliberate (ADR-0036's update); do not add `allow-same-origin` or a `connect-src` to fix a design, tell the agent to
+  inline. Video is held in memory (100 MB cap) and played from a blob. Checked in Chromium only, not Safari or Firefox.
 - **Autopilot has not run against a real Claude Code, and not for hours (CUT-174).** Built and tested against a fake builder,
   a synthetic transcript and the real hook script. Unverified: that Claude Code follows the plan-first instruction (it is in
   the appended system prompt; Codex gets it on the end of the goal), that it ticks `plan.md` as it goes (no ticks means "stuck"

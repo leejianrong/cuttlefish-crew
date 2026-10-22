@@ -90,9 +90,39 @@ def test_a_symlink_inside_the_folder_is_fine(root: Path) -> None:
 
 
 def test_other_files_are_listed_but_not_served(root: Path) -> None:
-    _write(root, "page.html", "<script>alert(1)</script>")
+    _write(root, "run.sh", "echo hi")
+    _write(root, "data.bin", b"\x00\x01")
     with pytest.raises(ArtifactNotPreviewableError):
-        read_artifact(str(root), "page.html")
+        read_artifact(str(root), "run.sh")
+    assert {a.name: a.kind for a in list_artifacts(str(root))} == {
+        "run.sh": "other",
+        "data.bin": "other",
+    }
+
+
+def test_html_is_served_as_text_never_as_html(root: Path) -> None:
+    _write(root, "design.html", "<script>alert(1)</script>")
+    _write(root, "old.htm", "<p>hi</p>")
+    body, content_type = read_artifact(str(root), "design.html")
+    assert body == b"<script>alert(1)</script>"
+    assert content_type.startswith("text/plain")  # the browser never renders it from our origin
+    assert read_artifact(str(root), "old.htm")[1].startswith("text/plain")
+    kinds = {a.name: a.kind for a in list_artifacts(str(root))}
+    assert kinds == {"design.html": "html", "old.htm": "html"}
+
+
+def test_video_is_listed_and_served(root: Path) -> None:
+    _write(root, "walkthrough.mp4", b"\x00\x00\x00 ftypisom")
+    _write(root, "clip.webm", b"\x1aE\xdf\xa3")
+    assert read_artifact(str(root), "walkthrough.mp4")[1] == "video/mp4"
+    assert read_artifact(str(root), "clip.webm")[1] == "video/webm"
+    assert {a.kind for a in list_artifacts(str(root))} == {"video"}
+
+
+def test_html_over_its_limit_is_refused(root: Path) -> None:
+    _write(root, "big.html", b"x" * 2_000_001)
+    with pytest.raises(ArtifactTooLargeError):
+        read_artifact(str(root), "big.html")
 
 
 def test_a_file_over_its_limit_is_refused(root: Path) -> None:

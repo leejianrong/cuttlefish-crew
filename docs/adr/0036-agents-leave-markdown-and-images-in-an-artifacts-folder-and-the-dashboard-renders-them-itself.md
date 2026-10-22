@@ -26,6 +26,24 @@ Claude's own artifacts avoid it by serving from a separate origin.
 - Agents are told in the task text of every round, and, for a Claude Code session in tmux, with
   `--append-system-prompt`. Codex and kopicode in tmux are not told yet; neither has a launch flag we checked.
 
+## Update (CUT-175, 2026-10-22): video and HTML designs
+
+ADR-0044 decided the canvas shows video and interactive HTML, so this ADR's "an iframe is not the plan" is superseded, with
+the problems it listed answered one by one:
+
+- **The file is still only data on the wire.** `.html` is served as `text/plain` with the same `nosniff` and `sandbox` headers
+  and is fetched with the token; the dashboard hands it to a frame as `srcdoc`, so the frame has no URL on the daemon and
+  there is no token in a URL. `.mp4` and `.webm` are served like images (100 MB cap) and played from a blob URL.
+- **The frame has no authority.** `sandbox="allow-scripts"` only: no `allow-same-origin` (so an opaque origin: it cannot
+  read the dashboard's storage or token), no navigation, forms, popups or downloads. A `Content-Security-Policy` meta tag
+  is put before the file and allows no network, no frames, no form submission and nothing loaded from outside the file
+  (`default-src 'none'`; inline script and style, and `data:` or `blob:` images, media and fonts, work).
+- **Verified in a browser (Chromium):** a design that tried `fetch` to the daemon, `localStorage`, `document.cookie`,
+  `parent.document`, `top.location`, and an external image got a SecurityError or a block for each, and reported
+  `origin: null`.
+- **Cost:** a design that loads a library or font from a CDN shows without it. A same-origin frame, or a second origin
+  for real apps (CUT-115), is still not in scope.
+
 ## Consequences
 
 - No sandbox to get wrong, no second origin, no token in a URL. It works the same for all three backends.
