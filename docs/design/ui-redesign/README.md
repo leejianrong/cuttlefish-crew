@@ -212,12 +212,19 @@ and this folder disagree after a slice lands, update this folder.
   the folder is empty. No coral. The tab bar now scrolls sideways under 400px instead of wrapping, because seven
   labels overlapped, and the open tab is scrolled into view.
 - **Terminal tab (CUT-96, 2026-10-16).** A project page has a **Terminal** tab after Overview: the agent's real
-  tmux session in xterm.js, inside an `inverse-surface` panel (colours from the `--md-sys-*` roles, no raw hex), with
+  tmux session in xterm.js, with
   a status line ("Connected to the agent's tmux session") and, below it, a row of 44px keys for a phone keyboard
   (Esc, Tab, Ctrl-C, the arrows, Enter). Under 640px the panel was 52dvh with room left above the fixed bottom
   nav; CUT-98 replaced that with a screen sized to the space left (see the entry at the end). With no session running it says so and offers **Start the agent session**; a lost connection says the agent
   is still running in tmux and offers **Reconnect**; a rejected sign-in offers nothing to retry. It opens only when
   the tab is shown, and never starts a session by itself. No coral: nothing here needs a decision from you.
+- **Terminal theme (CUT-169, 2026-10-22).** The terminal is dark by default in both app themes: it no longer borrows
+  `inverse-surface`, which turned light exactly when the app was dark. Its colours are their own tokens in
+  `frontend/src/terminal-tokens.css` (`--term-dark-*` and `--term-light-*`: background, foreground, cursor, selection,
+  border and the 16 ANSI colours): `#1d2426` in the light app, `#070b0c` with a 1px border in the dark app, and a
+  light palette for the choice below. A **Match app / Dark / Light** switch in the Terminal header (44px targets) is
+  remembered per browser (`lib/terminaltheme.ts`, key `cuttlefish.terminal-theme`); Match follows the app's own theme,
+  including a change made while the tab is open. Source board: `docs/design/chat-rework/Terminal.dc.html`.
 - **Phone layout and sign-in again (CUT-98, CUT-112, 2026-10-17).** On a phone the Terminal tab hides the project's path and
   tightens the header, and the terminal is sized in script to what is left between the header and the bottom bar
   (`lib/terminallayout.ts`, from `visualViewport` so a keyboard shrinks it), with the key row (44px keys, two rows at
