@@ -218,6 +218,11 @@ and this folder disagree after a slice lands, update this folder.
   nav; CUT-98 replaced that with a screen sized to the space left (see the entry at the end). With no session running it says so and offers **Start the agent session**; a lost connection says the agent
   is still running in tmux and offers **Reconnect**; a rejected sign-in offers nothing to retry. It opens only when
   the tab is shown, and never starts a session by itself. No coral: nothing here needs a decision from you.
+- **Shell terminal (CUT-170, 2026-10-22).** The Terminal header gains an **Agent / Shell** switch (44px targets,
+  `aria-pressed`). Shell is a plain shell in the project folder, with one line on a wide screen saying it has the
+  filtered environment and no project secrets and needs no agent. The notice that offers "Start the agent session"
+  is for the Agent view only. On a phone the "Terminal" title and that line are dropped to save height (the tab
+  already says Terminal); the two switches take two short rows.
 - **Terminal theme (CUT-169, 2026-10-22).** The terminal is dark by default in both app themes: it no longer borrows
   `inverse-surface`, which turned light exactly when the app was dark. Its colours are their own tokens in
   `frontend/src/terminal-tokens.css` (`--term-dark-*` and `--term-light-*`: background, foreground, cursor, selection,

@@ -26,6 +26,11 @@ def session_name(project_id: str) -> str:
     return "cf-" + _UNSAFE.sub("-", project_id)
 
 
+def shell_session_name(project_id: str) -> str:
+    """The name of a project's plain shell session, apart from its agent's (CUT-170)."""
+    return "cf-shell-" + _UNSAFE.sub("-", project_id)
+
+
 class Tmux:
     def __init__(self, socket: Path, binary: str = "tmux") -> None:
         self.socket = socket

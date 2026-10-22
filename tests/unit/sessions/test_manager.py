@@ -171,3 +171,51 @@ def test_a_deep_home_gets_a_short_socket_path(
     assert default_socket() == socket  # the same HOME always maps to the same server
     monkeypatch.setenv("HOME", str(deep) + "x")
     assert default_socket() != socket
+
+
+# -- the plain shell (CUT-170) ------------------------------------------------------------------
+
+
+def _shell_text(rig: Rig, name: str) -> str:
+    return rig.tmux._run("capture-pane", "-p", "-t", name).stdout
+
+
+def _type_and_wait(rig: Rig, name: str, line: str, needle: str) -> str:
+    for _ in range(50):  # keys sent while the shell starts can be dropped: wait for its prompt
+        if "$" in _shell_text(rig, name):
+            break
+        time.sleep(0.1)
+    rig.tmux._run("send-keys", "-t", name, line, "Enter")
+    for _ in range(50):
+        shown = _shell_text(rig, name)
+        if needle in shown:
+            return shown
+        time.sleep(0.1)
+    raise AssertionError(f"never saw {needle!r} in {shown!r}")
+
+
+def test_the_shell_is_its_own_session_in_the_project_folder_and_needs_no_agent(rig: Rig) -> None:
+    name = rig.manager.ensure_shell("p1", str(rig.root))
+    assert name == "cf-shell-p1"
+    assert rig.manager.status("p1", str(rig.root)).state == "none"  # not the agent's session
+    _type_and_wait(rig, name, "echo cwd=$(pwd)", f"cwd={rig.root}")
+
+
+def test_the_shell_gets_the_filtered_environment_and_no_project_secret(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LEAKY_DAEMON_VALUE", "daemon-only")  # in the test process, not given out
+    name = rig.manager.ensure_shell("p1", str(rig.root))
+    shown = _type_and_wait(rig, name, "echo leak=[${LEAKY_DAEMON_VALUE-absent}]", "leak=[absent]")
+    assert "daemon-only" not in shown
+
+
+def test_ensure_shell_again_reuses_it_and_a_stopped_shell_starts_fresh(rig: Rig) -> None:
+    name = rig.manager.ensure_shell("p1", str(rig.root))
+    _type_and_wait(rig, name, "SENTINEL=kept", "SENTINEL=kept")
+    assert rig.manager.ensure_shell("p1", str(rig.root)) == name
+    _type_and_wait(rig, name, "echo again=${SENTINEL}", "again=kept")
+    rig.manager.stop_shell("p1")
+    assert not rig.tmux.has_session(name)
+    rig.manager.ensure_shell("p1", str(rig.root))
+    _type_and_wait(rig, name, "echo fresh=[${SENTINEL-unset}]", "fresh=[unset]")

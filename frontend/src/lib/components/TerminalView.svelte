@@ -7,9 +7,11 @@
   import {
     KEY_ROW,
     authMessage,
+    TERMINAL_KINDS,
     describeClose,
     resizeMessage,
     type CloseInfo,
+    type TerminalKind,
   } from "../terminal";
   import { keyboardOpen, screenHeight } from "../terminallayout";
   import {
@@ -49,6 +51,8 @@
   let socket: SocketLike | null = null;
   let observer: ResizeObserver | null = null;
   let connectedFor = "";
+  // Which terminal: the agent's session, or the person's own shell in the project folder (CUT-170).
+  let kind = $state<TerminalKind>("agent");
   const encoder = new TextEncoder();
   const ANSI_KEYS = [
     "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
@@ -73,6 +77,10 @@
         ansiNames(which).map((n, i) => [ANSI_KEYS[i], role(n, "")] as const).filter(([, v]) => v),
       ),
     };
+  }
+
+  function chooseKind(next: TerminalKind) {
+    kind = next;
   }
 
   function chooseTheme(next: TerminalThemePreference) {
@@ -143,7 +151,7 @@
     disconnect();
     closed = null;
     status = "connecting";
-    connectedFor = projectId;
+    connectedFor = `${projectId}:${kind}`;
     terminal.reset();
     try {
       fit.fit();
@@ -153,7 +161,7 @@
     const ws = client.openTerminal(projectId);
     ws.binaryType = "arraybuffer";
     socket = ws;
-    ws.onopen = () => ws.send(authMessage(client.token, terminal.cols, terminal.rows));
+    ws.onopen = () => ws.send(authMessage(client.token, terminal.cols, terminal.rows, kind));
     ws.onmessage = (event) => {
       if (typeof event.data === "string") {
         if ((JSON.parse(event.data) as { type?: string }).type === "ready") {
@@ -168,7 +176,7 @@
       if (socket !== ws) return;
       socket = null;
       status = "closed";
-      closed = describeClose(event.code, event.reason);
+      closed = describeClose(event.code, event.reason, kind);
     };
   }
 
@@ -195,7 +203,7 @@
   // Connect when the tab is first shown, and again if it is shown for another project. A hidden
   // panel has no size to fit, so nothing is opened before then.
   $effect(() => {
-    if (active && host && connectedFor !== projectId) connect();
+    if (active && host && connectedFor !== `${projectId}:${kind}`) connect();
     else if (active) queueMicrotask(refit);
   });
 
@@ -257,8 +265,21 @@
 <section class="terminal" aria-labelledby="terminal-heading" bind:this={panel}>
   <div class="bar" bind:this={bar}>
     <h2 id="terminal-heading" class="title-medium">Terminal</h2>
+    <div class="seg" role="group" aria-label="Which terminal">
+      {#each TERMINAL_KINDS as choice (choice.id)}
+        <button
+          type="button"
+          class:on={kind === choice.id}
+          aria-pressed={kind === choice.id}
+          onclick={() => chooseKind(choice.id)}
+        >
+          {choice.label}
+        </button>
+      {/each}
+    </div>
     <span class="state body-small muted" role="status">
-      {#if status === "connected"}Connected to the agent's tmux session
+      {#if status === "connected" && kind === "shell"}Your shell, in the project folder
+      {:else if status === "connected"}Connected to the agent's tmux session
       {:else if status === "connecting"}Connecting…
       {:else if status === "closed"}Not connected
       {/if}
@@ -280,7 +301,7 @@
   {#if closed}
     <div class="notice" role="alert">
       <p class="body-medium">{closed.text}</p>
-      {#if closed.kind === "no-session"}
+      {#if closed.kind === "no-session" && kind === "agent"}
         <button class="btn btn-filled" disabled={starting} onclick={startSession}>
           Start the agent session
         </button>
@@ -288,6 +309,13 @@
         <button class="btn btn-tonal" onclick={connect}>Reconnect</button>
       {/if}
     </div>
+  {/if}
+
+  {#if kind === "shell"}
+    <p class="body-small muted shell-note">
+      A plain shell in the project folder. It has the same filtered environment as the agents and no
+      project secrets, and it needs no agent session. It keeps running when you close the tab.
+    </p>
   {/if}
 
   <div
@@ -324,6 +352,10 @@
 
   .bar h2 {
     margin: 0;
+  }
+
+  .shell-note {
+    margin: 0 0 0.5rem;
   }
 
   .notice {
@@ -399,6 +431,17 @@
 
     .terminal {
       margin: 0.25rem 0 0;
+    }
+
+    /* Height is what a phone's terminal needs most: the tab already says Terminal, and the
+       shell's explanation is on a wide screen only. */
+    .bar h2,
+    .shell-note {
+      display: none;
+    }
+
+    .bar {
+      row-gap: 0.25rem;
     }
   }
 

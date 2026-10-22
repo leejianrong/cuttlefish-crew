@@ -12,10 +12,23 @@ export function terminalPath(projectId: string): string {
   return `/api/projects/${encodeURIComponent(projectId)}/terminal`;
 }
 
+/** Which terminal: the agent's own tmux session, or the person's shell in the project folder (CUT-170). */
+export type TerminalKind = "agent" | "shell";
+
+export const TERMINAL_KINDS: { id: TerminalKind; label: string }[] = [
+  { id: "agent", label: "Agent" },
+  { id: "shell", label: "Shell" },
+];
+
 /** The first message. A browser cannot set a header on a websocket and a token in the address would
- * reach logs, so the token goes in the opening frame. */
-export function authMessage(token: string, cols: number, rows: number): string {
-  return JSON.stringify({ type: "auth", token, size: { cols, rows } });
+ * reach logs, so the token goes in the opening frame, with which terminal is wanted. */
+export function authMessage(
+  token: string,
+  cols: number,
+  rows: number,
+  kind: TerminalKind = "agent",
+): string {
+  return JSON.stringify({ type: "auth", token, size: { cols, rows }, kind });
 }
 
 export function resizeMessage(cols: number, rows: number): string {
@@ -42,7 +55,8 @@ export interface CloseInfo {
 }
 
 /** What a closed socket means, in words. 4401 and 4404 are the daemon's own codes. */
-export function describeClose(code: number, reason: string): CloseInfo {
+export function describeClose(code: number, reason: string, kind: TerminalKind = "agent"): CloseInfo {
+  const what = kind === "shell" ? "The shell" : "The agent";
   if (code === 4401) {
     return {
       kind: "unauthorised",
@@ -65,11 +79,11 @@ export function describeClose(code: number, reason: string): CloseInfo {
   if (code === 1000 || code === 1005) {
     return {
       kind: "ended",
-      text: "The terminal closed. The agent is still running in tmux.",
+      text: `The terminal closed. ${what} is still running in tmux.`,
     };
   }
   return {
     kind: "lost",
-    text: "The connection to the daemon was lost. The agent is still running in tmux.",
+    text: `The connection to the daemon was lost. ${what} is still running in tmux.`,
   };
 }
