@@ -353,8 +353,14 @@ def test_a_goal_with_autopilot_tells_the_builder_to_plan_first_and_waits_for_app
 ) -> None:
     log = _raw_reader(rig)
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
-    client = _client(rig.daemon())
-    path = f"/api/projects/{project.id}"
+    # One portal for the whole test: the journal's sqlite connection belongs to the loop thread that
+    # opened it, as it does in the daemon (a client with no `with` starts a thread per request).
+    with _client(rig.daemon()) as client:
+        _autopilot_flow(rig, client, project.id, log)
+
+
+def _autopilot_flow(rig: Rig, client: TestClient, project_id: str, log: Path) -> None:
+    path = f"/api/projects/{project_id}"
     assert client.get(f"{path}/autopilot").json()["phase"] == "off"
     given = client.post(f"{path}/goal", json={"text": "Build it", "autopilot": {"hours": 2}})
     assert given.status_code == 200
