@@ -25,7 +25,7 @@ def test_checks_flag_missing_cli_and_login(tmp_path: Path) -> None:
     assert by_name["uv"].ok
     assert not by_name["codex CLI"].ok
     assert not by_name["codex login"].ok
-    assert by_name["summarising key (optional)"].ok  # never blocks (KAN-1807)
+    assert "summarising key (optional)" not in by_name  # cuttlefish needs no key of its own
 
 
 def test_checks_pass_when_everything_present(tmp_path: Path) -> None:

@@ -20,7 +20,6 @@ from cuttlefish import runtime
 from cuttlefish.agents.outcome import ConsentDecisionRecord, DelegationOutcome, ToolCallRecord
 from cuttlefish.episodic.events import ConsentDecided, ToolCallRecorded
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.tasks import delegate
 from cuttlefish.workflow import run_task
 
@@ -69,7 +68,6 @@ async def test_each_consent_decision_is_journaled_after_the_tool_calls(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )

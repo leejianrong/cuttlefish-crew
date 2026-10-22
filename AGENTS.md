@@ -94,12 +94,10 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   `PATH`-checked at team start, not mid-task. Two kopicode-backed roles still
   dispatch one-at-a-time (shared `--root` lock); roles on different backends
   run concurrently.
-- **`OPENROUTER_API_KEY` is only needed once a handover summary is due**
-  (the provider is built lazily, KAN-1807); without it that call fails, unless
-  `CUTTLEFISH_LLM_PROVIDER=replay` (placeholder summaries). It is cuttlefish's
-  own summarising provider, not the coding agent's credential. With no key in the
-  environment it reads the *shared* `OPENROUTER_API_KEY` secret (set under Secrets in
-  the dashboard), never a project's own.
+- **cuttlefish makes no model call of its own** (CUT-140, ADR-0042). A checkpoint's handover is the agent's own
+  handoff (kopicode `session.handoff`; Codex over `app-server`, a second turn on the same thread; Claude Code is still to
+  do) or a digest read from the journal (`handover._digest`, no model). There is no summariser, no `CUTTLEFISH_LLM_*`
+  setting and no `OPENROUTER_API_KEY` for cuttlefish itself; that key is only the coding agent's (kopicode's).
 - **An agent gets an allowlisted environment, not the daemon's** (`delegate/subprocess_env.merge_env`). A variable an agent
   or a test double needs and does not get goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` (tests set it for `FAKE_KOPICODE_*`
   in `conftest.py`); never go back to inheriting everything. ADR-0029.

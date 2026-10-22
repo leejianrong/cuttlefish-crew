@@ -38,6 +38,7 @@ import dataclasses
 import inspect
 import json
 import logging
+import re
 import shlex
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -61,6 +62,33 @@ _LOG = logging.getLogger(__name__)
 
 #: How long ``turn/interrupt`` and the process's own exit may take before it is killed.
 _INTERRUPT_GRACE = 15.0
+
+#: How long the agent has to write its handoff once asked (ADR-0042).
+_HANDOFF_TIMEOUT = 240.0
+
+#: What the agent is asked for at a checkpoint (CUT-140): a document under fixed headings, written
+#: from its own history, with no commands run. Read back as its final message.
+_HANDOFF_PROMPT = (
+    "Your round has ended because it ran out of room. A new session will take over with no "
+    "memory of this one, so write the handoff now. Do not run any command or edit any file: "
+    "answer in text only. Use exactly these four headings, in this order, each on its own line "
+    "starting with '## ': Done, Remaining, Failed or refused, Open questions. Done: what you "
+    "finished, naming the files. Remaining: what is left, most important first. Failed or "
+    "refused: anything that failed or was declined, and why. Open questions: anything the next "
+    "session must decide or check. State only what you saw; say 'unconfirmed' when you did not "
+    "see a test pass or a commit land. {goal}"
+)
+
+
+def handoff_is_usable(text: str) -> bool:
+    """Whether a reply is a handoff document: it has the Done and the Remaining headings. A reply
+    without them is the agent talking, and the caller falls back to its digest (ADR-0042)."""
+    return all(
+        re.search(rf"^\s*#{{1,4}}\s*{name}\b", text, re.IGNORECASE | re.MULTILINE)
+        for name in ("Done", "Remaining")
+    )
+
+
 _STDERR_CAP = 64 * 1024
 _STDERR_TAIL_CHARS = 2000
 #: Longest command line copied into a journaled consent record.
@@ -263,10 +291,17 @@ class _Connection:
         self._pending: dict[int, asyncio.Future[Mapping[str, Any]]] = {}
         self._handlers: set[asyncio.Task[None]] = set()
         self.turn_done: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        #: Decline every command and edit approval: the turn that writes the handoff only talks.
+        self.refuse_all = False
         self._stderr = bytearray()
         assert process.stdout is not None and process.stderr is not None
         self._reader = asyncio.create_task(self._read(process.stdout))
         self._stderr_reader = asyncio.create_task(self._drain(process.stderr))
+
+    def begin_turn(self, round_: _Round) -> None:
+        """Gather the next turn on this thread into ``round_``, with its own completion signal."""
+        self._round = round_
+        self.turn_done = asyncio.get_running_loop().create_future()
 
     async def stderr_tail(self) -> str:
         with contextlib.suppress(Exception):
@@ -379,6 +414,11 @@ class _Connection:
             await self._process.stdin.drain()  # type: ignore[union-attr]
 
     async def _result_for(self, method: str, params: Mapping[str, Any]) -> Mapping[str, Any] | None:
+        if self.refuse_all and method in (
+            "item/commandExecution/requestApproval",
+            "item/fileChange/requestApproval",
+        ):
+            return {"decision": "decline"}
         if method == "item/commandExecution/requestApproval":
             return {"decision": await self._decide_command(params)}
         if method == "item/fileChange/requestApproval":
@@ -471,6 +511,7 @@ async def run_codex_app_server(
     timeout: float | None = None,
     token_budget: int | None = None,
     usage_sink: Callable[[int], None] | None = None,
+    handoff_goal: str | None = None,
     lease: Lease | None = None,
     thread_key: str | None = None,
     live_role: str | None = None,
@@ -483,6 +524,11 @@ async def run_codex_app_server(
 
     ``live_role`` (CUT-92, ADR-0033) makes the running turn steerable by that role's name, and
     lets the fleet daemon end it when a person presses Stop (``cuttlefish.delegate.codex_live``).
+
+    ``handoff_goal`` (ADR-0042, CUT-140) asks the agent to write its own handoff when the round ends
+    because it ran out of room (the token limit or the round time limit): a second turn on the same
+    thread, with every command and edit declined, whose reply comes back as the outcome's
+    ``handoff``. Any failure to get one leaves it ``None``.
 
     ``usage_sink`` (CUT-102) is called with the turn's own tokens so far after every usage update.
 
@@ -522,6 +568,8 @@ async def run_codex_app_server(
     turn_id: str | None = None
     timed_out = False
     over_budget = False
+    handoff_document: str | None = None
+    handoff_tokens = 0
     live: codex_live.LiveTurn | None = None
     budget_hit = asyncio.Event()
     if token_budget or usage_sink:
@@ -594,6 +642,10 @@ async def run_codex_app_server(
             else:
                 over_budget = True
                 await _interrupt(connection, thread_id, turn_id)
+        if handoff_goal is not None and (timed_out or over_budget):
+            handoff_document, handoff_tokens = await _request_handoff(
+                connection, thread_id, handoff_goal, effort, root
+            )
     except asyncio.CancelledError:
         await asyncio.shield(_interrupt(connection, thread_id, turn_id))
         raise
@@ -610,6 +662,12 @@ async def run_codex_app_server(
         await asyncio.shield(connection.close())
 
     outcome = round_.outcome()
+    if handoff_document is not None or handoff_tokens:
+        outcome = dataclasses.replace(
+            outcome,
+            handoff=handoff_document,
+            tokens=(outcome.tokens or 0) + handoff_tokens if handoff_tokens else outcome.tokens,
+        )
     if timed_out:
         limit = "its time limit" if timeout is None else f"{timeout:g} seconds"
         return dataclasses.replace(
@@ -663,3 +721,44 @@ async def _interrupt(connection: _Connection, thread_id: str | None, turn_id: st
             _INTERRUPT_GRACE,
         )
         await asyncio.wait_for(asyncio.shield(connection.turn_done), _INTERRUPT_GRACE)
+
+
+async def _request_handoff(
+    connection: _Connection, thread_id: str, goal: str, effort: str | None, root: str
+) -> tuple[str | None, int]:
+    """Ask the agent, in the thread it just worked in, for its handoff document (ADR-0042). The
+    document and the tokens the asking cost; ``None`` for the document when it cannot be had, for
+    any reason, since the round has already ended and the caller has its own digest."""
+    own = _Round(root)
+    first = connection._round
+    connection.begin_turn(own)
+    connection.refuse_all = True
+    turn_id: str | None = None
+    try:
+        turn = await connection.request(
+            "turn/start",
+            {
+                "threadId": thread_id,
+                "input": [{"type": "text", "text": _HANDOFF_PROMPT.format(goal=goal)}],
+                **({"effort": effort} if effort else {}),
+            },
+        )
+        started_turn = turn.get("turn")
+        turn_id = started_turn.get("id") if isinstance(started_turn, Mapping) else None
+        await asyncio.wait_for(asyncio.shield(connection.turn_done), _HANDOFF_TIMEOUT)
+    except (TimeoutError, DelegationError):
+        _LOG.warning("no handoff from codex thread %s", thread_id, exc_info=True)
+        await _interrupt(connection, thread_id, turn_id)
+        return None, _own_tokens(own)
+    finally:
+        connection.refuse_all = False
+        connection._round = first
+    document = own.final_answer.strip()
+    if own.status != "completed" or not handoff_is_usable(document):
+        _LOG.warning("codex thread %s answered the handoff prompt without a document", thread_id)
+        return None, _own_tokens(own)
+    return document, _own_tokens(own)
+
+
+def _own_tokens(round_: _Round) -> int:
+    return 0 if round_.tokens is None else max(round_.tokens - (round_.baseline or 0), 0)

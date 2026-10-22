@@ -1,35 +1,24 @@
-"""Integration: does the handover-summary chain actually hold across many chained
-rounds (ADR-0010/KAN-1704)?
+"""Integration: does the handover chain hold across many chained rounds (ADR-0010/KAN-1704,
+ADR-0042)?
 
-Before this ADR, `HandoverWritten` was journaled but never read back by anything
-(a write-only checkpoint), and the mechanism that *did* thread context across
-steered rounds (`round_summaries` in `compose_steered_text`) had no token budget at
-all -- it grew forever, one raw round at a time. `maybe_handover` also only ever
-fired before the round loop started and after it ended, never once *during* a long
-steered run -- exactly the case a mid-loop checkpoint exists for.
+Before ADR-0010, `HandoverWritten` was journaled but never read back by anything (a write-only
+checkpoint), and the mechanism that *did* thread context across steered rounds
+(`round_summaries` in `compose_steered_text`) had no token budget at all -- it grew forever, one raw
+round at a time. `maybe_handover` also only ever fired before the round loop started and after it
+ended, never once *during* a long steered run.
 
-This test drives a real, many-round steered `run_task` (`token_budget=0` forces a
-handover after literally every round, so a 10-round run chains 11 handovers deep,
-matching the ticket's own "10+ handovers deep") and asserts two things a bug in
-either mechanism would break: a marker planted in the very first handover survives,
-verbatim, in every later round's own composed prompt (nothing load-bearing silently
-drops out of the chain), and each round's composed prompt stays a roughly constant
-size instead of growing with round count.
+This test drives a real, many-round steered `run_task` (`token_budget=0` forces a handover after
+literally every round, so a 10-round run chains 11 handovers deep) and asserts what a bug in either
+mechanism would break: every later round's own composed prompt carries the latest handover, and its
+size stays roughly constant instead of growing with the round count.
 
-What this test *cannot* assert -- named honestly, not glossed over -- is whether a
-*real* model, summarising for real, would actually choose to preserve a load-bearing
-fact under compression. `ReplayLlmProvider` returns scripted text regardless of the
-prompt it's given, so every "summary" here is authored by the test, not produced by
-compression. That is a live-model-quality question, and it is out of scope for a
-deterministic test the same way it is for every other `ReplayLlmProvider`-driven test
-in this suite (`tests/unit/handover/test_maybe_handover.py`). What *is* in scope, and
-what a real bug in this fix would break, is whether cuttlefish's own plumbing
-correctly threads forward whatever the summariser wrote, without dropping or
-truncating it, across many chained checkpoints.
+Since CUT-140 a handover is the agent's own document or a digest read from the journal; cuttlefish
+no longer asks a model of its own to write one, so there is no summariser to script. Whether a real
+agent's handoff keeps a load-bearing fact is a live-model question this deterministic test cannot
+answer.
 
-Real kopicode, no mock (docs/PLAN.md "Testing approach") -- an invalid-but-
-syntactically-valid credential (mirrors `test_workflow_steering.py`'s own pattern)
-gets a real, fast, no-cost `DelegationFailed` every round, so ten real subprocess
+Real kopicode, no mock (docs/PLAN.md "Testing approach") -- an invalid-but-syntactically-valid
+credential gets a real, fast, no-cost `DelegationFailed` every round, so ten real subprocess
 invocations stay cheap and deterministic.
 """
 
@@ -44,8 +33,6 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import runtime
 from cuttlefish.episodic.events import DelegationStarted, HandoverWritten, SteeringMessage
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.provider import LlmResponse
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.workflow import run_task
 
 #: See the module docstring -- real session, no real cost, no real credential.
@@ -64,25 +51,16 @@ def _reset_runtime() -> None:
 
 
 @pytest.mark.requires_kopicode
-async def test_a_load_bearing_marker_survives_ten_chained_handovers_and_size_stays_bounded(
+async def test_ten_chained_handovers_reach_every_round_and_size_stays_bounded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("OPENROUTER_API_KEY", _INVALID_OPENROUTER_KEY)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    # One handover before the loop starts (the initial TaskSubmitted window) plus
-    # one per round (token_budget=0 forces every round's own maybe_handover call to
-    # fire) -- see run_task's own comment for why it's every round, not just the
-    # first and last.
-    responses = [
-        LlmResponse(model="replay", text=f"{_MARKER}; checkpoint {i}") for i in range(_ROUNDS + 1)
-    ]
-
     episodic_store = EpisodicStore.open(tmp_path / "episodic.db")
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider(responses),
             kopicode_binary="kopicode",
         )
     )
@@ -110,7 +88,9 @@ async def test_a_load_bearing_marker_survives_ten_chained_handovers_and_size_sta
         # on one key (satay-runtime ADR-0021) means all of these can be queued
         # up front; each round's own wait consumes exactly one.
         for i in range(1, _ROUNDS):
-            await satay.send_event(SteeringMessage(text=f"steer {i}"), key=task_id, store=store)
+            await satay.send_event(
+                SteeringMessage(text=f"{_MARKER} (steer {i})"), key=task_id, store=store
+            )
         result = await handle.result()
 
     assert result["status"] == "failed"  # the invalid credential, every round
@@ -121,17 +101,17 @@ async def test_a_load_bearing_marker_survives_ten_chained_handovers_and_size_sta
     assert kinds.count("HandoverWritten") == _ROUNDS + 1
 
     handovers = [e.payload for e in events if isinstance(e.payload, HandoverWritten)]
-    assert all(_MARKER in h.summary for h in handovers)
+    assert all("A digest read from the journal" in h.summary for h in handovers)
 
     started = [e.payload for e in events if isinstance(e.payload, DelegationStarted)]
     assert isinstance(started[0], DelegationStarted)
     # The first round runs before any round has finished, so no handover has been
     # read back into it yet -- it's still the plain original text.
-    assert _MARKER not in started[0].task_text
-    # Every later round's own composed prompt carries the marker forward, chained
-    # through as many handovers as rounds already ran -- this is the property that
-    # was silently broken before this fix (HandoverWritten was write-only).
+    assert "A digest read from the journal" not in started[0].task_text
+    # Every later round's own composed prompt carries the latest handover, and with it what the
+    # person said: the property that was silently broken before ADR-0010 (write-only).
     for round_input in started[1:]:
+        assert "A digest read from the journal" in round_input.task_text
         assert _MARKER in round_input.task_text
 
     # Bounded growth: round_summaries resets every time a handover fires
@@ -139,6 +119,6 @@ async def test_a_load_bearing_marker_survives_ten_chained_handovers_and_size_sta
     # stays roughly the same size instead of growing linearly with round count --
     # the concrete, unbounded-growth defect ADR-0010 named in compose_steered_text.
     lengths = [len(round_input.task_text) for round_input in started]
-    assert max(lengths[1:]) - min(lengths[1:]) < 100
+    assert max(lengths[1:]) - min(lengths[1:]) < 1500  # capped, not linear in the rounds
 
     episodic_store.close()

@@ -25,7 +25,6 @@ from dataclasses import dataclass
 
 from cuttlefish.broker import Broker
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.provider import LlmProvider
 from cuttlefish.requests import RequestContext
 from cuttlefish.sandbox.provider import SandboxProvider
 from cuttlefish.secrets.store import SecretsResolver
@@ -61,7 +60,6 @@ class Runtime:
     """
 
     episodic_store: EpisodicStore
-    llm_provider: LlmProvider
     kopicode_binary: str
     claude_code_binary: str = "claude"
     codex_binary: str = "codex"

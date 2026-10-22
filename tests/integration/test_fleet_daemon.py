@@ -36,7 +36,6 @@ from cuttlefish.steering import SteeringDeliveryError
 @pytest.fixture(autouse=True)
 def _missing_kopicode_binary(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CUTTLEFISH_KOPICODE_BIN", "cuttlefish-test-missing-kopicode-binary")
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
     monkeypatch.delenv("CUTTLEFISH_SECRETS_KEY", raising=False)
 
 

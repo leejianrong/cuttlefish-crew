@@ -1,5 +1,8 @@
 # Model choices and what they cost
 
+> **History (CUT-140, 2026-10-22):** the summariser this file prices is deleted. cuttlefish makes no model call of its own now; the
+> sections about its summaries and `CUTTLEFISH_LLM_MODEL` record what was measured while it existed. The coding rounds' costs still apply.
+
 A snapshot of OpenRouter's public model list (`GET https://openrouter.ai/api/v1/models`, no key needed) on 2026-10-08.
 Prices are US dollars per million tokens, input / output. They move; re-pull the list before deciding anything.
 

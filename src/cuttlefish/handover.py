@@ -1,11 +1,12 @@
-"""Working memory: a token-budget check and an automatic handover (ADR-0004, Q15).
+"""Working memory: a token-budget check and an automatic handover (ADR-0004, Q15, ADR-0042).
 
-Never a hand-maintained document. At a configured token-budget threshold, this
-distills the episodic window since the last handover (or the task's start) into
-one summary via a single bounded LLM call, and writes the summary back as its own
-episodic event (``HandoverWritten``) with a pointer into the full journal — nothing
-is dropped from the *record*, only from what a long-running task would otherwise
-keep piling into its own live context.
+Never a hand-maintained document. At a configured token-budget threshold, or at a checkpoint,
+this writes the episodic window since the last handover (or the task's start) back as its own
+episodic event (``HandoverWritten``) with a pointer into the full journal — nothing is dropped
+from the *record*, only from what a long-running task would otherwise keep piling into its own
+live context. The text is the agent's own handoff when it wrote one (ADR-0042, CUT-140), else a
+digest read from the journal that needs no model: cuttlefish no longer asks a model of its own to
+write one.
 
 Checked every round of a steered ``run_task``/``run_team`` loop, not only before it
 starts and after it ends (ADR-0010/KAN-1704 — the previous two-call-only shape meant
@@ -18,8 +19,6 @@ sees.
 """
 
 from __future__ import annotations
-
-import re
 
 from cuttlefish.episodic.events import (
     ConsentDecided,
@@ -40,7 +39,6 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.limits import CHECKPOINT_STOPS
 from cuttlefish.tasks.journal import journal, read_episodic_events
-from cuttlefish.tasks.llm import call_llm
 from cuttlefish.tasks.repo import REPO_STATE_MARKER, read_repo_state
 
 #: A placeholder default, not a tuned value — callers configure their own
@@ -65,8 +63,8 @@ def _texts(payload: EventPayload) -> tuple[str, ...]:
         case TaskSubmitted(text=text):
             return (text,)
         case LlmCallCompleted():
-            # The summariser's own call is journaled for its cost, not as progress: counting its
-            # prompt and response here would feed every handover back into the next window.
+            # The summariser's own call (journals written before CUT-140 hold them): its cost, not
+            # progress. Counting its prompt and response would feed every handover back in.
             return ()
         case LlmCallFailed(prompt=prompt, error=error):
             return (prompt, error)
@@ -115,22 +113,23 @@ async def maybe_handover(
     root: str | None = None,
     agent_document: str | None = None,
 ) -> bool:
-    """Summarise and checkpoint if the window since the last handover is over budget.
+    """Checkpoint if the window since the last handover is over budget.
 
     Reads the full episodic record via the durable ``read_episodic_events`` task
     (never the store directly — see that task's own doc comment for why), finds
     everything after the most recent ``HandoverWritten`` (or the start, if none),
-    and — only once that window's estimated size crosses `token_budget` — makes one
-    bounded ``call_llm`` call to distill it, then journals the result. Returns
-    whether a handover was written, so a caller (mainly a test) can assert it fired.
+    and — only once that window's estimated size crosses `token_budget` — journals a
+    handover for it: the agent's own document when given, else a digest of the window
+    that needs no model. Returns whether a handover was written, so a caller (mainly
+    a test) can assert it fired.
 
     ``force`` writes one whatever the window's size (but not for an empty window): a fresh
     session after a checkpoint has only what it is told, and a round that ran 100 turns can
     sit well under the budget in journal tokens (ADR-0030).
 
     ``agent_document`` (ADR-0042) is a handoff the agent wrote itself from its own history when it
-    was asked. It is journaled as the handover as it is: no summarising call is made, so this path
-    needs no summariser key, and a blank one is ignored.
+    was asked. It is journaled as the handover as it is, and a blank one is ignored (the digest is
+    written instead).
 
     ``root`` is the project's folder: when given, the repository's own recent commits and
     uncommitted changes (read from git, never summarised) are appended to the handover, so the
@@ -167,21 +166,7 @@ async def maybe_handover(
     if agent_document is not None and agent_document.strip():
         summary = agent_document.strip()
     else:
-        previous = _previous_summary(decoded, last_handover_seq)
-        summary, calls = await _write_summary(window, previous)
-        for call in calls:
-            await journal(
-                task_id,
-                LlmCallCompleted(
-                    model=str(call["model"]),
-                    prompt=_prompt_of(call),
-                    response=str(call["text"]),
-                    input_tokens=_as_int(call.get("input_tokens")),
-                    output_tokens=_as_int(call.get("output_tokens")),
-                    role=role,
-                    cost_usd=_as_float(call.get("cost_usd")),
-                ),
-            )
+        summary = _digest(decoded, _previous_summary(decoded, last_handover_seq))
     if root:
         state = await read_repo_state(root)
         if state:
@@ -219,28 +204,6 @@ async def latest_handover_summary(task_id: str, *, role: str | None = None) -> s
     return latest
 
 
-_FIRST_PERSON = re.compile(
-    r"^\s*(i['\u2019]?(ll|m|ve|d)\b|i (will|am|have|can)\b|let me\b|sure\b|okay\b)", re.I
-)
-_MIN_SUMMARY_CHARS = 20
-
-_INSTRUCTIONS = (
-    "You are writing the status report a coding agent will be handed at the start of its next "
-    "session, because it will remember nothing of this one. Write it in the third person, as a "
-    'plain report, never as the agent (not "I\'ll ...", not "let me ..."). Use these '
-    "headings: Done (name the files and modules), Remaining, Failed or refused, Open questions. "
-    "State only what the log shows. The log lists each tool call but NOT its output, so when you "
-    "cannot tell whether a test passed or a commit landed, say it is unconfirmed; never say "
-    "something did not happen unless the log shows it failing. Carry forward every fact from the "
-    "previous summary that is still true: do not drop finished work to save space. Keep it under "
-    "400 words."
-)
-_STRICTER = (
-    "Your last answer was empty or spoke as the agent. Answer again with only the report, in the "
-    "third person, starting with the heading Done."
-)
-
-
 def _previous_summary(
     decoded: list[tuple[int, EventPayload]], last_handover_seq: int
 ) -> str | None:
@@ -253,76 +216,79 @@ def _previous_summary(
     return None
 
 
-def _usable(text: str) -> bool:
-    """Whether a summary is a report: not empty, not a few words, not the agent talking."""
-    return len(text.strip()) >= _MIN_SUMMARY_CHARS and not _FIRST_PERSON.match(text)
+_QUOTE_CHARS = 600
+_REASON_CHARS = 300
+_MOST_RECENT = 5
+_MOST_RECENT_STEERS = 10
+#: How much of an earlier agent-written handover a digest carries forward.
+_CARRIED_CHARS = 4000
+_DIGEST_MARK = "(A digest read from the journal, not a report the agent wrote.)"
 
 
-def _as_int(value: object) -> int | None:
-    return value if isinstance(value, int) and not isinstance(value, bool) else None
+def _clip(text: str, limit: int) -> str:
+    flat = " ".join(text.split())
+    return flat if len(flat) <= limit else flat[: limit - 1] + "…"
 
 
-def _as_float(value: object) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return float(value)
+def _digest(history: list[tuple[int, EventPayload]], previous: str | None) -> str:
+    """A handover that needs no model (ADR-0042, CUT-140): what the journal shows about this role's
+    work so far, under the same four headings the agent is asked for. It is read over the whole
+    history, not the window since the last handover, so it is complete without nesting the one
+    before it and its size is bounded by the caps below, however many checkpoints there were.
+    Only facts the events carry, and it says plainly that it is a digest and not a report the
+    agent wrote, so the next session checks the files before redoing work.
 
+    ``previous`` is the last handover's text. A digest is not carried (this one covers it); a
+    document the agent wrote is, clipped, because it holds what the journal cannot: why."""
+    files: list[str] = []
+    said = ""
+    failures: list[str] = []
+    refused: list[str] = []
+    steers: list[str] = []
+    for _, payload in history:
+        if isinstance(payload, DelegationCompleted | DelegationFailed | DelegationRefused):
+            for path in getattr(payload, "edited_paths", []):
+                if path not in files:
+                    files.append(path)
+        if isinstance(payload, DelegationCompleted) and payload.summary.strip():
+            said = payload.summary
+        elif isinstance(payload, DelegationFailed):
+            if payload.failure_kind in CHECKPOINT_STOPS:
+                failures.append(
+                    f"a round ended because it ran out of room ({payload.failure_kind})"
+                )
+            else:
+                failures.append(_clip(payload.reason, _REASON_CHARS))
+        elif isinstance(payload, DelegationRefused):
+            failures.append(_clip(f"refused: {payload.reason}", _REASON_CHARS))
+        elif isinstance(payload, ConsentDecided) and payload.answer == "deny":
+            refused.append(_clip(payload.detail, _REASON_CHARS))
+        elif isinstance(payload, SteeringMessage):
+            steers.append(_clip(payload.text, _REASON_CHARS))
 
-def _prompt_of(call: dict[str, object]) -> str:
-    return str(call.get("prompt", ""))
-
-
-async def _write_summary(
-    window: list[tuple[int, EventPayload]], previous: str | None
-) -> tuple[str, list[dict[str, object]]]:
-    """The handover text and every summariser call made for it. An unusable answer is asked for
-    once more, firmly; if that fails too the previous summary is carried forward unchanged (or,
-    with none, a plain count of what the window holds), because an empty handover leaves the next
-    session knowing nothing (found by the first 16-round real run, where two were empty and three
-    were the model narrating) and a made-up one is worse."""
-    calls: list[dict[str, object]] = []
-    for prompt in (
-        _build_summary_prompt(window, previous),
-        _build_summary_prompt(window, previous, stricter=True),
-    ):
-        response = await call_llm(prompt)
-        calls.append({**response, "prompt": prompt})
-        text = response["text"]
-        summary = text if isinstance(text, str) else str(text)
-        if _usable(summary):
-            return summary.strip(), calls
-    return _fallback(window, previous), calls
-
-
-def _fallback(window: list[tuple[int, EventPayload]], previous: str | None) -> str:
-    files = sorted(
-        {
-            path
-            for _, payload in window
-            if isinstance(payload, DelegationCompleted | DelegationFailed | DelegationRefused)
-            for path in getattr(payload, "edited_paths", [])
-        }
-    )
-    note = (
-        "(The summariser gave no usable report for the latest rounds, so this is the previous "
-        "one carried forward"
-        + (f"; files changed since: {', '.join(files)}" if files else "")
-        + ".)"
-    )
-    return f"{previous}\n\n{note}" if previous else note
-
-
-def _build_summary_prompt(
-    window: list[tuple[int, EventPayload]], previous: str | None = None, *, stricter: bool = False
-) -> str:
-    lines = [_INSTRUCTIONS, ""]
-    if previous:
-        lines += ["Previous summary (carry forward what is still true):", previous, ""]
-    lines.append("Events since then, oldest first:")
-    for seq, payload in window:
-        texts = _texts(payload)
-        if texts:
-            lines.append(f"{seq}. {type(payload).__name__}: {' | '.join(texts)}")
-    if stricter:
-        lines += ["", _STRICTER]
-    return "\n".join(lines)
+    done = [
+        f"Files changed: {', '.join(sorted(files))}."
+        if files
+        else "No file change is recorded for these rounds."
+    ]
+    if said:
+        done.append(f'The agent\'s last words: "{_clip(said, _QUOTE_CHARS)}"')
+    problems = [f"- {text}" for text in failures[-_MOST_RECENT:]]
+    problems += [f"- command refused: {text}" for text in refused[-_MOST_RECENT:]]
+    sections = [
+        _DIGEST_MARK,
+        "## Done\n" + "\n".join(done),
+        "## Remaining\nNot recorded: carry on from the task, and check the files above before "
+        "redoing any work.",
+        "## Failed or refused\n" + ("\n".join(problems) if problems else "Nothing is recorded."),
+        "## Open questions\n"
+        + (
+            "\n".join(f'- The person said: "{text}"' for text in steers[-_MOST_RECENT_STEERS:])
+            if steers
+            else "None recorded."
+        ),
+    ]
+    if previous and not previous.startswith(_DIGEST_MARK):
+        carried = previous if len(previous) <= _CARRIED_CHARS else previous[:_CARRIED_CHARS] + "…"
+        sections.append(f"## Earlier handover, written by the agent\n{carried}")
+    return "\n\n".join(sections)

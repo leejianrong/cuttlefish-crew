@@ -63,3 +63,15 @@ Not handovers. Its job is a manager's: consolidating progress across projects an
   with no goal it asked nothing.
 - **Not checked:** quality of a handoff from a real model on a real task. Jian chose not to compare first. The soak
   harness (CUT-136) is where that shows up.
+
+## Update 2026-10-22 (CUT-140)
+
+- **Codex** now writes its own handoff: when a round ends because it used its round token limit or its round time limit, the
+  daemon starts a second turn on the same thread asking for it (fixed headings, commands and edits declined) and keeps the reply
+  if it has the Done and Remaining headings. Checked against the real `codex app-server` (codex-cli 0.155.1). Claude Code is still to do.
+- **The fallback is a digest, not a summary.** `handover._digest` reads the journal (files changed, the agent's last words, failures
+  and refusals, what the person said) and says it is not a report the agent wrote. It covers the whole history so it is complete
+  without nesting the digest before it, and an agent-written earlier handoff is carried, clipped.
+- **The summariser is deleted:** `cuttlefish.llm`, `tasks.llm.call_llm`, `Runtime.llm_provider`, `CUTTLEFISH_LLM_PROVIDER`,
+  `CUTTLEFISH_LLM_MODEL`, `CUTTLEFISH_HANDOFF=summary` and the `anthropic` and `openai` dependencies. A continuation needs no key.
+  `LlmCallCompleted` and `LlmCallFailed` stay as event types so journals written before this still decode.

@@ -20,7 +20,6 @@ from satay.journal.store import SQLiteStore
 from cuttlefish import runtime
 from cuttlefish.episodic.events import DelegationStarted, SteeringMessage
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.workflow import run_task
 
 #: See the module docstring -- real session, no real cost, no real credential.
@@ -44,7 +43,6 @@ async def test_a_steering_message_starts_a_second_round_with_it_folded_in(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )
@@ -97,7 +95,6 @@ async def test_a_steerable_task_nobody_steers_finalizes_after_one_round(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
         )
     )

@@ -25,8 +25,6 @@ from cuttlefish.episodic.events import (
     TaskSubmitted,
 )
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.provider import LlmResponse
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.team import RoleInput, _needs_sequential_dispatch, run_team
 
 
@@ -57,7 +55,6 @@ async def test_every_roles_own_delegation_failure_is_journaled_under_its_own_rol
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode-binary-that-does-not-exist",
         )
     )
@@ -101,7 +98,6 @@ async def test_a_role_name_appears_on_every_event_it_writes(tmp_path: Path) -> N
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode-binary-that-does-not-exist",
         )
     )
@@ -140,7 +136,6 @@ async def test_each_role_gets_its_own_handover_once_over_budget(tmp_path: Path) 
             # journal shape run_task already has), so more than one handover per
             # role can fire over this test's own small budget -- give it plenty
             # of replay responses rather than pinning an exact count.
-            llm_provider=ReplayLlmProvider([LlmResponse(model="replay", text="a summary")] * 10),
             kopicode_binary="kopicode-binary-that-does-not-exist",
         )
     )
@@ -179,7 +174,6 @@ async def test_a_role_can_name_its_own_backend_and_the_journal_records_it(
     runtime.configure(
         runtime.Runtime(
             episodic_store=episodic_store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode-binary-that-does-not-exist",
             codex_binary="codex-binary-that-does-not-exist",
         )

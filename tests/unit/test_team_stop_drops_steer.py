@@ -25,7 +25,6 @@ from cuttlefish.episodic.events import (
     TaskFailed,
 )
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.steering import steering_key
 from cuttlefish.team import run_team
 
@@ -82,7 +81,6 @@ async def _run_with_queued_steer(
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=_binary(tmp_path, first=first),
         )
     )

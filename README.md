@@ -48,7 +48,6 @@ continues it.
 | Python 3.12+ and [uv](https://docs.astral.sh/uv/) | everything |
 | Node.js and npm | the dashboard (`make demo` builds it once) |
 | One coding-agent CLI on `PATH`, logged in or keyed: [`kopicode`](https://github.com/leejianrong/kopicode#readme) (the default; v0.3.0 or later, v0.4.0 for cost, the turn cap, the context limit and questions; needs `OPENROUTER_API_KEY`), `claude`, or `codex` (after `codex login`) | delegating work |
-| `OPENROUTER_API_KEY` (optional) | cuttlefish's own summarising calls; see below |
 | Docker | only for `CUTTLEFISH_SANDBOX=container` |
 | `tmux` | only for the **Agent session** card (an agent that stays up when the browser closes or the daemon restarts) |
 
@@ -57,12 +56,9 @@ Install kopicode with
 (it lands in `~/.local/bin`). kopicode reads its key from the environment only,
 so `export OPENROUTER_API_KEY=...` in the shell you start cuttlefish from.
 
-cuttlefish's own model calls are used for one thing, summarising a role's
-working memory when it crosses its token budget. By default they go through
-OpenRouter, but only when a summary is actually due, so a run that never
-reaches its budget needs no key. If a summary is due and `OPENROUTER_API_KEY` is
-unset (in the environment, and as a shared secret under Secrets in the dashboard), the run fails with a message saying so; `CUTTLEFISH_LLM_PROVIDER=replay`
-makes those summaries a placeholder instead.
+cuttlefish makes no model call of its own, so it needs no key of its own: only the coding agent you choose does.
+When a round runs out of room the agent writes its own handoff for the next one (or, where it cannot, cuttlefish
+writes a digest from the journal), so a long run costs nothing extra.
 
 ## Try it: two projects, one dashboard
 
@@ -212,8 +208,6 @@ Tailscale access, the MCP server, a preview of the encrypted relay, every flag) 
 | Variable | Default | What it does |
 |---|---|---|
 | `CUTTLEFISH_AGENT_BACKEND` | `kopicode` | `kopicode`, `claude-code`, or `codex`; one choice per process. |
-| `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own summarising calls: `openrouter`, `claude`, or `replay` (no key, placeholder summaries). |
-| `CUTTLEFISH_LLM_MODEL` | `deepseek/deepseek-v4.1-flash` | The OpenRouter model for cuttlefish's own summaries (handovers). A small, cheap model (about $0.0005 a summary); it can reason, so each call asks for low effort and an 8192-token cap, and the guard against `openrouter/auto` stays. Any OpenRouter model id works, if the account's OpenRouter guardrail allows it. The provider reports each call's cost, shown on the Summary rows of the activity log. |
 | `CUTTLEFISH_CODEX_MODEL`, `CUTTLEFISH_CODEX_EFFORT` | unset | The model (`--model`) and reasoning effort (`minimal`, `low`, `medium`, `high`) for the Codex backend, so a team can use a small model on your ChatGPT subscription without editing `~/.codex/config.toml`. Unset leaves Codex's own configuration alone. A daemon run as another HOME also needs `CODEX_HOME` pointing at the Codex login, named in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. |
 | `CUTTLEFISH_CLAUDE_CODE_TRANSPORT`, `CUTTLEFISH_CODEX_TRANSPORT`, `CUTTLEFISH_KOPICODE_TRANSPORT` | `stdio`, `app-server`, `serve` | `print` / `exec` / `print` run the one-shot `claude -p` / `codex exec` / `kopicode run --print` instead of a live session. Those cannot pause for a person, so a command nothing approves is refused. |
 | `CUTTLEFISH_KOPICODE_PROVIDER_URL`, `CUTTLEFISH_KOPICODE_MODEL` | unset | Send kopicode's model traffic to an OpenAI-compatible endpoint (a local Ollama at `http://127.0.0.1:11434/v1`, llama.cpp, vLLM, a proxy) instead of OpenRouter, with kopicode's `--provider-url`; the model id the endpoint serves is required with it. Needs a kopicode that lists `provider_url.flag`, works on both the `serve` and `print` transports, and is refused with a sandbox provider (a container cannot reach a host-local endpoint). The endpoint's key, if it wants one, is `KOPICODE_PROVIDER_API_KEY` (optional on loopback); `OPENROUTER_API_KEY` is not passed to kopicode then. kopicode runs these sessions **unpinned** and tuned for no local model, so use it to try the plumbing or a local model, not to compare arms. |

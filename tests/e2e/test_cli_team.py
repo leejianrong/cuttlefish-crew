@@ -25,7 +25,6 @@ def test_run_team_reaches_a_terminal_state_with_both_roles(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
 
     exit_code = cli.main(
         [
@@ -51,7 +50,6 @@ def test_show_on_a_team_id_renders_both_roles_interleaved(
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
 
     cli.main(["run-team", "--role", "builder:add a .gitignore entry"])
     team_id = json.loads(capsys.readouterr().out)["team_id"]

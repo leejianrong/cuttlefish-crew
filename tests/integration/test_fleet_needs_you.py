@@ -47,7 +47,6 @@ def _fake_kopicode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, scenario: li
     binary.write_text(f'#!/bin/sh\nexec {sys.executable} {FAKE} "$@"\n')
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("CUTTLEFISH_KOPICODE_BIN", str(binary))
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
     monkeypatch.delenv("CUTTLEFISH_SECRETS_KEY", raising=False)
 
 

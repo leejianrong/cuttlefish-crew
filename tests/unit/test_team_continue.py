@@ -23,7 +23,6 @@ from cuttlefish.episodic.events import (
     RoundContinued,
 )
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.requests import RequestBroker, RequestContext
 from cuttlefish.team import run_team
 
@@ -100,11 +99,7 @@ def _sent(tmp_path: Path) -> list[dict[str, Any]]:
 
 async def _run(tmp_path: Path, binary: str, **team: Any) -> tuple[dict[str, Any], list[Any]]:
     store = EpisodicStore.open(tmp_path / "episodic.db")
-    runtime.configure(
-        runtime.Runtime(
-            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary=binary
-        )
-    )
+    runtime.configure(runtime.Runtime(episodic_store=store, kopicode_binary=binary))
     root = tmp_path / "root"
     root.mkdir()
     result = await start(
@@ -213,7 +208,6 @@ async def test_a_held_role_raises_a_card_that_says_nothing_is_waiting(tmp_path: 
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=_wrapper(tmp_path, stops=99),
             requests=RequestContext(broker, "p1", "t", 600.0),
         )
@@ -244,7 +238,6 @@ async def test_a_role_held_after_refusals_gets_a_card_that_says_what_was_refused
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary=binary,
             requests=RequestContext(broker, "p1", "t", 600.0),
         )
@@ -334,13 +327,10 @@ async def test_a_kopicode_that_cannot_report_usage_is_never_asked(tmp_path: Path
 async def test_a_continuation_writes_a_handover_even_when_the_journal_is_small(
     tmp_path: Path,
 ) -> None:
-    from cuttlefish.llm.provider import LlmResponse
-
     store = EpisodicStore.open(tmp_path / "episodic.db")
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([LlmResponse(model="m", text="BUILT slug; NEXT wrap")]),
             kopicode_binary=_wrapper(tmp_path, stops=1),
         )
     )
@@ -354,7 +344,7 @@ async def test_a_continuation_writes_a_handover_even_when_the_journal_is_small(
     ).result()
     store.close()
     assert result["status"] == "completed"
-    assert "BUILT slug; NEXT wrap" in _sent(tmp_path)[1]["params"]["prompt"]
+    assert "A digest read from the journal" in _sent(tmp_path)[1]["params"]["prompt"]
 
 
 def _builder(**limits: int) -> list[dict[str, Any]]:
@@ -425,16 +415,13 @@ async def test_with_agent_handoff_the_next_round_is_told_what_the_agent_wrote(
     assert _AGENT_DOC in _sent(tmp_path)[1]["params"]["prompt"]
 
 
-async def test_agent_handoff_falls_back_to_the_summary_when_kopicode_cannot_write_one(
+async def test_agent_handoff_falls_back_to_the_digest_when_kopicode_cannot_write_one(
     tmp_path: Path,
 ) -> None:
-    from cuttlefish.llm.provider import LlmResponse
-
     store = EpisodicStore.open(tmp_path / "episodic.db")
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([LlmResponse(model="m", text="BUILT slug; NEXT wrap")]),
             kopicode_binary=_wrapper(tmp_path, stops=1),  # no session.handoff feature
         )
     )
@@ -448,7 +435,7 @@ async def test_agent_handoff_falls_back_to_the_summary_when_kopicode_cannot_writ
     ).result()
     store.close()
     assert result["status"] == "completed"
-    assert "BUILT slug; NEXT wrap" in _sent(tmp_path)[1]["params"]["prompt"]
+    assert "A digest read from the journal" in _sent(tmp_path)[1]["params"]["prompt"]
     assert not [m for m in _all_sent(tmp_path) if m.get("method") == "session.handoff"]
 
 
@@ -458,24 +445,10 @@ async def test_the_agent_is_asked_for_a_handoff_by_default(tmp_path: Path) -> No
         [*_round_with_handoff(_AGENT_DOC), *_round("completed", 0)],
         features=[*FEATURES, "session.handoff"],
     )
-    result, payloads = await _run(tmp_path, binary)  # no CUTTLEFISH_HANDOFF set
+    result, payloads = await _run(tmp_path, binary)
     assert result["status"] == "completed"
     assert [m for m in _all_sent(tmp_path) if m.get("method") == "session.handoff"]
     assert any(isinstance(p, HandoverWritten) and _AGENT_DOC in p.summary for p in payloads)
-
-
-async def test_the_summary_escape_hatch_never_asks_the_agent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("CUTTLEFISH_HANDOFF", "summary")
-    binary = _script(
-        tmp_path,
-        [*_round("max_turns", 4), *_round("completed", 0)],
-        features=[*FEATURES, "session.handoff"],
-    )
-    result, _ = await _run(tmp_path, binary)
-    assert result["status"] == "completed"
-    assert not [m for m in _all_sent(tmp_path) if m.get("method") == "session.handoff"]
 
 
 def _all_sent(tmp_path: Path) -> list[dict[str, Any]]:

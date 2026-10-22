@@ -15,7 +15,6 @@ from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
 from cuttlefish.agents.registry import UnknownBackendError
 from cuttlefish.broker import BrokerRoute, Lease
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.llm.replay import ReplayLlmProvider
 from cuttlefish.requests import RequestBroker, RequestContext
 from cuttlefish.secrets.store import SecretsStore, generate_key
 from cuttlefish.tasks.delegate import delegate_to_agent_backend
@@ -32,7 +31,6 @@ async def test_the_kopicode_backend_is_used_by_default(tmp_path: Path) -> None:
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode-binary-that-does-not-exist",
         )
     )
@@ -48,7 +46,6 @@ async def test_the_claude_code_backend_is_used_when_configured(tmp_path: Path) -
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             claude_code_binary="claude-binary-that-does-not-exist",
             agent_backend="claude-code",
@@ -66,7 +63,6 @@ async def test_the_codex_backend_is_used_when_configured(tmp_path: Path) -> None
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             codex_binary="codex-binary-that-does-not-exist",
             agent_backend="codex",
@@ -100,7 +96,6 @@ async def test_secrets_are_resolved_from_the_store_scoped_to_the_declared_projec
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode-binary-that-does-not-exist",
             secrets_store=secrets_store,
         )
@@ -141,7 +136,6 @@ async def test_the_runtimes_secret_names_are_resolved_too_without_being_task_arg
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode-binary-that-does-not-exist",
             secrets_store=secrets_store,
             secret_names=("GITHUB_TOKEN",),
@@ -161,7 +155,6 @@ async def test_an_unknown_configured_backend_raises_rather_than_silently_falling
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             agent_backend="not-a-real-backend",
         )
@@ -194,11 +187,7 @@ async def _delegate_with(
     backend = _RecordingBackend()
     monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
     store = EpisodicStore.open(tmp_path / "episodic.db")
-    runtime.configure(
-        runtime.Runtime(
-            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary="kopicode"
-        )
-    )
+    runtime.configure(runtime.Runtime(episodic_store=store, kopicode_binary="kopicode"))
     kwargs = {"access": access} if access else {}
     await delegate_to_agent_backend("t", str(tmp_path), allow=[["go", "test"]], **kwargs)
     store.close()
@@ -248,11 +237,7 @@ async def test_chosen_presets_reach_the_backend_in_place_of_the_defaults(
     backend = _RecordingBackend()
     monkeypatch.setattr("cuttlefish.tasks.delegate.resolve_backend", lambda *a, **k: backend)
     store = EpisodicStore.open(tmp_path / "episodic.db")
-    runtime.configure(
-        runtime.Runtime(
-            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary="kopicode"
-        )
-    )
+    runtime.configure(runtime.Runtime(episodic_store=store, kopicode_binary="kopicode"))
     await delegate_to_agent_backend(
         "t", str(tmp_path), allow=[["go", "test"]], presets=["inspect", "containers"]
     )
@@ -294,7 +279,6 @@ async def _stuck_round(
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             requests=context,
         )
@@ -363,7 +347,6 @@ async def test_only_a_backend_that_can_pause_is_given_someone_to_ask(
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             requests=RequestContext(broker, "p1", "t1", 60.0),
         )
@@ -426,7 +409,6 @@ async def _brokered(
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             broker=broker,  # type: ignore[arg-type]
             sandbox_provider=object() if sandbox else None,  # type: ignore[arg-type]
@@ -508,7 +490,6 @@ async def test_a_key_the_backend_does_not_use_from_the_environment_is_not_broker
     runtime.configure(
         runtime.Runtime(
             episodic_store=store,
-            llm_provider=ReplayLlmProvider([]),
             kopicode_binary="kopicode",
             secrets_store=secrets_store,
             broker=broker,  # type: ignore[arg-type]
@@ -544,11 +525,7 @@ async def test_a_codex_round_is_given_its_session_only_when_resume_is_on(
         monkeypatch.delenv("CUTTLEFISH_RESUME", raising=False)
         monkeypatch.delenv("CUTTLEFISH_CODEX_RESUME", raising=False)
     store = EpisodicStore.open(tmp_path / "episodic.db")
-    runtime.configure(
-        runtime.Runtime(
-            episodic_store=store, llm_provider=ReplayLlmProvider([]), kopicode_binary="kopicode"
-        )
-    )
+    runtime.configure(runtime.Runtime(episodic_store=store, kopicode_binary="kopicode"))
     await delegate_to_agent_backend("t", str(tmp_path), allow=[["go", "test"]])
     store.close()
     assert ("session" in backend.kwargs) is expected

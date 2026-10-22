@@ -119,7 +119,6 @@ def test_run_with_a_declared_secret_but_no_key_configured_is_a_config_error(
     # error, not whether kopicode/a live model credential are actually
     # available (CI's unit-test job deliberately has neither).
     monkeypatch.setenv("CUTTLEFISH_KOPICODE_BIN", "true")
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("CUTTLEFISH_SECRETS_KEY", raising=False)
 
@@ -133,7 +132,6 @@ def test_run_with_a_declared_secret_not_in_either_scope_is_a_config_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("CUTTLEFISH_KOPICODE_BIN", "true")
-    monkeypatch.setenv("CUTTLEFISH_LLM_PROVIDER", "replay")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("CUTTLEFISH_SECRETS_KEY", generate_key())
 

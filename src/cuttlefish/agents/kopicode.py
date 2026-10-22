@@ -40,7 +40,6 @@ from cuttlefish.delegate.kopicode_serve import (
 )
 from cuttlefish.delegate.policy import write_policy_file
 from cuttlefish.limits import (
-    agent_handoff_enabled,
     context_limit_for,
     max_turns_for,
     round_timeout_for,
@@ -291,9 +290,8 @@ class KopicodeBackend:
 
     async def _handoff_goal(self, task_text: str) -> str | None:
         """What the next session is for, when the agent should write the handoff itself (ADR-0042):
-        always, unless ``CUTTLEFISH_HANDOFF=summary``, and only for a kopicode with
-        ``session.handoff``."""
-        if not agent_handoff_enabled() or not await serve_supports_handoff(self._binary):
+        always, and only for a kopicode with ``session.handoff``."""
+        if not await serve_supports_handoff(self._binary):
             return None
         return f"Carry on with this work in a fresh session: {task_text.strip()[:600]}"
 

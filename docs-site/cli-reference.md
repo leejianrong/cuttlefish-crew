@@ -282,8 +282,6 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 |---|---|---|
 | `CUTTLEFISH_AGENT_BACKEND` | `kopicode` | Which coding-agent backend a delegation runs through: `kopicode`, `claude-code`, or `codex`. One choice per process — every project and role a given `cuttlefish serve` runs shares it. |
 | `CUTTLEFISH_KOPICODE_BIN` / `CUTTLEFISH_CLAUDE_CODE_BIN` / `CUTTLEFISH_CODEX_BIN` | `kopicode` / `claude` / `codex` | Path to that backend's binary, when selected. |
-| `CUTTLEFISH_LLM_PROVIDER` | `openrouter` | cuttlefish's own reasoning calls (handover summaries, built only when one is due): `openrouter`, `claude`, or `replay` (keyless, for smoke tests). |
-| `CUTTLEFISH_LLM_MODEL` | `deepseek/deepseek-v4.1-flash` | The OpenRouter model for cuttlefish's own summaries (handovers). A small, cheap model (about $0.0005 a summary); it can reason, so each call asks for low effort and an 8192-token cap, and the guard against `openrouter/auto` stays. Any OpenRouter model id works, if the account's OpenRouter guardrail allows it. The provider reports each call's cost, shown on the Summary rows of the activity log. |
 | `CUTTLEFISH_CLAUDE_CODE_TRANSPORT` | `stdio` | `print` runs Claude Code as the one-shot `claude -p` (allow patterns, nothing to ask a person) instead of keeping a stream-json session open. |
 | `CUTTLEFISH_KOPICODE_TRANSPORT` | `serve` | `print` runs kopicode as the one-shot `kopicode run --print` (a policy file, nothing to ask a person) instead of `kopicode serve`. It is the only kopicode transport that can continue a session across rounds with `CUTTLEFISH_RESUME=1`. |
 | `CUTTLEFISH_CODEX_TRANSPORT` | `app-server` | `exec` runs Codex as the one-shot `codex exec` (coarse sandbox, nothing to ask a person) instead of `codex app-server`. |
@@ -303,7 +301,6 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_ROUND_TIMEOUT` | `7200` | Seconds one kopicode round may run before cuttlefish cancels it; the role then continues from the handover like any other round that ran out of room. `0` is no limit. A round waiting on you in Needs you counts. |
 | `CUTTLEFISH_MAX_IDLE_ROUNDS` | `3` | How many rounds in a row may end (out of room, or on a refused command) without changing a file before the role is held and a Needs-you card says so. A steer starts the count again. `0` turns it off. |
 | `CUTTLEFISH_CONTEXT_LIMIT_PERCENT` | `75` | How full a kopicode round's context may get, as a percentage of the model's window, before cuttlefish ends the round and the role continues from the handover with a fresh context. Needs kopicode v0.4.0 and a model whose window kopicode knows; otherwise nothing happens. `0` turns it off; above `95` counts as `95`. |
-| `CUTTLEFISH_HANDOFF` | agent | At a checkpoint (turn cap, token budget, a full context) kopicode is asked to write its own handoff (`session.handoff`) and the next round is told what it wrote; no summarising model is used. `summary` keeps cuttlefish's own summary from the journal. Claude Code and Codex still use the summary. See ADR-0042. |
 | `CUTTLEFISH_REQUEST_WINDOW` | `600` | Seconds you have to answer a Needs-you request (a command a kopicode agent wants to run that nothing approves) before it is denied, 10 to 86400. For a Claude Code session in tmux nothing is denied when it runs out: the terminal's own dialog still asks. cuttlefish asks kopicode for `--consent-timeout` when `serve --help` lists it (kopicode v0.3.0 and later). An older kopicode denies after its own fixed 60 seconds, so there you get 45. |
 | `CUTTLEFISH_SECRETS_KEY` | unset | Enables the project-scoped secrets store. Unset means `cuttlefish secrets`/`--project`/`--secret` and the dashboard's secrets routes are unavailable. |
 | `CUTTLEFISH_SERVE_PASSWORD` | unset | Required for any non-loopback `cuttlefish serve` bind. |
@@ -312,9 +309,8 @@ lets an agent run a shell command, so it is as weighty as `start_project`.
 | `CUTTLEFISH_RELAY_DB`, `CUTTLEFISH_RELAY_OWNER_SECRET` | unset | For `cuttlefish relay`: the accounts file and the owner's sign-in secret. |
 | `CUTTLEFISH_MCP_BASE_URL` / `CUTTLEFISH_MCP_TOKEN` | unset | Defaults for `cuttlefish mcp --base-url`/`--token`. |
 
-A real run also needs a model credential for whichever LLM provider and
-agent backend are selected: `OPENROUTER_API_KEY` for kopicode and the default
-reasoning provider (`ANTHROPIC_API_KEY` for `CUTTLEFISH_LLM_PROVIDER=claude`), Claude Code's own login or
+A real run needs a model credential for the agent backend that is selected (cuttlefish makes no model call of
+its own): `OPENROUTER_API_KEY` for kopicode, Claude Code's own login or
 `ANTHROPIC_API_KEY`, and `codex login` for Codex (`codex exec` ignores an
 ambient `OPENAI_API_KEY`, ADR-0018).
 
@@ -377,11 +373,18 @@ Secrets (it ignores one in the environment under a ChatGPT login). Not covered: 
 provider, kopicode (it already keeps its key from its shell), `cuttlefish run`, and `CLAUDE_*` variables passed through to
 Claude Code. `cuttlefish doctor` shows whether it is on.
 
+### What the next round is told
+
+When a round runs out of room, the role carries on from a handover. kopicode (turn cap, token budget, a full context)
+and Codex over `app-server` (its round token limit or round time limit) are asked to write their own handoff, and the
+next round is told what they wrote. Claude Code, the one-shot transports and a sandbox provider cannot be asked, and
+get a digest cuttlefish reads from the journal: the files changed, the agent's last words, what failed or was refused
+and what you said. A digest says it names no remaining work. cuttlefish makes no model call to write either. ADR-0042.
+
 ## Secrets in the dashboard
 
 The side bar's **Secrets** screen manages the secrets shared with every project (add, replace, remove; the remove dialog says how
-many projects lose it). With no `OPENROUTER_API_KEY` in the daemon's environment, a shared `OPENROUTER_API_KEY` secret is also the key
-cuttlefish's own handover summaries use; a project's own secret of that name is the agent's and is never used for them.
+many projects lose it).
 
 A project's **Secrets** tab lists its secrets (a lock, the name and a fixed run of dots: values are never shown), adds and replaces
 one in a dialog, and removes one after a confirmation. Secrets shared with every project show read-only below. An agent key is

@@ -506,3 +506,49 @@ async def test_the_usage_sink_hears_the_rounds_tokens_and_the_outcome_excludes_t
     outcome = await fake.run(backend, usage_sink=heard.append)
     assert heard == [100]
     assert outcome.tokens == 100
+
+
+DOCUMENT = (
+    "## Done\n- notes.md written\n\n## Remaining\n- the last paragraph\n\n"
+    "## Failed or refused\nnothing\n\n## Open questions\nnone"
+)
+
+
+async def test_a_round_that_ran_out_of_room_is_asked_for_its_handoff(fake: Fake) -> None:
+    # CUT-140: a second turn on the same thread; commands are declined; the reply is the document.
+    backend = fake.script(
+        {
+            "steps": [{"usage": {"total": 600, "last": 600}}, {"hang": True}],
+            "handoff": DOCUMENT,
+            "handoff_command": "make lint",
+            "handoff_tokens": 40,
+        }
+    )
+    outcome = await fake.run(backend, limits={"session_token_budget": 500})
+    assert outcome.failure_kind == "budget_exhausted"
+    assert outcome.handoff == DOCUMENT
+    assert fake.replies() == ["decline"]  # the handoff turn only talks
+    starts = fake.sent("turn/start")
+    assert len(starts) == 2
+    prompt = starts[1]["params"]["input"][0]["text"]
+    assert "## " in prompt and "Open questions" in prompt and "carries on with this work" in prompt
+    assert starts[1]["params"]["threadId"] == starts[0]["params"]["threadId"]
+    assert outcome.tokens == 600 + 40  # the asking is counted
+
+
+async def test_a_reply_without_the_sections_is_not_a_handoff(fake: Fake) -> None:
+    backend = fake.script(
+        {
+            "steps": [{"usage": {"total": 600, "last": 600}}, {"hang": True}],
+            "handoff": "Sure, I will carry on tomorrow.",
+        }
+    )
+    outcome = await fake.run(backend, limits={"session_token_budget": 500})
+    assert outcome.failure_kind == "budget_exhausted"
+    assert outcome.handoff is None
+
+
+async def test_a_round_that_finished_or_was_stopped_is_not_asked(fake: Fake) -> None:
+    done = await fake.run(fake.script({"handoff": DOCUMENT}))
+    assert done.kind == "completed" and done.handoff is None
+    assert len(fake.sent("turn/start")) == 1

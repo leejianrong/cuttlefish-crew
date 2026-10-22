@@ -141,6 +141,7 @@ class CodexBackend:
                 else None,
                 live_role=live_role,
                 usage_sink=usage_sink,
+                handoff_goal=self._handoff_goal(task_text),
             )
         if sandbox_provider is None:
             return await run_codex(
@@ -160,6 +161,12 @@ class CodexBackend:
             mode=mode,
             secrets=secrets,
         )
+
+    @staticmethod
+    def _handoff_goal(task_text: str) -> str:
+        """What the next session is for: the agent writes the handoff itself when a round runs out
+        of room (ADR-0042, CUT-140)."""
+        return f"The next session carries on with this work: {task_text.strip()[:600]}"
 
     async def _delegate_inside_sandbox(
         self,
