@@ -602,6 +602,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/chat${query}`);
   }
 
+  /** Say something to the builder: pasted into its session and sent (CUT-173). Terminal tier. */
+  sendChat(id: string, text: string): Promise<{ sent: "delivered" | "queued"; state: string }> {
+    return this.request(`/api/projects/${id}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+  }
+
   async getGoal(id: string): Promise<Goal | null> {
     return (await this.request<{ goal: Goal | null }>(`/api/projects/${id}/goal`)).goal;
   }

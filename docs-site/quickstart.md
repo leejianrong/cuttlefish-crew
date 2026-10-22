@@ -64,9 +64,14 @@ The project's **Chat** tab shows the builder's conversation as a thread, read li
 session record (`~/.claude/projects/<folder>/<session>.jsonl`; nothing is stored a second time). Tool calls are
 folded into one line each run ("Ran 4 commands, edited 2 files") that opens to the calls and their output, a context
 compaction is a divider, and a permission the builder is waiting on is answered inline, as under Needs you.
-It is read-only for now: type in the Terminal tab, which is the same session. Codex and kopicode sessions are not
-shown there yet. A device paired through the relay needs the Approve level to read it, because it shows what the
-agent's tools printed. `GET /api/projects/{id}/chat?after=<cursor>` is the same thing for a script.
+Under the thread a box types to the builder: the text is pasted into the session as one bracketed paste and then
+Enter, so a line break in your message is not an Enter and the terminal and the chat stay one conversation. A message to a
+builder that is working is queued by Claude Code and read at its next step. The box refuses while a dialog is open (a
+permission waiting here or in the terminal), because a dialog would read the message as its answer; whether one is open
+comes from the session's hooks and the last lines of its screen. It needs the Terminal level on a paired device, as typing
+in the terminal does, and the control characters in a message are removed so it cannot end its own paste early.
+Codex and kopicode sessions are not shown there yet. A device paired through the relay needs the Approve level to read it, because it shows what the
+agent's tools printed. `GET /api/projects/{id}/chat?after=<cursor>` is the same thing for a script, and `POST /api/projects/{id}/chat` with `{"text": ...}` sends a message.
 
 The round and team workflow is under **Advanced: run a team of roles** on the same page. Click **Start team** there, or:
 

@@ -84,6 +84,17 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
   Read tier is Approve (the thread has tool output), not View. Checked against a synthetic transcript in the observed
   shape and one real transcript's line types; **not** against a live Claude Code run (a real run needs Jian's yes).
 
+- CUT-173 the message box: `POST /api/projects/{id}/chat` (Terminal tier) pastes the text into the tmux session with
+  `load-buffer` and `paste-buffer -p -r` (bracketed, line feeds kept) and presses Enter 0.3 s later (`sessions/tmux.py`,
+  `fleet/daemon.py:send_chat`). Control characters are stripped first (`sessions/chat_input.py`): an ESC could close the
+  paste early. Busy, idle, dialog and unknown come from the session's hooks (`ClaudeHooks.activity`: `UserPromptSubmit`,
+  `PreToolUse`, `PostToolUse` mean busy, `Stop` idle, a held card or a permission left to the terminal mean dialog, a
+  turn silent for 5 minutes means unknown because Esc ends a turn without a `Stop`) and from the last lines of the screen
+  (a screen that looks like a dialog wins, and a hooks dialog the screen no longer shows is dropped). A dialog refuses the
+  send; busy sends and says it is queued. Verified with a fake raw-mode tool in tmux that asks for bracketed paste (the
+  exact bytes) and from the browser; **not** verified against a real Claude Code (Enter timing after a large paste,
+  whether Claude Code queues a message sent mid-turn as assumed, its dialog wording, `SessionStart`/trust-dialog handling).
+
 ## Build order (cards)
 
 1. CUT-169 terminal theme, CUT-170 shell terminal (small, independent).

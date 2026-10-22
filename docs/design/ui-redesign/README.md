@@ -224,9 +224,13 @@ and this folder disagree after a slice lands, update this folder.
   into one 44px row ("Ran 38 commands, edited 9 files", a `failed` count in the error container) that opens to the calls
   and their results in mono; a divider marks a context compaction and a left-ruled note is the builder's own recap. A
   permission the builder is waiting on is the same card as Needs you, inline at the foot. The thread follows the foot
-  while you are there and offers "N new messages" when you have scrolled up. It is read-only for now (the foot says to
-  type in the Terminal tab); the plan rail, composer and canvas of `Main.dc.html` arrive with CUT-173, CUT-174 and
-  CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
+  while you are there and offers "N new messages" when you have scrolled up. **Message box (CUT-173):** an outlined
+  textarea ("Message the builder", 2 rows, Ctrl or Cmd+Enter sends) and a filled Send under the thread, with one line
+  that says what sending does now: "waiting for you" (idle), "working, your message is queued" (busy), "no activity
+  seen yet, so it is not known whether it is ready" (unknown), or, when a permission is waiting, the box and Send are
+  disabled and the line says a message would be read as the answer. A builder that is not running disables it too, and
+  Codex and kopicode builders get no box (their input is not wired in). The foot says the Terminal tab is the same
+  session. The plan rail and canvas of `Main.dc.html` arrive with CUT-174 and CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
   say their record is not wired in yet.
 - **Give the builder a goal (CUT-171, 2026-10-22).** On Overview, when no team is running, a **Give the builder a goal**
   card sits above the Agent session card and replaces the "Start a team" form as the main way to start. A goal box

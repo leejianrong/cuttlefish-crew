@@ -22,6 +22,7 @@ import dataclasses
 import functools
 import logging
 import os
+import time
 import uuid
 from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
@@ -91,9 +92,11 @@ from cuttlefish.sessions import (
     agent_env,
     default_socket,
 )
+from cuttlefish.sessions.chat_input import MessageError, clean_message, dialog_open
 from cuttlefish.sessions.hooks import write_settings
 from cuttlefish.sessions.manager import read_goal, write_goal
 from cuttlefish.sessions.manager import wanted as session_wanted
+from cuttlefish.sessions.tmux import TmuxError
 from cuttlefish.sessions.transcript import candidate_paths, read_thread
 from cuttlefish.steering import (
     SteeringDeliveryError,
@@ -104,6 +107,9 @@ from cuttlefish.steering import (
 from cuttlefish.team import RoleInput, TeamInput, run_team
 
 logger = logging.getLogger(__name__)
+
+#: How long a paste is given to be taken in before Enter is pressed (CUT-173).
+_PASTE_SETTLE_S = 0.3
 
 #: The longest goal given to a builder (CUT-171): it is one command-line argument.
 MAX_GOAL_CHARS = 8000
@@ -361,6 +367,26 @@ class FleetDaemon:
         }
         if info.backend != "claude-code" or not info.session_id:
             return base
+        state, seconds = self._claude_hooks.activity(project.id)
+        screen_dialog = False
+        if info.state == "running":
+            tmux, name = self._session_manager().tmux_session(project.id)
+            screen = await asyncio.to_thread(self._screen, tmux, name)
+            screen_dialog = dialog_open(screen)
+        if screen_dialog:
+            state = "dialog"
+        elif (
+            state == "dialog"
+            and info.state == "running"
+            and not self._claude_hooks.holds(project.id)
+        ):
+            # The hooks left a dialog to the terminal, but the screen no longer shows one (it was
+            # refused there, which fires no hook): trust the screen.
+            state = "unknown"
+        base["activity"] = {
+            "state": state if info.state == "running" else "none",
+            "seconds": seconds,
+        }
         hooked = self._claude_hooks.transcript_path(project.id)
         paths = ([Path(hooked)] if hooked else []) + candidate_paths(project.root, info.session_id)
         found = next((p for p in paths if p.is_file()), None)
@@ -380,6 +406,55 @@ class FleetDaemon:
             "skipped": thread.skipped,
             "path": str(found),
         }
+
+    @staticmethod
+    def _screen(tmux: Tmux, name: str) -> str:
+        try:
+            return tmux.capture(name)
+        except TmuxError:
+            return ""
+
+    async def send_chat(self, project_id: str, text: str) -> dict[str, str]:
+        """Type ``text`` into the project's running Claude Code session as one bracketed paste,
+        then Enter (CUT-173). Refused when there is no such session, when the tool is not one
+        whose input is wired in yet, and while a dialog is open (a permission waiting, here or in
+        the terminal), because a dialog would read the message as its answer. A session that is
+        working takes it as a queued message, which the reply says."""
+        try:
+            message = clean_message(text)
+        except MessageError as exc:
+            raise FleetError(str(exc)) from exc
+        project = self._projects.get(project_id)
+        manager = self._session_manager()
+        info = await asyncio.to_thread(manager.status, project.id, project.root)
+        if info.state != "running":
+            raise FleetError("The builder is not running. Give it a goal on the Overview first.")
+        if info.backend != "claude-code":
+            raise FleetError(
+                "Typing from the chat is only wired in for Claude Code so far; "
+                "use the Terminal tab for this builder."
+            )
+        tmux, name = manager.tmux_session(project.id)
+        state, _ = self._claude_hooks.activity(project.id)
+        if self._claude_hooks.holds(project.id) or dialog_open(
+            await asyncio.to_thread(self._screen, tmux, name)
+        ):
+            raise FleetError(
+                "The builder is waiting on a permission. Answer it first (here or in the "
+                "Terminal tab); a message typed now would be read as the answer."
+            )
+
+        def deliver() -> None:
+            tmux.paste(name, message)
+            # A pasted block is taken in before the next key is read, or Enter lands in it.
+            time.sleep(_PASTE_SETTLE_S)
+            tmux.press_enter(name)
+
+        try:
+            await asyncio.to_thread(deliver)
+        except TmuxError as exc:
+            raise FleetError(str(exc)) from exc
+        return {"sent": "queued" if state == "busy" else "delivered", "state": state}
 
     async def goal(self, project_id: str) -> dict[str, str] | None:
         """The goal last given to the project's builder, or ``None`` (CUT-171)."""

@@ -1039,6 +1039,21 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.post("/api/projects/{project_id}/chat")
+    async def send_chat(project_id: str, request: Request) -> dict[str, str]:
+        """Say something to the builder (CUT-173): the text is pasted into its session and sent.
+        Typed access, like the terminal, so the Terminal tier. 409 says why it was not sent."""
+        body = await _json_body(request)
+        text = body.get("text")
+        if not isinstance(text, str):
+            raise HTTPException(400, "'text' is required")
+        try:
+            return await daemon.send_chat(project_id, text)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @app.get("/api/projects/{project_id}/goal")
     async def get_goal(project_id: str) -> dict[str, Any]:
         try:

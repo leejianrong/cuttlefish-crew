@@ -5,6 +5,7 @@ import {
   EMPTY_CHAT,
   applyChat,
   chatNotice,
+  composerState,
   clockTime,
   toRows,
   toolLabel,
@@ -158,5 +159,37 @@ describe("chatNotice", () => {
     expect(chatNotice(read([]), 0)).toBe("Nothing has been said yet.");
     expect(chatNotice(read([], { session: "stopped" }), 0)).toBe("This session has no messages.");
     expect(chatNotice(read([say("a", "user", "x")]), 1)).toBeNull();
+  });
+});
+
+describe("composerState", () => {
+  const withActivity = (state: NonNullable<ChatResponse["activity"]>["state"], session: ChatResponse["session"] = "running") =>
+    read([], { session, activity: { state, seconds: 1 } });
+
+  it("is hidden for a builder whose input is not wired in", () => {
+    expect(composerState(null)).toBeNull();
+    expect(composerState(read([], { supported: false, backend: "codex" }))).toBeNull();
+  });
+
+  it("is off, with the reason, when the builder is not running", () => {
+    const stopped = composerState(withActivity("none", "stopped"));
+    expect(stopped?.enabled).toBe(false);
+    expect(stopped?.hint).toContain("not running");
+  });
+
+  it("is off while a permission waits, and says a message would be its answer", () => {
+    const dialog = composerState(withActivity("dialog"));
+    expect(dialog?.enabled).toBe(false);
+    expect(dialog?.hint).toContain("read as the answer");
+  });
+
+  it("says a message to a working builder is queued", () => {
+    expect(composerState(withActivity("busy"))).toMatchObject({ enabled: true });
+    expect(composerState(withActivity("busy"))?.hint).toContain("queued");
+  });
+
+  it("is on when idle, and on with a caveat when it cannot tell", () => {
+    expect(composerState(withActivity("idle"))).toEqual({ enabled: true, hint: "The builder is waiting for you." });
+    expect(composerState(withActivity("unknown"))?.hint).toContain("not known");
   });
 });

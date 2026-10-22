@@ -55,6 +55,13 @@ ADR-0007 hold for it) and it builds on, not replaces, ADR-0032.
 - Typed access to a shell (the Shell terminal) bypasses the consent policy, as the agent terminal does (ADR-0035); the
   token or password session and the Terminal tier are the whole guard.
 
+## Notes from building (2026-10-22)
+
+- Input into a Claude Code session (CUT-173) is a tmux bracketed paste then Enter, refused while a dialog is open. The
+  dialog test is two weak signals ORed (the session's hooks, the last lines of its screen), because either can be wrong and
+  a message typed into a dialog is an answer. Typing needs the Terminal tier; reading the thread needs Approve.
+- A goal (CUT-171) is the tool's own first-message argument, never typed, so the first message cannot land in a dialog.
+
 ## Open
 
 - Whether the Autopilot supervisor is a satay workflow (durable across a daemon restart, ADR-0001) or a daemon loop with

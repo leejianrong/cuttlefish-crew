@@ -4,11 +4,13 @@
   // session is CUT-173, so the notice at the foot says where to type until then. A permission
   // the builder is waiting on is answered inline, with the same card as Needs you.
   import type { FleetClient, NeedsYouRequest } from "../api";
+  import { FleetApiError } from "../api";
   import {
     EMPTY_CHAT,
     applyChat,
     chatNotice,
     clockTime,
+    composerState,
     toRows,
     type ChatResponse,
     type ChatState,
@@ -110,6 +112,45 @@
     if (atFoot) unseen = 0;
   }
 
+  // The message box (CUT-173).
+  let draft = $state("");
+  let sending = $state(false);
+  let sendError = $state<string | null>(null);
+  let sentNote = $state<string | null>(null);
+  const composer = $derived(composerState(latest));
+
+  async function send() {
+    const text = draft.trim();
+    if (!text || sending || !composer?.enabled) return;
+    sending = true;
+    sendError = null;
+    sentNote = null;
+    try {
+      const result = await client.sendChat(projectId, text);
+      draft = "";
+      sentNote =
+        result.sent === "queued"
+          ? "Queued. The builder reads it at its next step, and it appears above then."
+          : "Sent.";
+    } catch (e) {
+      sendError =
+        e instanceof FleetApiError && e.status === 403
+          ? "This device is not allowed to type to the builder. Raise it to Terminal under Devices on the PC."
+          : e instanceof Error
+            ? e.message
+            : "That didn't work.";
+    } finally {
+      sending = false;
+    }
+  }
+
+  function onComposerKey(event: KeyboardEvent) {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      void send();
+    }
+  }
+
   function toggle(id: string) {
     opened[id] = !opened[id];
   }
@@ -206,10 +247,35 @@
     </button>
   {/if}
 
+  {#if composer}
+    <div class="composer">
+      <label class="field">
+        <span class="field-label">Message the builder</span>
+        <textarea
+          bind:value={draft}
+          onkeydown={onComposerKey}
+          rows="2"
+          disabled={!composer.enabled}
+          placeholder="Message the builder. It goes into the same session as the Terminal tab."
+        ></textarea>
+      </label>
+      <div class="composer-row">
+        <p class="body-small muted hint" role="status">{sendError ?? sentNote ?? composer.hint}</p>
+        <button
+          class="btn btn-filled"
+          disabled={sending || !composer.enabled || draft.trim() === ""}
+          onclick={send}
+        >
+          {sending ? "Sending…" : "Send"}
+        </button>
+      </div>
+    </div>
+  {/if}
+
   <p class="foot body-small muted">
-    This is a view of the conversation. To say something to the builder, type in the
-    <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>; it is the same
-    session.
+    One conversation: what you type here goes into the session that is live in the
+    <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>, and what you
+    type there appears here.
   </p>
 </section>
 
@@ -399,6 +465,29 @@
 
   .foot {
     margin: 0;
+  }
+
+  .composer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .composer :global(.field-label) {
+    background: var(--md-sys-color-surface);
+  }
+
+  .composer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .hint {
+    margin: 0;
+    flex: 1 1 14rem;
   }
 
   .link {
