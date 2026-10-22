@@ -91,6 +91,7 @@ from cuttlefish.sessions import (
     default_socket,
 )
 from cuttlefish.sessions.hooks import write_settings
+from cuttlefish.sessions.manager import read_goal, write_goal
 from cuttlefish.sessions.manager import wanted as session_wanted
 from cuttlefish.steering import (
     SteeringDeliveryError,
@@ -101,6 +102,9 @@ from cuttlefish.steering import (
 from cuttlefish.team import RoleInput, TeamInput, run_team
 
 logger = logging.getLogger(__name__)
+
+#: The longest goal given to a builder (CUT-171): it is one command-line argument.
+MAX_GOAL_CHARS = 8000
 
 
 class SecretsUnavailableError(Exception):
@@ -337,9 +341,38 @@ class FleetDaemon:
         project = self._projects.get(project_id)
         return await asyncio.to_thread(self._session_manager().status, project.id, project.root)
 
-    async def start_agent_session(self, project_id: str, backend: str | None = None) -> SessionInfo:
+    async def goal(self, project_id: str) -> dict[str, str] | None:
+        """The goal last given to the project's builder, or ``None`` (CUT-171)."""
+        project = self._projects.get(project_id)
+        return await asyncio.to_thread(read_goal, project.root)
+
+    async def give_goal(
+        self, project_id: str, text: str, backend: str | None = None
+    ) -> tuple[dict[str, str], SessionInfo]:
+        """Start the project's builder with ``text`` as its first message (CUT-171).
+
+        The goal goes in as the tool's own first-message argument, not typed into its terminal,
+        so it cannot land in a dialog. A builder that is already running has a conversation to type
+        to instead (`FleetError`), and the goal is only recorded once the session has started."""
+        goal = text.strip()
+        if not goal:
+            raise FleetError("Say what the builder should do.")
+        if len(goal) > MAX_GOAL_CHARS:
+            raise FleetError(
+                f"A goal is at most {MAX_GOAL_CHARS} characters; put the detail in a file."
+            )
+        project = self._projects.get(project_id)
+        chosen = resolve_agent_backend(backend or project.backend)
+        info = await self.start_agent_session(project_id, chosen, prompt=goal)
+        record = await asyncio.to_thread(write_goal, project.root, goal, chosen)
+        return record, info
+
+    async def start_agent_session(
+        self, project_id: str, backend: str | None = None, *, prompt: str | None = None
+    ) -> SessionInfo:
         """Start the project's agent in tmux, or reattach to it, or relaunch it with its resume
-        command. ``backend`` defaults to the project's own, else `CUTTLEFISH_AGENT_BACKEND`."""
+        command. ``backend`` defaults to the project's own, else `CUTTLEFISH_AGENT_BACKEND`.
+        ``prompt`` is its first message, for a session being launched now."""
         project = self._projects.get(project_id)
         chosen = resolve_agent_backend(backend or project.backend)
         settings: Path | None = None
@@ -358,6 +391,7 @@ class FleetDaemon:
                     chosen,
                     mode=project.mode,
                     hooks_settings=settings,
+                    prompt=prompt,
                 )
             )
         except SessionError as exc:

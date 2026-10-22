@@ -50,9 +50,17 @@ uv run cuttlefish projects add \
 `--role NAME:PERSONA` is optional per role — the persona is a persistent
 voice/tone the role keeps across every task it runs, not just this one.
 
-## 3. Start the crew
+## 3. Give the builder a goal, or start the crew
 
-Click **Start** on the project card, or:
+On a project's Overview, **Give the builder a goal** is the main way to start work. Pick **Claude Code**
+or **Codex**, say what you want, and cuttlefish starts that agent in the project's tmux session (section 6)
+with your goal as its first message. It is passed as the tool's own first-message argument, never typed into
+its terminal, so it cannot land in a permission dialog. If the builder is already running the box shows
+the goal it was given and takes you to the Terminal tab; it does not type a second goal into a live session.
+kopicode's interactive session cannot take a first message yet (the box says so); kopicode projects start work
+with the round workflow below. `GET`/`POST /api/projects/{id}/goal` is the same thing for a script (Approve tier).
+
+The round and team workflow is under **Advanced: run a team of roles** on the same page. Click **Start team** there, or:
 
 ```bash
 uv run cuttlefish run-team \

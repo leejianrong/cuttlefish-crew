@@ -17,6 +17,7 @@
   import AgentSessionCard from "./AgentSessionCard.svelte";
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
+  import GoalCard from "./GoalCard.svelte";
   import Icon from "./Icon.svelte";
   import ArtifactsTab from "./ArtifactsTab.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
@@ -318,6 +319,10 @@
         </section>
       {/if}
 
+      {#if !project.running}
+        <GoalCard {client} {projectId} projectBackend={project.backend} {onTabChange} />
+      {/if}
+
       <AgentSessionCard {client} {projectId} />
 
       {#if project.running && installing}
@@ -406,6 +411,12 @@
             {/each}
           </section>
         {/if}
+        <details class="advanced">
+          <summary class="title-small">Advanced: run a team of roles</summary>
+          <p class="body-small muted advanced-note">
+            The round workflow: each role runs one headless round on its task and stops, and a team
+            can have a reviewer beside the builder. It does not use the builder's terminal session.
+          </p>
         <section class="card filled start-form" aria-labelledby="start-heading">
           <h2 id="start-heading" class="title-large">Start a team</h2>
           {#if project.roles.length === 0}
@@ -488,6 +499,7 @@
             {/if}
           {/if}
         </section>
+        </details>
       {/if}
 
       <EnvironmentCard
@@ -674,6 +686,23 @@
     border-radius: var(--md-sys-shape-corner-medium);
     background: var(--md-sys-color-error-container);
     color: var(--md-sys-color-on-error-container);
+  }
+
+  .advanced {
+    margin-bottom: 2rem;
+    max-width: 56rem;
+  }
+
+  .advanced > summary {
+    cursor: pointer;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    width: fit-content;
+  }
+
+  .advanced-note {
+    margin: 0 0 0.75rem;
   }
 
   .start-form {

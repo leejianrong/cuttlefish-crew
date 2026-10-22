@@ -68,6 +68,14 @@ Claude Code's Remote Control (claude.ai/code, the Claude app) is Anthropic's ver
 conversation synced across terminal, browser and phone, relayed through Anthropic's API, with push notifications. It
 cannot be embedded here (login with claude.ai, Claude only); it is an optional extra at best.
 
+## Built so far
+
+- CUT-169 terminal theme, CUT-170 shell terminal (2026-10-22).
+- CUT-171 the goal box: the goal is the tool's own first-message argument (`claude "goal"`, `codex "goal"`), not typed
+  into the terminal, and is recorded in `.cuttlefish/goal.json`. A running builder is not typed into until CUT-173
+  (bracketed paste and busy/idle/dialog detection). kopicode has no first-message argument, so it is refused for now.
+  The **Autopilot default** moved to CUT-174, because a toggle that did nothing would imply a supervisor that is not there.
+
 ## Build order (cards)
 
 1. CUT-169 terminal theme, CUT-170 shell terminal (small, independent).

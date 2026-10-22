@@ -218,6 +218,13 @@ and this folder disagree after a slice lands, update this folder.
   nav; CUT-98 replaced that with a screen sized to the space left (see the entry at the end). With no session running it says so and offers **Start the agent session**; a lost connection says the agent
   is still running in tmux and offers **Reconnect**; a rejected sign-in offers nothing to retry. It opens only when
   the tab is shown, and never starts a session by itself. No coral: nothing here needs a decision from you.
+- **Give the builder a goal (CUT-171, 2026-10-22).** On Overview, when no team is running, a **Give the builder a goal**
+  card sits above the Agent session card and replaces the "Start a team" form as the main way to start. A goal box
+  (3 rows, Ctrl or Cmd+Enter sends), three example chips, a Claude Code / Codex choice (seeded from the project's
+  backend; kopicode is not offered and the card says why), and a filled **Give the builder this goal** button.
+  While the builder runs the card shows the goal it was given and **Open the terminal**. The old form is inside a
+  native `details` named **Advanced: run a team of roles** (44px summary) with a line on what it is. Autopilot and
+  its default are CUT-174; nothing on the card claims it yet.
 - **Shell terminal (CUT-170, 2026-10-22).** The Terminal header gains an **Agent / Shell** switch (44px targets,
   `aria-pressed`). Shell is a plain shell in the project folder, with one line on a wide screen saying it has the
   filtered environment and no project secrets and needs no agent. The notice that offers "Start the agent session"

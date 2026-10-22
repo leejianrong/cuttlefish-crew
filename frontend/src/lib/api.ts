@@ -438,6 +438,14 @@ export interface AgentSession {
   asks?: "needs-you" | "auto" | "terminal";
 }
 
+/** The goal last given to a project's builder (CUT-171). */
+export interface Goal {
+  text: string;
+  /** When it was given, ISO 8601 in UTC. */
+  at?: string;
+  backend?: string;
+}
+
 /** A password-mode daemon sends a fresh session token in this header once the one in use is past
  * half its life (ADR-0038). */
 export const TOKEN_REFRESH_HEADER = "x-cuttlefish-token-refresh";
@@ -583,6 +591,22 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/agent-session/start`, {
       method: "POST",
       body: JSON.stringify(backend ? { backend } : {}),
+    });
+  }
+
+  async getGoal(id: string): Promise<Goal | null> {
+    return (await this.request<{ goal: Goal | null }>(`/api/projects/${id}/goal`)).goal;
+  }
+
+  /** Start the builder with `text` as its first message. Refused (409) when it is already running. */
+  giveGoal(
+    id: string,
+    text: string,
+    backend?: string,
+  ): Promise<{ goal: Goal; session: AgentSession }> {
+    return this.request(`/api/projects/${id}/goal`, {
+      method: "POST",
+      body: JSON.stringify(backend ? { text, backend } : { text }),
     });
   }
 
