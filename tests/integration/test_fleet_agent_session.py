@@ -404,6 +404,38 @@ def test_a_goal_without_autopilot_does_not_ask_for_a_plan(rig: Rig) -> None:
     assert client.get(f"/api/projects/{project.id}/autopilot").json()["phase"] == "off"
 
 
+def test_the_overview_gathers_the_goal_the_timeline_and_a_digest(rig: Rig) -> None:
+    import subprocess
+
+    who = {"NAME": "t", "EMAIL": "t@e.co"}
+    env = {
+        f"GIT_{role}_{key}": value for role in ("AUTHOR", "COMMITTER") for key, value in who.items()
+    }
+    env |= {"PATH": "/usr/bin:/bin", "HOME": str(rig.tmp)}
+    for args in (["init", "-q", "-b", "feat/x"], ["add", "."], ["commit", "-q", "-m", "first"]):
+        (rig.root / "a.txt").write_text("a")
+        subprocess.run(
+            ["git", "-C", str(rig.root), *args], check=True, env=env, capture_output=True
+        )
+    art = rig.root / ".cuttlefish" / "artifacts"
+    art.mkdir(parents=True)
+    (art / "chart.png").write_bytes(b"\x89PNG")
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    path = f"/api/projects/{project.id}/overview"
+    body = client.get(path, params={"since": "2000-01-01T00:00:00Z"}).json()
+    assert body["branch"] == "feat/x" and body["autopilot"]["phase"] == "off"
+    texts = [e["text"] for e in body["timeline"]]
+    assert "Commit: first" in texts and "Produced an image: chart.png" in texts
+    assert "1 commit on feat/x." in body["digest"]
+    quiet = client.get(path, params={"since": "2999-01-01T00:00:00Z"}).json()
+    assert quiet["digest"] == [] and len(quiet["timeline"]) == len(texts)  # the timeline is not cut
+    assert client.get(path).status_code == 200  # a day back, when the page remembers nothing
+    for bad in ("yesterday", "2026-10-22", "2026-10-22T09:00:00+02:00"):
+        assert client.get(path, params={"since": bad}).status_code == 400
+    assert client.get("/api/projects/nope/overview").status_code == 404
+
+
 def test_the_terminal_needs_the_token_first(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     client = _client(rig.daemon())

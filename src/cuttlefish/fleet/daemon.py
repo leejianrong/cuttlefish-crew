@@ -26,6 +26,7 @@ import time
 import uuid
 from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
@@ -35,7 +36,7 @@ from satay.config import db_path as satay_db_path
 from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
-from cuttlefish import artifacts, environment, envprep, logsetup, runtime
+from cuttlefish import artifacts, environment, envprep, logsetup, runtime, timeline
 from cuttlefish.artifacts import Artifact
 from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
@@ -409,6 +410,38 @@ class FleetDaemon:
             "reset": thread.reset,
             "skipped": thread.skipped,
             "path": str(found),
+        }
+
+    async def overview(self, project_id: str, since: str | None = None) -> dict[str, Any]:
+        """The project's goal, Autopilot, timeline and the digest since ``since`` (CUT-176).
+
+        All of it is derived on each call from the journal, the artifacts folder, the repository
+        and the builder's transcript; nothing is stored for it (ADR-0004)."""
+        project = self._projects.get(project_id)
+        # A time the page remembers, or a day back: ISO 8601 UTC strings compare as text.
+        since_iso = since or timeline.iso(datetime.now(UTC) - timedelta(days=1))
+        journal = await asyncio.to_thread(self.session_events, project)
+        artifacts_found = await asyncio.to_thread(artifacts.list_artifacts, project.root)
+        env = agent_env(project.root, "shell")  # the agents' filtered environment, no secrets
+        branch, commits = await asyncio.to_thread(timeline.read_commits, project.root, env)
+        path = await asyncio.to_thread(self.chat_transcript_path, project)
+        chat_items: list[dict[str, Any]] = []
+        if path is not None:
+            chat_items = (await asyncio.to_thread(read_thread, path, None)).items
+        events = timeline.build(
+            timeline.journal_events(journal),
+            timeline.artifact_events(artifacts_found),
+            commits,
+            timeline.transcript_events(chat_items),
+        )
+        waiting = len(self.requests.pending(project.id))
+        return {
+            "since": since_iso,
+            "branch": branch,
+            "goal": await asyncio.to_thread(read_goal, project.root),
+            "autopilot": await self.autopilot.status(project),
+            "digest": timeline.digest(events, since_iso, branch, waiting),
+            "timeline": [e.to_json() for e in events],
         }
 
     async def autopilot_status(self, project_id: str) -> dict[str, Any]:

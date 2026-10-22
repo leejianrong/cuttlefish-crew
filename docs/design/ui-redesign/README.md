@@ -232,6 +232,16 @@ and this folder disagree after a slice lands, update this folder.
   Codex and kopicode builders get no box (their input is not wired in). The foot says the Terminal tab is the same
   session. The plan rail and canvas of `Main.dc.html` arrive with CUT-174 and CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
   say their record is not wired in yet.
+- **Mission control on the Overview (CUT-176, 2026-10-22).** Above the goal card, in `MissionControl.svelte`, from
+  `docs/design/chat-rework/MissionControl.dc.html` and nothing when there is nothing to say. (1) A **goal banner** when
+  Autopilot is on: a 64px progress ring (steps done of total, set in the `primary` role), the goal, one line of "Now: ..." from
+  the plan (and "Paused. Next: ..." and so on), pills for the state (coral only when it waits on you), the time limit and the
+  tokens, and **Pause or Resume, Stop Autopilot** (**Review the plan** when it waits for approval). (2) **While you were away**,
+  with "Since 18:00 yesterday": a few plain lines (commits on the branch, the last test run, context refreshes, files left, the
+  builder's own recap, what waits on you), shown only when you were last here more than ten minutes ago and there is something to
+  say; the "since" is per browser and project, fixed for the visit and saved when you leave it. (3) A **timeline** (newest first,
+  24 shown): time, a dot (coral for Needs you, teal for Autopilot and context refreshes, grey for the rest) and a line, with
+  **Review** or **Open** for a Needs you or an artifact, and the short commit id in mono. All of it is derived on each read.
 - **Artifact canvas (CUT-175, 2026-10-22).** The Chat tab's right column (22rem at 84rem and up; below that a native `details` row
   named Artifacts under the thread): chips for the builder's newest images, video and HTML designs (up to eight, the plan file
   left to the rail), one shown at a time and following the newest until you pick another, then **All artifacts** to the

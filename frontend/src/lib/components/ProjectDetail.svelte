@@ -18,6 +18,7 @@
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
+  import MissionControl from "./MissionControl.svelte";
   import Icon from "./Icon.svelte";
   import ArtifactsTab from "./ArtifactsTab.svelte";
   import ChatView from "./ChatView.svelte";
@@ -320,6 +321,8 @@
           {/each}
         </section>
       {/if}
+
+      <MissionControl {client} {projectId} active={tab === "overview"} {onTabChange} />
 
       {#if !project.running}
         <GoalCard {client} {projectId} projectBackend={project.backend} {onTabChange} />

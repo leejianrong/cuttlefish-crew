@@ -342,6 +342,15 @@ def _int(value: object, default: int) -> int:
     )
 
 
+def _is_iso(value: str) -> bool:
+    """Whether `value` is an ISO 8601 UTC time as the daemon writes them (compared as text)."""
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return value.endswith("Z") and "T" in value
+
+
 def _autopilot_limits(value: object) -> Limits | None:
     """Autopilot's limits off the wire (CUT-174): absent or false is off, true is the defaults,
     and an object sets any of ``hours``, ``tokens`` and ``nudges``. Anything else is a 400."""
@@ -1079,6 +1088,17 @@ def create_app(
             raise HTTPException(404, str(exc)) from exc
         except FleetError as exc:
             raise HTTPException(409, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/overview")
+    async def get_overview(project_id: str, since: str | None = None) -> dict[str, Any]:
+        """The goal, Autopilot, a timeline and the digest of what happened since `since` (an ISO
+        8601 time the page remembers from its last visit), all derived on the spot (CUT-176)."""
+        if since is not None and not _is_iso(since):
+            raise HTTPException(400, "'since' must be an ISO 8601 time, like 2026-10-22T09:00:00Z")
+        try:
+            return await daemon.overview(project_id, since)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.get("/api/projects/{project_id}/autopilot")
     async def get_autopilot(project_id: str) -> dict[str, Any]:
