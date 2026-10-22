@@ -105,6 +105,15 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
 
 - CUT-176 mission control on the Overview and CUT-179 the phone layout (see `docs/design/ui-redesign/README.md`).
 
+- CUT-177 the chat for Codex: read from Codex's own rollout, `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (`sessions/codex_record.py`),
+  not app-server events, because a tmux-hosted Codex is the TUI and the rollout is its record on disk. `item_completed` events
+  (`UserMessage`, `AgentMessage`, `CommandExecution`, `FileChange`, web search, `ContextCompaction`) become the same chat items as
+  Claude Code's, so the page, the canvas and the Overview timeline need no second code path. The rollout is found by folder: the
+  newest one whose `session_meta` `cwd` is the project root and that was written after the session started (our `codex` and
+  `codex resume --last` launches give us no session id). Read-only: there is no message box for Codex (no hooks to say a dialog
+  is open), and Autopilot's token meter reads Claude's usage lines only. Checked against synthetic lines and against five real
+  rollouts on this machine (counts only: 0 lines not understood); not against a live Codex run through the dashboard.
+
 ## Build order (cards)
 
 1. CUT-169 terminal theme, CUT-170 shell terminal (small, independent).

@@ -443,9 +443,15 @@
   {/if}
 
   <p class="foot body-small muted">
-    One conversation: what you type here goes into the session that is live in the
-    <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>, and what you
-    type there appears here.
+    {#if composer}
+      One conversation: what you type here goes into the session that is live in the
+      <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>, and what you
+      type there appears here.
+    {:else}
+      This is a view of the conversation. To say something to the builder, type in the
+      <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>; it is the same
+      session.
+    {/if}
   </p>
 </section>
 

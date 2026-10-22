@@ -221,7 +221,12 @@ _KNOWN_IGNORED = frozenset(
 )  # fmt: skip
 
 
-def _parse(data: bytes, scrub: Callable[[str], str]) -> tuple[list[dict[str, Any]], int]:
+def _parse(
+    data: bytes,
+    scrub: Callable[[str], str],
+    parse: Callable[[Mapping[str, Any]], list[dict[str, Any]]] = lambda e: items_for(e),
+    ignored: frozenset[str] = _KNOWN_IGNORED,
+) -> tuple[list[dict[str, Any]], int]:
     """The items in whole lines of ``data``, and how many lines were not understood."""
     items: list[dict[str, Any]] = []
     skipped = 0
@@ -236,8 +241,8 @@ def _parse(data: bytes, scrub: Callable[[str], str]) -> tuple[list[dict[str, Any
         if not isinstance(entry, dict):
             skipped += 1
             continue
-        if entry.get("type") not in _KNOWN_IGNORED:
-            for found in items_for(entry):
+        if entry.get("type") not in ignored:
+            for found in parse(entry):
                 items.append(json.loads(scrub(json.dumps(found))))
     return items, skipped
 
@@ -261,6 +266,8 @@ def read_thread(
     after: int | None = None,
     *,
     scrub: Callable[[str], str] = lambda text: text,
+    parse: Callable[[Mapping[str, Any]], list[dict[str, Any]]] = lambda e: items_for(e),
+    ignored: frozenset[str] = _KNOWN_IGNORED,
 ) -> Thread:
     """The items appended to ``path`` since byte offset ``after`` (``None`` for a first read,
     which starts near the end of a large file). Only whole lines are consumed, so a line still
@@ -272,7 +279,7 @@ def read_thread(
             handle.seek(after)
             data = handle.read(MAX_READ_BYTES)
         lines, _ = _whole_lines(data, from_middle=False)
-        items, skipped = _parse(lines, scrub)
+        items, skipped = _parse(lines, scrub, parse, ignored)
         return Thread(items, after + len(lines), skipped=skipped)
     # A first read (or a restart after the file shrank). Most of a long transcript is bookkeeping
     # (a 70 MB file can hold a few dozen messages in its last megabyte), so the window grows until
@@ -284,7 +291,7 @@ def read_thread(
             handle.seek(start)
             data = handle.read()
         lines, lead = _whole_lines(data, from_middle=start > 0)
-        items, skipped = _parse(lines, scrub)
+        items, skipped = _parse(lines, scrub, parse, ignored)
         if len(items) >= WANTED_ITEMS or start == 0 or window >= MAX_WINDOW_BYTES:
             return Thread(items, start + lead + len(lines), start > 0, reset, skipped)
         window *= 4

@@ -242,17 +242,38 @@ def test_the_chat_is_read_from_the_claude_code_transcript(
     assert client.get("/api/projects/nope/chat").status_code == 404
 
 
-def test_the_chat_of_another_tool_says_it_is_not_there_yet(rig: Rig) -> None:
+def test_the_chat_of_kopicode_says_it_is_not_there_yet(rig: Rig) -> None:
+    (rig.bin / "kopicode").write_text("#!/bin/sh\nexec sleep 300\n")
+    (rig.bin / "kopicode").chmod(0o755)
+    client, pid = _started(rig, backend="kopicode")
+    body = client.get(f"/api/projects/{pid}/chat").json()
+    assert body["supported"] is False and body["backend"] == "kopicode" and body["items"] == []
+
+
+def test_the_chat_of_codex_is_read_from_its_rollout(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+
+    monkeypatch.setenv("HOME", str(rig.tmp))
     (rig.bin / "codex").write_text("#!/bin/sh\nexec sleep 300\n")
     (rig.bin / "codex").chmod(0o755)
-    project = rig.store.register(name="alpha", root=str(rig.root), backend="codex")
-    client = _client(rig.daemon())
-    client.post(f"/api/projects/{project.id}/agent-session/start", json={})
-    body = client.get(f"/api/projects/{project.id}/chat").json()
-    assert body["supported"] is False and body["backend"] == "codex" and body["items"] == []
+    client, pid = _started(rig, backend="codex")
+    assert client.get(f"/api/projects/{pid}/chat").json()["waiting"] is True  # no rollout yet
+    folder = rig.tmp / ".codex" / "sessions" / datetime.now(UTC).strftime("%Y/%m/%d")
+    folder.mkdir(parents=True)
+    meta = {"type": "session_meta", "payload": {"cwd": str(rig.root.resolve())}}
+    item = {"type": "UserMessage", "id": "u1", "content": [{"type": "text", "text": "Hello codex"}]}
+    said = {"type": "event_msg", "payload": {"type": "item_completed", "item": item}}
+    path = folder / "rollout-x.jsonl"
+    path.write_text(json.dumps(meta) + "\n" + json.dumps(said) + "\n")
+    body = client.get(f"/api/projects/{pid}/chat").json()
+    assert body["supported"] and [i["text"] for i in body["items"]] == ["Hello codex"]
+    again = client.get(f"/api/projects/{pid}/chat", params={"after": body["cursor"]}).json()
+    assert again["items"] == [] and not again["reset"]
 
 
-# -- typing into the session from the chat box (CUT-173) ---------------------------------------
+# -- typing into the session from the chat box (CUT-173) -----------------------------
 
 
 def _raw_reader(rig: Rig, *, banner: str = "") -> Path:
