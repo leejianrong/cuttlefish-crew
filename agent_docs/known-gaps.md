@@ -290,6 +290,13 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **The Overview timeline and digest are heuristics over four sources (CUT-176).** Test runs are recognised from a Bash call
+  that names a known runner (`pytest`, `vitest`, `jest`, `go test`, `cargo test`, `npm test`, `make test|ci|check`, and a few
+  more) and a `N passed` or `N failed` in its output, so another runner or a differently worded summary does not show. Commits
+  come from `git log` on whatever branch is checked out (40 most recent), so work on another branch is not shown. A Codex or
+  kopicode project has no transcript reader yet, so its timeline has only commits, artifacts and journal events. "Since" is
+  per browser (local storage), so a second device sees its own digest. The builder's recap is Claude Code's own
+  `away_summary` line when it writes one, and is not always there.
 - **An HTML design runs with scripts but no network (CUT-175).** The frame has an opaque origin and a policy that allows
   nothing loaded from outside the file, so a design that pulls a library, font or image from a URL renders without it. That
   is deliberate (ADR-0036's update); do not add `allow-same-origin` or a `connect-src` to fix a design, tell the agent to

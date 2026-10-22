@@ -60,6 +60,15 @@ the goal it was given and takes you to the Terminal tab; it does not type a seco
 kopicode's interactive session cannot take a first message yet (the box says so); kopicode projects start work
 with the round workflow below. `GET`/`POST /api/projects/{id}/goal` is the same thing for a script (Approve tier).
 
+The project's **Overview** opens with the builder's goal and a progress ring, then **While you were away** (what happened
+since you last looked: commits, the last test run, context refreshes, files left for you, the builder's own recap, what
+waits on you; it is skipped if you were here in the last ten minutes) and a **timeline** of Autopilot's steps, Needs you
+requests, commits, test runs, context refreshes and the images, videos and designs the builder made. None of it is stored:
+the daemon builds it on each read from the journal, the artifacts folder, `git log` (run with the agents' filtered
+environment, with git told not to run any helper the repository's config names) and the builder's transcript. A test run is
+recognised from the builder's own test command and the `N passed` and `N failed` in its output, so a runner that prints
+differently does not appear. `GET /api/projects/{id}/overview?since=<ISO time>` is the same for a script.
+
 What a builder leaves in `.cuttlefish/artifacts/` shows on the Chat tab's canvas and the Artifacts tab: markdown, images,
 `mp4` or `webm` video, and self-contained `.html` designs. A design runs in a sandbox with scripts on and everything else
 off (no network, no access to the dashboard, your files or its storage), so one that loads a library or font from a CDN shows

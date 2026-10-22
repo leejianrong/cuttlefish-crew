@@ -5,6 +5,7 @@
 import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay";
 import type { AutopilotOptions, AutopilotStatus, Control } from "./autopilot";
 import type { ChatResponse } from "./chat";
+import type { OverviewData } from "./overview";
 import { terminalPath } from "./terminal";
 
 /** A device paired through the relay (ADR-0039). Never carries a key or a secret. */
@@ -631,6 +632,11 @@ export class FleetClient {
         autopilot: autopilot === undefined ? true : autopilot,
       }),
     });
+  }
+
+  /** The goal, Autopilot, a timeline and a digest of what happened since `since` (CUT-176). */
+  getOverview(id: string, since: string): Promise<OverviewData> {
+    return this.request(`/api/projects/${id}/overview?since=${encodeURIComponent(since)}`);
   }
 
   /** Autopilot's state, the plan checklist and what the run has used (CUT-174). */

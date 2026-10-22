@@ -54,6 +54,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("GET", "/api/projects/{project_id}"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/agent-session"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/goal"): Tier.VIEW,
+    ("GET", "/api/projects/{project_id}/overview"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/autopilot"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/artifacts"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/artifacts/file"): Tier.VIEW,
