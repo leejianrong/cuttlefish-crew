@@ -155,7 +155,7 @@ tmux is gone, and the next `cuttlefish serve` starts the agent again with the to
 command (**relaunched**), so the conversation carries on. A Claude Code session asks for permission
 under **Needs you** as well as in its own terminal (answer in either); Codex and kopicode ask in the terminal only.
 Open the project's **Terminal** tab, which is the real tmux session in
-the browser (xterm.js), with a key row for a phone that sits right under the terminal, above the bottom bar. It needs the same
+the browser (xterm.js, dark by default in both app themes, with a Match app / Dark / Light switch remembered per browser), with a key row for a phone that sits right under the terminal, above the bottom bar. It needs the same
 sign-in as the rest of the dashboard, and closing it leaves the agent running. The page title shows the
 Needs you count, and if the daemon restarts under an open page it asks you to sign in again.
 

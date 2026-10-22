@@ -12,6 +12,16 @@
     type CloseInfo,
   } from "../terminal";
   import { keyboardOpen, screenHeight } from "../terminallayout";
+  import {
+    TERMINAL_THEME_CHOICES,
+    ansiNames,
+    appIsDark,
+    loadTerminalTheme,
+    resolveTerminalMode,
+    saveTerminalTheme,
+    type TerminalMode,
+    type TerminalThemePreference,
+  } from "../terminaltheme";
 
   let {
     client,
@@ -29,6 +39,10 @@
   let bar: HTMLElement | undefined = $state();
   let keys: HTMLElement | undefined = $state();
   let screenPx = $state<number | null>(null);
+  // The terminal's own light, dark or follow-the-app choice (CUT-169); dark unless the person chose.
+  let themePref = $state<TerminalThemePreference>(loadTerminalTheme());
+  let appDark = $state(appIsDark());
+  let mode = $derived<TerminalMode>(resolveTerminalMode(themePref, appDark));
 
   let term: Terminal | null = null;
   let fit: FitAddon | null = null;
@@ -36,10 +50,34 @@
   let observer: ResizeObserver | null = null;
   let connectedFor = "";
   const encoder = new TextEncoder();
+  const ANSI_KEYS = [
+    "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white",
+    "brightBlack", "brightRed", "brightGreen", "brightYellow",
+    "brightBlue", "brightMagenta", "brightCyan", "brightWhite",
+  ] as const;
 
   function role(name: string, fallback: string): string {
     const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     return value || fallback;
+  }
+
+  function xtermTheme(which: TerminalMode) {
+    const name = (suffix: string) => `--term-${which}-${suffix}`;
+    return {
+      background: role(name("bg"), "#1d2426"),
+      foreground: role(name("fg"), "#e4efef"),
+      cursor: role(name("cursor"), "#7fd6dc"),
+      cursorAccent: role(name("bg"), "#1d2426"),
+      selectionBackground: role(name("selection"), "#3a5a5d"),
+      ...Object.fromEntries(
+        ansiNames(which).map((n, i) => [ANSI_KEYS[i], role(n, "")] as const).filter(([, v]) => v),
+      ),
+    };
+  }
+
+  function chooseTheme(next: TerminalThemePreference) {
+    themePref = next;
+    saveTerminalTheme(next);
   }
 
   function ensureTerminal(): Terminal | null {
@@ -49,11 +87,7 @@
       fontFamily: "'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, monospace",
       fontSize: 14,
       scrollback: 5000,
-      theme: {
-        background: role("--md-sys-color-inverse-surface", "#2d3135"),
-        foreground: role("--md-sys-color-inverse-on-surface", "#eff1f3"),
-        cursor: role("--md-sys-color-inverse-primary", "#4fd8e0"),
-      },
+      theme: xtermTheme(mode),
     });
     fit = new FitAddon();
     term.loadAddon(fit);
@@ -165,6 +199,25 @@
     else if (active) queueMicrotask(refit);
   });
 
+  // Paint the palette again when the choice changes, and follow the app's own theme.
+  $effect(() => {
+    // Read first: with no terminal yet, a short-circuit would leave this effect tracking nothing.
+    const palette = xtermTheme(mode);
+    if (term) term.options.theme = palette;
+  });
+
+  $effect(() => {
+    const follow = () => (appDark = appIsDark());
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", follow);
+    const watch = new MutationObserver(follow);
+    watch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => {
+      media.removeEventListener("change", follow);
+      watch.disconnect();
+    };
+  });
+
   // Size the screen when the tab is shown, and again when the window or the keyboard changes it.
   $effect(() => {
     if (!active) return;
@@ -210,6 +263,18 @@
       {:else if status === "closed"}Not connected
       {/if}
     </span>
+    <div class="seg" role="group" aria-label="Terminal theme">
+      {#each TERMINAL_THEME_CHOICES as choice (choice.id)}
+        <button
+          type="button"
+          class:on={themePref === choice.id}
+          aria-pressed={themePref === choice.id}
+          onclick={() => chooseTheme(choice.id)}
+        >
+          {choice.label}
+        </button>
+      {/each}
+    </div>
   </div>
 
   {#if closed}
@@ -227,6 +292,7 @@
 
   <div
     class="screen"
+    data-mode={mode}
     bind:this={host}
     data-testid="terminal-screen"
     style:height={screenPx === null ? undefined : `${screenPx}px`}
@@ -281,8 +347,47 @@
     min-height: 16rem;
     padding: 0.5rem;
     border-radius: var(--md-sys-shape-corner-medium, 12px);
-    background: var(--md-sys-color-inverse-surface);
+    border: 1px solid transparent;
     overflow: hidden;
+  }
+
+  .screen[data-mode="dark"] {
+    background: var(--term-dark-bg);
+    border-color: var(--term-dark-border);
+  }
+
+  .screen[data-mode="light"] {
+    background: var(--term-light-bg);
+    border-color: var(--term-light-border);
+  }
+
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: 1.25rem;
+    overflow: hidden;
+  }
+
+  .seg button {
+    min-height: 2.75rem;
+    padding: 0 1rem;
+    border: 0;
+    background: transparent;
+    color: var(--md-sys-color-on-surface);
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+  }
+
+  .seg button.on {
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
+    font-weight: 600;
+  }
+
+  .seg button:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: -2px;
   }
 
   @media (max-width: 640px) {

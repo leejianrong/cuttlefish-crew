@@ -1,0 +1,65 @@
+/*
+ * The terminal's own colours (CUT-169, docs/design/chat-rework/). A terminal is dark whichever theme the
+ * app wears, so it does not borrow the inverse-surface roles, which turn light exactly when the app is
+ * dark. Two sets: `dark` (the default) and `light`. The dark one is a shade deeper in the dark app, with
+ * a 1px border so it still reads as a panel. xterm needs concrete colours, so TerminalView reads these by
+ * name (`--term-<mode>-bg`, `--term-<mode>-ansi-0` to `-15`). Hex is allowed here, as in theme-tokens.css.
+ */
+
+:root {
+  --term-dark-bg: #1d2426;
+  --term-dark-fg: #e4efef;
+  --term-dark-cursor: #7fd6dc;
+  --term-dark-selection: #3a5a5d;
+  --term-dark-border: #3a4647;
+  --term-dark-ansi-0: #3a4647;
+  --term-dark-ansi-1: #ff8f8f;
+  --term-dark-ansi-2: #8bd49c;
+  --term-dark-ansi-3: #e6c07b;
+  --term-dark-ansi-4: #8cb4ff;
+  --term-dark-ansi-5: #d6a3f0;
+  --term-dark-ansi-6: #7fd6dc;
+  --term-dark-ansi-7: #c9d6d6;
+  --term-dark-ansi-8: #5b6b6d;
+  --term-dark-ansi-9: #ffb0b0;
+  --term-dark-ansi-10: #a9e8b8;
+  --term-dark-ansi-11: #f2d598;
+  --term-dark-ansi-12: #adc9ff;
+  --term-dark-ansi-13: #e5bff8;
+  --term-dark-ansi-14: #a2e6ea;
+  --term-dark-ansi-15: #f4fafa;
+
+  --term-light-bg: #fbfdfd;
+  --term-light-fg: #161d1d;
+  --term-light-cursor: #00696f;
+  --term-light-selection: #c9f3f6;
+  --term-light-border: #bfc9c9;
+  --term-light-ansi-0: #161d1d;
+  --term-light-ansi-1: #b3261e;
+  --term-light-ansi-2: #1b6e3c;
+  --term-light-ansi-3: #7a5900;
+  --term-light-ansi-4: #2a4fb8;
+  --term-light-ansi-5: #8a3fa8;
+  --term-light-ansi-6: #00696f;
+  --term-light-ansi-7: #6f7979;
+  --term-light-ansi-8: #3a4747;
+  --term-light-ansi-9: #d93a30;
+  --term-light-ansi-10: #2e8a50;
+  --term-light-ansi-11: #9a7000;
+  --term-light-ansi-12: #3f6fe0;
+  --term-light-ansi-13: #a65bc6;
+  --term-light-ansi-14: #0b8790;
+  --term-light-ansi-15: #a8b3b3;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --term-dark-bg: #070b0c;
+    --term-dark-border: #3f4849;
+  }
+}
+
+:root[data-theme="dark"] {
+  --term-dark-bg: #070b0c;
+  --term-dark-border: #3f4849;
+}
