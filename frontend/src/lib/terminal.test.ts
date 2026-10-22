@@ -30,7 +30,9 @@ describe("messages", () => {
       type: "auth",
       token: "tok",
       size: { cols: 100, rows: 30 },
+      kind: "agent",
     });
+    expect(JSON.parse(authMessage("tok", 100, 30, "shell")).kind).toBe("shell");
     expect(terminalUrl("http://h", "p")).not.toContain("tok");
   });
 
@@ -77,5 +79,7 @@ describe("describeClose", () => {
   it("says the agent keeps running when the view goes away", () => {
     expect(describeClose(1006, "").text).toContain("still running in tmux");
     expect(describeClose(1000, "").kind).toBe("ended");
+    expect(describeClose(1000, "").text).toContain("The agent is still running");
+    expect(describeClose(1006, "", "shell").text).toContain("The shell is still running");
   });
 });

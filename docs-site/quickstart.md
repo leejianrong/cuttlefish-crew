@@ -135,7 +135,13 @@ prompts, watch it work. It uses the same sign-in as the rest of the dashboard (t
 password session otherwise), has a key row for a phone keyboard (Esc, Tab, Ctrl-C, arrows, Enter), and closing
 it leaves the agent running. On a phone the terminal takes the height that is left between the header and
 the bottom bar, with the key row right under it, and the page title carries the Needs you count, like
-`(2) cuttlefish-crew`. With no session running it offers to start one.
+`(2) cuttlefish-crew`. With no session running it offers to start one. The terminal is dark in both app
+themes by default, with a Match app / Dark / Light switch that your browser remembers.
+
+Beside it, the **Shell** switch opens a plain shell in the project folder, with no agent needed. It is a
+second tmux session (`cf-shell-<project>`), so it keeps running when you close the tab, and it is started the first
+time you open it. It has the same filtered environment as the agents and no project secrets, so a variable
+you need there goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. It needs the same Terminal rights as the agent's terminal.
 
 ## Artifacts
 

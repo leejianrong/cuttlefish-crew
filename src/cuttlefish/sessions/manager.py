@@ -35,7 +35,7 @@ from typing import Literal
 
 from cuttlefish.artifacts import AGENT_NOTE
 from cuttlefish.sessions.hooks import permission_mode
-from cuttlefish.sessions.tmux import Tmux, TmuxError, session_name
+from cuttlefish.sessions.tmux import Tmux, TmuxError, session_name, shell_session_name
 
 Action = Literal["started", "reattached", "relaunched"]
 Asks = Literal["needs-you", "auto", "terminal"]
@@ -269,6 +269,24 @@ class SessionManager:
         record.update(backend=backend, wanted=True, last_action=action, at=_now())
         _write(root, record)
         return self.status(project_id, root)
+
+    def ensure_shell(self, project_id: str, root: str) -> str:
+        """Make sure the project's plain shell is running in tmux and return its session name
+        (CUT-170). It is the person's own shell in the project folder, needs no agent, and is
+        not recorded or reconciled: when it exits, the next view starts a fresh one. Its
+        environment is the agent's filtered one and carries no project secrets."""
+        name = shell_session_name(project_id)
+        try:
+            if not self._tmux.has_session(name):
+                env = dict(self._env_for(root, "shell"))
+                shell = env.get("SHELL") or "/bin/bash"
+                self._tmux.new_session(name, cwd=root, argv=[shell], env=env)
+        except TmuxError as exc:
+            raise SessionError(str(exc)) from exc
+        return name
+
+    def stop_shell(self, project_id: str) -> None:
+        self._tmux.kill_session(shell_session_name(project_id))
 
     def tmux_session(self, project_id: str) -> tuple[Tmux, str]:
         """The tmux server and session name a terminal view attaches to."""

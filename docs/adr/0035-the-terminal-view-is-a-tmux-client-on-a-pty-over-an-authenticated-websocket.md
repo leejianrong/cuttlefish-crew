@@ -36,6 +36,12 @@ bytes both ways.**
   bypasses the consent policy: what a person types into the TUI is theirs to decide. The token (loopback) or the
   password session (non-loopback, ADR-0011) is the whole guard, so a non-loopback bind must keep its password.
 - A tmux-hosted agent's permission prompts are answered here, in the terminal (ADR-0034).
+- **A Shell terminal (CUT-170, 2026-10-22).** The same route and websocket take `"kind": "shell"` in the auth message
+  and attach to a second tmux session, `cf-shell-<project id>`, running the person's own shell in the project root.
+  It is not recorded in `agent-session.json`, is not reconciled at daemon start, and is started when first opened.
+  Its environment is `merge_env` with no backend passthrough and no project secrets (a Shell that should get them
+  is an open question in `docs/design/chat-rework/README.md`). One route means one tier: a device with Terminal
+  rights has both, which is the point, because the agent's terminal can already run anything the shell can.
 - The pty bridge is POSIX only (`pty`, `termios`), as tmux is.
 - Binary output is not interpreted by the daemon, so nothing redacts a secret an agent prints into this view. The
   episodic journal is a different path and is unchanged (ADR-0004).

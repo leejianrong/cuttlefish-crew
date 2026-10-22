@@ -363,11 +363,24 @@ class FleetDaemon:
         except SessionError as exc:
             raise FleetError(str(exc)) from exc
 
-    async def open_terminal(self, project_id: str, *, cols: int, rows: int) -> PtyAttach:
+    async def open_terminal(
+        self, project_id: str, *, cols: int, rows: int, kind: str = "agent"
+    ) -> PtyAttach:
         """A view onto the project's running agent session (CUT-96). Raises `FleetError` when no
-        session is running: the view does not start one, so opening it is never a surprise."""
+        session is running: the view does not start one, so opening it is never a surprise.
+
+        ``kind="shell"`` (CUT-170) is the person's own shell in the project folder instead. It
+        needs no agent and is started when first opened, which is what the person asked for."""
         project = self._projects.get(project_id)
         manager = self._session_manager()
+        if kind == "shell":
+            try:
+                name = await asyncio.to_thread(manager.ensure_shell, project.id, project.root)
+            except SessionError as exc:
+                raise FleetError(str(exc)) from exc
+            return PtyAttach(manager.tmux_session(project.id)[0], name, cols=cols, rows=rows)
+        if kind != "agent":
+            raise FleetError(f"no terminal called {kind!r}; one of agent, shell")
         info = await asyncio.to_thread(manager.status, project.id, project.root)
         if info.state != "running":
             raise FleetError("no agent session is running; start it from the Overview first")

@@ -20,7 +20,7 @@ from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.projects.store import ProjectStore
 from cuttlefish.sessions import SessionManager, Tmux
-from cuttlefish.sessions.tmux import session_name
+from cuttlefish.sessions.tmux import session_name, shell_session_name
 
 pytestmark = pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux is not installed")
 
@@ -143,7 +143,8 @@ def _read_until(ws: Any, needle: bytes, tries: int = 60) -> bytes:
 
 
 def _wait_until_detached(rig: Rig, project_id: str, timeout: float = 10.0) -> None:
-    name = session_name(project_id)
+    # A project id names its agent's session; a session name (the shell's) is used as it is.
+    name = project_id if project_id.startswith("cf-") else session_name(project_id)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         listed = rig.tmux._run("list-clients", "-t", f"={name}", check=False).stdout
@@ -204,6 +205,33 @@ def test_a_project_with_no_running_session_says_so_and_is_not_started(rig: Rig) 
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_text()
         assert closed.value.code == 4404
+
+
+def test_a_shell_terminal_needs_no_agent_session_and_is_the_same_route(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    with _connect(client, f"/api/projects/{project.id}/terminal") as ws:
+        _auth(ws, kind="shell", size={"cols": 100, "rows": 30})
+        assert json.loads(ws.receive_text()) == {"type": "ready"}
+        # Type once the shell has drawn its prompt: bytes sent while it starts can be dropped.
+        _read_until(ws, b"$ ")
+        ws.send_bytes(b"echo shell-$((6*7))\r")
+        _read_until(ws, b"shell-42")
+        ws.close(1000)
+        _wait_until_detached(rig, shell_session_name(project.id))
+    # No agent was started for it, and closing the view left the shell running.
+    assert client.get(f"/api/projects/{project.id}/agent-session").json()["state"] == "none"
+    assert rig.tmux.has_session(shell_session_name(project.id))
+
+
+def test_a_terminal_kind_that_is_not_known_is_refused(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    with _connect(client, f"/api/projects/{project.id}/terminal") as ws:
+        _auth(ws, kind="root")
+        with pytest.raises(WebSocketDisconnect) as closed:
+            ws.receive_text()
+        assert closed.value.code == 4404 and "no terminal called" in closed.value.reason
 
 
 def test_typing_in_the_terminal_reaches_the_agent_and_its_output_comes_back(rig: Rig) -> None:

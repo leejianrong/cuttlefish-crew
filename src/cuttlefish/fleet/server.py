@@ -1043,7 +1043,9 @@ def create_app(
         the first message is `{"type": "auth", "token": ...}`, checked with the same guard as every
         other route, with the handshake's own `Host` and `Origin`. Then `{"type": "ready"}`, and
         from there binary frames are the terminal's bytes in both directions, and a text frame
-        `{"type": "resize", "cols": N, "rows": N}` resizes it."""
+        `{"type": "resize", "cols": N, "rows": N}` resizes it. The auth message may add
+        `"kind": "shell"` for the person's own shell in the project folder (CUT-170); the default
+        is the agent's session. Both are the same route, so both sit in the Terminal tier."""
         await websocket.accept()
         try:
             first = json.loads(await asyncio.wait_for(websocket.receive_text(), 10))
@@ -1081,9 +1083,14 @@ def create_app(
             return
         raw_size = first.get("size")
         size: dict[str, Any] = raw_size if isinstance(raw_size, dict) else {}
+        raw_kind = first.get("kind")
+        kind = raw_kind if isinstance(raw_kind, str) else "agent"
         try:
             attach = await daemon.open_terminal(
-                project_id, cols=_int(size.get("cols"), 120), rows=_int(size.get("rows"), 32)
+                project_id,
+                cols=_int(size.get("cols"), 120),
+                rows=_int(size.get("rows"), 32),
+                kind=kind,
             )
         except ProjectNotFoundError:
             await websocket.close(code=4404, reason="no such project")
