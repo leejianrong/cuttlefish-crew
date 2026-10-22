@@ -3,6 +3,7 @@
 // that slice adds -- no OpenAPI-codegen machinery for five routes.
 
 import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay";
+import type { AutopilotOptions, AutopilotStatus, Control } from "./autopilot";
 import type { ChatResponse } from "./chat";
 import { terminalPath } from "./terminal";
 
@@ -619,11 +620,27 @@ export class FleetClient {
     id: string,
     text: string,
     backend?: string,
+    autopilot?: AutopilotOptions | false,
   ): Promise<{ goal: Goal; session: AgentSession }> {
     return this.request(`/api/projects/${id}/goal`, {
       method: "POST",
-      body: JSON.stringify(backend ? { text, backend } : { text }),
+      body: JSON.stringify({
+        text,
+        ...(backend ? { backend } : {}),
+        // On by default for a builder given a goal from the dashboard (ADR-0044).
+        autopilot: autopilot === undefined ? true : autopilot,
+      }),
     });
+  }
+
+  /** Autopilot's state, the plan checklist and what the run has used (CUT-174). */
+  getAutopilot(id: string): Promise<AutopilotStatus> {
+    return this.request(`/api/projects/${id}/autopilot`);
+  }
+
+  /** Approve the plan, pause, resume, stop or nudge: fixed actions, not free text. */
+  autopilotAction(id: string, action: Control): Promise<AutopilotStatus> {
+    return this.request(`/api/projects/${id}/autopilot/${action}`, { method: "POST" });
   }
 
   stopAgentSession(id: string): Promise<AgentSession> {

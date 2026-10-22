@@ -288,3 +288,54 @@ def read_thread(
         if len(items) >= WANTED_ITEMS or start == 0 or window >= MAX_WINDOW_BYTES:
             return Thread(items, start + lead + len(lines), start > 0, reset, skipped)
         window *= 4
+
+
+class UsageMeter:
+    """Tokens a Claude Code session has used, summed from its transcript as it grows (CUT-174).
+
+    Each ``assistant`` line carries the ``usage`` of the whole message it belongs to, repeated on
+    every content block, so a message is counted once, by the id of the line before. Cache reads are
+    left out: they are cheap and would swamp a long session, so the figure is input, output and
+    cache writes. It is a budget guard, not a bill."""
+
+    def __init__(self) -> None:
+        self.offset = 0
+        self.tokens = 0
+        self._last_id: str | None = None
+
+    def update(self, path: Path) -> int:
+        """Read what was appended since the last call and return the running total."""
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return self.tokens
+        if size < self.offset:
+            self.offset, self.tokens, self._last_id = 0, 0, None  # the file was replaced
+        with path.open("rb") as handle:
+            handle.seek(self.offset)
+            data = handle.read(MAX_WINDOW_BYTES)
+        end = data.rfind(b"\n")
+        if end < 0:
+            return self.tokens
+        self.offset += end + 1
+        for raw in data[: end + 1].splitlines():
+            if b'"usage"' not in raw:
+                continue
+            try:
+                entry = json.loads(raw)
+            except ValueError:
+                continue
+            message = entry.get("message") if isinstance(entry, dict) else None
+            if entry.get("type") != "assistant" or not isinstance(message, dict):
+                continue
+            usage = message.get("usage")
+            ident = message.get("id")
+            if not isinstance(usage, dict) or (isinstance(ident, str) and ident == self._last_id):
+                continue
+            self._last_id = ident if isinstance(ident, str) else None
+            self.tokens += sum(
+                value
+                for key in ("input_tokens", "output_tokens", "cache_creation_input_tokens")
+                if isinstance(value := usage.get(key), int)
+            )
+        return self.tokens

@@ -141,9 +141,11 @@ class ClaudeHooks:
         if event in ("UserPromptSubmit", "PreToolUse", "PostToolUse"):
             self._terminal_dialog.discard(project.id)
             self._activity[project.id] = ("busy", time.monotonic())
+            self._daemon.autopilot.on_activity(project)  # the turn is not over
         elif event == "Stop":
             self._terminal_dialog.discard(project.id)
             self._activity[project.id] = ("idle", time.monotonic())
+            self._daemon.autopilot.on_stop(project)
         tool = str(payload.get("tool_name") or "")
         raw = payload.get("tool_input")
         tool_input: Mapping[str, Any] = raw if isinstance(raw, dict) else {}

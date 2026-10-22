@@ -52,6 +52,7 @@ from cuttlefish.artifacts import (
     ArtifactNotPreviewableError,
     ArtifactTooLargeError,
 )
+from cuttlefish.autopilot import Limits
 from cuttlefish.config import ConfigError, validate_backend_name
 from cuttlefish.delegate.consent import ConsentPolicyError, validate_allow_entry
 from cuttlefish.delegate.never_allowed import NEVER_ALLOWED_SUMMARY
@@ -65,6 +66,7 @@ from cuttlefish.delegate.presets import (
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet import hook_files
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
+from cuttlefish.fleet.autopilot import AutopilotError
 from cuttlefish.fleet.daemon import (
     FleetDaemon,
     FleetError,
@@ -337,6 +339,30 @@ def _int(value: object, default: int) -> int:
     """A positive terminal dimension off the wire, or ``default``."""
     return (
         value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else default
+    )
+
+
+def _autopilot_limits(value: object) -> Limits | None:
+    """Autopilot's limits off the wire (CUT-174): absent or false is off, true is the defaults,
+    and an object sets any of ``hours``, ``tokens`` and ``nudges``. Anything else is a 400."""
+    if value is None or value is False:
+        return None
+    if value is True:
+        return Limits()
+    if not isinstance(value, dict):
+        raise HTTPException(400, "'autopilot' must be true, false or an object of limits")
+    defaults = Limits()
+
+    def number(key: str, low: float, high: float, default: float) -> float:
+        raw = value.get(key, default)
+        if isinstance(raw, bool) or not isinstance(raw, int | float) or not low <= raw <= high:
+            raise HTTPException(400, f"autopilot '{key}' must be a number from {low:g} to {high:g}")
+        return float(raw)
+
+    return Limits(
+        hours=number("hours", 0.1, 720, defaults.hours),
+        tokens=int(number("tokens", 10_000, 1_000_000_000, defaults.tokens)),
+        nudges=int(number("nudges", 1, 5000, defaults.nudges)),
     )
 
 
@@ -1054,6 +1080,25 @@ def create_app(
         except FleetError as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @app.get("/api/projects/{project_id}/autopilot")
+    async def get_autopilot(project_id: str) -> dict[str, Any]:
+        """Autopilot's state, the plan checklist and what the run has used (CUT-174)."""
+        try:
+            return await daemon.autopilot_status(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/autopilot/{action}")
+    async def autopilot_action(project_id: str, action: str) -> dict[str, Any]:
+        """Approve the plan, pause, resume, stop, or ask for the next step now. Each is a fixed
+        action, never free text, so they are Approve tier and not typed access."""
+        try:
+            return await daemon.autopilot_action(project_id, action)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (FleetError, AutopilotError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @app.get("/api/projects/{project_id}/goal")
     async def get_goal(project_id: str) -> dict[str, Any]:
         try:
@@ -1071,8 +1116,9 @@ def create_app(
             raise HTTPException(400, "'text' is required")
         if backend is not None and not isinstance(backend, str):
             raise HTTPException(400, "'backend', if given, must be a string")
+        limits = _autopilot_limits(body.get("autopilot"))
         try:
-            goal, session = await daemon.give_goal(project_id, text, backend)
+            goal, session = await daemon.give_goal(project_id, text, backend, autopilot=limits)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except (FleetError, ConfigError) as exc:

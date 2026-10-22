@@ -6,6 +6,13 @@
   import type { FleetClient, NeedsYouRequest } from "../api";
   import { FleetApiError } from "../api";
   import {
+    controlLabel,
+    controlsFor,
+    phaseLabel,
+    type AutopilotStatus,
+    type Control,
+  } from "../autopilot";
+  import {
     EMPTY_CHAT,
     applyChat,
     chatNotice,
@@ -18,6 +25,8 @@
   import { parseMarkdown } from "../markdown";
   import Icon from "./Icon.svelte";
   import Markdown from "./Markdown.svelte";
+  import PlanCard from "./PlanCard.svelte";
+  import PlanRail from "./PlanRail.svelte";
   import RequestCard from "./RequestCard.svelte";
 
   let {
@@ -112,6 +121,55 @@
     if (atFoot) unseen = 0;
   }
 
+  // Autopilot: the plan rail and the plan card (CUT-174). Read on its own, slower beat: it changes
+  // when the builder ticks a step, not as each message arrives.
+  let autopilot = $state<AutopilotStatus | null>(null);
+  let controlBusy = $state(false);
+  let controlError = $state<string | null>(null);
+  let wide = $state(typeof window !== "undefined" && window.matchMedia("(min-width: 62rem)").matches);
+
+  $effect(() => {
+    const media = window.matchMedia("(min-width: 62rem)");
+    const follow = () => (wide = media.matches);
+    media.addEventListener("change", follow);
+    return () => media.removeEventListener("change", follow);
+  });
+
+  $effect(() => {
+    const id = projectId;
+    if (!active) return;
+    let stop = false;
+    const read = async () => {
+      try {
+        const next = await client.getAutopilot(id);
+        if (!stop && id === projectId) autopilot = next;
+      } catch {
+        // The thread's own notice covers a daemon that cannot be reached.
+      }
+    };
+    void read();
+    const timer = setInterval(read, 3000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  });
+
+  async function control(action: Control) {
+    if (controlBusy) return;
+    controlBusy = true;
+    controlError = null;
+    try {
+      autopilot = await client.autopilotAction(projectId, action);
+    } catch (e) {
+      controlError = e instanceof Error ? e.message : "That didn't work.";
+    } finally {
+      controlBusy = false;
+    }
+  }
+
+  const showRail = $derived(autopilot !== null && (autopilot.phase !== "off" || autopilot.plan !== null));
+
   // The message box (CUT-173).
   let draft = $state("");
   let sending = $state(false);
@@ -155,6 +213,35 @@
     opened[id] = !opened[id];
   }
 </script>
+
+<div class="layout" class:with-rail={showRail}>
+{#if showRail && autopilot}
+  <details class="rail-wrap" open={wide}>
+    <summary class="rail-summary body-medium">
+      <span>
+        {autopilot.plan && autopilot.plan.total > 0
+          ? `Plan: ${autopilot.plan.done} of ${autopilot.plan.total} done`
+          : "Plan"}
+      </span>
+      <span class="muted">{phaseLabel(autopilot.phase)}</span>
+    </summary>
+    <PlanRail status={autopilot} busy={controlBusy} error={controlError} onControl={control} />
+  </details>
+  {#if !wide && controlsFor(autopilot.phase).length > 0}
+    <!-- Pause and Stop stay in reach on a phone, where the rail is folded away. -->
+    <div class="quick" role="group" aria-label="Autopilot">
+      {#each controlsFor(autopilot.phase) as action (action)}
+        <button
+          class="btn {action === 'approve' ? 'btn-filled' : 'btn-tonal'}"
+          disabled={controlBusy}
+          onclick={() => control(action)}
+        >
+          {controlLabel(action, autopilot.phase)}
+        </button>
+      {/each}
+    </div>
+  {/if}
+{/if}
 
 <section class="chat" aria-labelledby="chat-heading">
   <h2 id="chat-heading" class="visually-hidden">Conversation</h2>
@@ -227,6 +314,10 @@
       </p>
     {/if}
 
+    {#if autopilot?.phase === "awaiting_approval"}
+      <PlanCard status={autopilot} busy={controlBusy} onApprove={() => control("approve")} />
+    {/if}
+
     {#each pending as request (request.id)}
       <div class="inline-request">
         <RequestCard
@@ -278,10 +369,60 @@
     type there appears here.
   </p>
 </section>
+</div>
 
 <style>
+  .layout {
+    display: grid;
+    gap: 1.5rem;
+    max-width: 78rem;
+  }
+
+  .layout.with-rail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (min-width: 62rem) {
+    .layout.with-rail {
+      grid-template-columns: 17rem minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .rail-wrap > .rail-summary {
+      display: none;
+    }
+  }
+
+  .rail-wrap {
+    padding: 0.25rem 0;
+  }
+
+  .quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: -0.75rem;
+  }
+
+  .rail-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    min-height: 2.75rem;
+    align-items: center;
+    cursor: pointer;
+    padding: 0 0.75rem;
+    border-radius: var(--md-sys-shape-corner-medium, 12px);
+    background: var(--md-sys-color-surface-container);
+  }
+
+  .rail-wrap > :global(.rail) {
+    padding: 0.75rem 0.25rem 0;
+  }
+
   .chat {
     position: relative;
+    min-width: 0;
     max-width: 56rem;
     display: flex;
     flex-direction: column;

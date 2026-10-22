@@ -62,9 +62,37 @@ ADR-0007 hold for it) and it builds on, not replaces, ADR-0032.
   a message typed into a dialog is an answer. Typing needs the Terminal tier; reading the thread needs Approve.
 - A goal (CUT-171) is the tool's own first-message argument, never typed, so the first message cannot land in a dialog.
 
+## Decided while building Autopilot (CUT-174, 2026-10-22)
+
+These were the open questions of the first version of this ADR.
+
+1. **The supervisor is a daemon-side supervisor, not a satay workflow, and its state is the journal's.** ADR-0032 already
+   said a session-first path need not be a workflow, and nothing here needs one: the builder is a process in tmux that
+   outlives the daemon, so there is no run for satay to resume. What the supervisor owns is a small state, kept as the
+   project's last `AutopilotUpdated` event in the episodic journal (a whole snapshot per change, under the session scope,
+   redacted at write time), read back the first time a project is touched after a restart. It is driven by the agent's
+   `Stop` hook; a `UserPromptSubmit`, `PreToolUse` or `PostToolUse` that arrives within two seconds cancels a pending nudge,
+   so a message the person typed right behind the stop is not trampled. `cuttlefish/autopilot.py` holds the policy as one
+   pure function; `fleet/autopilot.py` feeds it facts and acts.
+2. **The plan is a checklist file, `.cuttlefish/artifacts/plan.md`, not Claude Code's plan mode.** The builder is told (in
+   Claude Code's appended system prompt; on the end of the goal for Codex, which has no such flag) to write `- [ ]` steps,
+   wait for approval, then tick `- [x]` as it goes. A file works the same for every backend, is an artifact the dashboard
+   already shows, and a person can edit it. Claude Code's own todo tool was not in the install checked, and plan mode would
+   tie approval to one tool's UI. Cost: it depends on the agent following the instruction; no checklist means no approval
+   and no nudging, and the rail says so.
+3. **What "stuck" means:** the builder stopped three nudges in a row without ticking a step, or the plan has no steps.
+   Both end the nudging and show as "Stuck" with a Carry on button. Repeated environment failures (`stuck.py`) are not
+   used yet. It is surfaced in the rail, the Overview and a banner, not as a Needs you card.
+4. **Limits end the nudging, never the agent mid-step:** time (24 h from approval), tokens (5 M since approval: input,
+   output and cache writes from the transcript, cache reads left out) and nudges (200). All three are checked when the
+   builder stops. Resuming after a limit lifts it and restarts the clock.
+5. **A builder under Autopilot starts in the project's own permission mode**, with the same hooks and Needs you cards as
+   any session (ADR-0040). Autopilot never answers a permission and never types into a dialog: its two messages (the
+   approval and "continue") go through the same guarded send as a person's (CUT-173). A dialog open means the nudge is not
+   sent and the next stop tries again.
+
 ## Open
 
-- Whether the Autopilot supervisor is a satay workflow (durable across a daemon restart, ADR-0001) or a daemon loop with
-  its state in the episodic journal. The slice that builds it decides and updates this ADR.
-- The permission mode a builder starts in under Autopilot, and what stuck means for an interactive session.
-- Whether the agent's messages are also journaled.
+- Whether the agent's messages are also journaled (so history survives a deleted transcript).
+- Autopilot has not been run against a real long Claude Code session; everything above is built and tested against a fake
+  builder and a synthetic transcript. See `agent_docs/known-gaps.md`.

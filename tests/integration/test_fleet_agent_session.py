@@ -348,6 +348,62 @@ def test_the_chat_reports_what_the_session_is_doing(rig: Rig) -> None:
     assert body["activity"]["state"] == "unknown"  # no hook has fired yet
 
 
+def test_a_goal_with_autopilot_tells_the_builder_to_plan_first_and_waits_for_approval(
+    rig: Rig,
+) -> None:
+    log = _raw_reader(rig)
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    # One portal for the whole test: the journal's sqlite connection belongs to the loop thread that
+    # opened it, as it does in the daemon (a client with no `with` starts a thread per request).
+    with _client(rig.daemon()) as client:
+        _autopilot_flow(rig, client, project.id, log)
+
+
+def _autopilot_flow(rig: Rig, client: TestClient, project_id: str, log: Path) -> None:
+    path = f"/api/projects/{project_id}"
+    assert client.get(f"{path}/autopilot").json()["phase"] == "off"
+    given = client.post(f"{path}/goal", json={"text": "Build it", "autopilot": {"hours": 2}})
+    assert given.status_code == 200
+    time.sleep(0.8)
+    state = client.get(f"{path}/autopilot").json()
+    assert state["phase"] == "planning" and state["limits"]["hours"] == 2
+    assert state["goal"] == "Build it" and state["plan"] is None
+    refused = client.post(f"{path}/autopilot/approve")
+    assert refused.status_code == 409 and "not written a checklist" in refused.json()["detail"]
+    plan = rig.root / ".cuttlefish" / "artifacts" / "plan.md"
+    plan.parent.mkdir(parents=True)
+    plan.write_text("- [x] one\n- [ ] two\n")
+    approved = client.post(f"{path}/autopilot/approve")
+    assert approved.status_code == 200 and approved.json()["phase"] == "running"
+    assert approved.json()["plan"] == {
+        "steps": [{"text": "one", "done": True}, {"text": "two", "done": False}],
+        "done": 1,
+        "total": 2,
+    }
+    assert b"The plan is approved" in _bytes_seen(log, b"approved")
+    assert client.post(f"{path}/autopilot/pause").json()["phase"] == "paused"
+    assert client.post(f"{path}/autopilot/stop").json()["phase"] == "stopped"
+    assert client.post(f"{path}/autopilot/dance").status_code == 409
+
+
+def test_autopilot_limits_are_checked_and_the_plan_instruction_reaches_claude(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    path = f"/api/projects/{project.id}/goal"
+    for bad in ("yes", {"hours": -1}, {"tokens": "lots"}, {"nudges": 0}, [1]):
+        assert client.post(path, json={"text": "x", "autopilot": bad}).status_code == 400
+    assert client.post(path, json={"text": "Build it", "autopilot": True}).status_code == 200
+    assert "Plan first" in rig.launches()[0]
+
+
+def test_a_goal_without_autopilot_does_not_ask_for_a_plan(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    client.post(f"/api/projects/{project.id}/goal", json={"text": "Just do it"})
+    assert "Plan first" not in rig.launches()[0]
+    assert client.get(f"/api/projects/{project.id}/autopilot").json()["phase"] == "off"
+
+
 def test_the_terminal_needs_the_token_first(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     client = _client(rig.daemon())

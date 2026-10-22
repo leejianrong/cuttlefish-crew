@@ -73,6 +73,18 @@ in the terminal does, and the control characters in a message are removed so it 
 Codex and kopicode sessions are not shown there yet. A device paired through the relay needs the Approve level to read it, because it shows what the
 agent's tools printed. `GET /api/projects/{id}/chat?after=<cursor>` is the same thing for a script, and `POST /api/projects/{id}/chat` with `{"text": ...}` sends a message.
 
+**Autopilot** is on by default for a builder given a goal from the dashboard. The builder is told to plan first: to write
+a checklist (`- [ ] step`) to `.cuttlefish/artifacts/plan.md` and wait. The Chat tab shows the plan as a card with **Approve
+the plan**, and a rail with the goal, the checklist and the run's figures. Once you approve, the builder works through the
+steps ticking `- [x]`, and whenever it stops with steps left the daemon sends it "continue", until the plan is done, a limit is
+reached (24 hours, 5 million tokens, 200 nudges; set the first two on the goal card), or it is **stuck** (three nudges in a
+row with no step ticked). It asks you only for a permission, or if it is blocked and says so. **Pause** and **Stop
+Autopilot** are in the rail (and above the thread on a phone); they stop the nudging, not the agent mid-step. Everything
+Autopilot sends goes through the same guarded path as a message you type, so it never types into a permission dialog. Its
+state survives a daemon restart (it is in the journal), but a builder that went idle while the daemon was down waits for
+its next stop or for **Nudge now**. `GET /api/projects/{id}/autopilot` and `POST .../autopilot/{approve|pause|resume|stop|nudge}`
+are the same for a script; the goal route takes `"autopilot": true` or `{"hours": 8, "tokens": 2000000, "nudges": 100}`.
+
 The round and team workflow is under **Advanced: run a team of roles** on the same page. Click **Start team** there, or:
 
 ```bash
