@@ -1,8 +1,9 @@
 <script lang="ts">
-  // The Chat tab (CUT-172, ADR-0044): the agent's conversation, read from its own session record
-  // (Claude Code's transcript) and never stored a second time. Read-only here; typing into the
-  // session is CUT-173, so the notice at the foot says where to type until then. A permission
-  // the builder is waiting on is answered inline, with the same card as Needs you.
+  // The Chat tab (CUT-172 to CUT-175, CUT-179, ADR-0044): the agent's conversation, read from its own
+  // session record (Claude Code's transcript) and never stored a second time, with a box that types
+  // into the same session, the plan rail and the artifact canvas. A permission the builder is
+  // waiting on is answered inline, with the same card as Needs you. On a phone it is one column:
+  // a plan strip, the thread scrolling with the page, and the message box pinned above the bottom bar.
   import type { FleetClient, NeedsYouRequest } from "../api";
   import { FleetApiError } from "../api";
   import {
@@ -66,14 +67,26 @@
   // Which tool rows the reader opened. A plain set of ids: a row keeps its id as the thread grows.
   let opened = $state<Record<string, boolean>>({});
 
+  // One column on a phone (CUT-179): the page scrolls, not the thread, so there is no second scroll
+  // area to fight with, and the message box is pinned above the bottom bar.
+  let phone = $state(typeof window !== "undefined" && window.matchMedia("(max-width: 640px)").matches);
+  let navPx = $state(0);
+
   function nearFoot(): boolean {
+    if (phone) {
+      const page = document.documentElement;
+      return page.scrollHeight - window.scrollY - window.innerHeight < 160;
+    }
     if (!scroller) return true;
     return scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
   }
 
   function jump() {
-    if (!scroller) return;
-    scroller.scrollTop = scroller.scrollHeight;
+    if (phone) {
+      window.scrollTo({ top: document.documentElement.scrollHeight });
+    } else if (scroller) {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
     atFoot = true;
     unseen = 0;
   }
@@ -136,17 +149,45 @@
   $effect(() => {
     const media = window.matchMedia("(min-width: 62rem)");
     const big = window.matchMedia("(min-width: 84rem)");
+    const small = window.matchMedia("(max-width: 640px)");
     const follow = () => {
       wide = media.matches;
       huge = big.matches;
+      phone = small.matches;
+      navPx = document.getElementById("shell-nav")?.offsetHeight ?? 0;
     };
+    follow();
     media.addEventListener("change", follow);
     big.addEventListener("change", follow);
+    small.addEventListener("change", follow);
+    window.addEventListener("resize", follow);
     return () => {
       media.removeEventListener("change", follow);
       big.removeEventListener("change", follow);
+      small.removeEventListener("change", follow);
+      window.removeEventListener("resize", follow);
     };
   });
+
+  // The page's own scroll is the thread's on a phone.
+  $effect(() => {
+    if (!phone || !active) return;
+    const onPage = () => onScroll();
+    window.addEventListener("scroll", onPage, { passive: true });
+    return () => window.removeEventListener("scroll", onPage);
+  });
+
+  // A file the builder made, opened from the thread (CUT-179): the canvas shows it, and on a narrow
+  // screen the folded canvas opens and scrolls into view.
+  let canvasOpen = $state(false);
+  let pinned = $state<string | null>(null);
+  let canvasEl: HTMLDetailsElement | undefined = $state();
+
+  function showMade(path: string) {
+    pinned = path;
+    canvasOpen = true;
+    queueMicrotask(() => canvasEl?.scrollIntoView({ block: "start", behavior: "smooth" }));
+  }
 
   $effect(() => {
     const id = projectId;
@@ -231,12 +272,25 @@
 {#if showRail && autopilot}
   <details class="rail-wrap" open={wide}>
     <summary class="rail-summary body-medium">
-      <span>
-        {autopilot.plan && autopilot.plan.total > 0
-          ? `Plan: ${autopilot.plan.done} of ${autopilot.plan.total} done`
-          : "Plan"}
+      <span class="strip-top">
+        <span class="strip-title">
+          {#if autopilot.plan && autopilot.plan.total > 0}
+            Plan: {autopilot.plan.steps.find((s) => !s.done)?.text ?? "every step done"}
+          {:else}
+            Plan
+          {/if}
+        </span>
+        <span class="muted strip-count">
+          {autopilot.plan && autopilot.plan.total > 0
+            ? `${autopilot.plan.done} of ${autopilot.plan.total}`
+            : phaseLabel(autopilot.phase)}
+        </span>
       </span>
-      <span class="muted">{phaseLabel(autopilot.phase)}</span>
+      {#if autopilot.plan && autopilot.plan.total > 0}
+        <span class="strip-bar" aria-hidden="true">
+          <span class="strip-fill" style:width="{(autopilot.plan.done / autopilot.plan.total) * 100}%"></span>
+        </span>
+      {/if}
     </summary>
     <PlanRail status={autopilot} busy={controlBusy} error={controlError} onControl={control} />
   </details>
@@ -309,6 +363,18 @@
             </ul>
           {/if}
         </div>
+        {#each row.made as file (file.path)}
+          <!-- Shown even when the calls are folded: what the builder made is the point of the run. -->
+          <button type="button" class="made" onclick={() => showMade(file.path)}>
+            <span class="made-icon" aria-hidden="true">{file.kind === "image" ? "▣" : file.kind === "video" ? "▶" : "◧"}</span>
+            <span class="made-text">
+              <span class="label-large">{file.name}</span>
+              <span class="body-small muted">
+                {file.kind === "image" ? "Image" : file.kind === "video" ? "Video" : "Design"} from the builder, opens in the canvas
+              </span>
+            </span>
+          </button>
+        {/each}
       {:else if row.t === "divider"}
         <div class="divider label-medium muted" role="separator"><span>{row.text}</span></div>
       {:else if row.t === "note"}
@@ -352,7 +418,7 @@
   {/if}
 
   {#if composer}
-    <div class="composer">
+    <div class="composer" style:bottom={phone ? `${navPx}px` : undefined}>
       <label class="field">
         <span class="field-label">Message the builder</span>
         <textarea
@@ -383,9 +449,14 @@
   </p>
 </section>
 
-<details class="canvas-wrap" open={huge}>
+<details
+  class="canvas-wrap"
+  open={huge || canvasOpen}
+  bind:this={canvasEl}
+  ontoggle={(e) => (canvasOpen = (e.currentTarget as HTMLDetailsElement).open)}
+>
   <summary class="rail-summary body-medium">Artifacts</summary>
-  <ArtifactCanvas {client} {projectId} {active} onOpenAll={onOpenArtifacts} />
+  <ArtifactCanvas {client} {projectId} {active} {pinned} onOpenAll={onOpenArtifacts} />
 </details>
 </div>
 
@@ -454,6 +525,47 @@
     padding: 0 0.75rem;
     border-radius: var(--md-sys-shape-corner-medium, 12px);
     background: var(--md-sys-color-surface-container);
+  }
+
+  /* The plan strip (CUT-179): the step it is on and how far along, in one tappable row. */
+  .rail-summary:has(.strip-top) {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .strip-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: baseline;
+  }
+
+  .strip-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .strip-count {
+    flex: none;
+  }
+
+  .strip-bar {
+    display: block;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--md-sys-color-surface-container-highest);
+    overflow: hidden;
+  }
+
+  .strip-fill {
+    display: block;
+    height: 100%;
+    background: var(--md-sys-color-primary);
   }
 
   .rail-wrap > :global(.rail) {
@@ -682,9 +794,53 @@
     min-height: 2.75rem;
   }
 
+  /* A file the builder made, as a card in the thread. */
+  .made {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    width: 100%;
+    min-height: 3.5rem;
+    padding: 0.6rem 0.9rem;
+    border: 1px solid var(--md-sys-color-outline-variant);
+    border-radius: var(--md-sys-shape-corner-large, 16px);
+    background: var(--md-sys-color-surface-container-lowest);
+    color: var(--md-sys-color-on-surface);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .made:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 2px;
+  }
+
+  .made-icon {
+    font-size: 1.5rem;
+    color: var(--md-sys-color-primary);
+  }
+
+  .made-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
   @media (max-width: 640px) {
+    /* One scroll area: the page's. The thread is as tall as it is, and the box stays in reach. */
     .scroller {
-      max-height: 60dvh;
+      max-height: none;
+      overflow-y: visible;
+    }
+
+    .composer {
+      position: sticky;
+      z-index: 5;
+      padding: 0.5rem 0 0.5rem;
+      background: var(--md-sys-color-surface);
+      border-top: 1px solid var(--md-sys-color-outline-variant);
     }
   }
 </style>

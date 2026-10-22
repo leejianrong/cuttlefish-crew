@@ -66,8 +66,49 @@ export interface ToolCall {
 
 export type Row =
   | { t: "message"; who: "you" | "builder"; id: string; at: string | null; text: string }
-  | { t: "tools"; id: string; calls: ToolCall[]; at: string | null; label: string; failed: number }
+  | {
+      t: "tools";
+      id: string;
+      calls: ToolCall[];
+      at: string | null;
+      label: string;
+      failed: number;
+      /** Files the calls left for a person in the artifacts folder (CUT-179): shown as cards. */
+      made: MadeFile[];
+    }
   | { t: "divider" | "note" | "command"; id: string; at: string | null; text: string };
+
+export interface MadeFile {
+  /** Relative to the artifacts folder, the form the canvas and the daemon use. */
+  path: string;
+  name: string;
+  kind: "image" | "video" | "html";
+}
+
+const ARTIFACTS_MARK = ".cuttlefish/artifacts/";
+const MADE_KINDS: Record<string, MadeFile["kind"]> = {
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  svg: "image",
+  mp4: "video",
+  webm: "video",
+  html: "html",
+  htm: "html",
+};
+
+/** A file a Write call put in the artifacts folder that the canvas can show, from the call's path. */
+export function madeFile(call: Pick<ToolCall, "name" | "summary">): MadeFile | null {
+  if (call.name !== "Write") return null;
+  const at = call.summary.indexOf(ARTIFACTS_MARK);
+  if (at < 0) return null;
+  const path = call.summary.slice(at + ARTIFACTS_MARK.length);
+  const kind = MADE_KINDS[path.split(".").pop()?.toLowerCase() ?? ""];
+  if (!kind || path.includes("..")) return null;
+  return { path, name: path.split("/").pop() ?? path, kind };
+}
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read"]);
@@ -117,7 +158,7 @@ export function toRows(items: readonly ChatItem[]): Row[] {
   let group: Extract<Row, { t: "tools" }> | null = null;
   const place = (at: string | null) => {
     if (!group) {
-      group = { t: "tools", id: `tools-${rows.length}`, calls: [], at, label: "", failed: 0 };
+      group = { t: "tools", id: `tools-${rows.length}`, calls: [], at, label: "", failed: 0, made: [] };
       rows.push(group);
     }
     return group;
@@ -153,6 +194,9 @@ export function toRows(items: readonly ChatItem[]): Row[] {
     if (row.t === "tools") {
       row.label = toolLabel(row.calls) || "Used a tool";
       row.failed = row.calls.filter((c) => c.result?.isError).length;
+      row.made = row.calls
+        .map(madeFile)
+        .filter((m): m is MadeFile => m !== null && !row.calls.some((c) => c.result?.isError && madeFile(c)?.path === m.path));
     }
   }
   return rows;

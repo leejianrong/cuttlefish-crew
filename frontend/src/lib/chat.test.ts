@@ -5,6 +5,7 @@ import {
   EMPTY_CHAT,
   applyChat,
   chatNotice,
+  madeFile,
   composerState,
   clockTime,
   toRows,
@@ -191,5 +192,34 @@ describe("composerState", () => {
   it("is on when idle, and on with a caveat when it cannot tell", () => {
     expect(composerState(withActivity("idle"))).toEqual({ enabled: true, hint: "The builder is waiting for you." });
     expect(composerState(withActivity("unknown"))?.hint).toContain("not known");
+  });
+});
+
+describe("madeFile", () => {
+  it("recognises a Write into the artifacts folder of a kind the canvas shows", () => {
+    expect(madeFile({ name: "Write", summary: "/work/ledger/.cuttlefish/artifacts/monthly-totals.png" })).toEqual({
+      path: "monthly-totals.png",
+      name: "monthly-totals.png",
+      kind: "image",
+    });
+    expect(madeFile({ name: "Write", summary: "/w/.cuttlefish/artifacts/demo/walk.MP4" })?.kind).toBe("video");
+    expect(madeFile({ name: "Write", summary: "/w/.cuttlefish/artifacts/d.html" })?.kind).toBe("html");
+  });
+  it("ignores other tools, other folders, markdown and a path that climbs out", () => {
+    expect(madeFile({ name: "Edit", summary: "/w/.cuttlefish/artifacts/a.png" })).toBeNull();
+    expect(madeFile({ name: "Write", summary: "/w/src/a.png" })).toBeNull();
+    expect(madeFile({ name: "Write", summary: "/w/.cuttlefish/artifacts/plan.md" })).toBeNull();
+    expect(madeFile({ name: "Write", summary: "/w/.cuttlefish/artifacts/../../x.png" })).toBeNull();
+  });
+  it("puts what a run of calls made on its row, unless the write failed", () => {
+    const rows = toRows([
+      call("1", "Write", "/w/.cuttlefish/artifacts/a.png"),
+      result("1", "ok"),
+      call("2", "Write", "/w/.cuttlefish/artifacts/b.png"),
+      result("2", "denied", true),
+    ]);
+    const tools = rows[0];
+    if (tools.t !== "tools") throw new Error("expected tools");
+    expect(tools.made.map((m) => m.path)).toEqual(["a.png"]);
   });
 });
