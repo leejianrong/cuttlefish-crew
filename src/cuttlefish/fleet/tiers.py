@@ -76,6 +76,8 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("DELETE", "/api/devices/{device_id}"): Tier.APPROVE,  # a lost phone is cut off from another
     # The agent's terminal.
     ("WS", "/api/projects/{project_id}/terminal"): Tier.TERMINAL,
+    # Typing into the agent's session from the chat box: the same typed access.
+    ("POST", "/api/projects/{project_id}/chat"): Tier.TERMINAL,
     # Settings, secrets, folders, projects and devices.
     ("GET", "/api/fs"): Tier.ADMIN,
     ("GET", "/api/fs/inspect"): Tier.ADMIN,

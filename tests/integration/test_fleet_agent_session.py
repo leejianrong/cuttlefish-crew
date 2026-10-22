@@ -252,6 +252,102 @@ def test_the_chat_of_another_tool_says_it_is_not_there_yet(rig: Rig) -> None:
     assert body["supported"] is False and body["backend"] == "codex" and body["items"] == []
 
 
+# -- typing into the session from the chat box (CUT-173) ---------------------------------------
+
+
+def _raw_reader(rig: Rig, *, banner: str = "") -> Path:
+    """Make the fake `claude` a terminal program that asks for bracketed paste, reads raw bytes and
+    logs each one it gets. Returns the log. `banner` is printed first (a dialog, say)."""
+    log = rig.tmp / "keys.log"
+    tool = rig.bin / "claude"
+    tool.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os, sys, termios, tty\n"
+        f"sys.stdout.write({banner!r} + '\\x1b[?2004h'); sys.stdout.flush()\n"
+        "tty.setraw(0)\n"
+        f"out = open({str(log)!r}, 'ab', buffering=0)\n"
+        "while True:\n"
+        "    data = os.read(0, 4096)\n"
+        "    if not data: break\n"
+        "    out.write(data)\n"
+    )
+    tool.chmod(0o755)
+    return log
+
+
+def _bytes_seen(log: Path, needle: bytes, seconds: float = 6.0) -> bytes:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if log.exists() and needle in log.read_bytes():
+            return log.read_bytes()
+        time.sleep(0.05)
+    raise AssertionError(f"never saw {needle!r}; got {log.read_bytes() if log.exists() else b''!r}")
+
+
+def _started(rig: Rig, backend: str = "claude-code") -> tuple[TestClient, str]:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend=backend)
+    client = _client(rig.daemon())
+    client.post(f"/api/projects/{project.id}/agent-session/start", json={})
+    time.sleep(0.8)  # the tool has to be up and have asked for bracketed paste
+    return client, project.id
+
+
+def test_a_chat_message_is_pasted_as_one_bracketed_block_and_then_sent(rig: Rig) -> None:
+    log = _raw_reader(rig)
+    client, pid = _started(rig)
+    sent = client.post(f"/api/projects/{pid}/chat", json={"text": "line one\nline two"})
+    assert sent.status_code == 200 and sent.json()["sent"] in ("delivered", "queued")
+    seen = _bytes_seen(log, b"\r")
+    # One paste with both lines inside the markers (so the newline is not an Enter), then Enter.
+    assert seen == b"\x1b[200~line one\nline two\x1b[201~\r"
+
+
+def test_escape_sequences_in_a_message_cannot_break_out_of_the_paste(rig: Rig) -> None:
+    log = _raw_reader(rig)
+    client, pid = _started(rig)
+    client.post(f"/api/projects/{pid}/chat", json={"text": "a\x1b[201~y\x1b[200~b"})
+    seen = _bytes_seen(log, b"\r")
+    assert seen == b"\x1b[200~a[201~y[200~b\x1b[201~\r"
+
+
+def test_nothing_is_typed_while_a_dialog_is_on_the_screen(rig: Rig) -> None:
+    banner = "Do you want to proceed?\\r\\n\u276f 1. Yes\\r\\n  2. No\\r\\n"
+    log = _raw_reader(rig, banner=banner)
+    client, pid = _started(rig)
+    refused = client.post(f"/api/projects/{pid}/chat", json={"text": "hello"})
+    assert refused.status_code == 409 and "waiting on a permission" in refused.json()["detail"]
+    time.sleep(0.5)
+    assert not log.exists() or log.read_bytes() == b""
+
+
+def test_a_message_needs_a_running_claude_code_session(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    path = f"/api/projects/{project.id}/chat"
+    assert client.post(path, json={"text": "hi"}).status_code == 409  # not running
+    assert client.post(path, json={}).status_code == 400
+    assert client.post("/api/projects/nope/chat", json={"text": "hi"}).status_code == 404
+    started = _started(rig)
+    assert started[0].post(path, json={"text": "   "}).status_code == 409  # nothing to say
+
+
+def test_a_codex_builder_is_told_the_chat_input_is_not_wired_in_yet(rig: Rig) -> None:
+    (rig.bin / "codex").write_text("#!/bin/sh\nexec sleep 300\n")
+    (rig.bin / "codex").chmod(0o755)
+    client, pid = _started(rig, backend="codex")
+    refused = client.post(f"/api/projects/{pid}/chat", json={"text": "hi"})
+    assert (
+        refused.status_code == 409 and "only wired in for Claude Code" in refused.json()["detail"]
+    )
+
+
+def test_the_chat_reports_what_the_session_is_doing(rig: Rig) -> None:
+    _raw_reader(rig)
+    client, pid = _started(rig)
+    body = client.get(f"/api/projects/{pid}/chat").json()
+    assert body["activity"]["state"] == "unknown"  # no hook has fired yet
+
+
 def test_the_terminal_needs_the_token_first(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     client = _client(rig.daemon())

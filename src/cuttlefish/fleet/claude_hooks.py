@@ -17,6 +17,7 @@ import collections
 import contextlib
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -41,6 +42,9 @@ _REMEMBERED_CALLS = 64
 _TAIL_EVERY_S = 1.0
 _DETAIL_CHARS = 1024
 _REJECTED = "doesn't want to proceed"
+#: A turn with no hook for this long is shown as unknown, not busy: Esc in the terminal ends a turn
+#: without a `Stop`, so silence is the only sign of it.
+_BUSY_SILENCE_S = 300.0
 
 Gone = Callable[[], Awaitable[None]]
 
@@ -96,9 +100,34 @@ class ClaudeHooks:
         #: follows the session when Claude Code starts a new one (`/clear`), which a path worked
         #: out from the recorded session id would not.
         self._transcripts: dict[str, str] = {}
+        #: project id -> what the session's hooks last said it was doing, and when (monotonic).
+        self._activity: dict[str, tuple[str, float]] = {}
+        #: Projects whose terminal is showing a dialog of its own: a permission the daemon left to
+        #: it. Cleared by the next hook that shows the session moved on.
+        self._terminal_dialog: set[str] = set()
 
     def transcript_path(self, project_id: str) -> str | None:
         return self._transcripts.get(project_id)
+
+    def holds(self, project_id: str) -> bool:
+        """Whether a permission card of this session is waiting for an answer."""
+        return bool(self._held.get(project_id))
+
+    def activity(self, project_id: str) -> tuple[str, float | None]:
+        """What the session is doing, from its hooks (CUT-173): ``dialog`` (a permission is waiting,
+        here or in the terminal), ``busy``, ``idle``, or ``unknown`` (no hook seen yet, or a turn
+        that has been silent so long a lost ``Stop`` is likelier than a long tool). The second
+        value is how many seconds ago that was said."""
+        if self._held.get(project_id) or project_id in self._terminal_dialog:
+            return "dialog", None
+        seen = self._activity.get(project_id)
+        if seen is None:
+            return "unknown", None
+        state, at = seen
+        age = time.monotonic() - at
+        if state == "busy" and age > _BUSY_SILENCE_S:
+            return "unknown", age
+        return state, age
 
     # -- entry -------------------------------------------------------------------------------
 
@@ -109,6 +138,12 @@ class ClaudeHooks:
         reported = _str(payload.get("transcript_path"))
         if reported:
             self._transcripts[project.id] = reported
+        if event in ("UserPromptSubmit", "PreToolUse", "PostToolUse"):
+            self._terminal_dialog.discard(project.id)
+            self._activity[project.id] = ("busy", time.monotonic())
+        elif event == "Stop":
+            self._terminal_dialog.discard(project.id)
+            self._activity[project.id] = ("idle", time.monotonic())
         tool = str(payload.get("tool_name") or "")
         raw = payload.get("tool_input")
         tool_input: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
@@ -124,7 +159,10 @@ class ClaudeHooks:
         elif event in ("UserPromptSubmit", "Stop"):
             self._supersede(project.id)
         elif event == "PermissionRequest":
-            return await self._permission(project, payload, tool, tool_input, gone)
+            answer = await self._permission(project, payload, tool, tool_input, gone)
+            if not answer and project.mode != "auto":
+                self._terminal_dialog.add(project.id)  # the terminal's own dialog asks
+            return answer
         return {}
 
     # -- the decision ------------------------------------------------------------------------
@@ -284,6 +322,8 @@ class ClaudeHooks:
         """The person stopped the agent session: its cards end and its hooks go quiet."""
         self._daemon.requests.end_team(session_scope(project_id), "cancelled")
         self._calls.pop(project_id, None)
+        self._activity.pop(project_id, None)
+        self._terminal_dialog.discard(project_id)
 
 
 def _str(value: object) -> str | None:

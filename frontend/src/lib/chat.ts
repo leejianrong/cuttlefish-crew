@@ -34,6 +34,8 @@ export interface ChatResponse {
   reset?: boolean;
   /** Lines of the record that were not understood. */
   skipped?: number;
+  /** What the session is doing, from its hooks and its screen (Claude Code only). */
+  activity?: { state: "idle" | "busy" | "dialog" | "unknown" | "none"; seconds: number | null };
   path?: string;
 }
 
@@ -179,4 +181,39 @@ export function chatNotice(response: ChatResponse | null, held: number): string 
   if (held === 0)
     return response.session === "running" ? "Nothing has been said yet." : "This session has no messages.";
   return null;
+}
+
+export interface Composer {
+  /** Whether the box takes a message now. */
+  enabled: boolean;
+  /** One line under the box: what sending does now, or why it cannot. */
+  hint: string;
+}
+
+/** What the message box does, from the last read. Hidden (null) for a builder whose input is not
+ * wired in (only Claude Code's is), so the box never offers what the daemon would refuse. */
+export function composerState(response: ChatResponse | null): Composer | null {
+  if (response === null || !response.supported) return null;
+  if (response.session !== "running") {
+    return { enabled: false, hint: "The builder is not running. Give it a goal on the Overview to start it." };
+  }
+  switch (response.activity?.state) {
+    case "dialog":
+      return {
+        enabled: false,
+        hint: "The builder is waiting on a permission. Answer it above, or in the Terminal tab, first: a message typed now would be read as the answer.",
+      };
+    case "busy":
+      return {
+        enabled: true,
+        hint: "The builder is working. Your message is queued and read at its next step.",
+      };
+    case "idle":
+      return { enabled: true, hint: "The builder is waiting for you." };
+    default:
+      return {
+        enabled: true,
+        hint: "No activity seen from the builder yet, so it is not known whether it is ready. A dialog open in the Terminal would stop the message.",
+      };
+  }
 }

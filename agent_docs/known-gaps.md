@@ -290,6 +290,13 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **The Chat message box is built on assumptions about Claude Code's TUI that have not been checked live (CUT-173).**
+  Verified: the bytes tmux sends (a bracketed paste, line feeds kept, then Enter) against a fake raw-mode program. Not
+  verified against a real Claude Code: that 0.3 s between the paste and Enter is enough for a large paste (Claude Code
+  collapses one into "[Pasted text]"), that a message sent mid-turn is queued and not lost, and the dialog wording the
+  screen check matches (`sessions/chat_input.py`). Busy shows only for hooks the session was launched with; a session
+  started before this change, or one whose hooks fail, reads "unknown" and the screen check is the only guard. A dialog
+  the terminal's own user refused fires no hook, so the daemon trusts the screen over its own flag.
 - **The Chat tab's parser is Claude Code's undocumented format (CUT-172).** It reads the transcript JSONL as seen on
   2.1.300 to 2.1.308 and ignores what it does not know, counting lines it cannot parse (the thread says how many were left
   out). A first read of a big file starts from its end and widens (1 MB, then 4, up to 32 MB) until it holds about 120 items

@@ -39,7 +39,9 @@ class Tmux:
     def available(self) -> bool:
         return shutil.which(self.binary) is not None
 
-    def _run(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    def _run(
+        self, *args: str, check: bool = True, input: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         if not self.available():
             raise TmuxError(
                 f"{self.binary!r} is not installed; the agent session needs tmux"
@@ -52,6 +54,7 @@ class Tmux:
             text=True,
             check=False,
             timeout=15,
+            input=input,
         )
         if check and result.returncode != 0:
             raise TmuxError(
@@ -85,3 +88,23 @@ class Tmux:
 
     def kill_session(self, name: str) -> None:
         self._run("kill-session", "-t", f"={name}", check=False)
+
+    # -- typing into a session (CUT-173) ------------------------------------------------------
+
+    def paste(self, name: str, text: str) -> None:
+        """Put ``text`` in the session's input as one bracketed paste, so a tool that asked for
+        it (Claude Code does) reads it as pasted text and not as keystrokes: a newline in it is a
+        line break, not Enter (``-r`` keeps it a newline, which tmux would make a carriage
+        return). ``text`` is cleaned of control characters by the caller; a paste's end marker
+        inside it would otherwise let the rest be read as keys."""
+        buffer = f"cf-paste-{name}"
+        self._run("load-buffer", "-b", buffer, "-", input=text)
+        self._run("paste-buffer", "-p", "-r", "-d", "-b", buffer, "-t", f"={name}:")
+
+    def press_enter(self, name: str) -> None:
+        self._run("send-keys", "-t", f"={name}:", "Enter")
+
+    def capture(self, name: str, lines: int = 15) -> str:
+        """The last ``lines`` non-blank lines the session's screen shows."""
+        shown = self._run("capture-pane", "-p", "-t", f"={name}:").stdout.splitlines()
+        return "\n".join([line for line in shown if line.strip()][-lines:])

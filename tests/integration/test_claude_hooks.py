@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -142,6 +143,52 @@ async def test_auto_mode_and_a_question_are_left_to_the_terminal(rig: Rig) -> No
     rig.set_mode("standard")
     assert await rig.hook("PermissionRequest", tool_name="AskUserQuestion", tool_input={}) == {}
     assert await rig.cards() == []
+
+
+# -- what the session is doing, from its hooks (CUT-173) -------------
+
+
+async def test_the_session_is_unknown_busy_idle_or_waiting_on_a_dialog(rig: Rig) -> None:
+    hooks = rig.daemon._claude_hooks
+    assert hooks.activity(rig.project_id) == ("unknown", None)
+    await rig.hook("UserPromptSubmit")
+    assert hooks.activity(rig.project_id)[0] == "busy"
+    await rig.hook("Stop")
+    assert hooks.activity(rig.project_id)[0] == "idle"
+    held = rig.start(
+        "PermissionRequest", tool_name="Bash", tool_input={"command": "docker compose up -d"}
+    )
+    card = await rig.one_card()
+    assert hooks.activity(rig.project_id) == ("dialog", None) and hooks.holds(rig.project_id)
+    await rig.answer(card, "allow_once")
+    await asyncio.wait_for(held, 5)
+    await rig.hook("PostToolUse", tool_name="Bash", tool_input={"command": "docker compose up -d"})
+    assert hooks.activity(rig.project_id)[0] == "busy" and not hooks.holds(rig.project_id)
+
+
+async def test_a_dialog_left_to_the_terminal_blocks_until_the_session_moves_on(rig: Rig) -> None:
+    hooks = rig.daemon._claude_hooks
+    assert await rig.hook("PermissionRequest", tool_name="AskUserQuestion", tool_input={}) == {}
+    assert hooks.activity(rig.project_id)[0] == "dialog" and not hooks.holds(rig.project_id)
+    await rig.hook("PostToolUse", tool_name="AskUserQuestion", tool_input={})
+    assert hooks.activity(rig.project_id)[0] == "busy"
+
+
+async def test_a_turn_silent_for_minutes_is_unknown_not_busy(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    hooks = rig.daemon._claude_hooks
+    await rig.hook("UserPromptSubmit")
+    real = time.monotonic()
+    monkeypatch.setattr(time, "monotonic", lambda: real + 600)
+    assert hooks.activity(rig.project_id)[0] == "unknown"
+
+
+async def test_stopping_the_session_forgets_what_it_was_doing(rig: Rig) -> None:
+    hooks = rig.daemon._claude_hooks
+    await rig.hook("UserPromptSubmit")
+    hooks.end_session(rig.project_id)
+    assert hooks.activity(rig.project_id) == ("unknown", None)
 
 
 # -- a card, held until a person answers ----------------------------
