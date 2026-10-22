@@ -191,6 +191,43 @@ async def test_stopping_the_session_forgets_what_it_was_doing(rig: Rig) -> None:
     assert hooks.activity(rig.project_id) == ("unknown", None)
 
 
+# -- Autopilot is driven by the Stop hook (CUT-174) --------------
+
+
+async def test_the_stop_hook_moves_a_planning_builder_to_awaiting_approval(rig: Rig) -> None:
+    from cuttlefish.autopilot import Limits
+    from cuttlefish.plan import PLAN_PATH
+
+    project = rig.daemon.projects.get(rig.project_id)
+    rig.daemon.autopilot._settle_s = 0.02
+    await rig.daemon.autopilot.begin(project, "Build it", "claude-code", Limits())
+    await rig.hook("Stop")
+    await asyncio.sleep(0.2)
+    assert (await rig.daemon.autopilot.status(project))["phase"] == "planning"  # no plan yet
+    plan = rig.root / PLAN_PATH
+    plan.parent.mkdir(parents=True)
+    plan.write_text("- [ ] one\n- [ ] two\n")
+    await rig.hook("UserPromptSubmit")
+    await rig.hook("Stop")
+    for _ in range(50):
+        await asyncio.sleep(0.05)
+        if (await rig.daemon.autopilot.status(project))["phase"] == "awaiting_approval":
+            break
+    assert (await rig.daemon.autopilot.status(project))["phase"] == "awaiting_approval"
+
+
+async def test_a_new_prompt_right_after_a_stop_means_no_nudge_is_pending(rig: Rig) -> None:
+    from cuttlefish.autopilot import Limits
+
+    project = rig.daemon.projects.get(rig.project_id)
+    rig.daemon.autopilot._settle_s = 0.3
+    await rig.daemon.autopilot.begin(project, "Build it", "claude-code", Limits())
+    await rig.hook("Stop")
+    assert rig.project_id in rig.daemon.autopilot._tasks
+    await rig.hook("UserPromptSubmit")
+    assert rig.project_id not in rig.daemon.autopilot._tasks
+
+
 # -- a card, held until a person answers ----------------------------
 
 

@@ -232,6 +232,15 @@ and this folder disagree after a slice lands, update this folder.
   Codex and kopicode builders get no box (their input is not wired in). The foot says the Terminal tab is the same
   session. The plan rail and canvas of `Main.dc.html` arrive with CUT-174 and CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
   say their record is not wired in yet.
+- **Plan rail, plan card and Autopilot (CUT-174, 2026-10-22).** On a wide screen (62rem and up) the Chat tab is two columns: a
+  17rem **plan rail** (Goal; Plan with a progress bar and the checklist as done, now and to do with a text mark, not colour
+  alone; Run with the state in words, nudges, tokens and time against their limits, and the controls) and the thread. Under
+  62rem the rail folds into a `details` row ("Plan: 3 of 6 done, Running on its own") and **Pause, Nudge now and Stop** (or Approve and Stop)
+  stay as 44px buttons beside it. A plan waiting for approval is a card at the foot of the thread (a primary
+  **Approve the plan** and a coral "Waiting for you" pill, the only use of attention colour here besides a permission). The
+  Overview's goal card has an **Autopilot** switch, on by default, with time and token limits and one honest paragraph of what
+  it does; while a builder runs it shows `Autopilot: Running on its own, 2 of 6 steps` and **Open the chat** and **Open the
+  terminal**. Source board: `Main.dc.html`, `Phone.dc.html`.
 - **Give the builder a goal (CUT-171, 2026-10-22).** On Overview, when no team is running, a **Give the builder a goal**
   card sits above the Agent session card and replaces the "Start a team" form as the main way to start. A goal box
   (3 rows, Ctrl or Cmd+Enter sends), three example chips, a Claude Code / Codex choice (seeded from the project's

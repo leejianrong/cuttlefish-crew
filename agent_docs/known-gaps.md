@@ -290,6 +290,16 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **Autopilot has not run against a real Claude Code, and not for hours (CUT-174).** Built and tested against a fake builder,
+  a synthetic transcript and the real hook script. Unverified: that Claude Code follows the plan-first instruction (it is in
+  the appended system prompt; Codex gets it on the end of the goal), that it ticks `plan.md` as it goes (no ticks means "stuck"
+  after three nudges, by design), that a `Stop` hook fires at every end of turn and not on an Esc interrupt, and that
+  "continue" pasted at the next stop behaves like a person's message. Known limits: the supervisor reacts to the `Stop`
+  hook, so a builder that went idle while the daemon was down, or whose hooks failed, waits for the next stop or the
+  **Nudge now** button; the time limit is only checked when the builder stops, so a
+  turn that never ends is not cut short; "stuck" does not use `stuck.py`'s environment signatures yet and does not raise a
+  Needs you card, so nothing outside the page tells a person away from it; the token figure leaves out cache reads and is a
+  guard, not a bill; the daemon restarting between an approval message and its journal line could send it twice.
 - **The Chat message box is built on assumptions about Claude Code's TUI that have not been checked live (CUT-173).**
   Verified: the bytes tmux sends (a bracketed paste, line feeds kept, then Enter) against a fake raw-mode program. Not
   verified against a real Claude Code: that 0.3 s between the paste and Enter is enough for a large paste (Claude Code

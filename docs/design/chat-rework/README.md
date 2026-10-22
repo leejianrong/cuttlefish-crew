@@ -95,6 +95,14 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
   exact bytes) and from the browser; **not** verified against a real Claude Code (Enter timing after a large paste,
   whether Claude Code queues a message sent mid-turn as assumed, its dialog wording, `SessionStart`/trust-dialog handling).
 
+- CUT-174 the plan card and Autopilot (decisions in ADR-0044): a goal given with Autopilot on (the default from the
+  dashboard) tells the builder to write a checklist to `.cuttlefish/artifacts/plan.md` and wait; on its `Stop` hook the
+  supervisor moves to "plan waiting for you" when a checklist exists; **Approve the plan** sends the fixed approval message;
+  from then on each `Stop` with steps left sends "continue" (after 2 s, unless the turn went on), bounded by time, tokens
+  and nudges, stuck after three nudges with no ticked step, with Pause, Carry on and Stop in the rail (and on a phone, above
+  the thread). State is the journal's last `AutopilotUpdated`. Checked with a fake builder and a synthetic transcript through
+  the real hook script, the daemon and the browser; **not** with a real Claude Code, and not over hours.
+
 ## Build order (cards)
 
 1. CUT-169 terminal theme, CUT-170 shell terminal (small, independent).
@@ -104,7 +112,7 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
 5. CUT-175 artifact canvas, CUT-176 Overview digest and timeline, CUT-179 phone.
 6. CUT-177 Codex, then CUT-178 kopicode.
 
-## Open
+## Open (the first, third and fourth were decided in CUT-174: see ADR-0044)
 
 - Whether the Autopilot supervisor is a satay workflow (ADR-0001, durable across a daemon restart) or a daemon loop whose
   state lives in the episodic journal. ADR-0032 left the same question open for a session-first path; the first slice

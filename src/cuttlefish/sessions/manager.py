@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Literal
 
 from cuttlefish.artifacts import AGENT_NOTE
+from cuttlefish.plan import PLAN_INSTRUCTION
 from cuttlefish.sessions.hooks import permission_mode
 from cuttlefish.sessions.tmux import Tmux, TmuxError, session_name, shell_session_name
 
@@ -174,6 +175,7 @@ def launch_argv(
     kopicode_binary: str = "kopicode",
     claude_args: Sequence[str] = (),
     prompt: str | None = None,
+    plan_first: bool = False,
 ) -> list[str]:
     """The command that starts the backend's interactive tool, resuming when asked.
 
@@ -183,14 +185,22 @@ def launch_argv(
     ``prompt`` is the first message (a goal, CUT-171): both claude and codex take it as a trailing
     argument, so nothing is typed into a terminal that may be showing a dialog. kopicode's REPL
     has no such argument, so a prompt for it is refused rather than dropped.
+
+    ``plan_first`` (Autopilot, CUT-174) tells the builder to write a checklist and wait to be
+    approved:
+    in Claude Code's system prompt, which keeps the first message the person's own words, and on the
+    end of the goal for Codex, which has no such flag.
     """
     first = _first_prompt(prompt) if prompt else None
+    if first and plan_first and backend == "codex":
+        first = f"{first}\n\n{PLAN_INSTRUCTION}"
+    system_note = f"{AGENT_NOTE} {PLAN_INSTRUCTION}" if plan_first else AGENT_NOTE
     tail = f" {shlex.quote(first)}" if first else ""
     if backend == "claude-code":
         sid = shlex.quote(session_id)
         # `claude_args`: our hooks and permission mode (ADR-0040), for a resume as for a start.
         note = (
-            f"--append-system-prompt {shlex.quote(AGENT_NOTE)} {shlex.join(claude_args)}".rstrip()
+            f"--append-system-prompt {shlex.quote(system_note)} {shlex.join(claude_args)}".rstrip()
             + tail
         )
         if resume:
@@ -204,7 +214,7 @@ def launch_argv(
             "--session-id",
             session_id,
             "--append-system-prompt",
-            AGENT_NOTE,
+            system_note,
             *claude_args,
             *([first] if first else []),
         ]
@@ -271,6 +281,7 @@ class SessionManager:
         mode: str = "standard",
         hooks_settings: Path | None = None,
         prompt: str | None = None,
+        plan_first: bool = False,
     ) -> SessionInfo:
         """Make sure the project's agent is running in tmux, and record which way it got there.
 
@@ -307,6 +318,7 @@ class SessionManager:
                 resume=previous,
                 kopicode_binary=self._kopicode,
                 prompt=prompt,
+                plan_first=plan_first,
                 claude_args=(
                     ["--settings", str(hooks_settings), "--permission-mode", permission_mode(mode)]
                     if hooked

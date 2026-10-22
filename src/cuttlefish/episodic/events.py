@@ -473,6 +473,35 @@ class EnvironmentPrepared:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class AutopilotUpdated:
+    """Autopilot's state for a project's builder, whole, each time it changes (CUT-174, ADR-0044).
+
+    A snapshot, not a delta, so the last one is the state and a daemon that restarts picks it up
+    by reading that one back; there is no second store of it (ADR-0004). ``phase`` is one of
+    ``planning``, ``awaiting_approval``, ``running``, ``paused``, ``done``, ``stopped``, ``limit``
+    and ``stuck``; ``reason`` says why it last moved, in words a person reads. ``goal`` is redacted
+    by the store at write time like any journaled text."""
+
+    EVENT_TYPE: ClassVar[str] = "AutopilotUpdated"
+
+    phase: str
+    goal: str
+    backend: str
+    reason: str = ""
+    approved_at: str | None = None
+    nudges: int = 0
+    nudges_since_progress: int = 0
+    #: Steps ticked when the last nudge went out, to tell whether it made progress.
+    steps_done_before: int = 0
+    #: The session's token total when the plan was approved; what it has used since is the
+    #: difference.
+    tokens_baseline: int = 0
+    limit_hours: float = 24.0
+    limit_tokens: int = 5_000_000
+    limit_nudges: int = 200
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class UnknownPayload:
     """A payload whose event type this build does not recognise, preserved verbatim.
 
@@ -513,6 +542,7 @@ EventPayload = (
     | RoundUsageUpdated
     | EnvironmentPrepareStarted
     | EnvironmentPrepared
+    | AutopilotUpdated
     | UnknownPayload
 )
 
@@ -544,6 +574,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         RoundUsageUpdated,
         EnvironmentPrepareStarted,
         EnvironmentPrepared,
+        AutopilotUpdated,
     )
 }
 

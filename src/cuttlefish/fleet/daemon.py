@@ -37,6 +37,7 @@ from satay.journal.store import SQLiteStore
 
 from cuttlefish import artifacts, environment, envprep, logsetup, runtime
 from cuttlefish.artifacts import Artifact
+from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import PreparedRun, prepare_run, resolve_agent_backend
@@ -57,6 +58,7 @@ from cuttlefish.episodic.events import (
 from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet import gitexclude
+from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
@@ -314,6 +316,8 @@ class FleetDaemon:
         self.requests = RequestBroker(self._append_for_team)
         #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
         self._claude_hooks = ClaudeHooks(self)
+        #: Keeps a builder going after its plan is approved (CUT-174, ADR-0044).
+        self.autopilot = Autopilot(self)
         #: The credential broker (ADR-0031): started with the first team that needs it.
         self._broker: Broker | None = None
 
@@ -407,6 +411,24 @@ class FleetDaemon:
             "path": str(found),
         }
 
+    async def autopilot_status(self, project_id: str) -> dict[str, Any]:
+        return await self.autopilot.status(self._projects.get(project_id))
+
+    async def autopilot_action(self, project_id: str, action: str) -> dict[str, Any]:
+        """One of Autopilot's fixed actions, then its state (CUT-174)."""
+        project = self._projects.get(project_id)
+        actions = {
+            "approve": self.autopilot.approve,
+            "pause": self.autopilot.pause,
+            "resume": self.autopilot.resume,
+            "stop": self.autopilot.stop,
+            "nudge": self.autopilot.nudge_now,
+        }
+        if action not in actions:
+            raise FleetError(f"no Autopilot action called {action!r}; one of {', '.join(actions)}")
+        await actions[action](project)
+        return await self.autopilot.status(project)
+
     @staticmethod
     def _screen(tmux: Tmux, name: str) -> str:
         try:
@@ -462,13 +484,21 @@ class FleetDaemon:
         return await asyncio.to_thread(read_goal, project.root)
 
     async def give_goal(
-        self, project_id: str, text: str, backend: str | None = None
+        self,
+        project_id: str,
+        text: str,
+        backend: str | None = None,
+        *,
+        autopilot: Limits | None = None,
     ) -> tuple[dict[str, str], SessionInfo]:
         """Start the project's builder with ``text`` as its first message (CUT-171).
 
         The goal goes in as the tool's own first-message argument, not typed into its terminal,
         so it cannot land in a dialog. A builder that is already running has a conversation to type
-        to instead (`FleetError`), and the goal is only recorded once the session has started."""
+        to instead (`FleetError`), and the goal is only recorded once the session has started.
+
+        ``autopilot`` (its limits) turns Autopilot on (CUT-174): the builder is told to plan first
+        and wait for approval, and the daemon keeps it going after that."""
         goal = text.strip()
         if not goal:
             raise FleetError("Say what the builder should do.")
@@ -478,12 +508,21 @@ class FleetDaemon:
             )
         project = self._projects.get(project_id)
         chosen = resolve_agent_backend(backend or project.backend)
-        info = await self.start_agent_session(project_id, chosen, prompt=goal)
+        info = await self.start_agent_session(
+            project_id, chosen, prompt=goal, plan_first=autopilot is not None
+        )
         record = await asyncio.to_thread(write_goal, project.root, goal, chosen)
+        if autopilot is not None:
+            await self.autopilot.begin(project, goal, chosen, autopilot)
         return record, info
 
     async def start_agent_session(
-        self, project_id: str, backend: str | None = None, *, prompt: str | None = None
+        self,
+        project_id: str,
+        backend: str | None = None,
+        *,
+        prompt: str | None = None,
+        plan_first: bool = False,
     ) -> SessionInfo:
         """Start the project's agent in tmux, or reattach to it, or relaunch it with its resume
         command. ``backend`` defaults to the project's own, else `CUTTLEFISH_AGENT_BACKEND`.
@@ -507,6 +546,7 @@ class FleetDaemon:
                     mode=project.mode,
                     hooks_settings=settings,
                     prompt=prompt,
+                    plan_first=plan_first,
                 )
             )
         except SessionError as exc:
@@ -541,6 +581,7 @@ class FleetDaemon:
         # Cards the session holds end now, and the hooks waiting on them are told there is no
         # decision (ADR-0040), before the tmux session goes.
         self._claude_hooks.end_session(project.id)
+        await self.autopilot.stop(project, "The builder's session was stopped.")
         return await asyncio.to_thread(self._session_manager().stop, project.id, project.root)
 
     async def reconcile_agent_sessions(self) -> list[tuple[str, SessionInfo | str]]:
@@ -689,6 +730,27 @@ class FleetDaemon:
     ) -> dict[str, Any]:
         """One hook of the project's Claude Code session (ADR-0040): what to tell its script."""
         return await self._claude_hooks.handle(self._projects.get(project_id), payload, gone)
+
+    def session_events(self, project: Project) -> list[EpisodicEvent]:
+        """Every event of the project's agent session, read-only (Autopilot reads its state)."""
+        return self._session_events(project)
+
+    def append_session_event(self, project: Project, payload: EventPayload) -> None:
+        """Journal ``payload`` under the project's agent session, in the loop thread."""
+        self.open_session_journal(project)
+        scope = session_scope(project.id)
+        self._team_stores[scope].append(scope, payload)
+
+    def chat_transcript_path(self, project: Project) -> Path | None:
+        """Where the builder's Claude Code transcript is, or ``None`` (no session or not Claude)."""
+        record = self._session_manager().status(project.id, project.root)
+        if record.backend != "claude-code" or not record.session_id:
+            return None
+        hooked = self._claude_hooks.transcript_path(project.id)
+        paths = ([Path(hooked)] if hooked else []) + candidate_paths(
+            project.root, record.session_id
+        )
+        return next((p for p in paths if p.is_file()), None)
 
     def _session_events(self, project: Project) -> list[EpisodicEvent]:
         """Every event of the project's agent session (its hook cards), read-only."""
