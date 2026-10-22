@@ -163,6 +163,36 @@ def _auth(ws: Any, token: str = "t", **extra: Any) -> None:
     ws.send_text(json.dumps({"type": "auth", "token": token, **extra}))
 
 
+def test_giving_a_goal_starts_the_builder_with_it_and_records_it(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    assert client.get(f"/api/projects/{project.id}/goal").json() == {"goal": None}
+    given = client.post(f"/api/projects/{project.id}/goal", json={"text": "  Add a summary  "})
+    assert given.status_code == 200
+    body = given.json()
+    assert body["goal"]["text"] == "Add a summary"
+    assert body["session"]["state"] == "running" and body["session"]["last_action"] == "started"
+    assert rig.launches()[0].endswith("Add a summary")
+    assert client.get(f"/api/projects/{project.id}/goal").json()["goal"]["text"] == "Add a summary"
+
+
+def test_a_goal_for_a_running_builder_is_refused_and_not_recorded(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    client.post(f"/api/projects/{project.id}/agent-session/start", json={})
+    refused = client.post(f"/api/projects/{project.id}/goal", json={"text": "Another"})
+    assert refused.status_code == 409 and "already running" in refused.json()["detail"]
+    assert client.get(f"/api/projects/{project.id}/goal").json() == {"goal": None}
+
+
+def test_a_goal_needs_text_and_a_known_project(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    assert client.post(f"/api/projects/{project.id}/goal", json={}).status_code == 400
+    assert client.post(f"/api/projects/{project.id}/goal", json={"text": "   "}).status_code == 409
+    assert client.post("/api/projects/nope/goal", json={"text": "x"}).status_code == 404
+
+
 def test_the_terminal_needs_the_token_first(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     client = _client(rig.daemon())

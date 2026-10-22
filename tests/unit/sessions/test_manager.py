@@ -219,3 +219,61 @@ def test_ensure_shell_again_reuses_it_and_a_stopped_shell_starts_fresh(rig: Rig)
     assert not rig.tmux.has_session(name)
     rig.manager.ensure_shell("p1", str(rig.root))
     _type_and_wait(rig, name, "echo fresh=[${SENTINEL-unset}]", "fresh=[unset]")
+
+
+# -- a goal as the first message (CUT-171) ------------------------------------------------------
+
+
+def test_a_goal_is_the_first_message_of_a_fresh_claude_or_codex_session(rig: Rig) -> None:
+    root = str(rig.root)
+    claude = launch_argv("claude-code", root=root, session_id="abc", resume=False, prompt="Fix it")
+    assert claude[-1] == "Fix it" and claude[:3] == ["claude", "--session-id", "abc"]
+    assert launch_argv("codex", root=root, session_id="x", resume=False, prompt="Fix it") == [
+        "codex",
+        "Fix it",
+    ]
+
+
+def test_a_goal_reaches_a_resumed_session_as_one_quoted_argument(rig: Rig) -> None:
+    root = str(rig.root)
+    resumed = launch_argv(
+        "claude-code", root=root, session_id="abc", resume=True, prompt='it\'s "quoted" $(x)'
+    )
+    assert resumed[:2] == ["sh", "-c"]
+    # Both the resume and the fresh fallback carry it, quoted so the shell reads it as one word.
+    assert resumed[2].count("'it'\"'\"'s \"quoted\" $(x)'") == 2
+    codex = launch_argv("codex", root=root, session_id="x", resume=True, prompt="go")
+    assert codex[2] == "codex resume --last go || exec codex go"
+
+
+def test_a_goal_that_looks_like_a_flag_cannot_become_one(rig: Rig) -> None:
+    root = str(rig.root)
+    argv = launch_argv(
+        "claude-code",
+        root=root,
+        session_id="a",
+        resume=False,
+        prompt="--dangerously-skip-permissions",
+    )
+    assert argv[-1] == "Goal: --dangerously-skip-permissions"
+
+
+def test_kopicode_has_no_first_message_so_a_goal_is_refused_not_dropped(rig: Rig) -> None:
+    with pytest.raises(SessionError, match="does not take a first message"):
+        launch_argv("kopicode", root=str(rig.root), session_id="x", resume=False, prompt="go")
+
+
+def test_ensure_with_a_goal_starts_the_tool_with_it_and_refuses_a_running_one(rig: Rig) -> None:
+    rig.manager.ensure("p1", str(rig.root), "claude-code", prompt="Build the thing")
+    assert rig.launches()[0].endswith("Build the thing")
+    with pytest.raises(SessionError, match="already running"):
+        rig.manager.ensure("p1", str(rig.root), "claude-code", prompt="Another")
+
+
+def test_the_goal_is_recorded_beside_the_session_and_read_back(rig: Rig) -> None:
+    from cuttlefish.sessions.manager import read_goal, write_goal
+
+    assert read_goal(str(rig.root)) is None
+    written = write_goal(str(rig.root), "Ship it", "claude-code")
+    assert read_goal(str(rig.root)) == written
+    assert written["text"] == "Ship it" and written["backend"] == "claude-code"

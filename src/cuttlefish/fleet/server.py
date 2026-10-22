@@ -1028,6 +1028,31 @@ def create_app(
         except (FleetError, ConfigError) as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @app.get("/api/projects/{project_id}/goal")
+    async def get_goal(project_id: str) -> dict[str, Any]:
+        try:
+            return {"goal": await daemon.goal(project_id)}
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/goal")
+    async def give_goal(project_id: str, request: Request) -> dict[str, Any]:
+        """Give the project's builder a goal (CUT-171): start its session with the goal as the
+        first message. 409 when it cannot (already running, or a backend with no first message)."""
+        body = await _json_body(request)
+        text, backend = body.get("text"), body.get("backend")
+        if not isinstance(text, str):
+            raise HTTPException(400, "'text' is required")
+        if backend is not None and not isinstance(backend, str):
+            raise HTTPException(400, "'backend', if given, must be a string")
+        try:
+            goal, session = await daemon.give_goal(project_id, text, backend)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except (FleetError, ConfigError) as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"goal": goal, "session": session.to_json()}
+
     @app.post("/api/projects/{project_id}/agent-session/stop")
     async def stop_agent_session(project_id: str) -> dict[str, Any]:
         try:

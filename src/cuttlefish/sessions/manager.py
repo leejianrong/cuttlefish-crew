@@ -104,6 +104,31 @@ def _write(root: str, record: Mapping[str, object]) -> None:
     scratch.replace(path)
 
 
+def _goal_path(root: str) -> Path:
+    return Path(root) / ".cuttlefish" / "goal.json"
+
+
+def read_goal(root: str) -> dict[str, str] | None:
+    """The goal last given to the project's builder (CUT-171): ``text``, ``at`` and ``backend``."""
+    try:
+        data = json.loads(_goal_path(root).read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("text"), str):
+        return None
+    return {k: v for k, v in data.items() if isinstance(v, str)}
+
+
+def write_goal(root: str, text: str, backend: str) -> dict[str, str]:
+    goal = {"text": text, "at": _now(), "backend": backend}
+    path = _goal_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    scratch = path.with_suffix(".tmp")
+    scratch.write_text(json.dumps(goal, indent=2, sort_keys=True))
+    scratch.replace(path)
+    return goal
+
+
 def wanted(root: str) -> bool:
     return _read(root).get("wanted") is True
 
@@ -134,6 +159,12 @@ def _latest_kopicode_session(binary: str, root: str) -> str | None:
     return best[1] if best else None
 
 
+def _first_prompt(text: str) -> str:
+    """``text`` as one argument that cannot be read as a flag: the tools take their first message
+    as a trailing positional, so a goal that begins with ``-`` is given a lead-in."""
+    return f"Goal: {text}" if text.startswith("-") else text
+
+
 def launch_argv(
     backend: str,
     *,
@@ -142,17 +173,25 @@ def launch_argv(
     resume: bool,
     kopicode_binary: str = "kopicode",
     claude_args: Sequence[str] = (),
+    prompt: str | None = None,
 ) -> list[str]:
     """The command that starts the backend's interactive tool, resuming when asked.
 
     Where a resume can fail because there is no conversation to resume (the agent was killed
     before its first prompt), the shell form falls back to a fresh start in the same command.
+
+    ``prompt`` is the first message (a goal, CUT-171): both claude and codex take it as a trailing
+    argument, so nothing is typed into a terminal that may be showing a dialog. kopicode's REPL
+    has no such argument, so a prompt for it is refused rather than dropped.
     """
+    first = _first_prompt(prompt) if prompt else None
+    tail = f" {shlex.quote(first)}" if first else ""
     if backend == "claude-code":
         sid = shlex.quote(session_id)
         # `claude_args`: our hooks and permission mode (ADR-0040), for a resume as for a start.
         note = (
             f"--append-system-prompt {shlex.quote(AGENT_NOTE)} {shlex.join(claude_args)}".rstrip()
+            + tail
         )
         if resume:
             return [
@@ -167,12 +206,18 @@ def launch_argv(
             "--append-system-prompt",
             AGENT_NOTE,
             *claude_args,
+            *([first] if first else []),
         ]
     if backend == "codex":
         if resume:
-            return ["sh", "-c", "codex resume --last || exec codex"]
-        return ["codex"]
+            return ["sh", "-c", f"codex resume --last{tail} || exec codex{tail}"]
+        return ["codex", *([first] if first else [])]
     if backend == "kopicode":
+        if first:
+            raise SessionError(
+                "kopicode's interactive session does not take a first message yet; "
+                "start the session and type the goal in the Terminal"
+            )
         previous = _latest_kopicode_session(kopicode_binary, root) if resume else None
         return [kopicode_binary, "-resume", previous] if previous else [kopicode_binary]
     raise SessionError(f"no interactive session for backend {backend!r}")
@@ -225,12 +270,16 @@ class SessionManager:
         *,
         mode: str = "standard",
         hooks_settings: Path | None = None,
+        prompt: str | None = None,
     ) -> SessionInfo:
         """Make sure the project's agent is running in tmux, and record which way it got there.
 
         ``hooks_settings`` (Claude Code only, ADR-0040) is the settings file that gives the session
         its permission hook, launched with the permission mode ``mode`` maps to. A session that is
-        found already running keeps the way it was launched."""
+        found already running keeps the way it was launched.
+
+        ``prompt`` is a first message for a tool that is being launched now. A session that is
+        already running cannot take it without typing into its terminal, so that is refused."""
         if backend not in BACKENDS:
             raise SessionError(f"backend {backend!r} has no interactive session")
         name = session_name(project_id)
@@ -240,6 +289,10 @@ class SessionManager:
         except TmuxError as exc:
             raise SessionError(str(exc)) from exc
         action: Action
+        if alive and prompt:
+            raise SessionError(
+                "the builder is already running, so it has a conversation to type to"
+            )
         if alive:
             action = "reattached"
         else:
@@ -253,6 +306,7 @@ class SessionManager:
                 session_id=session_id,
                 resume=previous,
                 kopicode_binary=self._kopicode,
+                prompt=prompt,
                 claude_args=(
                     ["--settings", str(hooks_settings), "--permission-mode", permission_mode(mode)]
                     if hooked

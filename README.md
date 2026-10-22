@@ -104,8 +104,11 @@ and add it. Repeat for `~/crew-demo/notes-site` with the Solo builder team. (Fro
 a terminal, `uv run cuttlefish projects add --name todo-api --root ~/crew-demo/todo-api`
 does the same; add `--max-tokens 200000` to cap a project's token use.)
 
-**4. Start both crews.** Open **todo-api**, give the builder a task, and press
-**Start team**:
+**4. Start both crews.** Open **todo-api**. These two demo projects use kopicode, whose
+interactive session cannot take a first message yet, so use **Advanced: run a team of roles** on the
+Overview, give the builder a task, and press **Start team**. (For a project you want to work on with
+Claude Code or Codex, the main box is **Give the builder a goal**: it starts that agent in its own
+terminal with your goal as its first message.)
 
 > Add a remove(item) method to TodoList in todo.py, and a test for it. Then run
 > `uname -a` and tell me what it prints.
