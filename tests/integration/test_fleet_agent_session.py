@@ -242,12 +242,19 @@ def test_the_chat_is_read_from_the_claude_code_transcript(
     assert client.get("/api/projects/nope/chat").status_code == 404
 
 
-def test_the_chat_of_kopicode_says_it_is_not_there_yet(rig: Rig) -> None:
+def test_the_chat_of_kopicode_is_read_from_its_events(rig: Rig) -> None:
     (rig.bin / "kopicode").write_text("#!/bin/sh\nexec sleep 300\n")
     (rig.bin / "kopicode").chmod(0o755)
     client, pid = _started(rig, backend="kopicode")
+    assert client.get(f"/api/projects/{pid}/chat").json()["waiting"] is True  # no events yet
+    folder = rig.root / ".kopicode" / "sessions" / "s1"
+    folder.mkdir(parents=True)
+    said = {"session_id": "s1", "seq": 2, "type": "UserMessage", "ts": "2026-10-22T10:00:00Z",
+            "payload": {"text": {"inline": "Hello kopicode", "size": 14}}}  # fmt: skip
+    (folder / "events.jsonl").write_text(json.dumps(said) + "\n")
     body = client.get(f"/api/projects/{pid}/chat").json()
-    assert body["supported"] is False and body["backend"] == "kopicode" and body["items"] == []
+    assert body["supported"] and [i["text"] for i in body["items"]] == ["Hello kopicode"]
+    assert "activity" not in body  # no message box for it
 
 
 def test_the_chat_of_codex_is_read_from_its_rollout(

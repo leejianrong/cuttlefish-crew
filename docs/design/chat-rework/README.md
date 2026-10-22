@@ -114,6 +114,14 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
   is open), and Autopilot's token meter reads Claude's usage lines only. Checked against synthetic lines and against five real
   rollouts on this machine (counts only: 0 lines not understood); not against a live Codex run through the dashboard.
 
+- CUT-178 the chat for kopicode, the last of the order: read from `<repo>/.kopicode/sessions/<id>/events.jsonl`
+  (`sessions/kopicode_record.py`): `UserMessage`, `AssistantMessage`, `ToolCallParsed` with its `ToolResult` (by `call_id`) and
+  `AskRequested` become the same chat items; provider traffic, permissions and bookkeeping are left out. The REPL in tmux makes
+  its own session id, so the record is the newest `events.jsonl` written after the tmux session started. Read-only, as Codex
+  (kopicode's REPL has no hook to say a dialog is open, ADR research CUT-91). Checked against synthetic lines and the two real
+  sessions in this repo's `.kopicode` (0 lines not understood); not against a live kopicode REPL through the dashboard.
+  All three backends now have a chat; the whole of CUT-E20's order (Claude Code, Codex, kopicode) is built.
+
 ## Build order (cards)
 
 1. CUT-169 terminal theme, CUT-170 shell terminal (small, independent).

@@ -214,13 +214,11 @@ export function clockTime(iso: string | null): string {
 export function chatNotice(response: ChatResponse | null, held: number): string | null {
   if (response === null) return "Reading the conversation…";
   if (!response.supported) {
-    if (response.backend === "kopicode")
-      return "The chat view reads the agent's own session record, and kopicode's is not wired in yet. Use the Terminal tab; this view follows.";
     return "No builder has been started for this project. Give it a goal on the Overview and its conversation appears here.";
   }
   if (response.waiting) {
-    return response.backend === "codex"
-      ? "The builder is starting. Its conversation appears once Codex has written its session record, after its first message."
+    return response.backend === "codex" || response.backend === "kopicode"
+      ? `The builder is starting. Its conversation appears once ${response.backend === "codex" ? "Codex" : "kopicode"} has written its session record, after its first message.`
       : "The builder is starting. Its conversation appears once Claude Code has written to its record. A new folder asks you to trust it first, in the Terminal tab.";
   }
   if (held === 0)

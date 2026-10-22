@@ -98,6 +98,7 @@ from cuttlefish.sessions import (
 from cuttlefish.sessions.chat_input import MessageError, clean_message, dialog_open
 from cuttlefish.sessions.codex_record import find_rollout, read_rollout
 from cuttlefish.sessions.hooks import write_settings
+from cuttlefish.sessions.kopicode_record import find_events, read_events
 from cuttlefish.sessions.manager import read_goal, write_goal
 from cuttlefish.sessions.manager import wanted as session_wanted
 from cuttlefish.sessions.tmux import TmuxError
@@ -369,12 +370,12 @@ class FleetDaemon:
             "backend": info.backend,
             "session": info.state,
             "session_id": info.session_id,
-            "supported": info.backend in ("claude-code", "codex"),
+            "supported": info.backend in ("claude-code", "codex", "kopicode"),
             "items": [],
             "cursor": 0,
         }
-        if info.backend == "codex":
-            return await self._codex_chat(project, info, base, after)
+        if info.backend in ("codex", "kopicode"):
+            return await self._file_chat(project, info, base, after)
         if info.backend != "claude-code" or not info.session_id:
             return base
         state, seconds = self._claude_hooks.activity(project.id)
@@ -417,31 +418,38 @@ class FleetDaemon:
             "path": str(found),
         }
 
-    def _codex_rollout(self, project: Project, started: float) -> Path | None:
-        """The Codex rollout for the project's folder: the one last used, unless a newer one has
-        appeared (a new session in the same terminal), looked for at most every 15 seconds."""
+    def _session_record(self, project: Project, backend: str, started: float) -> Path | None:
+        """The record file of a Codex or kopicode session for the project's folder: the one last
+        used, unless a newer one has appeared (a new session in the same terminal), looked for at
+        most every 15 seconds."""
         cached = self._codex_records.get(project.id)
         now = time.monotonic()
         if cached is not None and cached[0].is_file() and now - cached[1] < 15:
             return cached[0]
-        found = find_rollout(project.root, not_before=started)
+        if backend == "codex":
+            found = find_rollout(project.root, not_before=started)
+        else:
+            found = find_events(project.root, not_before=started)
         if found is None:
             return cached[0] if cached is not None and cached[0].is_file() else None
         self._codex_records[project.id] = (found, now)
         return found
 
-    async def _codex_chat(
+    async def _file_chat(
         self, project: Project, info: SessionInfo, base: dict[str, Any], after: int | None
     ) -> dict[str, Any]:
+        """The chat of a Codex (CUT-177) or kopicode (CUT-178) builder, read from its own record.
+        Neither takes a message from the page yet, so there is no activity to report."""
         started = _parse_stamp(info.at) - 5 if info.at else 0.0
         before = self._codex_records.get(project.id)
-        found = await asyncio.to_thread(self._codex_rollout, project, started)
+        found = await asyncio.to_thread(self._session_record, project, info.backend or "", started)
         if found is None:
             return {**base, "waiting": True}
         reset = before is not None and before[0] != found
+        read = read_rollout if info.backend == "codex" else read_events
         thread = await asyncio.to_thread(
             functools.partial(
-                read_rollout,
+                read,
                 found,
                 None if reset else after,
                 scrub=lambda t: Redactor().scrub(t)[0],

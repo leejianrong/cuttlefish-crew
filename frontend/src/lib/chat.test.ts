@@ -154,7 +154,7 @@ describe("chatNotice", () => {
   it("says what it is waiting for, and is silent when there is a thread", () => {
     expect(chatNotice(null, 0)).toContain("Reading");
     expect(chatNotice(read([], { waiting: true, backend: "codex" }), 0)).toContain("Codex has written");
-    expect(chatNotice(read([], { supported: false, backend: "kopicode" }), 0)).toContain("kopicode");
+    expect(chatNotice(read([], { waiting: true, backend: "kopicode" }), 0)).toContain("kopicode has written");
     expect(chatNotice(read([], { supported: false, backend: null }), 0)).toContain("Give it a goal");
     expect(chatNotice(read([], { waiting: true }), 0)).toContain("trust it first");
     expect(chatNotice(read([]), 0)).toBe("Nothing has been said yet.");
@@ -169,7 +169,7 @@ describe("composerState", () => {
 
   it("is hidden for a builder whose input is not wired in", () => {
     expect(composerState(null)).toBeNull();
-    expect(composerState(read([], { supported: false, backend: "kopicode" }))).toBeNull();
+    expect(composerState(read([], { backend: "kopicode" }))).toBeNull();
     expect(composerState(read([], { backend: "codex" }))).toBeNull(); // read, not typed to, for now
   });
 

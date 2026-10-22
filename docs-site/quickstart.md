@@ -85,7 +85,7 @@ permission waiting here or in the terminal), because a dialog would read the mes
 comes from the session's hooks and the last lines of its screen. It needs the Terminal level on a paired device, as typing
 in the terminal does, and the control characters in a message are removed so it cannot end its own paste early.
 A Codex session is shown there too, read from Codex's own session record (`~/.codex/sessions`, found by the project's folder);
-it is read-only, so type to a Codex builder in the Terminal tab. kopicode sessions are not shown there yet. A device paired through the relay needs the Approve level to read it, because it shows what the
+it is read-only, so type to a Codex builder in the Terminal tab. A kopicode session is shown there too, from `<project>/.kopicode/sessions/*/events.jsonl`, also read-only. A device paired through the relay needs the Approve level to read it, because it shows what the
 agent's tools printed. `GET /api/projects/{id}/chat?after=<cursor>` is the same thing for a script, and `POST /api/projects/{id}/chat` with `{"text": ...}` sends a message.
 
 **Autopilot** is on by default for a builder given a goal from the dashboard. The builder is told to plan first: to write
