@@ -290,6 +290,12 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **The Codex chat is read-only and found by folder (CUT-177).** The rollout is the newest `rollout-*.jsonl` whose first line names the
+  project's folder and that was written after the session started, looked for again every 15 seconds, so two Codex sessions
+  in one folder at once show the newer. There is no message box (no dialog detection for Codex), no token meter for Autopilot's
+  limit (the nudge and time limits still hold; Autopilot only plans for Claude Code and Codex is told to by its first message),
+  and tool calls that Codex records only as `response_item` lines (not `item_completed`) are not shown. Format observed on
+  codex-cli 0.155.1.
 - **The phone chat is checked in emulation only (CUT-179).** The pinned message box is placed from the bottom bar's measured
   height and the page's scroll; how it behaves with a real on-screen keyboard (`visualViewport`), Safari's toolbar and a
   notch is not checked, as for the Terminal (CUT-98). The thread follows the foot by page scroll, so a long thread makes a long page.

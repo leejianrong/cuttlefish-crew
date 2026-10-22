@@ -96,6 +96,7 @@ from cuttlefish.sessions import (
     default_socket,
 )
 from cuttlefish.sessions.chat_input import MessageError, clean_message, dialog_open
+from cuttlefish.sessions.codex_record import find_rollout, read_rollout
 from cuttlefish.sessions.hooks import write_settings
 from cuttlefish.sessions.manager import read_goal, write_goal
 from cuttlefish.sessions.manager import wanted as session_wanted
@@ -317,6 +318,8 @@ class FleetDaemon:
         self.requests = RequestBroker(self._append_for_team)
         #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
         self._claude_hooks = ClaudeHooks(self)
+        #: project id -> the Codex rollout its chat reads, and when it was last looked for.
+        self._codex_records: dict[str, tuple[Path, float]] = {}
         #: Keeps a builder going after its plan is approved (CUT-174, ADR-0044).
         self.autopilot = Autopilot(self)
         #: The credential broker (ADR-0031): started with the first team that needs it.
@@ -357,8 +360,8 @@ class FleetDaemon:
     async def chat(self, project_id: str, after: int | None = None) -> dict[str, Any]:
         """The project's chat thread, read from the agent's own session record (CUT-172).
 
-        Claude Code only for now (its transcript JSONL); Codex and kopicode report
-        ``supported: false`` with their name, so the page can say where to look instead. ``after``
+        Claude Code (its transcript JSONL) and Codex (its rollout, CUT-177); kopicode reports
+        ``supported: false`` with its name, so the page can say where to look instead. ``after``
         is the cursor the last read returned, or ``None`` for the first read."""
         project = self._projects.get(project_id)
         info = await asyncio.to_thread(self._session_manager().status, project.id, project.root)
@@ -366,10 +369,12 @@ class FleetDaemon:
             "backend": info.backend,
             "session": info.state,
             "session_id": info.session_id,
-            "supported": info.backend == "claude-code",
+            "supported": info.backend in ("claude-code", "codex"),
             "items": [],
             "cursor": 0,
         }
+        if info.backend == "codex":
+            return await self._codex_chat(project, info, base, after)
         if info.backend != "claude-code" or not info.session_id:
             return base
         state, seconds = self._claude_hooks.activity(project.id)
@@ -408,6 +413,46 @@ class FleetDaemon:
             "cursor": thread.cursor,
             "earlier": thread.earlier,
             "reset": thread.reset,
+            "skipped": thread.skipped,
+            "path": str(found),
+        }
+
+    def _codex_rollout(self, project: Project, started: float) -> Path | None:
+        """The Codex rollout for the project's folder: the one last used, unless a newer one has
+        appeared (a new session in the same terminal), looked for at most every 15 seconds."""
+        cached = self._codex_records.get(project.id)
+        now = time.monotonic()
+        if cached is not None and cached[0].is_file() and now - cached[1] < 15:
+            return cached[0]
+        found = find_rollout(project.root, not_before=started)
+        if found is None:
+            return cached[0] if cached is not None and cached[0].is_file() else None
+        self._codex_records[project.id] = (found, now)
+        return found
+
+    async def _codex_chat(
+        self, project: Project, info: SessionInfo, base: dict[str, Any], after: int | None
+    ) -> dict[str, Any]:
+        started = _parse_stamp(info.at) - 5 if info.at else 0.0
+        before = self._codex_records.get(project.id)
+        found = await asyncio.to_thread(self._codex_rollout, project, started)
+        if found is None:
+            return {**base, "waiting": True}
+        reset = before is not None and before[0] != found
+        thread = await asyncio.to_thread(
+            functools.partial(
+                read_rollout,
+                found,
+                None if reset else after,
+                scrub=lambda t: Redactor().scrub(t)[0],
+            )
+        )
+        return {
+            **base,
+            "items": thread.items,
+            "cursor": thread.cursor,
+            "earlier": thread.earlier,
+            "reset": thread.reset or reset,
             "skipped": thread.skipped,
             "path": str(found),
         }
@@ -1400,3 +1445,11 @@ def _secret_rows(names: Sequence[str]) -> list[dict[str, str]]:
     return [
         {"name": name, "kind": "credential" if name in credentials else "secret"} for name in names
     ]
+
+
+def _parse_stamp(stamp: str) -> float:
+    """A session record's ISO time as seconds since the epoch, or 0 when it cannot be read."""
+    try:
+        return datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0

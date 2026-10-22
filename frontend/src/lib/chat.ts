@@ -214,14 +214,15 @@ export function clockTime(iso: string | null): string {
 export function chatNotice(response: ChatResponse | null, held: number): string | null {
   if (response === null) return "Reading the conversation…";
   if (!response.supported) {
-    if (response.backend === "codex")
-      return "The chat view reads the agent's own session record, and Codex's is not wired in yet. Use the Terminal tab; this view follows.";
     if (response.backend === "kopicode")
       return "The chat view reads the agent's own session record, and kopicode's is not wired in yet. Use the Terminal tab; this view follows.";
     return "No builder has been started for this project. Give it a goal on the Overview and its conversation appears here.";
   }
-  if (response.waiting)
-    return "The builder is starting. Its conversation appears once Claude Code has written to its record. A new folder asks you to trust it first, in the Terminal tab.";
+  if (response.waiting) {
+    return response.backend === "codex"
+      ? "The builder is starting. Its conversation appears once Codex has written its session record, after its first message."
+      : "The builder is starting. Its conversation appears once Claude Code has written to its record. A new folder asks you to trust it first, in the Terminal tab.";
+  }
   if (held === 0)
     return response.session === "running" ? "Nothing has been said yet." : "This session has no messages.";
   return null;
@@ -237,7 +238,8 @@ export interface Composer {
 /** What the message box does, from the last read. Hidden (null) for a builder whose input is not
  * wired in (only Claude Code's is), so the box never offers what the daemon would refuse. */
 export function composerState(response: ChatResponse | null): Composer | null {
-  if (response === null || !response.supported) return null;
+  // Only Claude Code's input is wired in (CUT-173): Codex's thread is read, and typed in the Terminal.
+  if (response === null || !response.supported || response.backend !== "claude-code") return null;
   if (response.session !== "running") {
     return { enabled: false, hint: "The builder is not running. Give it a goal on the Overview to start it." };
   }
