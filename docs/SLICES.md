@@ -942,3 +942,18 @@ CUT-146 onboarding, CUT-148 terms and deletion, CUT-149 the outside security rev
 on epic CUT-E16.
 
 **Open:** a simple sign-in for the single-user phase; approval on every deploy or only at first.
+
+
+## V9: The chat is a view onto the agent session, and Autopilot keeps a builder going (decided 2026-10-22, not started)
+
+**Why:** a hands-on session found "Start team" wrong for the main use (a builder runs one round, then asks again; replies are
+one-line summaries; the terminal and the page are two unsynced ways to prompt). ADR-0044 builds the part of ADR-0032 that was
+never built: a chat thread onto the project's one agent session, an Autopilot that keeps a builder running for hours or days, and
+a canvas for images, video and designs. Mockups and decisions: `docs/design/chat-rework/`.
+
+**Cards (board CUT, epic CUT-E20):** CUT-169 terminal theme, CUT-170 shell terminal, CUT-171 "Give the builder a goal" replaces
+Start team, CUT-172 chat view for Claude Code, CUT-173 input into the live session, CUT-174 plan card and Autopilot, CUT-175
+artifact canvas, CUT-176 Overview digest and timeline, CUT-177 Codex, CUT-178 kopicode, CUT-179 phone.
+
+**Open:** whether the Autopilot supervisor is a satay workflow or a daemon loop with its state in the journal; the permission mode
+a builder starts in; whether the agent's messages are also journaled.

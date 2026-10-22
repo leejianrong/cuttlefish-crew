@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phone: the same thread</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f4fafa}
+.t{font-family:'Figtree',system-ui,sans-serif;color:#161d1d}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.pill{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:500;background:#e1ebeb;color:#243030}
+.pill.teal{background:#c9f3f6;color:#00363a}
+.pill.coral{background:#ffdbcf;color:#6e2a10}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:44px;padding:0 18px;border-radius:22px;border:0;font:500 14px 'Figtree',sans-serif;cursor:pointer}
+.btn.fill{background:#00696f;color:#ffffff}
+.btn.outline{background:transparent;color:#00696f;border:1px solid #6f7979}
+.btn.tonal{background:#c9f3f6;color:#00363a}
+.nav{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:56px;font-size:12px;color:#243030;text-decoration:none}
+</style>
+</helmet>
+<div class="t" style="width:390px;height:844px;box-sizing:border-box;display:flex;flex-direction:column;background:#f4fafa;overflow:hidden">
+
+  <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid #bfc9c9">
+    <div style="font:700 19px 'Bricolage Grotesque',sans-serif;color:#00696f">ledger</div>
+    <span class="pill">Claude Code</span>
+    <div style="flex-grow:1"></div>
+    <span class="pill teal">Working 6 h 12 m</span>
+  </div>
+
+  <!-- plan strip -->
+  <div style="padding:10px 16px;background:#eef5f5;border-bottom:1px solid #d1dcdc">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:#3a4747"><span>Plan: CLI with summary and chart output</span><span>3 of 6</span></div>
+    <div style="height:6px;border-radius:3px;background:#d5e0e0;margin-top:6px"><div style="width:50%;height:6px;border-radius:3px;background:#00696f"></div></div>
+  </div>
+
+  <div style="flex-grow:1;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;font-size:14px;line-height:1.55">
+    <div>
+      <div style="font-size:12px;font-weight:600;color:#00696f;margin-bottom:3px">Builder, 14:31</div>
+      The CLI prints a summary and can draw a chart. All 41 tests pass. A month with no rows now prints as zero so charts have no gaps.
+    </div>
+
+    <div style="display:flex;gap:12px;align-items:center;border:1px solid #bfc9c9;border-radius:16px;padding:10px;background:#ffffff">
+      <svg width="84" height="56" viewBox="0 0 96 64" role="img" aria-label="Thumbnail of the monthly totals chart" style="border-radius:8px;background:#eef5f5;flex:0 0 84px"><rect x="12" y="30" width="10" height="26" fill="#00696f"/><rect x="28" y="22" width="10" height="34" fill="#00696f"/><rect x="44" y="34" width="10" height="22" fill="#00696f"/><rect x="60" y="14" width="10" height="42" fill="#00696f"/><rect x="76" y="26" width="10" height="30" fill="#00696f"/></svg>
+      <div style="font-size:13px;line-height:1.4"><div style="font-weight:600">monthly-totals.png</div><div style="color:#3a4747">Tap to open</div></div>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:10px;color:#3a4747;font-size:12px">
+      <div style="flex-grow:1;height:1px;background:#bfc9c9"></div><span>Context refreshed, 3 of 20</span><div style="flex-grow:1;height:1px;background:#bfc9c9"></div>
+    </div>
+
+    <div style="border:1px solid #e8a58c;background:#fff4ef;border-radius:16px;padding:12px 14px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill coral">Needs you</span><span style="font-size:13px;color:#3a4747">A command is not on the list</span></div>
+      <div class="mono" style="margin:10px 0;background:#ffffff;border:1px solid #e8c9bd;border-radius:10px;padding:8px 10px;font-size:12.5px;word-break:break-all">git push origin feat/ledger-summary</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn fill">Allow once</button>
+        <button class="btn outline">Deny</button>
+      </div>
+      <button class="btn tonal" style="margin-top:8px;width:100%">Always allow git push</button>
+    </div>
+  </div>
+
+  <!-- composer -->
+  <div style="padding:8px 12px 10px;border-top:1px solid #d1dcdc;background:#f4fafa">
+    <div style="display:flex;gap:8px;align-items:flex-end;border:1px solid #6f7979;border-radius:22px;background:#ffffff;padding:6px 6px 6px 14px">
+      <label for="pm" style="position:absolute;left:-9999px">Message the builder</label>
+      <textarea id="pm" rows="1" placeholder="Message the builder" style="flex-grow:1;border:0;outline:0;resize:none;font:15px 'Figtree',sans-serif;padding:10px 0;background:transparent"></textarea>
+      <button class="btn fill" aria-label="Send">Send</button>
+    </div>
+  </div>
+
+  <!-- bottom nav -->
+  <nav style="display:flex;border-top:1px solid #bfc9c9;background:#eef5f5" aria-label="Project">
+    <a class="nav" href="#chat" style="font-weight:600;color:#00363a">Chat</a>
+    <a class="nav" href="#terminal">Terminal</a>
+    <a class="nav" href="#needs">Needs you <span class="pill coral" style="height:18px;padding:0 7px;font-size:11px">1</span></a>
+    <a class="nav" href="#artifacts">Artifacts</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

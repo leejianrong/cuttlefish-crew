@@ -70,7 +70,7 @@ Not handovers. Its job is a manager's: consolidating progress across projects an
   daemon starts a second turn on the same thread asking for it (fixed headings, commands and edits declined) and keeps the reply
   if it has the Done and Remaining headings. Checked against the real `codex app-server` (codex-cli 0.155.1).
 - **Claude Code** (live stream-json transport) is asked the same way, as another user message on the same process, when a round ends
-  on its time limit, the one limit it has. Written against the scripted fake; a real `claude` has not been run (CUT-140 part 2).
+  on its time limit, the one limit it has. Written against the scripted fake, then run once against a real `claude` by another agent before merge (Jian, 2026-10-22); that run's result was not recorded in the repo (CUT-140 part 2).
 - **The fallback is a digest, not a summary.** `handover._digest` reads the journal (files changed, the agent's last words, failures
   and refusals, what the person said) and says it is not a report the agent wrote. It covers the whole history so it is complete
   without nesting the digest before it, and an agent-written earlier handoff is carried, clipped.
