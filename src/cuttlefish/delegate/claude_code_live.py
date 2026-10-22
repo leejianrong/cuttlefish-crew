@@ -48,9 +48,11 @@ from cuttlefish.delegate.claude_code import (
     _EDIT_TOOLS,
     _NEVER_ALLOWED_BASH_PREFIXES,
     ENV_PASSTHROUGH,
+    _usage_from_result,
     classify_stream,
 )
 from cuttlefish.delegate.codex_app_server import inside
+from cuttlefish.delegate.handoff import HANDOFF_PROMPT, HANDOFF_TIMEOUT, handoff_is_usable
 from cuttlefish.delegate.kopicode_serve import Decider
 from cuttlefish.delegate.subprocess_env import merge_env
 
@@ -140,9 +142,15 @@ class _Connection:
         self._handlers: set[asyncio.Task[None]] = set()
         self._stderr = bytearray()
         self.done: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        #: Deny every tool call: the turn that writes the handoff only talks (ADR-0042).
+        self.refuse_all = False
         assert process.stdout is not None and process.stderr is not None
         self._reader = asyncio.create_task(self._read(process.stdout))
         self._stderr_reader = asyncio.create_task(self._drain(process.stderr))
+
+    def begin_turn(self) -> None:
+        """Wait for the next ``result``, on this same process."""
+        self.done = asyncio.get_running_loop().create_future()
 
     async def stderr_tail(self) -> str:
         with contextlib.suppress(Exception):
@@ -226,6 +234,8 @@ class _Connection:
         tool_input = request.get("input")
         tool_input = tool_input if isinstance(tool_input, Mapping) else {}
         call_id = request.get("tool_use_id")
+        if self.refuse_all:
+            return {"behavior": "deny", "message": "This turn only writes the handoff."}
         if tool == "AskUserQuestion":
             answered = await self._answer_questions(tool_input)
             if answered is not None:
@@ -327,6 +337,7 @@ async def run_claude_code_live(
     env: Mapping[str, str] | None = None,
     timeout: float | None = None,
     conversation: str | None = None,
+    handoff_goal: str | None = None,
 ) -> DelegationOutcome:
     """Run one delegation as one ``claude`` process and one turn, and classify what it did.
 
@@ -338,6 +349,11 @@ async def run_claude_code_live(
     ``decide`` is asked about every ``Bash`` command that prompts as ``("run_shell", "/bin/sh -c
     <line>")``. A turn past ``timeout`` is interrupted (``control_request`` ``interrupt``) and
     reported as a ``round_timeout`` failure; a cancelled call interrupts it and re-raises.
+
+    ``handoff_goal`` (ADR-0042, CUT-140) asks the agent to write its own handoff when the round
+    ends on its time limit (the one limit Claude Code has): another user message on the same
+    process, with every tool call denied, whose reply comes back as the outcome's ``handoff``. Any
+    failure to get one leaves it ``None``.
 
     Raises :class:`DelegationError` for the binary missing or the process dying mid-turn.
     """
@@ -367,6 +383,7 @@ async def run_claude_code_live(
     session = _Session(root, edits=mode != "read-only")
     connection = _Connection(process, session, decide, ask)
     timed_out = False
+    handoff: _Handoff | None = None
     try:
         await connection.write({"type": "user", "message": {"role": "user", "content": task_text}})
         try:
@@ -374,6 +391,8 @@ async def run_claude_code_live(
         except TimeoutError:
             timed_out = True
             await _interrupt(connection)
+            if handoff_goal is not None and any(e.get("type") == "result" for e in session.events):
+                handoff = await _request_handoff(connection, session, handoff_goal)
     except asyncio.CancelledError:
         await asyncio.shield(_interrupt(connection))
         raise
@@ -403,6 +422,15 @@ async def run_claude_code_live(
     outcome = dataclasses.replace(outcome, consent_decisions=session.consents)
     if outcome.kind == "refused" and any(c.answer == "deny" for c in session.consents):
         outcome = dataclasses.replace(outcome, reason=describe_refusals(session.consents))
+    if handoff is not None:
+        outcome = dataclasses.replace(
+            outcome,
+            handoff=handoff.document,
+            tokens=(outcome.tokens or 0) + handoff.tokens if handoff.tokens else outcome.tokens,
+            cost_usd=(outcome.cost_usd or 0.0) + handoff.cost_usd
+            if handoff.cost_usd is not None
+            else outcome.cost_usd,
+        )
     if timed_out:
         limit = "its time limit" if timeout is None else f"{timeout:g} seconds"
         return dataclasses.replace(
@@ -426,3 +454,45 @@ async def _interrupt(connection: _Connection) -> None:
             }
         )
         await asyncio.wait_for(asyncio.shield(connection.done), _INTERRUPT_GRACE)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class _Handoff:
+    document: str | None
+    tokens: int
+    cost_usd: float | None
+
+
+async def _request_handoff(connection: _Connection, session: _Session, goal: str) -> _Handoff:
+    """Ask the agent, in the session it just worked in, for its handoff document (ADR-0042). The
+    document, and what the asking cost; a ``None`` document when it cannot be had, for any reason,
+    since the round has already ended and the caller has its own digest."""
+    first_events = session.events
+    session.events = []
+    connection.begin_turn()
+    connection.refuse_all = True
+    try:
+        await connection.write(
+            {
+                "type": "user",
+                "message": {"role": "user", "content": HANDOFF_PROMPT.format(goal=goal)},
+            }
+        )
+        await asyncio.wait_for(asyncio.shield(connection.done), HANDOFF_TIMEOUT)
+    except (TimeoutError, DelegationError):
+        _LOG.warning("no handoff from the claude session", exc_info=True)
+        await _interrupt(connection)
+        return _Handoff(None, 0, None)
+    finally:
+        connection.refuse_all = False
+        turn_events, session.events = session.events, first_events
+    result = next((e for e in reversed(turn_events) if e.get("type") == "result"), None)
+    if result is None:
+        return _Handoff(None, 0, None)
+    tokens, cost = _usage_from_result(result)
+    text = result.get("result")
+    document = text.strip() if isinstance(text, str) else ""
+    if result.get("is_error") or not handoff_is_usable(document):
+        _LOG.warning("the claude session answered the handoff prompt without a document")
+        return _Handoff(None, tokens or 0, cost)
+    return _Handoff(document, tokens or 0, cost)

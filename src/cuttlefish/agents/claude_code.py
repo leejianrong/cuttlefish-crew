@@ -31,6 +31,7 @@ from cuttlefish.broker import BrokerRoute, Lease
 from cuttlefish.delegate import conversations
 from cuttlefish.delegate.claude_code import run_claude_code, run_claude_code_in_sandbox
 from cuttlefish.delegate.claude_code_live import QuestionHandler, run_claude_code_live
+from cuttlefish.delegate.handoff import handoff_goal
 from cuttlefish.limits import round_timeout_for
 from cuttlefish.requests import ShellAsker
 from cuttlefish.sandbox.provider import SandboxProvider, SandboxSpec
@@ -138,6 +139,7 @@ class ClaudeCodeBackend:
                 conversation=(session or conversations.DEFAULT_KEY)
                 if conversations.resume_enabled("claude-code")
                 else None,
+                handoff_goal=handoff_goal(task_text),
             )
         if sandbox_provider is None:
             return await run_claude_code(

@@ -377,8 +377,8 @@ Claude Code. `cuttlefish doctor` shows whether it is on.
 
 When a round runs out of room, the role carries on from a handover. kopicode (turn cap, token budget, a full context)
 and Codex over `app-server` (its round token limit or round time limit) are asked to write their own handoff, and the
-next round is told what they wrote. Claude Code, the one-shot transports and a sandbox provider cannot be asked, and
-get a digest cuttlefish reads from the journal: the files changed, the agent's last words, what failed or was refused
+next round is told what they wrote. Claude Code over stream-json is asked when a round ends on its time limit. The one-shot
+transports and a sandbox provider cannot be asked, and get a digest cuttlefish reads from the journal: the files changed, the agent's last words, what failed or was refused
 and what you said. A digest says it names no remaining work. cuttlefish makes no model call to write either. ADR-0042.
 
 ## Secrets in the dashboard
