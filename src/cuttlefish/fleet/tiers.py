@@ -62,6 +62,8 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("GET", "/api/requests"): Tier.VIEW,
     ("GET", "/api/relay"): Tier.VIEW,
     # Answer, steer, start and stop.
+    # The conversation itself: what the agent was asked and what its tools printed.
+    ("GET", "/api/projects/{project_id}/chat"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/approve"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/requests/{request_id}/answer"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/steer"): Tier.APPROVE,

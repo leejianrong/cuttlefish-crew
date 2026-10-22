@@ -3,6 +3,7 @@
 // that slice adds -- no OpenAPI-codegen machinery for five routes.
 
 import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay";
+import type { ChatResponse } from "./chat";
 import { terminalPath } from "./terminal";
 
 /** A device paired through the relay (ADR-0039). Never carries a key or a secret. */
@@ -592,6 +593,13 @@ export class FleetClient {
       method: "POST",
       body: JSON.stringify(backend ? { backend } : {}),
     });
+  }
+
+  /** The conversation, read from the agent's own session record (CUT-172). `after` is the last
+   * answer's cursor; null reads from near the end. */
+  getChat(id: string, after: number | null): Promise<ChatResponse> {
+    const query = after === null ? "" : `?after=${after}`;
+    return this.request(`/api/projects/${id}/chat${query}`);
   }
 
   async getGoal(id: string): Promise<Goal | null> {

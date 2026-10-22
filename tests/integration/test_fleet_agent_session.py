@@ -193,6 +193,65 @@ def test_a_goal_needs_text_and_a_known_project(rig: Rig) -> None:
     assert client.post("/api/projects/nope/goal", json={"text": "x"}).status_code == 404
 
 
+def _transcript_for(home: Path, root: Path, session_id: str, lines: list[dict[str, Any]]) -> Path:
+    from cuttlefish.sessions.transcript import project_dir_name
+
+    folder = home / ".claude" / "projects" / project_dir_name(str(root.resolve()))
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{session_id}.jsonl"
+    path.write_text("".join(json.dumps(line) + "\n" for line in lines))
+    return path
+
+
+def test_the_chat_is_read_from_the_claude_code_transcript(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(rig.tmp))
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    assert client.get(f"/api/projects/{project.id}/chat").json()["supported"] is False  # no session
+    session = client.post(f"/api/projects/{project.id}/agent-session/start", json={}).json()
+    waiting = client.get(f"/api/projects/{project.id}/chat").json()
+    assert waiting["supported"] and waiting["waiting"] and waiting["items"] == []
+    path = _transcript_for(
+        rig.tmp,
+        rig.root,
+        session["session_id"],
+        [
+            {"type": "user", "uuid": "u1", "message": {"role": "user", "content": "Hello"}},
+            {
+                "type": "assistant",
+                "uuid": "a1",
+                "message": {"role": "assistant", "content": [{"type": "text", "text": "Hi"}]},
+            },
+        ],
+    )
+    first = client.get(f"/api/projects/{project.id}/chat").json()
+    assert [i["text"] for i in first["items"]] == ["Hello", "Hi"]
+    assert first["path"] == str(path) and first["session"] == "running"
+    with path.open("a") as handle:
+        handle.write(
+            json.dumps(
+                {"type": "user", "uuid": "u2", "message": {"role": "user", "content": "More"}}
+            )
+            + "\n"
+        )
+    more = client.get(f"/api/projects/{project.id}/chat", params={"after": first["cursor"]}).json()
+    assert [i["text"] for i in more["items"]] == ["More"]
+    assert client.get(f"/api/projects/{project.id}/chat", params={"after": -1}).status_code == 400
+    assert client.get("/api/projects/nope/chat").status_code == 404
+
+
+def test_the_chat_of_another_tool_says_it_is_not_there_yet(rig: Rig) -> None:
+    (rig.bin / "codex").write_text("#!/bin/sh\nexec sleep 300\n")
+    (rig.bin / "codex").chmod(0o755)
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="codex")
+    client = _client(rig.daemon())
+    client.post(f"/api/projects/{project.id}/agent-session/start", json={})
+    body = client.get(f"/api/projects/{project.id}/chat").json()
+    assert body["supported"] is False and body["backend"] == "codex" and body["items"] == []
+
+
 def test_the_terminal_needs_the_token_first(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     client = _client(rig.daemon())

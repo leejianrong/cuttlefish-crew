@@ -60,6 +60,14 @@ the goal it was given and takes you to the Terminal tab; it does not type a seco
 kopicode's interactive session cannot take a first message yet (the box says so); kopicode projects start work
 with the round workflow below. `GET`/`POST /api/projects/{id}/goal` is the same thing for a script (Approve tier).
 
+The project's **Chat** tab shows the builder's conversation as a thread, read live from Claude Code's own
+session record (`~/.claude/projects/<folder>/<session>.jsonl`; nothing is stored a second time). Tool calls are
+folded into one line each run ("Ran 4 commands, edited 2 files") that opens to the calls and their output, a context
+compaction is a divider, and a permission the builder is waiting on is answered inline, as under Needs you.
+It is read-only for now: type in the Terminal tab, which is the same session. Codex and kopicode sessions are not
+shown there yet. A device paired through the relay needs the Approve level to read it, because it shows what the
+agent's tools printed. `GET /api/projects/{id}/chat?after=<cursor>` is the same thing for a script.
+
 The round and team workflow is under **Advanced: run a team of roles** on the same page. Click **Start team** there, or:
 
 ```bash
