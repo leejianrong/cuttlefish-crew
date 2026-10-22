@@ -2,7 +2,7 @@
 // button and a pasted link land on the same screen. Pure: no window, no history, just the mapping.
 
 export type ProjectTab =
-  "overview" | "terminal" | "artifacts" | "needs-you" | "permissions" | "team" | "secrets";
+  "overview" | "chat" | "terminal" | "artifacts" | "needs-you" | "permissions" | "team" | "secrets";
 
 export type Route =
   | { view: "projects" }
@@ -16,6 +16,7 @@ export type Route =
 
 export const PROJECT_TABS: readonly ProjectTab[] = [
   "overview",
+  "chat",
   "terminal",
   "artifacts",
   "needs-you",

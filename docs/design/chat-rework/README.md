@@ -76,6 +76,14 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
   (bracketed paste and busy/idle/dialog detection). kopicode has no first-message argument, so it is refused for now.
   The **Autopilot default** moved to CUT-174, because a toggle that did nothing would imply a supervisor that is not there.
 
+- CUT-172 the Chat tab for Claude Code, read-only: `sessions/transcript.py` parses the transcript (`user`, `assistant`
+  `text` and `tool_use`, `tool_result`, compaction and recap lines; thinking, meta, sub-agent and bookkeeping lines are left
+  out), `GET /api/projects/{id}/chat?after=<byte offset>` returns what was appended and the next offset, and the page
+  polls every 1.5 s while the tab is open. The path comes from the transcript path Claude Code's own hooks report (so it
+  follows a `/clear`), else from the recorded session id and the folder name Claude Code derives from the project path.
+  Read tier is Approve (the thread has tool output), not View. Checked against a synthetic transcript in the observed
+  shape and one real transcript's line types; **not** against a live Claude Code run (a real run needs Jian's yes).
+
 ## Build order (cards)
 
 1. CUT-169 terminal theme, CUT-170 shell terminal (small, independent).

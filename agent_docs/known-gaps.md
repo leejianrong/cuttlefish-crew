@@ -290,6 +290,13 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
 - **The real-model tests are opt-in.** `make test-live` (`CUTTLEFISH_TEST_LIVE=1`); `make test-all` skips them even with a key in `.env`.
   CI has no key and skips them too. A change to what the model is told needs one deliberate live run (the 16-round handover check
   in ADR-0030's updates) because nothing in `make test-all` exercises a real model.
+- **The Chat tab's parser is Claude Code's undocumented format (CUT-172).** It reads the transcript JSONL as seen on
+  2.1.300 to 2.1.308 and ignores what it does not know, counting lines it cannot parse (the thread says how many were left
+  out). A first read of a big file starts from its end and widens (1 MB, then 4, up to 32 MB) until it holds about 120 items
+  ("Earlier messages are in the record file"), because most of a long transcript is bookkeeping: a 70 MB file held a few
+  hundred messages. A days-long session shows its recent part; thinking blocks are not shown (they are empty and signed in the record). The tool output
+  it shows is scrubbed only of the known provider keys (`episodic/redact.py`), like the journal, which is why the route is
+  the Approve tier and not View. A session that `/clear`s keeps its thread only while the hooks report its new transcript.
 - **Codex reports no cost, so a project's cost ceiling (`max_cost_usd`) cannot stop it.** `cost_usd` is always `None` on a ChatGPT
   login (only tokens are known), so the budget check has nothing to add up; the token ceiling and the round time limit still apply.
   The dashboard shows "cost unknown" but does not say the ceiling is inert for Codex. Since CUT-102 a Codex role's tokens are journaled while the turn runs (`RoundUsageUpdated`, first figure then at most one per 5 s) and added to its total until the round's own event replaces them; the round's reported tokens are its own (a resumed thread's earlier tokens are subtracted). Since CUT-157 a Claude Code role with no figure yet reads "Tokens: not reported until the round ends (limit N, checked then)" instead of "0 tokens / N", and the limit is checked only between rounds: a Codex round can pass the *project* ceiling (seen 2026-10-19: 1,083,519 and 1,122,062 tokens against 1,000,000, nothing stopped either). Since CUT-168 the per-round `Tokens per round` limit (`session_token_budget`, default 5,000,000) is enforced mid-turn on Codex's default transport: usage arrives after every model call, and a turn over it is interrupted as `budget_exhausted` (a checkpoint). A limit below one model call's own cost (about 17,000 tokens for a first call seen live 2026-10-21) acts only after that call, and the project ceiling is still checked between rounds.

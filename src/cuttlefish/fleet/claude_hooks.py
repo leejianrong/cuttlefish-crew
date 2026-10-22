@@ -92,6 +92,13 @@ class ClaudeHooks:
         self._calls: dict[str, collections.OrderedDict[str, str]] = {}
         #: project id -> request id -> (tool_use_id, input key) of the call it holds.
         self._held: dict[str, dict[str, tuple[str | None, str]]] = {}
+        #: project id -> the transcript path the session's own hooks last reported (CUT-172). It
+        #: follows the session when Claude Code starts a new one (`/clear`), which a path worked
+        #: out from the recorded session id would not.
+        self._transcripts: dict[str, str] = {}
+
+    def transcript_path(self, project_id: str) -> str | None:
+        return self._transcripts.get(project_id)
 
     # -- entry -------------------------------------------------------------------------------
 
@@ -99,6 +106,9 @@ class ClaudeHooks:
         self, project: Project, payload: Mapping[str, Any], gone: Gone
     ) -> dict[str, Any]:
         event = payload.get("hook_event_name")
+        reported = _str(payload.get("transcript_path"))
+        if reported:
+            self._transcripts[project.id] = reported
         tool = str(payload.get("tool_name") or "")
         raw = payload.get("tool_input")
         tool_input: Mapping[str, Any] = raw if isinstance(raw, dict) else {}

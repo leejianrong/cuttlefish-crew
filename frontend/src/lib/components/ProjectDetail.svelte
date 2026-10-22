@@ -20,6 +20,7 @@
   import GoalCard from "./GoalCard.svelte";
   import Icon from "./Icon.svelte";
   import ArtifactsTab from "./ArtifactsTab.svelte";
+  import ChatView from "./ChatView.svelte";
   import NeedsYouTab from "./NeedsYouTab.svelte";
   import RequestCard from "./RequestCard.svelte";
   import PrepareConfirm from "./PrepareConfirm.svelte";
@@ -112,6 +113,7 @@
   // Four tabs for what you use while an agent runs; the three you set once live under Settings.
   const TABS = $derived([
     { id: "overview", label: "Overview" },
+    { id: "chat", label: "Chat" },
     { id: "terminal", label: "Terminal" },
     { id: "needs-you", label: "Needs you", badge: pending.length },
     { id: "artifacts", label: "Artifacts" },
@@ -513,6 +515,19 @@
         <h2 id="activity-heading" class="title-medium">Recent activity</h2>
         <EventLog {events} onOpenPermissions={() => onTabChange("permissions")} />
       </section>
+    </div>
+
+    <div id="panel-chat" role="tabpanel" aria-labelledby="tab-chat" hidden={tab !== "chat"}>
+      <ChatView
+        {client}
+        {projectId}
+        active={tab === "chat"}
+        {pending}
+        fetchedAt={requestsFetchedAt}
+        onAnswered={refresh}
+        offline={unreachable}
+        onOpenTerminal={() => onTabChange("terminal")}
+      />
     </div>
 
     <div id="panel-artifacts" role="tabpanel" aria-labelledby="tab-artifacts" hidden={tab !== "artifacts"}>

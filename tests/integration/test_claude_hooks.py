@@ -98,6 +98,14 @@ async def rig(tmp_path: Path) -> AsyncIterator[Rig]:
 # -- what is decided without asking ----------------------------
 
 
+async def test_the_transcript_a_hook_reports_is_remembered_for_the_chat(rig: Rig) -> None:
+    claude_hooks = rig.daemon._claude_hooks
+    assert claude_hooks.transcript_path(rig.project_id) is None
+    await rig.hook("UserPromptSubmit", transcript_path="/h/.claude/projects/p/one.jsonl")
+    await rig.hook("PreToolUse", tool_name="Bash", tool_input={}, transcript_path="/h/two.jsonl")
+    assert claude_hooks.transcript_path(rig.project_id) == "/h/two.jsonl"  # /clear starts a new one
+
+
 async def test_a_command_on_the_list_runs_and_a_never_allowed_one_is_refused_with_no_card(
     rig: Rig,
 ) -> None:

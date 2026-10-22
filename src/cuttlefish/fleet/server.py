@@ -1028,6 +1028,17 @@ def create_app(
         except (FleetError, ConfigError) as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @app.get("/api/projects/{project_id}/chat")
+    async def get_chat(project_id: str, after: int | None = None) -> dict[str, Any]:
+        """The project's chat thread (CUT-172), read from the agent's own record. ``after`` is the
+        ``cursor`` of the previous answer; leave it out for the first read."""
+        if after is not None and after < 0:
+            raise HTTPException(400, "'after' must not be negative")
+        try:
+            return await daemon.chat(project_id, after)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.get("/api/projects/{project_id}/goal")
     async def get_goal(project_id: str) -> dict[str, Any]:
         try:

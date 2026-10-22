@@ -53,6 +53,7 @@ from cuttlefish.episodic.events import (
     TeamResumed,
     TeamStopped,
 )
+from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet import gitexclude
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
@@ -93,6 +94,7 @@ from cuttlefish.sessions import (
 from cuttlefish.sessions.hooks import write_settings
 from cuttlefish.sessions.manager import read_goal, write_goal
 from cuttlefish.sessions.manager import wanted as session_wanted
+from cuttlefish.sessions.transcript import candidate_paths, read_thread
 from cuttlefish.steering import (
     SteeringDeliveryError,
     cancel_run,
@@ -340,6 +342,44 @@ class FleetDaemon:
     async def agent_session(self, project_id: str) -> SessionInfo:
         project = self._projects.get(project_id)
         return await asyncio.to_thread(self._session_manager().status, project.id, project.root)
+
+    async def chat(self, project_id: str, after: int | None = None) -> dict[str, Any]:
+        """The project's chat thread, read from the agent's own session record (CUT-172).
+
+        Claude Code only for now (its transcript JSONL); Codex and kopicode report
+        ``supported: false`` with their name, so the page can say where to look instead. ``after``
+        is the cursor the last read returned, or ``None`` for the first read."""
+        project = self._projects.get(project_id)
+        info = await asyncio.to_thread(self._session_manager().status, project.id, project.root)
+        base: dict[str, Any] = {
+            "backend": info.backend,
+            "session": info.state,
+            "session_id": info.session_id,
+            "supported": info.backend == "claude-code",
+            "items": [],
+            "cursor": 0,
+        }
+        if info.backend != "claude-code" or not info.session_id:
+            return base
+        hooked = self._claude_hooks.transcript_path(project.id)
+        paths = ([Path(hooked)] if hooked else []) + candidate_paths(project.root, info.session_id)
+        found = next((p for p in paths if p.is_file()), None)
+        if found is None:
+            return {**base, "waiting": True}
+
+        def scrub(text: str) -> str:
+            return Redactor().scrub(text)[0]
+
+        thread = await asyncio.to_thread(functools.partial(read_thread, found, after, scrub=scrub))
+        return {
+            **base,
+            "items": thread.items,
+            "cursor": thread.cursor,
+            "earlier": thread.earlier,
+            "reset": thread.reset,
+            "skipped": thread.skipped,
+            "path": str(found),
+        }
 
     async def goal(self, project_id: str) -> dict[str, str] | None:
         """The goal last given to the project's builder, or ``None`` (CUT-171)."""
