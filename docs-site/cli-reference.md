@@ -250,6 +250,30 @@ checked for being a real Fernet key), `PATH` entries that mislead an agent (cutt
 venv, Windows `/mnt/...` directories under WSL), the log file, and each registered project
 (root exists, an empty `.cuttlefish/secrets.db` left by a failed start, which daemon variables an agent is not given, and what its files say it needs: `Python (uv, wants 3.12, .venv present)`). Values are never printed.
 
+## `cuttlefish soak run` and `soak score`
+
+A harness that scores a long unattended Autopilot run, so Autopilot is trusted on evidence and not on a guess. It is a client
+of an already-running `cuttlefish serve`, **a scratch one on its own port** (it refuses port 8420, a person's usual daemon,
+unless you pass `--allow-default-port`). It gives the project's builder a goal with Autopilot on, approves the plan once,
+then samples Autopilot, Needs you, the thread and the timeline until the run ends or `--hours` is reached, when it stops
+Autopilot. It answers no permission and says nothing to the builder, so what it scores is what Autopilot managed alone.
+
+```bash
+uv run cuttlefish soak run --base-url http://127.0.0.1:8431 --token <token> --project <id> \
+  --goal "Build the thing in SPEC.md" --hours 8 --out soak/2026-10-24-baseline
+uv run cuttlefish soak score soak/2026-10-24-baseline/run.jsonl      # score a saved run again
+```
+
+A real run uses the model login or key the daemon has, so it prints a size estimate and asks you to type `yes` first (`--yes`
+skips the question; without a terminal it is required). `--out` gets `report.md`, `score.json` and `run.jsonl` (written as
+the run goes, so a crash of the driver loses nothing; the builder carries on in the daemon).
+
+The report gives useful time (running with nothing waiting, minus **stalled** time when the token count stood still for
+10 minutes), time blocked on a permission, time stuck, human interventions (a message, a resume or a permission someone else
+answered; approving the plan is counted apart), steps ticked, nudges, commits, handoffs (context refreshes), tokens per day,
+and a cost per day if you give `--usd-per-mtok`. Tokens are Autopilot's own figure (cache reads left out). `--arm` labels
+the run (`baseline` is Autopilot alone); the manager arm waits for the manager.
+
 ## `cuttlefish mcp`
 
 Run an MCP server (stdio transport) wrapping an already-running

@@ -1057,6 +1057,76 @@ def _mcp(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _soak(args: argparse.Namespace) -> int:
+    """Score a long unattended Autopilot run (CUT-136), or score a saved one again."""
+    import time
+    from datetime import UTC, datetime
+    from pathlib import Path
+
+    from cuttlefish import soak, soak_run
+
+    if args.soak_command == "score":
+        samples, notes = soak.load_run(Path(args.run).read_text())
+        if not samples:
+            print(f"cuttlefish: {args.run} holds no samples", file=sys.stderr)
+            return EXIT_CONFIG_ERROR
+        result = soak.score(samples, notes, arm=args.arm, usd_per_mtok=args.usd_per_mtok)
+        print(soak.render_report(result, {"title": args.run}))
+        return EXIT_OK
+
+    if not args.base_url or not args.token:
+        print(
+            "cuttlefish: soak run needs --base-url and --token "
+            f"(or ${MCP_BASE_URL_ENV}/${MCP_TOKEN_ENV})",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG_ERROR
+    plan = soak_run.RunPlan(
+        project_id=args.project,
+        goal=args.goal,
+        backend=args.backend,
+        hours=args.hours,
+        tokens=args.tokens,
+        nudges=args.nudges,
+        arm=args.arm,
+        interval_s=args.interval,
+        usd_per_mtok=args.usd_per_mtok,
+    )
+    try:
+        soak_run.check_target(args.base_url, allow_default_port=args.allow_default_port)
+        print(plan.estimate())
+        if not args.yes:
+            if not sys.stdin.isatty():
+                raise soak_run.SoakError("not a terminal: pass --yes to start without being asked")
+            if input("Start this run? Type 'yes' to go ahead: ").strip().lower() != "yes":
+                print("Not started.")
+                return EXIT_OK
+        out_dir = Path(args.out)
+        run_file = out_dir / "run.jsonl"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        def save(text: str) -> None:
+            run_file.write_text(text)
+
+        outcome = soak_run.run_soak(
+            soak_run.HttpApi(args.base_url, args.token),
+            plan,
+            clock=time.monotonic,
+            sleep=time.sleep,
+            now_iso=lambda: datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+            save=save,
+            log=lambda line: print(f"soak: {line}", flush=True),
+        )
+    except soak_run.SoakError as exc:
+        print(f"cuttlefish: soak: {exc}", file=sys.stderr)
+        return EXIT_CONFIG_ERROR
+    for path in soak_run.write_outputs(out_dir, outcome):
+        print(f"wrote {path}")
+    print()
+    print(outcome.report)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cuttlefish")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1649,6 +1719,45 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    soak_parser = subparsers.add_parser(
+        "soak",
+        help="Score a long unattended Autopilot run against a scratch daemon (CUT-136)",
+    )
+    soak_sub = soak_parser.add_subparsers(dest="soak_command", required=True)
+    soak_run_parser = soak_sub.add_parser(
+        "run",
+        help=(
+            "Give a project's builder a goal with Autopilot on, watch it, and write a report. "
+            "A real run: it asks first, and never answers a permission for the builder"
+        ),
+    )
+    soak_run_parser.add_argument("--base-url", default=os.environ.get(MCP_BASE_URL_ENV))
+    soak_run_parser.add_argument("--token", default=os.environ.get(MCP_TOKEN_ENV))
+    soak_run_parser.add_argument("--project", required=True, help="Id of a project on that daemon")
+    soak_run_parser.add_argument("--goal", required=True, help="What the builder is to do")
+    soak_run_parser.add_argument("--backend", default="claude-code")
+    soak_run_parser.add_argument("--hours", type=float, default=4.0, help="Wall-clock limit")
+    soak_run_parser.add_argument("--tokens", type=int, default=2_000_000, help="Autopilot's limit")
+    soak_run_parser.add_argument("--nudges", type=int, default=100, help="Autopilot's limit")
+    soak_run_parser.add_argument("--interval", type=float, default=30.0, help="Seconds per sample")
+    soak_run_parser.add_argument(
+        "--arm", default="baseline", help="A label for the run: baseline (no manager) by default"
+    )
+    soak_run_parser.add_argument(
+        "--usd-per-mtok", type=float, default=None, help="A price, to give a cost per day"
+    )
+    soak_run_parser.add_argument("--out", required=True, help="Directory for report and run files")
+    soak_run_parser.add_argument("--yes", action="store_true", help="Skip the question")
+    soak_run_parser.add_argument(
+        "--allow-default-port",
+        action="store_true",
+        help="Allow a daemon on port 8420, which is usually a person's own",
+    )
+    soak_score_parser = soak_sub.add_parser("score", help="Score a saved run.jsonl again")
+    soak_score_parser.add_argument("run", help="A run.jsonl a soak run wrote")
+    soak_score_parser.add_argument("--arm", default="baseline")
+    soak_score_parser.add_argument("--usd-per-mtok", type=float, default=None)
+
     return parser
 
 
@@ -1709,6 +1818,8 @@ def main(argv: list[str] | None = None) -> int:
         return _relay_admin(args)
     if args.command == "mcp":
         return _mcp(args)
+    if args.command == "soak":
+        return _soak(args)
     return _show(args)
 
 

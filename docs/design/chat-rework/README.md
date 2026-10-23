@@ -104,6 +104,8 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
   the real hook script, the daemon and the browser, and then (2026-10-23) with two short real Claude Code runs: it planned first, ticked the
   checklist, the `Stop` hook fired every turn, and "continue" made it carry on. Not over hours.
 
+- CUT-136 the soak harness for Autopilot (`cuttlefish soak run|score`): see ADR-0044's "Scoring a long run".
+
 - CUT-176 mission control on the Overview and CUT-179 the phone layout (see `docs/design/ui-redesign/README.md`).
 
 - CUT-177 the chat for Codex: read from Codex's own rollout, `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` (`sessions/codex_record.py`),

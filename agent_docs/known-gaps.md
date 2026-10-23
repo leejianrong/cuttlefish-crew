@@ -315,6 +315,14 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   nothing loaded from outside the file, so a design that pulls a library, font or image from a URL renders without it. That
   is deliberate (ADR-0036's update); do not add `allow-same-origin` or a `connect-src` to fix a design, tell the agent to
   inline. Video is held in memory (100 MB cap) and played from a blob. Checked in Chromium only, not Safari or Firefox.
+- **The soak harness has not yet scored a real multi-hour run (CUT-136).** `cuttlefish soak run` (`soak.py` scores, `soak_run.py`
+  drives) is checked against a fake daemon and a fake HTTP server only. Its measures are definitions, not facts about the builder:
+  "stalled" is running with the token figure unmoved for 10 minutes (a long turn in one tool call that writes no transcript line
+  would count), a person's message is any user line in the thread that is not the goal or one of Autopilot's two messages (the
+  thread read keeps the latest ~120 items, so a message that scrolled out between two reads is missed), and an answered
+  permission is a request that left Needs you with the harness not having answered it. It reads Claude Code's token figure
+  only, so a Codex or kopicode run has none. It watches one project on a daemon it is told about and cannot tell a second
+  person's actions on that project apart from the first's.
 - **Autopilot has had two short real Claude Code runs, not a long one (CUT-174).** Verified 2026-10-23 on Claude Code 2.1.308
   (Sonnet 5.5, a scratch repo, Write-only tasks, a few thousand tokens each): Claude follows the plan-first instruction in the
   appended system prompt (it wrote `plan.md` and stopped for approval both times), ticks the checklist after approval, the `Stop`
