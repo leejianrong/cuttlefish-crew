@@ -91,6 +91,13 @@ These were the open questions of the first version of this ADR.
    approval and "continue") go through the same guarded send as a person's (CUT-173). A dialog open means the nudge is not
    sent and the next stop tries again.
 
+## Scoring a long run (CUT-136, 2026-10-24)
+
+A soak harness (`cuttlefish soak`, `soak.py`, `soak_run.py`) is how the last open item below is closed on evidence: it runs
+one real goal on a scratch daemon with Autopilot on, answers nothing for the builder, and scores useful time, stalled and
+stuck time, human interventions, handoffs and tokens per day, with a baseline arm (Autopilot alone) now and a manager arm when
+there is a manager. It is a client of the daemon's HTTP API, adds no route, and asks before each real run.
+
 ## Open
 
 - Whether the agent's messages are also journaled (so history survives a deleted transcript).
