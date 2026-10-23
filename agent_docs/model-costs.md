@@ -59,8 +59,28 @@ are partial runs, not finished ones. Each arm used the custom-URL path (unpinned
 What it says, and what it does not: on this one task the cheaper model finished the work in about a third of the spend, and followed the
 "five tests, one module at a time, commit each" instruction where the default did not (it wrote far more tests than asked and committed
 late). That is one run per arm and a cap-truncated one, so it is a lead, not a ranking. **Recommendation: use `deepseek/deepseek-v4.1-flash`
-as the cheap kopicode model for cuttlefish rounds, set through the URL path, and repeat the task three times when the key has room.** The
+as the cheap kopicode model for cuttlefish rounds, set through the URL path, and repeat the task three times when the key has room** (two clean runs are in the 2026-10-23 section below). The
 account's OpenRouter guardrail only allows a few models (see below), and `deepseek/deepseek-v4.1-flash` is on that list.
+
+### Clean full runs of both arms, 2026-10-23 (CUT-75)
+
+The 2026-10-18 arms were all cut short by the key's weekly limit, so neither finished. This is the same `textkit` task run to the end, one run per arm, on the same stack:
+`cuttlefish run-team` at `d849834` (no summariser: a round that fills its 12 turns hands over through kopicode's own handoff), kopicode v0.5.0-21 (`59393b0`), `--limit max_turns=12 --mode auto`,
+the custom-URL path to OpenRouter (unpinned), a fresh scratch repository each. Cost is the sum of `cost_usd` over the rounds' kopicode journals; the handoff calls between rounds were not
+checked separately, so treat it as the rounds' cost.
+
+| Arm | Rounds | Tokens | Cost | Modules committed | Tests |
+| --- | --- | --- | --- | --- | --- |
+| `qwen/qwen3-coder-next` (the default) | 6 | 0.55M | $0.054 | 7 of 9 on their own, the last two (`tables`, `templater`) in one closing "fix tests" commit | 45, all passing, five per module |
+| `deepseek/deepseek-v4.1-flash` | 5 | 0.59M | $0.031 | 9 of 9, one commit each | 45, all passing, five per module |
+
+Both finished with "all nine done". The default needed a sixth round and a closing commit that rewrote test files to get to exactly five tests each; the cheaper model did it as asked, for about
+57 per cent of the spend. That agrees with the 2026-10-18 partial runs (the default wrote more tests than asked and committed late), so it is now two runs in the same direction, not yet three.
+A first attempt of the default arm on this stack was lost in its sixth round to `read: connection reset by peer` on the provider stream (kopicode ends the session on a mid-stream failure, and the
+round and the run fail with it); it had seven modules committed and cost $0.066, and is not in the table. It is the only failed run in the three.
+
+What this does not show: one run per arm, one task, an unpinned path, and the default being a coder-tuned model that may do better under a task phrased for it. The recommendation stands as
+written above: `deepseek/deepseek-v4.1-flash` is the cheap kopicode model for cuttlefish rounds, and a third run of each arm would make it a ranking.
 
 ### Summariser trial, 2026-10-18 (CUT-129)
 
