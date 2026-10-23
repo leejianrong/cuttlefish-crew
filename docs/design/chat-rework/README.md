@@ -101,7 +101,8 @@ cannot be embedded here (login with claude.ai, Claude only); it is an optional e
   from then on each `Stop` with steps left sends "continue" (after 2 s, unless the turn went on), bounded by time, tokens
   and nudges, stuck after three nudges with no ticked step, with Pause, Carry on and Stop in the rail (and on a phone, above
   the thread). State is the journal's last `AutopilotUpdated`. Checked with a fake builder and a synthetic transcript through
-  the real hook script, the daemon and the browser; **not** with a real Claude Code, and not over hours.
+  the real hook script, the daemon and the browser, and then (2026-10-23) with two short real Claude Code runs: it planned first, ticked the
+  checklist, the `Stop` hook fired every turn, and "continue" made it carry on. Not over hours.
 
 - CUT-176 mission control on the Overview and CUT-179 the phone layout (see `docs/design/ui-redesign/README.md`).
 

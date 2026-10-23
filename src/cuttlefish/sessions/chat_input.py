@@ -9,7 +9,8 @@ last lines of the screen.
 
 The screen patterns are Claude Code's wording as far as it is known and are a safety net, not a
 parser; a dialog they miss is the hooks' to catch, and one both miss is the person's to answer in
-the terminal. Nothing here is verified against a live Claude Code release yet.
+the terminal. Checked against Claude Code 2.1.308 for the trust-folder dialog (CUT-173 notes in
+``agent_docs/known-gaps.md``); a permission dialog's wording is still assumed.
 """
 
 from __future__ import annotations
@@ -25,7 +26,9 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 _DIALOG_LINES = (
     re.compile(r"Esc to cancel", re.I),
     re.compile(r"[\u276f>]\s*1\.\s"),  # a numbered choice with the cursor on the first
-    re.compile(r"Do you trust|trust this folder|trust the files", re.I),
+    re.compile(
+        r"Do you trust|trust this folder|trust the files|project you created or one you trust", re.I
+    ),
     re.compile(r"Do you want to (proceed|make this edit|create|allow)", re.I),
 )
 
