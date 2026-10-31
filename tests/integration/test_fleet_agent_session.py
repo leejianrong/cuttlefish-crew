@@ -573,6 +573,10 @@ def test_a_project_with_a_terminal_command_runs_it_and_the_terminal_attaches(rig
     with _connect(client, f"{path}/terminal") as ws:
         _auth(ws, cols=80, rows=24)
         assert b"TOOLREADY" in _read_until(ws, b"TOOLREADY")
+        # As in the other terminal tests: the test client cancels the app when its `with` ends, so
+        # wait for the handler's tmux client to detach first (CUT-125, CUT-252).
+        ws.close(1000)
+        _wait_until_detached(rig, project.id)
     goal = client.post(f"{path}/goal", json={"text": "do a thing"})
     assert goal.status_code == 409 and "terminal command" in goal.json()["detail"]
     cleared = client.patch(f"{path}/terminal-command", json={"terminal_command": None})
