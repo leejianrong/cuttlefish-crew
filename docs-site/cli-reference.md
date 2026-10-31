@@ -125,7 +125,7 @@ uv run cuttlefish projects add \
 ## `cuttlefish schedule`
 
 Ask a project's builder for a goal on a repeat; `cuttlefish serve` starts each one when it is due (see
-[Scheduled goals](quickstart.md#scheduled-goals)). Output is one JSON object per line. A running daemon sees a change
+[Scheduled goals](schedules.md)). Output is one JSON object per line. A running daemon sees a change
 at its next pass, so nothing needs restarting.
 
 | Subcommand | What it does |

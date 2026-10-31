@@ -55,6 +55,12 @@ Want the whole walk-through, with two practice repos and two crews side by side?
 - **A guarded `git push`.** A `git-push` preset (off unless declared) lets an agent push a named branch that is not
   the default one; the default branch and every force form are refused in every mode
   ([CLI reference](https://leejianrong.github.io/cuttlefish-crew/docs/cli-reference/)).
+- **While you are away.** A [schedule](https://leejianrong.github.io/cuttlefish-crew/docs/schedules/) asks the
+  builder for a goal on a repeat (`cuttlefish schedule add`, times in UTC); it never interrupts a goal in progress
+  and plans first, so an unattended run waits at the plan for you. A
+  [manager agent](https://leejianrong.github.io/cuttlefish-crew/docs/manager-tools/) can watch every project over
+  MCP (`cuttlefish mcp --manager`), allow a command once or raise a decision for you, but cannot touch settings or
+  secrets ([ADR-0050](docs/adr/0050-the-manager-credential-is-its-own-token-held-to-the-approve-tier-and-a-route-list.md)).
 - **Secrets and keys.** An encrypted per-project secrets store, and an optional credential broker so an agent never
   holds its model key.
 - **From a phone.** The dashboard is a web app you can pair through Tailscale https or a relay (checked in Chromium

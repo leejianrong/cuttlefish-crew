@@ -1,0 +1,68 @@
+---
+icon: lucide/git-pull-request
+---
+
+# Run a goal on its own branch and open a pull request
+
+By default the builder edits your own checkout, on whatever branch you are on. This page shows how to give each goal
+its own branch instead, and how to turn that branch into a GitHub pull request without leaving cuttlefish. It assumes
+a registered project (see the [quickstart](quickstart.md)) whose folder is a git repository with at least one commit.
+
+## Turn on a branch per goal
+
+On the project page, switch on **Its own branch** in the goal box, then give the builder a goal. From a terminal, the
+same switch is an Admin-tier call:
+
+```bash
+curl -X PATCH "$URL/api/projects/$PROJECT_ID/worktree-per-goal" \
+  -H "x-cuttlefish-token: $TOKEN" -H "content-type: application/json" \
+  -d '{"worktree_per_goal": true}'
+```
+
+It applies to the next goal, not to a builder already running. That goal gets a git worktree at
+`<project>/.cuttlefish/worktrees/<slug>` on a new branch `cuttlefish/<slug>`, made from your checkout's current commit.
+The slug is the goal's first words and the minute. The builder runs there, and the project page names the branch.
+
+Check it from the project folder:
+
+```bash
+git worktree list
+git log --oneline cuttlefish/<slug>
+```
+
+Your checkout and its branch are not touched. If the folder is not a repository, or has no commit, the goal is refused
+with the reason; it does not quietly run in your checkout.
+
+!!! note "Worktrees are kept"
+    A finished goal's worktree stays, with its work on it. Remove one you no longer need with
+    `git worktree remove <path>`. cuttlefish never merges it and never deletes a worktree that has work.
+
+## Open a pull request
+
+When the goal is done, press **Open a pull request** under it on the project page, or run:
+
+```bash
+uv run cuttlefish projects pr <project-id>
+uv run cuttlefish projects pr <project-id> --push   # push the branch to origin first
+```
+
+Either runs `gh pr create` in the goal's worktree against the default branch (`origin/HEAD`, else `main` or `master`)
+and prints the URL. It uses the `gh` login already on this machine; cuttlefish stores no GitHub credential.
+
+- **Title and body.** The title is the goal's first line. The body is the goal, what happened (from the journal) and the
+  commit subjects ahead of the base, with known secrets removed. There is no model call.
+- **It says why when it cannot.** `gh` missing or logged out, the branch is the default branch, there is no `origin`
+  remote, no commits ahead, or the branch is not pushed yet. For the last one the page offers **Push and open it**;
+  `--push` is the CLI equivalent. The push goes to `origin` only, for that one branch. The default branch and any force
+  push are refused in every mode.
+- **A branch that already has a pull request** returns that URL instead of making a second.
+- **Admin tier, GitHub only, never merges.** The URL shows on the page and in the timeline.
+
+The CLI's description has the goal and commits but not the page's digest lines, since those come from the daemon.
+
+## See also
+
+- [Scheduled goals](schedules.md) start a goal on a repeat and respect this setting.
+- [`cuttlefish projects`](cli-reference.md) in the CLI reference.
+- Why: [ADR-0048](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md)
+  and [ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md).
