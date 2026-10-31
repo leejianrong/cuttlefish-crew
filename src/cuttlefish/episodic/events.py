@@ -522,6 +522,25 @@ class PullRequestOpened:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class ScheduleRan:
+    """A schedule was due and the daemon gave the project's builder its goal (CUT-245)."""
+
+    EVENT_TYPE: ClassVar[str] = "ScheduleRan"
+
+    schedule_id: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class ScheduleSkipped:
+    """A schedule was due and nothing was started; ``reason`` says why (CUT-245)."""
+
+    EVENT_TYPE: ClassVar[str] = "ScheduleSkipped"
+
+    schedule_id: str
+    reason: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class UnknownPayload:
     """A payload whose event type this build does not recognise, preserved verbatim.
 
@@ -564,6 +583,8 @@ EventPayload = (
     | EnvironmentPrepared
     | AutopilotUpdated
     | PullRequestOpened
+    | ScheduleRan
+    | ScheduleSkipped
     | UnknownPayload
 )
 
@@ -597,6 +618,8 @@ _REGISTRY: Mapping[str, type[Any]] = {
         EnvironmentPrepared,
         AutopilotUpdated,
         PullRequestOpened,
+        ScheduleRan,
+        ScheduleSkipped,
     )
 }
 

@@ -67,6 +67,7 @@ from cuttlefish.fleet.serve_token import default_serve_token_path
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
 from cuttlefish.limits import LIMIT_SPECS, validate_limits
 from cuttlefish.permissions import DEFAULT_MODE, MODES
+from cuttlefish.projects.schedules import ScheduleStore
 from cuttlefish.projects.store import (
     Project,
     ProjectNotFoundError,
@@ -887,7 +888,8 @@ async def _serve(args: argparse.Namespace) -> int:
     except OSError as exc:
         print(f"cuttlefish serve: cannot open the project registry: {exc}", file=sys.stderr)
         return EXIT_TASK_FAILED
-    daemon = FleetDaemon(store, request_window_s=request_window)
+    schedules = ScheduleStore.open()
+    daemon = FleetDaemon(store, request_window_s=request_window, schedules=schedules)
     try:
         # ADR-0010/KAN-1703: resume every project whose last team was still
         # running when this process (or a prior `cuttlefish serve`) died, before
@@ -916,6 +918,8 @@ async def _serve(args: argparse.Namespace) -> int:
                     f"cuttlefish serve: agent session for {name!r} {restored.last_action}",
                     flush=True,
                 )
+        if daemon.scheduler is not None:
+            daemon.scheduler.start()
         host = args.host
         tailnet_name: str | None = None
         relay_settings: RelaySettings | None = None
@@ -988,6 +992,7 @@ async def _serve(args: argparse.Namespace) -> int:
             return EXIT_TASK_FAILED
     finally:
         await daemon.close()
+        schedules.close()
         store.close()
     return EXIT_OK
 
