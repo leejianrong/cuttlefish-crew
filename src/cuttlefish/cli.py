@@ -53,7 +53,13 @@ from cuttlefish.config import (
 from cuttlefish.episodic.events import PullRequestOpened
 from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicStore
-from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
+from cuttlefish.fleet import (
+    DEFAULT_FLEET_PORT,
+    FleetDaemon,
+    WeakPasswordError,
+    hook_files,
+    run_daemon,
+)
 from cuttlefish.fleet.claude_hooks import session_scope
 from cuttlefish.fleet.pullrequest import open_pull_request
 from cuttlefish.fleet.relay_link import RelaySettings
@@ -1097,16 +1103,20 @@ def _mcp(args: argparse.Namespace) -> int:
     """Run an MCP server (stdio transport) wrapping an already-running
     `cuttlefish serve`'s own HTTP API (KAN-1764/ADR-0020) -- this process is a
     client of that daemon, not the daemon itself; it never starts one."""
-    if not args.base_url or not args.token:
+    manager = bool(args.manager)
+    # The manager serves its own credential, never the owner's token (ADR-0050).
+    token = hook_files.manager_token() if manager else args.token
+    if not args.base_url or not token:
         print(
             f"cuttlefish: mcp needs --base-url and --token (or {MCP_BASE_URL_ENV}/{MCP_TOKEN_ENV})",
             file=sys.stderr,
         )
         return EXIT_CONFIG_ERROR
 
-    from cuttlefish.mcp import build_mcp_server
+    from cuttlefish.mcp import build_manager_mcp_server, build_mcp_server
 
-    server = build_mcp_server(base_url=args.base_url, token=args.token)
+    build = build_manager_mcp_server if manager else build_mcp_server
+    server = build(base_url=args.base_url, token=token)
     server.run("stdio")
     return EXIT_OK
 
@@ -1790,6 +1800,16 @@ def build_parser() -> argparse.ArgumentParser:
             "That daemon's own x-cuttlefish-token -- its printed-once static "
             f"token (loopback default), or a POST /api/login session token "
             f"(non-loopback/password mode, ADR-0011). Default: ${MCP_TOKEN_ENV}."
+        ),
+    )
+
+    mcp_parser.add_argument(
+        "--manager",
+        action="store_true",
+        help=(
+            "Serve the manager agent's tools (attention queue, digest, answer, message, decision) "
+            "with the manager credential from ~/.cuttlefish/manager-token, which the daemon holds "
+            "to the Approve tier (ADR-0046, ADR-0050). --token is not used."
         ),
     )
 

@@ -55,3 +55,13 @@ def remove_daemon_info(home: Path | None = None) -> None:
     with contextlib.suppress(OSError, ValueError, KeyError):
         if json.loads(path.read_text()).get("pid") == os.getpid():
             path.unlink()
+
+
+def manager_token_path(home: Path | None = None) -> Path:
+    return (home or default_home()) / "manager-token"
+
+
+def manager_token(home: Path | None = None) -> str:
+    """The manager's own credential (ADR-0050): held to the Approve tier and a short list of routes
+    (``fleet/tiers.py: MANAGER_ROUTES``). Kept across restarts like the others; delete to rotate."""
+    return load_or_create_token(manager_token_path(home))
