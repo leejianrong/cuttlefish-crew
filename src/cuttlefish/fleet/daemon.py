@@ -62,6 +62,7 @@ from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet import gitexclude
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
+from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
@@ -499,6 +500,20 @@ class FleetDaemon:
             "digest": timeline.digest(events, since_iso, branch, waiting),
             "timeline": [e.to_json() for e in events],
         }
+
+    async def digest(self, project_id: str, last_n: int = DEFAULT_EVENTS) -> dict[str, Any]:
+        """The compact, allowlisted digest a manager agent reads (CUT-150)."""
+        project = self._projects.get(project_id)
+        journal = await asyncio.to_thread(
+            lambda: [*self._last_team_events(project), *self._session_events(project)]
+        )
+        return build_digest(
+            project_id=project.id,
+            name=project.name,
+            events=journal,
+            pending=[p.record for p in self.requests.pending(project.id)],
+            last_n=last_n,
+        )
 
     async def autopilot_status(self, project_id: str) -> dict[str, Any]:
         return await self.autopilot.status(self._projects.get(project_id))

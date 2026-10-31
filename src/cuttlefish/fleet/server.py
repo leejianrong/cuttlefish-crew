@@ -75,6 +75,7 @@ from cuttlefish.fleet.daemon import (
     UnknownRoleError,
 )
 from cuttlefish.fleet.devices import DeviceError
+from cuttlefish.fleet.digest import DEFAULT_EVENTS
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings, TierRefusal
 from cuttlefish.fleet.serve_token import load_or_create_token
@@ -1138,6 +1139,15 @@ def create_app(
             raise HTTPException(400, "'since' must be an ISO 8601 time, like 2026-10-22T09:00:00Z")
         try:
             return await daemon.overview(project_id, since)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/digest")
+    async def get_digest(project_id: str, events: int = DEFAULT_EVENTS) -> dict[str, Any]:
+        """The compact digest of one project: status, last events, blockers, pending requests and
+        spend, with no code, output or secrets (CUT-150, `docs/digest.md`)."""
+        try:
+            return await daemon.digest(project_id, events)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
