@@ -465,6 +465,18 @@ def test_the_overview_gathers_the_goal_the_timeline_and_a_digest(rig: Rig) -> No
     assert client.get("/api/projects/nope/overview").status_code == 404
 
 
+def test_the_digest_route_serves_the_allowlisted_digest(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    body = client.get(f"/api/projects/{project.id}/digest").json()
+    assert body["project_id"] == project.id and body["status"] == "idle"
+    assert set(body) == {
+        "project_id", "name", "status", "roles", "autopilot", "goal", "last_events",
+        "blockers", "pending_count", "pending", "spend",
+    }  # fmt: skip
+    assert client.get("/api/projects/nope/digest").status_code == 404
+
+
 def test_the_terminal_needs_the_token_first(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     client = _client(rig.daemon())
