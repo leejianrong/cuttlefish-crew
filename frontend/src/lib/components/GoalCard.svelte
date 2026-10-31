@@ -2,10 +2,19 @@
   // "Give the builder a goal" (CUT-171, ADR-0044): one box that starts the project's agent in tmux
   // with the goal as its first message. It replaces "Start a team" as the main way to start work;
   // the round and team workflow is under Advanced on the same page.
-  import type { AgentSession, FleetClient, Goal } from "../api";
+  import type { AgentSession, FleetClient, Goal, PullRequestResult } from "../api";
   import { phaseLabel, type AutopilotStatus } from "../autopilot";
   import { TERMINAL_COMMAND_NOTE } from "../agentsession";
-  import { BUILDERS, GOAL_EXAMPLES, branchLine, builderLabel, canGive, defaultBuilder } from "../goal";
+  import {
+    BUILDERS,
+    GOAL_EXAMPLES,
+    branchLine,
+    builderLabel,
+    canGive,
+    canPushToFix,
+    defaultBuilder,
+    pullRequestNote,
+  } from "../goal";
   import type { ProjectTab } from "../route";
 
   let {
@@ -39,6 +48,8 @@
   // svelte-ignore state_referenced_locally
   let worktreeOn = $state(worktreePerGoal);
   let busy = $state(false);
+  let prBusy = $state(false);
+  let prResult = $state<PullRequestResult | null>(null);
   let error = $state<string | null>(null);
   let shownFor = "";
 
@@ -47,6 +58,7 @@
     if (shownFor !== id) {
       session = null;
       goal = null;
+      prResult = null;
       text = "";
       error = null;
       shownFor = id;
@@ -95,6 +107,19 @@
       error = e instanceof Error ? e.message : "That didn't work.";
     } finally {
       busy = false;
+    }
+  }
+
+  async function openPr(push: boolean) {
+    if (prBusy) return;
+    prBusy = true;
+    try {
+      prResult = await client.openPullRequest(projectId, push);
+      if (prResult.ok && prResult.url && goal) goal = { ...goal, pr_url: prResult.url };
+    } catch (e) {
+      prResult = { ok: false, reason: e instanceof Error ? e.message : "That didn't work." };
+    } finally {
+      prBusy = false;
     }
   }
 
@@ -248,6 +273,35 @@
       {busy ? "Starting…" : "Give the builder this goal"}
     </button>
   {/if}
+  {#if goal}
+    <div class="pr" data-testid="pull-request">
+      {#if goal.pr_url}
+        <p class="body-medium">
+          Pull request: <a href={goal.pr_url} target="_blank" rel="noopener noreferrer">{goal.pr_url}</a>
+        </p>
+      {:else}
+        <div class="actions">
+          <button class="btn btn-tonal" disabled={prBusy} onclick={() => openPr(false)}>
+            {prBusy ? "Opening…" : "Open a pull request"}
+          </button>
+        </div>
+        <p class="body-small muted">
+          Uses this machine's <code>gh</code> login, with the goal and the commits as the text. It never
+          merges.
+        </p>
+      {/if}
+      {#if prResult && !prResult.ok}
+        <p class="body-small error" role="alert" data-testid="pr-refused">{pullRequestNote(prResult)}</p>
+        {#if canPushToFix(prResult)}
+          <div class="actions">
+            <button class="btn btn-filled" disabled={prBusy} onclick={() => openPr(true)}>
+              Push {prResult.branch ?? "the branch"} and open it
+            </button>
+          </div>
+        {/if}
+      {/if}
+    </div>
+  {/if}
   {/if}
 </section>
 
@@ -363,6 +417,14 @@
     background: transparent;
     color: inherit;
     font: inherit;
+  }
+
+  .pr {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: flex-start;
+    overflow-wrap: anywhere;
   }
 
   .error {

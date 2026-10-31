@@ -18,7 +18,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from cuttlefish.artifacts import Artifact
-from cuttlefish.episodic.events import AutopilotUpdated, RequestRaised
+from cuttlefish.episodic.events import AutopilotUpdated, PullRequestOpened, RequestRaised
 
 Kind = Literal["needs_you", "autopilot", "refresh", "image", "tests", "commit", "note"]
 
@@ -72,6 +72,8 @@ def journal_events(events: Iterable[Any]) -> list[Event]:
             found.append(
                 Event(at, "needs_you", f"Needs you: {_clip(payload.title)}", payload.request_id)
             )
+        elif isinstance(payload, PullRequestOpened):
+            found.append(Event(at, "note", f"Pull request: {payload.url}", payload.url))
         elif isinstance(payload, AutopilotUpdated) and payload.phase != previous:
             text = _autopilot_text(payload)
             if text:

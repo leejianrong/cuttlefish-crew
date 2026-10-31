@@ -83,6 +83,20 @@ describe("login", () => {
   });
 });
 
+describe("FleetClient.openPullRequest (CUT-241)", () => {
+  it("posts whether to push first and returns the refusal as an answer", async () => {
+    const answer = { ok: false, code: "not_pushed", reason: "b is not pushed to origin yet." };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(answer), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FleetClient("http://x", "t");
+    await expect(client.openPullRequest("p1", true)).resolves.toEqual(answer);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://x/api/projects/p1/pull-request");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({ push: true });
+  });
+});
+
 describe("FleetClient session refresh (ADR-0038)", () => {
   const reply = (headers: Record<string, string> = {}, status = 200) =>
     vi.fn(async () => new Response(JSON.stringify({ projects: [] }), { status, headers }));

@@ -1186,6 +1186,20 @@ def create_app(
             raise HTTPException(409, str(exc)) from exc
         return {"goal": goal, "session": session.to_json()}
 
+    @app.post("/api/projects/{project_id}/pull-request")
+    async def open_pull_request(project_id: str, request: Request) -> dict[str, Any]:
+        """Open a pull request for the goal's branch with the machine's own `gh` login (CUT-241,
+        ADR-0049). `push: true` pushes the branch to origin first. A refusal is a 200 with
+        `ok: false`, a `code` and a plain `reason`; nothing is merged from here."""
+        body = await _json_body(request)
+        push = body.get("push", False)
+        if not isinstance(push, bool):
+            raise HTTPException(400, "'push' must be true or false")
+        try:
+            return (await daemon.open_pull_request(project_id, push=push)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.post("/api/projects/{project_id}/agent-session/stop")
     async def stop_agent_session(project_id: str) -> dict[str, Any]:
         try:

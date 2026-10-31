@@ -48,6 +48,7 @@ from cuttlefish.episodic.events import (
     EnvironmentPrepared,
     EnvironmentPrepareStarted,
     EventPayload,
+    PullRequestOpened,
     RequestResolved,
     SteeringMessage,
     SteeringQueued,
@@ -61,6 +62,7 @@ from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet import gitexclude
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
+from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
@@ -566,9 +568,45 @@ class FleetDaemon:
         return {"sent": "queued" if state == "busy" else "delivered", "state": state}
 
     async def goal(self, project_id: str) -> dict[str, str] | None:
-        """The goal last given to the project's builder, or ``None`` (CUT-171)."""
+        """The goal last given to the project's builder, or ``None`` (CUT-171). ``pr_url`` is the
+        pull request opened for it since, read back from the journal (CUT-241)."""
         project = self._projects.get(project_id)
-        return await asyncio.to_thread(read_goal, project.root)
+        goal = await asyncio.to_thread(read_goal, project.root)
+        if goal is None:
+            return None
+        events = await asyncio.to_thread(self.session_events, project)
+        opened = [
+            e.payload.url
+            for e in events
+            if isinstance(e.payload, PullRequestOpened) and timeline.iso(e.ts) >= goal.get("at", "")
+        ]
+        return {**goal, "pr_url": opened[-1]} if opened else goal
+
+    async def open_pull_request(self, project_id: str, *, push: bool = False) -> PullRequest:
+        """Open a pull request for the goal's branch with the machine's ``gh`` login (CUT-241,
+        ADR-0049) and journal it. Refusals come back as a result with a reason, not an error."""
+        project = self._projects.get(project_id)
+        goal = await asyncio.to_thread(read_goal, project.root)
+        overview = await self.overview(project_id, goal.get("at") if goal else None)
+        summary = [line for line in overview["digest"] if "waiting for you" not in line]
+        result = await asyncio.to_thread(
+            functools.partial(
+                open_pull_request,
+                project.root,
+                goal,
+                summary,
+                push=push,
+                scrub=lambda text: Redactor().scrub(text)[0],
+            )
+        )
+        if result.ok and result.url and result.branch and result.base and result.title:
+            self.append_session_event(
+                project,
+                PullRequestOpened(
+                    result.url, result.branch, result.base, result.title, result.existing
+                ),
+            )
+        return result
 
     async def give_goal(
         self,

@@ -236,9 +236,20 @@ By default the builder works in your own checkout. Turn on **Its own branch** on
 a git worktree under `<project>/.cuttlefish/worktrees/` on a new `cuttlefish/<goal words>` branch, made from your
 checkout's current commit. The builder runs there, your checkout and its branch are not touched, and the project
 page names the branch. The folder must be a git repository with a commit, or the goal is refused with the reason.
-The worktree is kept when the goal ends, with the work on it; remove it with `git worktree remove`. cuttlefish does
-not push or merge it
+The worktree is kept when the goal ends, with the work on it; remove it with `git worktree remove`. cuttlefish never
+merges it
 ([ADR-0048](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md)).
+
+### Open a pull request
+
+Under the goal on the project page, **Open a pull request** runs `gh pr create` for the goal's branch, using the
+`gh` login already on this machine (`cuttlefish projects pr <id> [--push]` does the same from a terminal). The title
+is the goal's first line; the body is the goal, what happened and the commit subjects, with known secrets removed.
+There is no model call and nothing is merged. It tells you why when it cannot: `gh` missing or logged out, the branch
+is the default branch, no commits ahead, or not pushed yet, in which case **Push and open it** pushes that one branch
+to `origin` (never `main`, never a force push). The URL shows on the page and in the timeline. It needs the Admin
+tier, and GitHub only
+([ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)).
 
 ## Artifacts
 

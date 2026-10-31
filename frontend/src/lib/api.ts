@@ -454,6 +454,20 @@ export interface Goal {
   /** CUT-238: the branch the goal is worked on, when the project gives each goal a worktree. */
   branch?: string;
   worktree?: string;
+  /** CUT-241: the pull request opened for this goal, read back from the journal. */
+  pr_url?: string;
+}
+
+/** The answer to "open a pull request" (CUT-241). A refusal is `ok: false` with a plain reason;
+ * `code` is `not_pushed` when pushing the branch first would fix it. */
+export interface PullRequestResult {
+  ok: boolean;
+  url?: string;
+  existing?: boolean;
+  code?: string;
+  reason?: string;
+  branch?: string;
+  base?: string;
 }
 
 /** A password-mode daemon sends a fresh session token in this header once the one in use is past
@@ -624,6 +638,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/worktree-per-goal`, {
       method: "PATCH",
       body: JSON.stringify({ worktree_per_goal: on }),
+    });
+  }
+
+  /** Open a pull request for the goal's branch with the machine's `gh` login (CUT-241). */
+  openPullRequest(id: string, push = false): Promise<PullRequestResult> {
+    return this.request(`/api/projects/${id}/pull-request`, {
+      method: "POST",
+      body: JSON.stringify({ push }),
     });
   }
 
