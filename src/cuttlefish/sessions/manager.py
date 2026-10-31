@@ -185,6 +185,7 @@ def launch_argv(
     claude_args: Sequence[str] = (),
     prompt: str | None = None,
     plan_first: bool = False,
+    extra_args: Sequence[str] = (),
 ) -> list[str]:
     """The command that starts the backend's interactive tool, resuming when asked.
 
@@ -199,7 +200,10 @@ def launch_argv(
     approved:
     in Claude Code's system prompt, which keeps the first message the person's own words, and on the
     end of the goal for Codex, which has no such flag.
+
+    ``extra_args`` are flags for the tool itself (the manager's MCP server, ADR-0052).
     """
+    claude_args = [*claude_args, *extra_args]
     first = _first_prompt(prompt) if prompt else None
     if first and plan_first and backend == "codex":
         first = f"{first}\n\n{PLAN_INSTRUCTION}"
@@ -228,9 +232,10 @@ def launch_argv(
             *([first] if first else []),
         ]
     if backend == "codex":
+        rest = "".join(f" {shlex.quote(arg)}" for arg in extra_args) + tail
         if resume:
-            return ["sh", "-c", f"codex resume --last{tail} || exec codex{tail}"]
-        return ["codex", *([first] if first else [])]
+            return ["sh", "-c", f"codex resume --last{rest} || exec codex{rest}"]
+        return ["codex", *extra_args, *([first] if first else [])]
     if backend == "kopicode":
         if first:
             raise SessionError(
@@ -293,6 +298,7 @@ class SessionManager:
         plan_first: bool = False,
         command: str | None = None,
         cwd: str | None = None,
+        extra_args: Sequence[str] = (),
     ) -> SessionInfo:
         """Make sure the project's agent is running in tmux, and record which way it got there.
 
@@ -339,6 +345,7 @@ class SessionManager:
                 kopicode_binary=self._kopicode,
                 prompt=prompt,
                 plan_first=plan_first,
+                extra_args=extra_args,
                 claude_args=(
                     ["--settings", str(hooks_settings), "--permission-mode", permission_mode(mode)]
                     if hooked

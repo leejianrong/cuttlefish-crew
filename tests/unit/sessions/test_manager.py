@@ -309,3 +309,11 @@ def test_a_terminal_command_refuses_a_first_message_and_an_empty_command(rig: Ri
     with pytest.raises(SessionError, match="empty"):
         rig.manager.ensure("p1", str(rig.root), "x", command="  ")
     assert rig.manager.status("p1", str(rig.root)).state == "none"
+
+
+def test_codex_takes_extra_flags_on_a_start_and_on_a_resume() -> None:
+    flags = ["-c", 'mcp_servers.x.command="cf"']
+    start = launch_argv("codex", root="/r", session_id="s", resume=False, extra_args=flags)
+    assert start == ["codex", *flags]
+    resumed = launch_argv("codex", root="/r", session_id="s", resume=True, extra_args=flags)
+    assert resumed[2].count("mcp_servers.x.command") == 2

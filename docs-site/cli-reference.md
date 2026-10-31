@@ -149,6 +149,7 @@ Sessions do not survive a restart: the dashboard asks you to sign in again and c
 |---|---|
 | `--host HOST` | Loopback by default. A non-loopback host (LAN IP, Tailscale address, `0.0.0.0`) requires `CUTTLEFISH_SERVE_PASSWORD` and switches to password/session auth. |
 | `--port PORT` | Auto-picks a free port if the default is taken. |
+| `--manager BACKEND` | Run the manager agent (`claude-code` or `codex`; ADR-0052). Makes a project named `manager` (root `~/.cuttlefish/manager`) and starts its session with the manager's tools, and without a shell or editor. Later starts of `serve` restore it without the flag, so it survives a daemon restart. kopicode cannot be the manager yet: it has no MCP client. See [The manager's tools](#the-managers-tools). |
 | `--tailscale-https` | Keep the daemon on loopback and print the two `tailscale serve` commands that give the dashboard an https address and the relay a `wss` address, so a phone can pair (see [Pairing over Tailscale https](#pairing-over-tailscale-https)). Needs `CUTTLEFISH_SERVE_PASSWORD`. Turns the relay on. Cannot be combined with `--tailscale`. |
 | `--tailscale` | Bind directly to this machine's own Tailscale IPv4 address — the recommended remote-access path. Overrides `--host`. |
 | `--relay URL` | Also dial out to a relay (`ws://host:port`, run by `cuttlefish relay`) and print a link that opens the dashboard through it, end-to-end encrypted. Preview, loopback only: see [the relay](#cuttlefish-relay). Default: `$CUTTLEFISH_RELAY_URL`. |
@@ -334,6 +335,12 @@ stopping a team (a 403).
 
 Every answer is journaled with who gave it (`person` or `manager`) and the caller's tier. A manager cannot answer or
 message in the project named by `CUTTLEFISH_MANAGER_PROJECT` (the project hosting its own session).
+
+`cuttlefish serve --manager claude-code` runs that agent for you (ADR-0052): the `manager` project is an ordinary one,
+so you message it from the dashboard's chat, and an external MCP client with the manager token reaches the same tools.
+Its instructions are the `CLAUDE.md` and `AGENTS.md` in `~/.cuttlefish/manager`. With no `--base-url`, `mcp --manager`
+reads the daemon's address from `~/.cuttlefish/daemon.json`, so a restart on another port is followed. cuttlefish makes
+no model call for it: the model is the backend's own.
 
 ## Configuration
 

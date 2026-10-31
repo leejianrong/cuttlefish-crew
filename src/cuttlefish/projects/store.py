@@ -546,6 +546,13 @@ class ProjectStore:
         self._conn.commit()
         return self.get(project_id)
 
+    def update_backend(self, project_id: str, backend: str | None) -> Project:
+        """Set the project's own backend. It applies the next time its session starts."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute("UPDATE projects SET backend = ? WHERE id = ?", (backend, project_id))
+        self._conn.commit()
+        return self.get(project_id)
+
     def update_terminal_command(self, project_id: str, command: str | None) -> Project:
         """Set (or, with ``None``, clear) the command the tmux agent session runs. It applies
         the next time the session starts."""
