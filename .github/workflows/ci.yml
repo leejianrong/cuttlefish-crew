@@ -112,6 +112,15 @@ jobs:
       - name: bootstrap a fresh Ubuntu and verify it
         run: make test-bootstrap
 
+  shellcheck:
+    name: Shell scripts (shellcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # CUT-235: scripts/install.sh is piped to sh by strangers and deploy/ runs as root; ubuntu-latest ships shellcheck.
+      - name: shellcheck scripts/ and deploy/
+        run: make shellcheck
+
   frontend:
     name: Dashboard frontend (svelte-check + vitest + build)
     runs-on: ubuntu-latest
