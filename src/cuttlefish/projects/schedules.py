@@ -16,12 +16,14 @@ A schedule that was due while the daemon was down is due once, not once per miss
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import sqlite3
 import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from cuttlefish.projects.store import default_projects_db
 
@@ -74,6 +76,14 @@ class Schedule:
     next_due: datetime
     last_run: datetime | None = None
     last_result: str | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        """Times as ISO 8601 UTC, for the API and the CLI."""
+        return {
+            **dataclasses.asdict(self),
+            "next_due": self.next_due.isoformat(),
+            "last_run": self.last_run.isoformat() if self.last_run else None,
+        }
 
 
 def due(schedules: list[Schedule], now: datetime) -> list[Schedule]:

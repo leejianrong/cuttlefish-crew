@@ -18,6 +18,7 @@
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
+  import ScheduleCard from "./ScheduleCard.svelte";
   import MissionControl from "./MissionControl.svelte";
   import Icon from "./Icon.svelte";
   import ArtifactsTab from "./ArtifactsTab.svelte";
@@ -336,6 +337,8 @@
       {/if}
 
       <AgentSessionCard {client} {projectId} />
+
+      <ScheduleCard {client} {projectId} />
 
       {#if project.running && installing}
         <p class="banner" role="status">

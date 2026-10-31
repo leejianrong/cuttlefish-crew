@@ -68,6 +68,7 @@ from cuttlefish.fleet import hook_files
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.autopilot import AutopilotError
 from cuttlefish.fleet.daemon import (
+    MAX_GOAL_CHARS,
     FleetDaemon,
     FleetError,
     RoleStart,
@@ -88,6 +89,7 @@ from cuttlefish.permissions import (
     MODES,
     backend_notes,
 )
+from cuttlefish.projects.schedules import ScheduleNotFoundError, ScheduleStore
 from cuttlefish.projects.store import (
     Project,
     ProjectNotFoundError,
@@ -910,6 +912,53 @@ def create_app(
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    def _schedules() -> ScheduleStore:
+        if daemon.schedules is None:
+            raise HTTPException(404, "this daemon has no schedule store")
+        return daemon.schedules
+
+    @app.get("/api/projects/{project_id}/schedules")
+    async def list_schedules(project_id: str) -> dict[str, Any]:
+        try:
+            daemon.projects.get(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"schedules": [s.to_json() for s in _schedules().entries(project_id)]}
+
+    @app.post("/api/projects/{project_id}/schedules")
+    async def add_schedule(project_id: str, request: Request) -> dict[str, Any]:
+        """Ask the project's builder for a goal on a recurrence, unattended (CUT-246, ADR-0051)."""
+        body = await _json_body(request)
+        goal, recurrence = body.get("goal"), body.get("recurrence")
+        if not isinstance(goal, str) or not isinstance(recurrence, str):
+            raise HTTPException(400, "'goal' and 'recurrence' are required text")
+        if len(goal.strip()) > MAX_GOAL_CHARS:
+            raise HTTPException(400, f"A goal is at most {MAX_GOAL_CHARS} characters.")
+        try:
+            daemon.projects.get(project_id)
+            return _schedules().add(project_id, goal, recurrence, now=datetime.now(UTC)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:  # RecurrenceError, or an empty goal
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.patch("/api/schedules/{schedule_id}")
+    async def update_schedule(schedule_id: str, request: Request) -> dict[str, Any]:
+        body = await _json_body(request)
+        enabled = body.get("enabled")
+        if not isinstance(enabled, bool):
+            raise HTTPException(400, "'enabled' must be true or false")
+        try:
+            return _schedules().set_enabled(schedule_id, enabled, now=datetime.now(UTC)).to_json()
+        except ScheduleNotFoundError as exc:
+            raise HTTPException(404, f"no schedule {schedule_id!r}") from exc
+
+    @app.delete("/api/schedules/{schedule_id}")
+    async def delete_schedule(schedule_id: str) -> dict[str, str]:
+        if not _schedules().remove(schedule_id):
+            raise HTTPException(404, f"no schedule {schedule_id!r}")
+        return {"status": "removed"}
 
     @app.patch("/api/projects/{project_id}/limits")
     async def update_limits(project_id: str, request: Request) -> dict[str, Any]:

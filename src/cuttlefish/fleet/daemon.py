@@ -341,6 +341,7 @@ class FleetDaemon:
         #: The credential broker (ADR-0031): started with the first team that needs it.
         self._broker: Broker | None = None
         #: Gives a builder its scheduled goal (CUT-245); only when a schedule store is supplied.
+        self.schedules = schedules
         self.scheduler = Scheduler(self, schedules) if schedules is not None else None
 
     def broker_enabled(self) -> bool:

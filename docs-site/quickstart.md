@@ -251,6 +251,31 @@ to `origin` (never `main`, never a force push). The URL shows on the page and in
 tier, and GitHub only
 ([ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)).
 
+## Scheduled goals
+
+On the project page, **Scheduled goals** asks the builder for a goal on a repeat while you are away. Write the goal,
+pick **Every N minutes**, **Every N hours** or **Daily at (UTC)**, and add it. The list shows each schedule's next run
+and what happened the last time it was due. From a terminal:
+
+```bash
+uv run cuttlefish schedule add <project-id> --goal "Triage the open issues" --recurrence "daily 06:30"
+uv run cuttlefish schedule list
+```
+
+What to know before you rely on it:
+
+- **Times are UTC**, all year, so a daylight-saving change never moves a run.
+- **Only `cuttlefish serve` runs a schedule.** It looks every 20 seconds. If the daemon was down when a run was due,
+  that schedule runs once when it comes back, not once per missed slot.
+- It starts the goal the way **Give the builder a goal** does, with Autopilot on and your **Its own branch** setting
+  respected. Autopilot plans first, so an unattended run waits at the plan under Needs you until you approve it.
+- **It never interrupts a builder that is still on its last goal.** That run is skipped, journaled as a skipped
+  schedule and shown on the page with the reason. A builder whose last goal has ended (done, stopped, hit a limit or
+  stuck) is restarted with the new goal. A builder you started without Autopilot cannot be told apart from one still
+  working, so it counts as busy until you stop it.
+- Adding, pausing or removing a schedule needs the Admin tier, since it starts work unattended
+  ([ADR-0051](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0051-a-schedule-asks-a-projects-builder-for-a-goal-from-the-fleet-daemon-and-never-interrupts-one.md)).
+
 ## Artifacts
 
 Agents are told to write results as markdown files under `.cuttlefish/artifacts/` in the project, and the
