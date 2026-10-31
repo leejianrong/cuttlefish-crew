@@ -647,3 +647,43 @@ def test_a_worktree_goal_in_a_folder_that_is_not_a_repository_is_refused(rig: Ri
     refused = client.post(f"{path}/goal", json={"text": "x", "backend": "claude-code"})
     assert refused.status_code == 409 and "worktree" in refused.json()["detail"]
     assert client.get(f"{path}/agent-session").json()["state"] == "none"
+
+
+# -- the manager's own session (CUT-137, ADR-0052) -------------------------------------------------
+
+
+async def test_the_manager_session_has_its_tools_and_survives_a_restart(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(rig.tmp))
+    daemon = rig.daemon()
+    manager = daemon.adopt_manager("claude-code")
+    assert manager is not None and daemon.manager_project == manager.id
+    first = await daemon.start_agent_session(manager.id)
+    assert "--mcp-config" in rig.launches()[0] and "--disallowedTools" in rig.launches()[0]
+    assert "cuttlefish-manager" in (Path(manager.root) / ".cuttlefish/manager-mcp.json").read_text()
+    assert "mcp --manager" not in (Path(manager.root) / "CLAUDE.md").read_text()  # tools, not shell
+
+    rig.tmux._run("kill-server")  # a reboot, then a new daemon that is told nothing
+    restarted = rig.daemon()
+    assert restarted.adopt_manager() is not None  # found by its root, no flag needed
+    restored = await restarted.reconcile_agent_sessions()
+    info = restored[0][1]
+    assert not isinstance(info, str) and info.last_action == "relaunched"
+    assert rig.launches()[-1].startswith(f"claude --resume {first.session_id} ")
+    assert "--mcp-config" in rig.launches()[-1]
+    with pytest.raises(Exception, match="own session"):
+        restarted.check_manager_may_touch(manager.id)
+
+
+def test_there_is_no_manager_until_one_is_asked_for(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(rig.tmp))
+    assert rig.daemon().adopt_manager() is None
+
+
+def test_kopicode_cannot_be_the_manager_yet(rig: Rig, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOME", str(rig.tmp))
+    with pytest.raises(Exception, match="no MCP client"):
+        rig.daemon().adopt_manager("kopicode")

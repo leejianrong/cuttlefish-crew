@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -62,6 +63,7 @@ from cuttlefish.fleet import (
     run_daemon,
 )
 from cuttlefish.fleet.claude_hooks import session_scope
+from cuttlefish.fleet.daemon import FleetError
 from cuttlefish.fleet.pullrequest import open_pull_request
 from cuttlefish.fleet.relay_link import RelaySettings
 from cuttlefish.fleet.serve_token import default_serve_token_path
@@ -949,6 +951,12 @@ async def _serve(args: argparse.Namespace) -> int:
                     f"(team {attempt.team_id}): {attempt.error}",
                     file=sys.stderr,
                 )
+        try:
+            manager = daemon.adopt_manager(args.manager)
+            if manager is not None and args.manager:
+                await daemon.start_agent_session(manager.id)
+        except FleetError as exc:
+            print(f"cuttlefish serve: manager not started: {exc}", file=sys.stderr)
         for name, restored in await daemon.reconcile_agent_sessions():
             if isinstance(restored, str):
                 print(
@@ -1153,7 +1161,12 @@ def _mcp(args: argparse.Namespace) -> int:
     manager = bool(args.manager)
     # The manager serves its own credential, never the owner's token (ADR-0050).
     token = hook_files.manager_token() if manager else args.token
-    if not args.base_url or not token:
+    base_url = args.base_url
+    if manager and not base_url:
+        # A restarted daemon may listen elsewhere; its own file says where (ADR-0040, ADR-0052).
+        with contextlib.suppress(OSError, ValueError, KeyError):
+            base_url = json.loads(hook_files.daemon_info_path().read_text())["url"]
+    if not base_url or not token:
         print(
             f"cuttlefish: mcp needs --base-url and --token (or {MCP_BASE_URL_ENV}/{MCP_TOKEN_ENV})",
             file=sys.stderr,
@@ -1163,7 +1176,7 @@ def _mcp(args: argparse.Namespace) -> int:
     from cuttlefish.mcp import build_manager_mcp_server, build_mcp_server
 
     build = build_manager_mcp_server if manager else build_mcp_server
-    server = build(base_url=args.base_url, token=token)
+    server = build(base_url=base_url, token=token)
     server.run("stdio")
     return EXIT_OK
 
@@ -1732,6 +1745,16 @@ def build_parser() -> argparse.ArgumentParser:
             "`tailscale serve`'s own reverse proxy (ADR-0013: it forwards the "
             "original tailnet Host header verbatim, which a loopback-bound "
             "cuttlefish serve would reject outright)."
+        ),
+    )
+    serve_parser.add_argument(
+        "--manager",
+        choices=("claude-code", "codex"),
+        metavar="BACKEND",
+        help=(
+            "Run the manager agent (ADR-0052): a project named 'manager' whose session is "
+            "started on this backend with the manager's MCP tools, and resumed on every restart "
+            "of serve. Once made, serve restores it without this flag."
         ),
     )
     serve_parser.add_argument(

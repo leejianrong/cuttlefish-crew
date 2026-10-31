@@ -59,7 +59,7 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
-from cuttlefish.fleet import gitexclude
+from cuttlefish.fleet import gitexclude, manager_agent
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
@@ -740,6 +740,13 @@ class FleetDaemon:
             except SessionError as exc:
                 raise FleetError(str(exc)) from exc
         chosen = resolve_agent_backend(backend or project.backend)
+        extra_args: list[str] = []
+        if project.id == self.manager_project:
+            # The manager's launch (ADR-0052), on a restart's relaunch as on a first start.
+            try:
+                extra_args = await asyncio.to_thread(manager_agent.prepare, project.root, chosen)
+            except ValueError as exc:
+                raise FleetError(str(exc)) from exc
         settings: Path | None = None
         if chosen == "claude-code":
             # Its permission questions come to Needs you through our hooks (ADR-0040).
@@ -763,10 +770,34 @@ class FleetDaemon:
                     prompt=prompt,
                     plan_first=plan_first,
                     cwd=cwd,
+                    extra_args=extra_args,
                 )
             )
         except SessionError as exc:
             raise FleetError(str(exc)) from exc
+
+    def adopt_manager(self, backend: str | None = None) -> Project | None:
+        """Find the manager's project, making it when ``backend`` is given and there is none
+        (CUT-137, ADR-0052), and mark it as the one the manager credential may not touch. With
+        neither a project nor a backend, there is no manager and nothing changes. A project
+        named by ``CUTTLEFISH_MANAGER_PROJECT`` stays the manager's."""
+        root = str(manager_agent.manager_root())
+        found = next((p for p in self._projects.list() if p.root == root), None)
+        if found is None and backend is None:
+            return None
+        if backend is not None:
+            resolve_agent_backend(backend)
+            if backend in manager_agent.UNSUPPORTED:
+                raise FleetError(manager_agent.UNSUPPORTED[backend])
+        if found is None:
+            Path(root).mkdir(parents=True, exist_ok=True)
+            found = self._projects.register(
+                name=manager_agent.MANAGER_NAME, root=root, backend=backend
+            )
+        elif backend is not None and found.backend != backend:
+            found = self._projects.update_backend(found.id, backend)
+        self.manager_project = self.manager_project or found.id
+        return found
 
     async def open_terminal(
         self, project_id: str, *, cols: int, rows: int, kind: str = "agent"
