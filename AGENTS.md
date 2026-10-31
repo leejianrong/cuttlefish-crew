@@ -63,6 +63,9 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
   `curl ... | sh`, writes outside the root). One shared constant, never
   duplicated per backend, never overridable by a rule or an answer. V4 in
   `docs/SLICES.md`.
+- **Approvals are tiered; the manager is an agent, not a cuttlefish model call.** Never-allowed, then policy, then a manager
+  agent at the APPROVE device tier, then the person. The manager cannot reach ADMIN routes, answer its own session's
+  request or lift the never-allowed list. ADR-0046.
 - **Never imply a live prompt where there is none.** kopicode (`serve`), Claude
   Code (stream-json) and Codex (`app-server`) pause for a permission on their
   default transports (V4-H, V4-K, V4-M). The one-shot transports
