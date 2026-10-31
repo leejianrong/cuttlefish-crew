@@ -103,10 +103,20 @@ class Removal:
         return out | {"ok": self.ok}
 
 
-def remove(root: str, path: str, branch: str | None, *, delete_branch: bool = False) -> Removal:
-    """Remove a goal's worktree (CUT-250). Refuses a folder that is not one of ours or that has
+def remove(
+    root: str,
+    path: str,
+    branch: str | None,
+    *,
+    delete_branch: bool = False,
+    builder_running: bool = False,
+) -> Removal:
+    """Remove a goal's worktree (CUT-250). Refuses while the builder runs (the one check the page
+    and the CLI share, CUT-264), a folder that is not one of ours or that has
     uncommitted or untracked changes; never forces. The branch is kept unless ``delete_branch``,
     and then only with ``git branch -d``, which itself refuses commits that are merged nowhere."""
+    if builder_running:
+        return Removal(False, "running", "The builder is still running. Stop it before removing.")
     base = (Path(root) / ".cuttlefish" / "worktrees").resolve()
     target = Path(path).resolve()
     if target.parent != base:
@@ -121,12 +131,14 @@ def remove(root: str, path: str, branch: str | None, *, delete_branch: bool = Fa
                     "The worktree has uncommitted changes. Commit or discard them first.",
                 )
             _git(root, "worktree", "remove", str(target))
+        elif target.exists():
+            return Removal(False, "not_a_worktree", "That folder is not a registered git worktree.")
     except WorktreeError as exc:
         return Removal(False, "failed", str(exc))
     if not delete_branch or not branch:
         return Removal(True)
     try:
         _git(root, "branch", "-d", branch)
-    except WorktreeError as exc:
-        return Removal(True, branch_note=f"The branch was kept: {exc}")
+    except WorktreeError:
+        return Removal(True, branch_note="The branch was kept: it has commits that are not merged.")
     return Removal(True, branch_deleted=True)

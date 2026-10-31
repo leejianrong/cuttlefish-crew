@@ -24,6 +24,7 @@
     projectBackend,
     terminalCommand = null,
     worktreePerGoal = false,
+    refreshKey = 0,
     onTabChange,
   }: {
     client: FleetClient;
@@ -31,6 +32,7 @@
     projectBackend: string | null | undefined;
     terminalCommand?: string | null;
     worktreePerGoal?: boolean;
+    refreshKey?: number;
     onTabChange: (tab: ProjectTab) => void;
   } = $props();
 
@@ -59,6 +61,7 @@
 
   $effect(() => {
     const id = projectId;
+    void refreshKey; // a start or stop on the session card re-runs this read now
     if (shownFor !== id) {
       session = null;
       goal = null;

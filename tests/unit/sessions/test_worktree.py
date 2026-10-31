@@ -121,3 +121,27 @@ def test_remove_of_a_folder_already_gone_still_clears_the_registration(repo: Pat
     shutil.rmtree(path)
     assert worktree.remove(str(repo), path, branch).ok
     assert str(Path(path).resolve()) not in _git(repo, "worktree", "list")
+
+
+def test_remove_refuses_a_plain_folder_git_does_not_list_and_leaves_it(repo: Path) -> None:
+    folder = repo / ".cuttlefish" / "worktrees" / "plain"
+    folder.mkdir(parents=True)
+    result = worktree.remove(str(repo), str(folder), None)
+    assert not result.ok and result.code == "not_a_worktree"
+    assert folder.exists()
+
+
+def test_remove_refuses_while_the_builder_runs_and_removes_nothing(repo: Path) -> None:
+    branch, path = worktree.create(str(repo), "Busy", now=NOW)
+    result = worktree.remove(str(repo), path, branch, delete_branch=True, builder_running=True)
+    assert not result.ok and result.code == "running"
+    assert Path(path).exists() and branch in _git(repo, "branch", "--list")
+
+
+def test_an_unmerged_branch_note_is_a_sentence_not_git_output(repo: Path) -> None:
+    branch, path = worktree.create(str(repo), "Note", now=NOW)
+    (Path(path) / "a.txt").write_text("a")
+    _git(Path(path), "add", "a.txt")
+    _git(Path(path), "commit", "-q", "-m", "work")
+    note = worktree.remove(str(repo), path, branch, delete_branch=True).branch_note
+    assert note and "error:" not in note and "-D" not in note

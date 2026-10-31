@@ -41,6 +41,9 @@
   import TerminalView from "./TerminalView.svelte";
   import TeamTab from "./TeamTab.svelte";
 
+  // Bumped when the person starts or stops the agent here, so the goal card reads again at once.
+  let sessionChanges = $state(0);
+
   let {
     client,
     projectId,
@@ -332,11 +335,12 @@
           projectBackend={project.backend}
           terminalCommand={project.terminal_command}
           worktreePerGoal={project.worktree_per_goal}
+          refreshKey={sessionChanges}
           {onTabChange}
         />
       {/if}
 
-      <AgentSessionCard {client} {projectId} />
+      <AgentSessionCard {client} {projectId} onChange={() => sessionChanges++} />
 
       <ScheduleCard {client} {projectId} />
 

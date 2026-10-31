@@ -90,7 +90,7 @@ from cuttlefish.secrets.store import (
     SecretsStore,
     generate_key,
 )
-from cuttlefish.sessions import worktree
+from cuttlefish.sessions import SessionManager, Tmux, agent_env, default_socket, worktree
 from cuttlefish.sessions.manager import read_goal
 from cuttlefish.steering import (
     SteeringDeliveryError,
@@ -834,7 +834,16 @@ def _project_remove_worktree(store: ProjectStore, project_id: str, *, delete_bra
     if not goal or not path:
         print("cuttlefish: the last goal has no worktree", file=sys.stderr)
         return EXIT_TASK_FAILED
-    result = worktree.remove(project.root, path, goal.get("branch"), delete_branch=delete_branch)
+    running = (
+        SessionManager(Tmux(default_socket()), env_for=agent_env).status(project.id, project.root)
+    ).state == "running"
+    result = worktree.remove(
+        project.root,
+        path,
+        goal.get("branch"),
+        delete_branch=delete_branch,
+        builder_running=running,
+    )
     if not result.ok:
         print(f"cuttlefish: {result.reason}", file=sys.stderr)
         return EXIT_TASK_FAILED

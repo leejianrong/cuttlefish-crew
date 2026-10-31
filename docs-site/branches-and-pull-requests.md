@@ -47,7 +47,8 @@ uv run cuttlefish projects remove-worktree <project-id> --delete-branch   # also
 ```
 
 It removes the last goal's worktree folder. A worktree with uncommitted or untracked changes is refused, with the
-reason, and so is one while the builder is still running; nothing is forced. The branch stays unless you ask for
+reason, and so is one while the builder is still running (from the page or the CLI) or a folder git does not list as a
+worktree; nothing is forced. The branch stays unless you ask for
 `--delete-branch` (the page has a checkbox), and then only a merged branch goes: an unmerged one is kept and the
 answer says so. The page's route is `POST /api/projects/{id}/goal/worktree/remove` (Admin tier).
 

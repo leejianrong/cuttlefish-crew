@@ -2,7 +2,11 @@
   import type { AgentSession, FleetClient } from "../api";
   import { backendLabel, explanation, lastActionText, stateText } from "../agentsession";
 
-  let { client, projectId }: { client: FleetClient; projectId: string } = $props();
+  let {
+    client,
+    projectId,
+    onChange,
+  }: { client: FleetClient; projectId: string; onChange?: () => void } = $props();
 
   let session = $state<AgentSession | null>(null);
   let busy = $state(false);
@@ -44,6 +48,7 @@
         action === "start"
           ? await client.startAgentSession(projectId)
           : await client.stopAgentSession(projectId);
+      onChange?.();
     } catch (e) {
       error = e instanceof Error ? e.message : "That didn't work.";
     } finally {

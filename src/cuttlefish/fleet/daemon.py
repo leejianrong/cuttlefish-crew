@@ -636,12 +636,16 @@ class FleetDaemon:
         path = goal.get("worktree") if goal else None
         if not goal or not path:
             return worktree.Removal(False, "not_a_worktree", "The last goal has no worktree.")
-        if (await self.agent_session(project_id)).state == "running":
-            return worktree.Removal(
-                False, "running", "The builder is still running. Stop it before removing."
-            )
+        running = (await self.agent_session(project_id)).state == "running"
         return await asyncio.to_thread(
-            worktree.remove, project.root, path, goal.get("branch"), delete_branch=delete_branch
+            functools.partial(
+                worktree.remove,
+                project.root,
+                path,
+                goal.get("branch"),
+                delete_branch=delete_branch,
+                builder_running=running,
+            )
         )
 
     async def open_pull_request(self, project_id: str, *, push: bool = False) -> PullRequest:
