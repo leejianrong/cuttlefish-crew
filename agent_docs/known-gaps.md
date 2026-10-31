@@ -442,10 +442,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   path; use a browser with no password session. Accepted for now: ending a particular password session would need a session list,
   which does not exist. A lost phone that ever signed in with the password needs the password changed and the daemon restarted.
 
-- **cuttlefish keeps its own folders out of a project's git status only for a team the daemon starts, in a plain `.git`
-  directory** (CUT-159). `fleet/gitexclude.py` adds `.cuttlefish/` and `.satay/` to `.git/info/exclude` when a team starts.
-  `cuttlefish run` and `run-team` do not (add them to your own `.gitignore`), a linked worktree or submodule (`.git` is a file)
-  is skipped, and a file the agent already committed from there stays tracked: excluding does not untrack.
+- **cuttlefish keeps its own folders out of a project's git status only for a team the daemon starts** (CUT-159, CUT-237). `fleet/gitexclude.py` adds `.cuttlefish/` and `.satay/` to the repository's `info/exclude` when a team starts (a linked worktree or submodule is found with `git rev-parse --git-path`).
+  `cuttlefish run` and `run-team` do not (add them to your own `.gitignore`), and a file the agent already committed from there stays tracked: excluding does not untrack.
 
 - **The text filters are checked on the live path only** (CUT-161). `sort`, `uniq` and `sed -n` are in the `inspect` preset, held to
   their read-only forms by `never_allowed.unsafe_flag` and `sed_print_is_pure` (only `sed -n 'A,Bp' FILE`; `A,$p` too). A Claude Code

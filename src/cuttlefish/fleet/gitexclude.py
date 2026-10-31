@@ -10,6 +10,7 @@ nothing that is committed or shared, and a project that already ignores them is 
 from __future__ import annotations
 
 import logging
+import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -20,16 +21,23 @@ _NOTE = "# cuttlefish-crew: its own state, not part of the project"
 
 
 def ensure_excluded(root: str | Path, entries: Sequence[str] = ENTRIES) -> bool:
-    """Add what is missing of ``entries`` to ``<root>/.git/info/exclude``; ``True`` if it changed.
+    """Add what is missing of ``entries`` to the repo's ``info/exclude``; ``True`` if it changed.
 
-    Only a plain ``.git`` directory is handled: a linked worktree or submodule (``.git`` is a file)
-    keeps its exclude file elsewhere, and a folder that is not a repository has none. Best effort: a
-    read-only or odd ``.git`` is logged and skipped, never a reason to refuse a team.
+    A plain ``.git`` directory is read directly. Where ``.git`` is a file (a linked worktree or a
+    submodule) ``git rev-parse --git-path`` names the exclude file; a folder that is not a
+    repository has none. Best effort: a read-only or odd ``.git``, or no ``git``, is logged and
+    skipped, never a reason to refuse a team.
     """
     git = Path(root) / ".git"
-    if not git.is_dir():
+    if git.is_dir():
+        path = git / "info" / "exclude"
+    elif git.is_file():
+        found = _linked_exclude(Path(root))
+        if found is None:
+            return False
+        path = found
+    else:
         return False
-    path = git / "info" / "exclude"
     try:
         existing = path.read_text(encoding="utf-8") if path.exists() else ""
         have = {line.strip().rstrip("/") for line in existing.splitlines()}
@@ -43,3 +51,18 @@ def ensure_excluded(root: str | Path, entries: Sequence[str] = ENTRIES) -> bool:
         _LOG.info("could not update %s: %s", path, exc)
         return False
     return True
+
+
+def _linked_exclude(root: Path) -> Path | None:
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-path", "info/exclude"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        _LOG.info("could not find the git dir of %s: %s", root, exc)
+        return None
+    return root / out if out else None
