@@ -64,3 +64,38 @@ def test_the_route_validates_its_body_and_the_project(client: TestClient) -> Non
 
 def test_opening_a_pull_request_needs_the_admin_tier() -> None:
     assert required_tier("POST", "/api/projects/{project_id}/pull-request") is Tier.ADMIN
+
+
+def test_the_remove_worktree_route_refuses_dirty_then_removes_and_keeps_the_branch(
+    client: TestClient, tmp_path: Path
+) -> None:
+    import subprocess
+
+    from cuttlefish.sessions import worktree
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "first"]):
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args], cwd=root, check=True
+        )
+    project = client.store.register(name="beta", root=str(root))  # type: ignore[attr-defined]
+    branch, path = worktree.create(str(root), "Add a thing")
+    write_goal(str(root), "Add a thing", "claude-code", branch=branch, worktree=path)
+    url = f"/api/projects/{project.id}/goal/worktree/remove"
+    assert required_tier("POST", "/api/projects/{project_id}/goal/worktree/remove") is Tier.ADMIN
+
+    (Path(path) / "wip.txt").write_text("x")
+    refused = client.post(url, json={}).json()
+    assert refused["ok"] is False and refused["code"] == "uncommitted"
+    assert client.get(f"/api/projects/{project.id}/goal").json()["goal"]["worktree"] == path
+
+    (Path(path) / "wip.txt").unlink()
+    assert client.post(url, json={}).json() == {"ok": True}
+    assert not Path(path).exists()
+    goal = client.get(f"/api/projects/{project.id}/goal").json()["goal"]
+    assert "worktree" not in goal and goal["branch"] == branch
+    branches = subprocess.run(["git", "branch", "--list"], cwd=root, capture_output=True, text=True)
+    assert branch in branches.stdout
+    assert client.post(url, json={"delete_branch": "yes"}).status_code == 400
+    assert client.post("/api/projects/nope/goal/worktree/remove", json={}).status_code == 404

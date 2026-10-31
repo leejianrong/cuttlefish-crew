@@ -1279,6 +1279,21 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.post("/api/projects/{project_id}/goal/worktree/remove")
+    async def remove_goal_worktree(project_id: str, request: Request) -> dict[str, Any]:
+        """Remove the last goal's git worktree (CUT-250). `delete_branch: true` also deletes its
+        branch, only if merged. A refusal (uncommitted changes, a running builder) is a 200 with
+        `ok: false`, a `code` and a plain `reason`."""
+        body = await _json_body(request)
+        delete_branch = body.get("delete_branch", False)
+        if not isinstance(delete_branch, bool):
+            raise HTTPException(400, "'delete_branch' must be true or false")
+        try:
+            result = await daemon.remove_goal_worktree(project_id, delete_branch=delete_branch)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return result.to_json()
+
     @app.post("/api/projects/{project_id}/agent-session/stop")
     async def stop_agent_session(project_id: str) -> dict[str, Any]:
         try:

@@ -4,12 +4,13 @@ The worktree lives under ``<root>/.cuttlefish/worktrees/``, inside the project r
 that holds an agent to the project folder (the never-allowed list, the hook's edit check) still
 holds there, and ``.cuttlefish/`` is already out of ``git status``. It is made from the checkout's
 current ``HEAD`` on a new ``cuttlefish/<slug>`` branch; the checkout and its branch are not touched.
-A finished goal's worktree is kept, because it holds the work: remove it with
-``git worktree remove``.
+A finished goal's worktree is kept, because it holds the work; ``remove`` (CUT-250) takes it away
+on request, and refuses one with uncommitted changes. Its branch stays unless asked.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import re
 import shutil
 import subprocess
@@ -84,3 +85,60 @@ def discard(root: str, branch: str, path: str) -> None:
     """Undo ``create`` for a goal that never started."""
     _git(root, "worktree", "remove", "--force", path)
     _git(root, "branch", "-D", branch)
+
+
+@dataclasses.dataclass(frozen=True)
+class Removal:
+    ok: bool
+    #: Why not, in a word the page switches on: ``not_a_worktree``, ``uncommitted``, ``running``
+    #: or ``failed``.
+    code: str | None = None
+    reason: str | None = None
+    branch_deleted: bool = False
+    #: The branch was asked to go and could not (it holds commits not merged anywhere).
+    branch_note: str | None = None
+
+    def to_json(self) -> dict[str, object]:
+        out = {k: v for k, v in dataclasses.asdict(self).items() if v not in (None, False)}
+        return out | {"ok": self.ok}
+
+
+def remove(
+    root: str,
+    path: str,
+    branch: str | None,
+    *,
+    delete_branch: bool = False,
+    builder_running: bool = False,
+) -> Removal:
+    """Remove a goal's worktree (CUT-250). Refuses while the builder runs (the one check the page
+    and the CLI share, CUT-264), a folder that is not one of ours or that has
+    uncommitted or untracked changes; never forces. The branch is kept unless ``delete_branch``,
+    and then only with ``git branch -d``, which itself refuses commits that are merged nowhere."""
+    if builder_running:
+        return Removal(False, "running", "The builder is still running. Stop it before removing.")
+    base = (Path(root) / ".cuttlefish" / "worktrees").resolve()
+    target = Path(path).resolve()
+    if target.parent != base:
+        return Removal(False, "not_a_worktree", "That is not one of this project's goal worktrees.")
+    try:
+        _git(root, "worktree", "prune")
+        if target in _registered(root):
+            if _git(target, "status", "--porcelain").strip():
+                return Removal(
+                    False,
+                    "uncommitted",
+                    "The worktree has uncommitted changes. Commit or discard them first.",
+                )
+            _git(root, "worktree", "remove", str(target))
+        elif target.exists():
+            return Removal(False, "not_a_worktree", "That folder is not a registered git worktree.")
+    except WorktreeError as exc:
+        return Removal(False, "failed", str(exc))
+    if not delete_branch or not branch:
+        return Removal(True)
+    try:
+        _git(root, "branch", "-d", branch)
+    except WorktreeError:
+        return Removal(True, branch_note="The branch was kept: it has commits that are not merged.")
+    return Removal(True, branch_deleted=True)

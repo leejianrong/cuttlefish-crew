@@ -90,6 +90,7 @@ from cuttlefish.secrets.store import (
     SecretsStore,
     generate_key,
 )
+from cuttlefish.sessions import SessionManager, Tmux, agent_env, default_socket, worktree
 from cuttlefish.sessions.manager import read_goal
 from cuttlefish.steering import (
     SteeringDeliveryError,
@@ -820,6 +821,36 @@ def _project_pull_request(store: ProjectStore, project_id: str, *, push: bool) -
     return EXIT_OK
 
 
+def _project_remove_worktree(store: ProjectStore, project_id: str, *, delete_branch: bool) -> int:
+    """`projects remove-worktree`: remove the last goal's worktree (CUT-250). Refuses uncommitted
+    changes; keeps the branch unless `--delete-branch`."""
+    try:
+        project = store.get(project_id)
+    except ProjectNotFoundError:
+        print(f"cuttlefish: no project {project_id!r} registered", file=sys.stderr)
+        return EXIT_TASK_FAILED
+    goal = read_goal(project.root)
+    path = goal.get("worktree") if goal else None
+    if not goal or not path:
+        print("cuttlefish: the last goal has no worktree", file=sys.stderr)
+        return EXIT_TASK_FAILED
+    running = (
+        SessionManager(Tmux(default_socket()), env_for=agent_env).status(project.id, project.root)
+    ).state == "running"
+    result = worktree.remove(
+        project.root,
+        path,
+        goal.get("branch"),
+        delete_branch=delete_branch,
+        builder_running=running,
+    )
+    if not result.ok:
+        print(f"cuttlefish: {result.reason}", file=sys.stderr)
+        return EXIT_TASK_FAILED
+    print(f"cuttlefish: removed {path}" + (f"; {result.branch_note}" if result.branch_note else ""))
+    return EXIT_OK
+
+
 def _projects(args: argparse.Namespace) -> int:
     store = ProjectStore.open()
     try:
@@ -866,6 +897,10 @@ def _projects(args: argparse.Namespace) -> int:
             return EXIT_OK
         if args.projects_command == "pr":
             return _project_pull_request(store, args.project_id, push=args.push)
+        if args.projects_command == "remove-worktree":
+            return _project_remove_worktree(
+                store, args.project_id, delete_branch=args.delete_branch
+            )
         if args.projects_command == "list":
             for project in store.list():
                 print(json.dumps(_project_dict(project)))
@@ -1690,6 +1725,15 @@ def build_parser() -> argparse.ArgumentParser:
     pr_parser.add_argument("project_id")
     pr_parser.add_argument(
         "--push", action="store_true", help="Push the branch to origin first if it is not there"
+    )
+
+    rw_parser = projects_sub.add_parser(
+        "remove-worktree",
+        help="Remove the last goal's git worktree (refused with uncommitted changes)",
+    )
+    rw_parser.add_argument("project_id")
+    rw_parser.add_argument(
+        "--delete-branch", action="store_true", help="Also delete its branch, if it is merged"
     )
 
     schedule_parser = subparsers.add_parser(

@@ -9,6 +9,7 @@ import {
   canPushToFix,
   defaultBuilder,
   pullRequestNote,
+  worktreeRemovalNote,
 } from "./goal";
 
 describe("defaultBuilder", () => {
@@ -68,5 +69,16 @@ describe("canPushToFix", () => {
     expect(canPushToFix({ ok: false, code: "not_pushed" })).toBe(true);
     expect(canPushToFix({ ok: false, code: "no_commits" })).toBe(false);
     expect(canPushToFix({ ok: true })).toBe(false);
+  });
+});
+
+describe("worktreeRemovalNote (CUT-250)", () => {
+  it("says why a removal was refused, and what happened to the branch", () => {
+    expect(worktreeRemovalNote({ ok: false, reason: "The worktree has uncommitted changes." })).toBe(
+      "The worktree has uncommitted changes.",
+    );
+    expect(worktreeRemovalNote({ ok: true })).toBe("Worktree removed; its branch is kept.");
+    expect(worktreeRemovalNote({ ok: true, branch_deleted: true })).toBe("Worktree and branch removed.");
+    expect(worktreeRemovalNote({ ok: true, branch_note: "The branch was kept: not merged." })).toContain("not merged");
   });
 });

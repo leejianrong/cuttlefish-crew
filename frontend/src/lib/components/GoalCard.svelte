@@ -2,7 +2,7 @@
   // "Give the builder a goal" (CUT-171, ADR-0044): one box that starts the project's agent in tmux
   // with the goal as its first message. It replaces "Start a team" as the main way to start work;
   // the round and team workflow is under Advanced on the same page.
-  import type { AgentSession, FleetClient, Goal, PullRequestResult } from "../api";
+  import type { AgentSession, FleetClient, Goal, PullRequestResult, WorktreeRemoval } from "../api";
   import { phaseLabel, type AutopilotStatus } from "../autopilot";
   import { TERMINAL_COMMAND_NOTE } from "../agentsession";
   import {
@@ -14,6 +14,7 @@
     canPushToFix,
     defaultBuilder,
     pullRequestNote,
+    worktreeRemovalNote,
   } from "../goal";
   import type { ProjectTab } from "../route";
 
@@ -23,6 +24,7 @@
     projectBackend,
     terminalCommand = null,
     worktreePerGoal = false,
+    refreshKey = 0,
     onTabChange,
   }: {
     client: FleetClient;
@@ -30,6 +32,7 @@
     projectBackend: string | null | undefined;
     terminalCommand?: string | null;
     worktreePerGoal?: boolean;
+    refreshKey?: number;
     onTabChange: (tab: ProjectTab) => void;
   } = $props();
 
@@ -50,11 +53,15 @@
   let busy = $state(false);
   let prBusy = $state(false);
   let prResult = $state<PullRequestResult | null>(null);
+  let rmResult = $state<WorktreeRemoval | null>(null);
+  let rmBusy = $state(false);
+  let rmBranch = $state(false);
   let error = $state<string | null>(null);
   let shownFor = "";
 
   $effect(() => {
     const id = projectId;
+    void refreshKey; // a start or stop on the session card re-runs this read now
     if (shownFor !== id) {
       session = null;
       goal = null;
@@ -120,6 +127,19 @@
       prResult = { ok: false, reason: e instanceof Error ? e.message : "That didn't work." };
     } finally {
       prBusy = false;
+    }
+  }
+
+  async function removeWorktree() {
+    if (rmBusy) return;
+    rmBusy = true;
+    try {
+      rmResult = await client.removeGoalWorktree(projectId, rmBranch);
+      if (rmResult.ok && goal) goal = { ...goal, worktree: undefined };
+    } catch (e) {
+      rmResult = { ok: false, reason: e instanceof Error ? e.message : "That didn't work." };
+    } finally {
+      rmBusy = false;
     }
   }
 
@@ -258,7 +278,7 @@
         <span class="title-small">Its own branch</span>
         <span class="body-small muted">
           Each goal gets a new git worktree and branch, so the builder never touches your checkout
-          or its branch. The worktree is kept when the goal ends, with the work on it.
+          or its branch. The worktree is kept when the goal ends, with the work on it; remove it from here when you are done.
         </span>
       </span>
     </label>
@@ -288,6 +308,19 @@
         <p class="body-small muted">
           Uses this machine's <code>gh</code> login, with the goal and the commits as the text. It never
           merges.
+        </p>
+      {/if}
+      {#if goal.worktree && !running}
+        <div class="actions" data-testid="remove-worktree">
+          <button class="btn btn-tonal" disabled={rmBusy} onclick={removeWorktree}>
+            {rmBusy ? "Removing…" : "Remove worktree"}
+          </button>
+          <label class="body-small"><input type="checkbox" bind:checked={rmBranch} /> Also delete its branch (if merged)</label>
+        </div>
+      {/if}
+      {#if rmResult}
+        <p class="body-small {rmResult.ok ? 'muted' : 'error'}" role={rmResult.ok ? "status" : "alert"} data-testid="worktree-note">
+          {worktreeRemovalNote(rmResult)}
         </p>
       {/if}
       {#if prResult && !prResult.ok}
