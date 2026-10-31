@@ -29,6 +29,8 @@ scattered logs that disagree with each other.
 
 ## Install
 
+cuttlefish-crew runs on Linux and WSL2 (CI runs on Ubuntu); macOS is untested. It needs Python 3.12+, [uv](https://docs.astral.sh/uv/) and Node.js.
+
 ```bash
 git clone https://github.com/leejianrong/cuttlefish-crew.git
 cd cuttlefish-crew
