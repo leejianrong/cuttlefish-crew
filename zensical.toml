@@ -12,6 +12,7 @@ nav = [
   { "Home" = "index.md" },
   { "Quickstart" = "quickstart.md" },
   { "CLI reference" = "cli-reference.md" },
+  { "How we differ" = "comparison.md" },
   { "Hosting the relay" = "hosted-relay.md" },
   { "Architecture" = "architecture.md" },
   { "Architecture diagrams" = "architecture-diagrams.md" },
