@@ -37,6 +37,12 @@ curl -fsSL https://raw.githubusercontent.com/leejianrong/cuttlefish-crew/main/sc
 
 To work from a checkout instead, see the [quickstart](quickstart.md).
 
+## From a phone
+
+The dashboard is a web app; there is no native app yet. Pairing a phone needs an https page, through
+[Tailscale https](cli-reference.md#pairing-over-tailscale-https) or a relay, and it has been checked in Chromium
+only, not on a real phone or Safari. The install line above runs on your computer, not the phone.
+
 You'll also need at least one coding-agent backend on `PATH` —
 [kopicode](https://github.com/leejianrong/kopicode) (the default), the
 `claude` CLI, or the `codex` CLI — plus a model credential for whichever

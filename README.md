@@ -7,7 +7,7 @@ coding to a pluggable backend
 ([kopicode](https://github.com/leejianrong/kopicode), headless Claude Code, or
 headless Codex), and everything that happens lands in one readable journal.
 
-![The Projects screen from a real run: three projects, each with a Claude Code builder paused on a command and a "1 waiting for you" badge](docs/assets/dashboard-fleet-hero.png)
+![The Projects screen from a real run: three projects in Auto mode, each with a Claude Code builder shown as working](docs/assets/dashboard-fleet-hero.png)
 
 When an agent wants to run a command you have not approved, it stops and waits
 for you. You answer from the dashboard, and the agent carries on:

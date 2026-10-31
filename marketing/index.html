@@ -241,10 +241,46 @@
   footer a { color: var(--foam-dim); text-decoration: none; }
   footer a:hover { color: var(--foam); }
 
+  /* phone-only pieces: hidden on a wide screen so the desktop fold stays as it was */
+  .cta-phone, .phone-note, .modes-phone, .shot-phone, .staged-phone, .phone-only { display: none; }
+  .from-phone { color: var(--foam-dim); font-size: 0.95rem; max-width: 56ch; margin: 28px auto 0; }
+
   @media (max-width: 860px) {
     .hero { grid-template-columns: 1fr; padding-top: 8px; gap: 36px; }
     .features { grid-template-columns: 1fr; }
     footer { flex-direction: column; gap: 12px; text-align: center; }
+  }
+
+  @media (max-width: 600px) {
+    .hero { gap: 16px; padding-bottom: 48px; }
+    .hero > div:first-child { display: contents; }
+    .hero h1 { order: 1; font-size: 2rem; }
+    .hero p.sub { order: 2; font-size: 1.02rem; margin: 0; }
+    .sub-more { display: none; }
+    .agents-row { order: 3; flex-wrap: nowrap; gap: 6px; margin: 0; }
+    .agents-label { font-size: 0.82rem; margin-right: 0; white-space: nowrap; }
+    .agent-chip { padding: 3px 9px; font-size: 0.8rem; white-space: nowrap; }
+    .cta-phone { order: 4; display: flex; flex-direction: column; gap: 10px; }
+    .cta-phone a {
+      display: block; text-align: center; text-decoration: none; white-space: nowrap;
+      padding: 13px 16px; border-radius: 10px; font-weight: 600; font-size: 1rem;
+      border: 1px solid var(--glow);
+    }
+    .cta-phone a.primary { background: var(--glow); color: var(--ink); }
+    .phone-note { order: 5; display: block; margin: 0; color: var(--foam-dim); font-size: 0.85rem; }
+    .hero > div:last-child { order: 6; }
+    .shot-wide { display: none; }
+    .shot-phone { display: block; max-width: 270px; margin: 0 auto; }
+    .staged { display: none; }
+    .staged-phone { display: block; text-align: center; color: var(--foam-dim); font-size: 0.8rem; margin: 10px 0 0; }
+    .install { order: 7; max-width: none; }
+    .install code { white-space: pre-wrap; word-break: break-all; font-size: 0.74rem; }
+    .platforms { order: 8; margin: 0; }
+    .hero-links { display: none; }
+    .phone-only { display: inline; }
+    .modes-phone { order: 9; display: block; color: var(--foam-dim); font-size: 0.95rem; margin: 0; }
+    .try .install { margin-top: 24px; }
+    .try-links a { white-space: nowrap; }
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -266,30 +302,41 @@
 <header class="wrap hero">
   <div>
     <h1>A fleet manager for <span class="accent">coding agents</span>.</h1>
-    <p class="sub">Register your software projects, give each a small crew of coding agents, and run all of them from one dashboard. You choose how much it asks: Ask first pauses on every shell command, Standard runs a list of safe ones and asks about the rest, and Auto runs everything except a short never-allowed list. A restarted daemon picks up unfinished teams.</p>
+    <p class="sub">Register your software projects, give each a small crew of coding agents, and run all of them from one dashboard.<span class="sub-more"> You choose how much it asks: Ask first pauses on every shell command, Standard runs a list of safe ones and asks about the rest, and Auto runs everything except a short never-allowed list. A restarted daemon picks up unfinished teams.</span></p>
     <p class="agents-row" aria-label="Supported coding agents">
       <span class="agents-label">Works with</span>
       <span class="agent-chip">Claude Code</span>
       <span class="agent-chip">Codex</span>
       <span class="agent-chip">kopicode</span>
     </p>
+    <!-- Phone only: the install line cannot be run from a phone, so offer the docs or a mail to yourself. -->
+    <div class="cta-phone">
+      <a class="primary" href="docs/quickstart/">Read the quickstart</a>
+      <a href="mailto:?subject=Install%20cuttlefish-crew&amp;body=Run%20this%20on%20your%20computer%20(Linux%20or%20WSL2)%3A%0A%0Acurl%20-fsSL%20https%3A%2F%2Fraw.githubusercontent.com%2Fleejianrong%2Fcuttlefish-crew%2Fmain%2Fscripts%2Finstall.sh%20%7C%20sh%0A%0AQuickstart%3A%20https%3A%2F%2Fleejianrong.github.io%2Fcuttlefish-crew%2Fdocs%2Fquickstart%2F">Email the install line to yourself</a>
+    </div>
+    <p class="phone-note">The dashboard is a web app, with no native app yet. Answering from a phone needs an https page: Tailscale https or a relay.</p>
     <!-- INSTALL: the one line a visitor copies (scripts/install.sh, ADR-0045). -->
     <div class="install">
       <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/leejianrong/cuttlefish-crew/main/scripts/install.sh | sh</code>
       <button class="copy-btn" id="copy-btn" type="button">copy</button>
     </div>
-    <p class="platforms">Runs on Linux and WSL2; macOS is untested. Needs git and curl. The installer adds <a href="https://docs.astral.sh/uv/">uv</a> and tells you if Node.js, tmux or an agent CLI is missing.</p>
+    <p class="platforms"><span class="phone-only">Paste it in a terminal on your computer. </span>Runs on Linux and WSL2; macOS is untested. Needs git and curl. The installer adds <a href="https://docs.astral.sh/uv/">uv</a> and tells you if Node.js, tmux or an agent CLI is missing.</p>
     <div class="hero-links">
       <a href="docs/quickstart/">Quickstart →</a>
       <a href="https://github.com/leejianrong/cuttlefish-crew">Star or read the source on GitHub →</a>
     </div>
+    <p class="modes-phone">You choose how much it asks: Ask first pauses on every shell command, Standard runs a list of safe ones and asks about the rest, and Auto runs everything except a short never-allowed list. A restarted daemon picks up unfinished teams.</p>
   </div>
   <div>
-   <div class="chrome">
+   <div class="chrome shot-wide">
     <div class="chrome-bar"><span></span><span></span><span></span></div>
-    <img src="assets/dashboard-fleet-hero.png" width="2000" height="960" alt="The cuttlefish-crew Projects screen with three projects, each showing a 1 waiting for you badge while its Claude Code builder is paused for approval of a command">
+    <img src="assets/dashboard-fleet-hero.png" width="2000" height="960" alt="The cuttlefish-crew Projects screen with three projects, each with a Claude Code builder shown as working">
    </div>
-    <p class="staged">A real run: three Claude Code agents, one one-line task each, paused for your answer.</p>
+    <p class="staged">A real run: three Claude Code agents in Auto mode, each partway through a small edit to one file.</p>
+   <div class="chrome shot-phone">
+    <img src="assets/needs-you-phone.png" width="780" height="1520" alt="The Needs you screen on a phone: a Claude Code builder is paused on a shell command, with Allow once and Deny buttons and a ten-minute timer">
+   </div>
+    <p class="staged-phone">A real run in Ask first mode: the agent waits for your Allow once or Deny.</p>
   </div>
 </header>
 
@@ -343,6 +390,7 @@
   <div class="try-links">
     <a href="docs/quickstart/">Full quickstart, including the dashboard →</a>
   </div>
+  <p class="from-phone">From a phone: the dashboard is a web app, not a native one. Pairing a phone needs an https page, through Tailscale https or a relay, and has been checked in Chromium only, not on a real phone or Safari.</p>
 </section>
 
 <footer class="wrap">
