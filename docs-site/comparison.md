@@ -52,8 +52,9 @@ where we are behind.
 - **Setup.** herdr offers a one-line install or a download. We have a one-line install script for Linux and
   WSL2 (macOS is untested), and you still add Node.js, tmux and an agent CLI yourself.
 - **Git workflow.** Paseo and Conductor advertise worktree isolation and a pull-request flow, and Paseo a
-  scheduled run. cuttlefish-crew has none of those today: two roles that use kopicode on the same project run
-  one at a time, there is no per-agent worktree, no pull-request flow and no cron-style schedule. Autopilot
+  scheduled run. cuttlefish-crew has a worktree and branch per goal (opt-in) and a button that opens a GitHub pull
+  request through your own `gh` login, but no merge, no PR status and no cron-style schedule; two roles that use
+  kopicode on the same project still run one at a time. Autopilot
   keeps one builder working toward a goal, which is not a schedule.
 - **People and cloud.** Conductor's cloud workspaces run for you. cuttlefish-crew runs only on machines you
   own, and it has one operator with one password: no accounts, roles or single sign-on.

@@ -57,6 +57,7 @@ from __future__ import annotations
 import os
 import shutil
 from collections.abc import AsyncIterator, Sequence
+from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
@@ -145,3 +146,61 @@ def pytest_collection_modifyitems(items: Sequence[pytest.Item]) -> None:
         codex_live_marker = item.get_closest_marker("requires_codex_live")
         if not codex_live_enabled and codex_live_marker is not None:
             item.add_marker(skip_codex_live)
+
+
+class PrRig:
+    """A repository with a bare local origin, a goal branch one commit ahead, and a fake ``gh``
+    first on PATH (CUT-241). Nothing here reaches a network or a forge."""
+
+    def __init__(self, tmp: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import stat
+
+        self.bare, self.root, self.bin = tmp / "origin.git", tmp / "work", tmp / "bin"
+        self.log, self.mode = tmp / "gh.log", tmp / "gh.mode"
+        self.bin.mkdir()
+        self.root.mkdir()
+        self.log.touch()
+        self.git("init", "-q", "--bare", "-b", "main", str(self.bare), cwd=tmp)
+        self.git("init", "-q", "-b", "main")
+        self.git("remote", "add", "origin", str(self.bare))
+        self.commit("first")
+        self.git("push", "-q", "-u", "origin", "main")
+        self.git("remote", "set-head", "origin", "main")
+        self.git("switch", "-q", "-c", "cuttlefish/add-summary")
+        self.commit("Add the summary command")
+        gh = self.bin / "gh"
+        gh.write_text(
+            "#!/bin/sh\n"
+            f'echo "$*" | tr "\\n" " " >> {self.log}; echo >> {self.log}\n'
+            f"mode=$(cat {self.mode} 2>/dev/null)\n"
+            'if [ "$1 $2" = "auth status" ]; then [ "$mode" = loggedout ] && exit 1; exit 0; fi\n'
+            'if [ "$mode" = exists ]; then\n'
+            '  echo "a pull request for branch already exists:" >&2\n'
+            '  echo "https://example.test/o/r/pull/7" >&2; exit 1; fi\n'
+            'echo "https://example.test/o/r/pull/9"\n'
+        )
+        gh.chmod(gh.stat().st_mode | stat.S_IXUSR)
+        self.nogh = tmp / "nogh"
+        self.nogh.mkdir()
+        (self.nogh / "git").symlink_to(shutil.which("git") or "git")
+        monkeypatch.setenv("PATH", f"{self.bin}:{os.environ['PATH']}")
+
+    def git(self, *args: str, cwd: Path | None = None) -> str:
+        import subprocess
+
+        done = subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            cwd=cwd or self.root, capture_output=True, text=True, check=True,
+        )  # fmt: skip
+        return done.stdout.strip()
+
+    def commit(self, message: str) -> None:
+        self.git("commit", "-q", "--allow-empty", "-m", message)
+
+    def gh_calls(self) -> list[str]:
+        return [line.strip() for line in self.log.read_text().splitlines()]
+
+
+@pytest.fixture
+def pr_rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PrRig:
+    return PrRig(tmp_path, monkeypatch)

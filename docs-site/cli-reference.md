@@ -119,6 +119,7 @@ uv run cuttlefish projects add \
 |---|---|
 | `add` | Register a project — `--name`/`--root` required; `--secrets-scope`, `--template NAME` (a built-in team, below) or `--role NAME[:PERSONA]` (repeatable), `--allow CMD` (repeatable), `--max-tokens`/`--max-cost-usd` optional. |
 | `list` | List every registered project. |
+| `pr` | Open a pull request for the project's goal branch with `gh` and print its URL (`--push` pushes the branch to `origin` first). Needs `gh` installed and logged in; never merges ([ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)). |
 | `remove` | Deregister a project — never touches its files. |
 
 ## `cuttlefish serve`

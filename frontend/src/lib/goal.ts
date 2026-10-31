@@ -36,3 +36,19 @@ export function branchLine(goal: { branch?: string } | null | undefined): string
 export function canGive(text: string): boolean {
   return text.trim().length > 0;
 }
+
+/** What the page says after "open a pull request": the URL on success, else why not. */
+export function pullRequestNote(result: {
+  ok: boolean;
+  url?: string;
+  existing?: boolean;
+  reason?: string;
+}): string {
+  if (result.ok) return result.existing ? "A pull request is already open." : "Pull request opened.";
+  return result.reason ?? "That didn't work.";
+}
+
+/** Whether the refusal is one that pushing the branch first fixes. */
+export function canPushToFix(result: { ok: boolean; code?: string }): boolean {
+  return !result.ok && result.code === "not_pushed";
+}

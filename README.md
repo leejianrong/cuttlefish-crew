@@ -118,7 +118,9 @@ interactive session cannot take a first message yet, so use **Advanced: run a te
 Overview, give the builder a task, and press **Start team**. (For a project you want to work on with
 Claude Code or Codex, the main box is **Give the builder a goal**: it starts that agent in its own
 terminal with your goal as its first message. Switch on **Its own branch** there and each goal runs in a
-new git worktree and branch, leaving your checkout alone: [ADR-0048](docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md).)
+new git worktree and branch, leaving your checkout alone: [ADR-0048](docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md).
+**Open a pull request** under the goal runs `gh pr create` with your own `gh` login and never merges:
+[ADR-0049](docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md).)
 
 > Add a remove(item) method to TodoList in todo.py, and a test for it. Then run
 > `uname -a` and tell me what it prints.

@@ -50,8 +50,12 @@ from cuttlefish.config import (
     secrets_db_path,
     validate_backend_name,
 )
+from cuttlefish.episodic.events import PullRequestOpened
+from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet import DEFAULT_FLEET_PORT, FleetDaemon, WeakPasswordError, run_daemon
+from cuttlefish.fleet.claude_hooks import session_scope
+from cuttlefish.fleet.pullrequest import open_pull_request
 from cuttlefish.fleet.relay_link import RelaySettings
 from cuttlefish.fleet.serve_token import default_serve_token_path
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
@@ -59,6 +63,7 @@ from cuttlefish.limits import LIMIT_SPECS, validate_limits
 from cuttlefish.permissions import DEFAULT_MODE, MODES
 from cuttlefish.projects.store import (
     Project,
+    ProjectNotFoundError,
     ProjectRootError,
     ProjectRootInUseError,
     ProjectStore,
@@ -75,6 +80,7 @@ from cuttlefish.secrets.store import (
     SecretsStore,
     generate_key,
 )
+from cuttlefish.sessions.manager import read_goal
 from cuttlefish.steering import (
     SteeringDeliveryError,
     read_steering_pointer,
@@ -769,6 +775,41 @@ def _doctor(args: argparse.Namespace) -> int:
     return EXIT_TASK_FAILED if failed else EXIT_OK
 
 
+def _project_pull_request(store: ProjectStore, project_id: str, *, push: bool) -> int:
+    """`projects pr`: open a pull request for the project's goal branch with `gh` (CUT-241). The
+    body has the goal and the commits; the page's digest needs the daemon and is left out."""
+    try:
+        project = store.get(project_id)
+    except ProjectNotFoundError:
+        print(f"cuttlefish: no project {project_id!r} registered", file=sys.stderr)
+        return EXIT_TASK_FAILED
+    result = open_pull_request(
+        project.root,
+        read_goal(project.root),
+        [],
+        push=push,
+        scrub=lambda text: Redactor().scrub(text)[0],
+    )
+    if not result.ok or not result.url or not result.branch or not result.base or not result.title:
+        hint = " (rerun with --push to push it)" if result.code == "not_pushed" else ""
+        print(f"cuttlefish: {result.reason}{hint}", file=sys.stderr)
+        return EXIT_TASK_FAILED
+    path = Path(project.root) / ".cuttlefish" / "episodic.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    journal = EpisodicStore.open(path)
+    try:
+        journal.append(
+            session_scope(project.id),
+            PullRequestOpened(
+                result.url, result.branch, result.base, result.title, result.existing
+            ),
+        )
+    finally:
+        journal.close()
+    print(result.url)
+    return EXIT_OK
+
+
 def _projects(args: argparse.Namespace) -> int:
     store = ProjectStore.open()
     try:
@@ -813,6 +854,8 @@ def _projects(args: argparse.Namespace) -> int:
             )
             print(json.dumps(_project_dict(project)))
             return EXIT_OK
+        if args.projects_command == "pr":
+            return _project_pull_request(store, args.project_id, push=args.push)
         if args.projects_command == "list":
             for project in store.list():
                 print(json.dumps(_project_dict(project)))
@@ -1569,6 +1612,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     projects_sub.add_parser("list", help="List every registered project")
+
+    pr_parser = projects_sub.add_parser(
+        "pr",
+        help="Open a pull request for the project's goal branch with gh (prints its URL)",
+    )
+    pr_parser.add_argument("project_id")
+    pr_parser.add_argument(
+        "--push", action="store_true", help="Push the branch to origin first if it is not there"
+    )
 
     remove_parser = projects_sub.add_parser(
         "remove", help="Deregister a project (never touches its files)"
