@@ -73,6 +73,7 @@ from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, Role
 from cuttlefish.requests import (
     AlreadyResolvedError,
     HistoryEntry,
+    InvalidAnswerError,
     ManagerNotAllowedError,
     Outcome,
     PendingRequest,
@@ -1044,10 +1045,19 @@ class FleetDaemon:
         project = self._projects.get(project_id)
         if by == "manager":
             self.check_manager_may_touch(project_id)
-            kind = next((p.record.kind for p in self.requests.pending() if p.id == request_id), "")
-            if answer not in ("allow_once", "deny") or kind == "decision":
+            if answer not in ("allow_once", "allow_always", "deny", "answer"):
+                raise InvalidAnswerError("answer must be allow_once or deny")
+            pending = next((p for p in self.requests.pending() if p.id == request_id), None)
+            if pending is None:
+                if answer not in ("allow_once", "deny"):
+                    raise self._from_journal(project, request_id)  # 404, or already answered
+            elif pending.record.kind == "decision":
                 raise ManagerNotAllowedError(
-                    "the manager may allow once or deny a request, and may not answer a decision"
+                    "a decision is the person's to answer, not the manager's"
+                )
+            elif answer not in ("allow_once", "deny"):
+                raise ManagerNotAllowedError(
+                    "the manager may only allow once or deny; an always-allow rule is the person's"
                 )
         try:
             outcome = self.requests.answer(
@@ -1586,7 +1596,16 @@ class FleetDaemon:
         same-loop-deadlock reason."""
         running = self.running(project_id)
         if running is None:
-            raise FleetError(f"project {project_id!r} has no running team to steer")
+            # No team: the builder is an agent session, which a message reaches as chat (ADR-0044).
+            project = self._projects.get(project_id)
+            info = await asyncio.to_thread(self._session_manager().status, project.id, project.root)
+            if info.state != "running":
+                raise FleetError(
+                    f"{project.name} has no running team and its builder session is not "
+                    "running, so there is nobody to message"
+                )
+            await self.send_chat(project_id, text)
+            return
         # A Codex role mid-turn takes the message at once (ADR-0033); anything else, or a turn
         # that has just ended, is queued for the round boundary as before.
         if await codex_live.steer(self._projects.get(project_id).root, role, text):

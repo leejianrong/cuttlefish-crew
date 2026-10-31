@@ -22,6 +22,7 @@ from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.mcp import FleetApiError, build_manager_mcp_server
 from cuttlefish.projects.store import ProjectStore
+from cuttlefish.sessions.manager import SessionInfo
 
 OWNER = "owner-token-value-0123456789abcdef"
 MANAGER = "manager-token-value-0123456789abcd"
@@ -383,3 +384,45 @@ async def test_nothing_wakes_the_manager_by_default_or_for_its_own_session(
 ) -> None:
     assert await _woken(rig, monkeypatch, on=False) == []
     assert await _woken(rig, monkeypatch, on=True, own=True) == []
+
+
+async def test_a_bad_manager_answer_says_what_is_allowed_and_an_unknown_request_is_404(
+    rig: Rig,
+) -> None:
+    request_id = rig.ask()
+    bad = await rig.manager.post(rig.answer_path(request_id), json={"answer": "yes"})
+    assert bad.status_code == 422 and "allow_once or deny" in bad.json()["detail"]
+    for answer in ("allow_once", "allow_always", "deny"):
+        gone = await rig.manager.post(rig.answer_path("nope"), json={"answer": answer})
+        assert gone.status_code == 404, answer
+    always = await rig.manager.post(rig.answer_path(request_id), json={"answer": "allow_always"})
+    assert always.status_code == 403 and "always-allow" in always.json()["detail"]
+    assert len(rig.daemon.requests.pending()) == 1
+
+
+async def test_steer_messages_the_builder_session_when_there_is_no_team(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[str] = []
+
+    async def send_chat(project_id: str, text: str) -> dict[str, str]:
+        sent.append(text)
+        return {"sent": "delivered", "state": "idle"}
+
+    class Sessions:
+        state = "none"
+
+        def status(self, *_: object) -> SessionInfo:
+            return SessionInfo(state=self.state, tmux_session="s")  # type: ignore[arg-type]
+
+    sessions = Sessions()
+    monkeypatch.setattr(rig.daemon, "_session_manager", lambda: sessions)
+    monkeypatch.setattr(rig.daemon, "send_chat", send_chat)
+    path = f"/api/projects/{rig.project_id}/steer"
+    body = {"role": "builder", "text": "go on"}
+    nobody = await rig.manager.post(path, json=body)
+    assert nobody.status_code == 409 and "nobody to message" in nobody.json()["detail"]
+    assert "alpha" in nobody.json()["detail"] and rig.project_id not in nobody.json()["detail"]
+    sessions.state = "running"
+    assert (await rig.manager.post(path, json=body)).status_code == 200
+    assert sent == ["go on"]
