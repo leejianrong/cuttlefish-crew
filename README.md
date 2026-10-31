@@ -9,10 +9,10 @@ headless Codex), and everything that happens lands in one readable journal.
 
 ![The Projects screen from a real run: three projects, each with a Claude Code builder paused on a command and a "1 waiting for you" badge](docs/assets/dashboard-fleet-hero.png)
 
-![The Needs you screen from the same run: a Claude Code command waiting for Allow once or Deny](docs/assets/dashboard-needs-you.png)
-
 When an agent wants to run a command you have not approved, it stops and waits
 for you. You answer from the dashboard, and the agent carries on:
+
+![The Needs you tab: a command waiting for Allow once, Always allow or Deny](docs/design/ui-redesign/shipped/v4h-needs-you-light.png)
 
 ![The Needs you tab: a command waiting for Allow once, Always allow or Deny](docs/design/ui-redesign/shipped/v4h-needs-you-light.png)
 
