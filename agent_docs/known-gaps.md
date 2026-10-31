@@ -451,3 +451,8 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   those three are left out and asked about. The check reads text: a `sort` abbreviation beyond GNU's prefix rule, or a file whose name
   starts with a dash, is not modelled, and it over-refuses a `sort -k` definition that contains an `o` or `T`. A declared bare `sed`
   rule still allows any script, as before; only the preset's `sed -n` is narrowed.
+- **The push guard knows `main` and `master` by name everywhere, and `origin/HEAD` only for Claude Code
+  sessions** (CUT-240). `never_allowed.repo_default_branches(root)` reads `origin/HEAD`, but only the
+  Claude Code hook path has the project root at the point it builds a `ConsentPolicy`; kopicode, Codex and
+  the one-shot paths pass no `default_branches`, so a repository whose default is `trunk` is guarded there
+  by the person's answer, not the list. The `git-push` preset is also off by default.

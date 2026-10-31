@@ -15,14 +15,21 @@ It is a floor, not containment: an approved command still runs as this user.
 from __future__ import annotations
 
 import re
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
 #: A command that gains privileges. Never approved, whatever it wraps.
 _PRIVILEGE_ESCALATION = frozenset({"sudo", "su", "doas"})
 
-#: A ``git push`` argument that rewrites or deletes remote history. ``+refspec`` is a force.
-_FORCE_PUSH_FLAGS = frozenset({"-f", "--force", "--mirror", "--delete", "-d"})
+#: A ``git push`` argument that rewrites or deletes remote history, or pushes every branch.
+#: ``+refspec`` and a ``:branch`` refspec are a force and a delete.
+_FORCE_PUSH_FLAGS = frozenset({"-f", "--force", "--mirror", "--delete", "-d", "--all", "--prune"})
+_FORCE_PUSH_CLUSTER = re.compile(r"-[A-Za-z]*[fd][A-Za-z]*")  # -fu, -df: short flags run together
+
+#: Branch names that are the default whatever the repository says. A repository whose
+#: ``origin/HEAD`` names another passes it as ``default_branches`` (``repo_default_branches``).
+DEFAULT_BRANCHES: frozenset[str] = frozenset({"main", "master"})
 
 #: Splits a command line into the commands a shell would run: ``;``, ``&``, ``|``, newline,
 #: ``$(`` and a backtick all start a new one.
@@ -139,7 +146,43 @@ def _writes_outside_root(words: list[str], *, dynamic: bool) -> bool:
     return False
 
 
-def never_allowed_reason(line: str, _depth: int = 0) -> str | None:
+def repo_default_branches(root: Path) -> frozenset[str]:
+    """:data:`DEFAULT_BRANCHES` plus the branch ``origin/HEAD`` names in the repo at `root`."""
+    try:
+        done = subprocess.run(
+            ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+            cwd=root, capture_output=True, text=True, timeout=5, check=False,
+        )  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return DEFAULT_BRANCHES
+    name = done.stdout.strip().removeprefix("origin/")
+    return DEFAULT_BRANCHES | {name} if done.returncode == 0 and name else DEFAULT_BRANCHES
+
+
+def push_branches(words: list[str]) -> list[str] | None:
+    """The branches a ``git push`` (`words` is the command from ``git`` on) names, or ``None``
+    when it names none (``git push``, ``git push origin``) or ``HEAD``, which is whichever
+    branch is checked out. ``src:dst`` names ``dst``; ``refs/heads/`` is dropped."""
+    args = words[words.index("push", 1) + 1 :]
+    positional = [arg for arg in args if not arg.startswith("-")]
+    branches = [spec.rsplit(":", 1)[-1].removeprefix("refs/heads/") for spec in positional[1:]]
+    return branches if branches and "HEAD" not in branches else None
+
+
+def _push_reason(words: list[str], defaults: frozenset[str]) -> str | None:
+    for arg in words[words.index("push", 1) + 1 :]:
+        if arg in _FORCE_PUSH_FLAGS or arg.startswith(("--force", "+", ":")):
+            return "never_allowed:force_push"
+        if _FORCE_PUSH_CLUSTER.fullmatch(arg):
+            return "never_allowed:force_push"
+    if defaults.intersection(push_branches(words) or ()):
+        return "never_allowed:push_default_branch"
+    return None
+
+
+def never_allowed_reason(
+    line: str, _depth: int = 0, *, default_branches: frozenset[str] = DEFAULT_BRANCHES
+) -> str | None:
     """Why `line` may never be approved, or ``None`` when no never-allowed rule applies.
 
     A command is read through its wrappers and its path (``/usr/bin/sudo``, ``env sudo``) and a
@@ -158,17 +201,29 @@ def never_allowed_reason(line: str, _depth: int = 0) -> str | None:
         if not words:
             continue
         script = _nested_shell_line(words)
-        if script and _depth < _MAX_DEPTH and (inner := never_allowed_reason(script, _depth + 1)):
-            return inner
+        if script and _depth < _MAX_DEPTH:
+            inner = never_allowed_reason(script, _depth + 1, default_branches=default_branches)
+            if inner:
+                return inner
         if words[0] in _PRIVILEGE_ESCALATION:
             return "never_allowed:privilege_escalation"
         if words[0] == "git" and "push" in words[1:]:
-            args = words[words.index("push", 1) + 1 :]
-            if any(arg in _FORCE_PUSH_FLAGS or arg.startswith(("--force", "+")) for arg in args):
-                return "never_allowed:force_push"
+            reason = _push_reason(words, default_branches)
+            if reason:
+                return reason
         if _writes_outside_root(words, dynamic=dynamic):
             return "never_allowed:write_outside_root"
     return None
+
+
+def unnamed_push(line: str) -> bool:
+    """Whether `line` runs a ``git push`` that names no branch (see :func:`push_branches`): the
+    branch it sends is decided by the checkout, so it is asked about, never allowed on a rule."""
+    for segment in _SEGMENT_SPLIT.split(line):
+        words = _effective_words(segment.split())
+        if words[:1] == ["git"] and "push" in words[1:] and push_branches(words) is None:
+            return True
+    return False
 
 
 #: ``sort`` options that write a file or run a program. GNU ``sort`` accepts any unambiguous
@@ -248,6 +303,7 @@ def sed_print_is_pure(words: list[str]) -> bool:
 NEVER_ALLOWED_SUMMARY: tuple[tuple[str, str], ...] = (
     ("sudo, su, doas", "Anything that gains privileges"),
     ("git push --force", "Rewriting or deleting history on a remote"),
+    ("git push origin main", "Pushing the default branch"),
     ("curl ... | sh", "A download piped into a shell"),
     ("rm, mv, cp, tee, >", "Changing a path outside the project folder"),
 )

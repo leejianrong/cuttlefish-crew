@@ -445,9 +445,12 @@ and `sed -n '<from>,<to>p' FILE`), **git-read** (`git status|diff|log|show`),
 **git-save** (`git add`, `git commit -m '<message>'`, `git switch -c`), **python**
 (`uv run pytest|ruff|mypy`, `uv sync`), **javascript** (`npm test|ci`, `npm run
 test|build|lint|check`, `npx tsc`) and **make** (`make test|check|lint|build|ci`). **go-rust**
-and **containers** exist but are off unless declared.
+and **containers** exist but are off unless declared. So does **git-push**: `git push <remote> <branch>`
+for a branch that is not `main`, `master` or the branch `origin/HEAD` names (a per-goal `cuttlefish/<slug>`
+branch is fine). A push that names no branch (`git push`, `git push origin HEAD`) still asks.
 
-Never approved, whatever is declared: `sudo`/`su`/`doas`, a forced `git push`, a
+Never approved, whatever is declared: `sudo`/`su`/`doas`, a forced `git push` (`--force`, `-f`,
+`--force-with-lease`, `+branch`, `--mirror`, `--all`, `--delete`), a push of the default branch, a
 download piped into a shell (`curl ... | sh`), and arguments that reach outside `--root`.
 `find -delete`/`-exec`, `rg --pre` and `git commit --no-verify` are refused too, and so are the forms of a
 text filter that write or run something: `sort -o`/`--output`/`--compress-program`/`-T`, `uniq IN OUT`

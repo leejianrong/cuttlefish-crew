@@ -27,10 +27,12 @@ from pathlib import Path
 from typing import Literal
 
 from cuttlefish.delegate.never_allowed import (
+    DEFAULT_BRANCHES,
     SED_PRINT_ENTRY,
     WRAPPER_PROGRAMS,
     never_allowed_reason,
     sed_print_is_pure,
+    unnamed_push,
     unsafe_flag,
 )
 
@@ -415,8 +417,15 @@ class ConsentPolicy:
     read-only role should get; ``write_outside_root`` is denied for every role, always.
     """
 
-    def __init__(self, allow: Sequence[Sequence[str]] | None = None, *, auto: bool = False) -> None:
+    def __init__(
+        self,
+        allow: Sequence[Sequence[str]] | None = None,
+        *,
+        auto: bool = False,
+        default_branches: frozenset[str] = DEFAULT_BRANCHES,
+    ) -> None:
         self._auto = auto
+        self._defaults = default_branches
         self._patterns = tuple(_pattern_from_entry(entry) for entry in allow or ())
         self._commit_messages = _GIT_COMMIT in self._patterns
 
@@ -429,16 +438,18 @@ class ConsentPolicy:
         if not self._auto and not self._patterns:
             # Nothing is allowed, so a person may be asked -- but only about a line that no
             # never-allowed rule refuses (ADR-0028).
-            if line is None or never_allowed_reason(line) is not None:
+            if line is None or never_allowed_reason(line, default_branches=self._defaults):
                 return _deny("no_shell_allowed")
             return _deny("no_shell_allowed", askable=True)
         if line is None:
             return _deny(
                 "not_a_sh_c_command" if not detail.startswith(_DETAIL_PREFIX) else "command_length"
             )
-        reason = never_allowed_reason(line)
+        reason = never_allowed_reason(line, default_branches=self._defaults)
         if reason is not None:
             return _deny(reason)
+        if unnamed_push(line):
+            return _deny("push_branch_not_named", askable=True)
         if self._auto:
             return ConsentDecision("allow", "auto")
         if self._commit_messages and _GIT_COMMIT_MESSAGE.fullmatch(line):
@@ -464,7 +475,7 @@ class ConsentPolicy:
         """The rule "Always allow" proposes for a line this policy denied: for a plain word list
         its own start, for a chain the start of the first command nothing allows (CUT-99), so the
         same chain runs unasked next time. ``None`` when nothing narrow and safe can be named."""
-        if never_allowed_reason(line) is not None:
+        if never_allowed_reason(line, default_branches=self._defaults) is not None:
             return None
         if _plain_words(line) is not None:
             return suggest_rule(line)
@@ -472,7 +483,7 @@ class ConsentPolicy:
         for words in commands or ():
             if tuple(words) in {(name,) for name in _STATUS_ONLY}:
                 continue
-            if never_allowed_reason(" ".join(words)) is not None:
+            if never_allowed_reason(" ".join(words), default_branches=self._defaults):
                 return None
             if isinstance(self._match_words(words), ConsentDecision):
                 return _suggest_words(words)
@@ -491,9 +502,11 @@ class ConsentPolicy:
         for words in commands:
             if tuple(words) in {(name,) for name in _STATUS_ONLY}:
                 continue
-            reason = never_allowed_reason(" ".join(words))
+            reason = never_allowed_reason(" ".join(words), default_branches=self._defaults)
             if reason is not None:
                 return _deny(reason)
+            if unnamed_push(" ".join(words)):
+                return _deny("push_branch_not_named", askable=True)
             rule = self._match_words(words)
             if isinstance(rule, ConsentDecision):
                 return rule

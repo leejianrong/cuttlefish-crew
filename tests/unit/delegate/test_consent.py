@@ -240,7 +240,8 @@ def test_validate_allow_entry_accepts_a_launcher_that_names_what_it_runs() -> No
         ("python script.py -x", ("python", "script.py")),
         ("python -c print", None),
         ("git -c user.name=x commit -m msg", None),
-        ("git push origin main", ("git", "push", "origin")),
+        ("git push origin feat", ("git", "push", "origin")),
+        ("git push origin main", None),
         ("uv run python evil.py", None),
         ("uv run python -m tally", None),
         ("env A=1 uv run python -m tally", None),
@@ -290,7 +291,7 @@ def test_validate_always_rule_refuses(line: str, rule: list[str], message: str) 
 
 def test_a_granted_rule_still_loses_to_the_never_allowed_list() -> None:
     policy = ConsentPolicy([["git", "push"]])
-    assert policy.decide("run_shell", SH + "git push origin main").answer == "allow"
+    assert policy.decide("run_shell", SH + "git push origin feat").answer == "allow"
     forced = policy.decide("run_shell", SH + "git push --force origin main")
     assert forced.answer == "deny" and not forced.askable
 
@@ -446,3 +447,56 @@ def test_a_chain_with_nothing_safe_to_suggest_offers_nothing() -> None:
 def test_a_chain_rule_for_a_command_not_in_the_line_is_refused() -> None:
     with pytest.raises(ConsentPolicyError, match="start of the command"):
         validate_always_rule("make test && ls", ["cat"])
+
+
+PUSH = [["git", "push"]]
+
+
+@pytest.mark.parametrize("auto", [False, True])
+@pytest.mark.parametrize(
+    ("line", "answer", "rule"),
+    [
+        ("git push origin cuttlefish/fix-x", "allow", None),
+        ("git push -u origin feat", "allow", None),
+        ("git push origin main", "deny", "never_allowed:push_default_branch"),
+        ("git push o f && git push o master", "deny", "never_allowed:push_default_branch"),
+        ("git push -f origin feat", "deny", "never_allowed:force_push"),
+        ("git push origin +feat", "deny", "never_allowed:force_push"),
+        ("git push --force-with-lease origin feat", "deny", "never_allowed:force_push"),
+        ("git push origin --delete main", "deny", "never_allowed:force_push"),
+        ("git push --mirror origin", "deny", "never_allowed:force_push"),
+        ("git push", "deny", "push_branch_not_named"),
+        ("git push origin HEAD", "deny", "push_branch_not_named"),
+        ("git status && git push", "deny", "push_branch_not_named"),
+    ],
+)
+def test_push_is_allowed_only_for_a_named_non_default_branch(
+    line: str, answer: str, rule: str | None, auto: bool
+) -> None:
+    decision = ConsentPolicy(PUSH, auto=auto).decide("run_shell", SH + line)
+    assert decision.answer == answer
+    if rule:
+        assert decision.rule == rule
+        assert decision.askable == (rule == "push_branch_not_named")
+
+
+def test_a_push_in_a_chain_is_decided_command_by_command() -> None:
+    policy = ConsentPolicy([["git", "status"], *PUSH])
+    assert policy.decide("run_shell", SH + "git status && git push origin feat").answer == "allow"
+    assert policy.decide("run_shell", SH + "git status && git push origin main").answer == "deny"
+
+
+def test_a_push_is_not_allowed_without_the_preset() -> None:
+    decision = ConsentPolicy(PYTEST).decide("run_shell", SH + "git push origin feat")
+    assert decision.answer == "deny"
+
+
+def test_a_push_rule_cannot_open_the_default_branch_or_a_force() -> None:
+    for entry in (["git", "push", "origin", "main"], ["git", "push", "--force"]):
+        with pytest.raises(ConsentPolicyError):
+            ConsentPolicy([entry])
+
+
+def test_the_repository_default_branch_is_refused_too() -> None:
+    policy = ConsentPolicy(PUSH, default_branches=frozenset({"main", "trunk"}))
+    assert policy.decide("run_shell", SH + "git push origin trunk").answer == "deny"
