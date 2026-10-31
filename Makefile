@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 LIVE_TOKEN_BUDGET ?= 1000000
-.PHONY: help dev demo lint type check test test-all test-sandbox-live test-live ci install-hooks diagrams \
+.PHONY: help dev demo lint type check shellcheck test test-all test-sandbox-live test-live ci install-hooks diagrams \
 	install-systemd-service phone frontend-install frontend-check frontend-test frontend-build docs
 
 help: ## Show available targets
@@ -54,6 +54,13 @@ test-smoke: ## Build the relay image and smoke-test it (needs docker)
 # the real apt repositories (network, a few minutes), then verify.sh and a real sshd are checked.
 test-bootstrap: ## Run deploy/droplet/bootstrap.sh in a fresh Ubuntu container and verify it (needs docker, network)
 	CUTTLEFISH_SMOKE_BOOTSTRAP=1 uv run pytest tests/smoke/test_bootstrap.py -q
+
+# shellcheck over the scripts a person or a pipeline runs as root or pipes to sh (CUT-235). Uses the local
+# binary when there is one, else the pinned docker image.
+SHELL_SCRIPTS := scripts/*.sh deploy/droplet/*.sh deploy/relay/relay-deploy.sh
+shellcheck: ## shellcheck (warnings and up) over scripts/ and deploy/ (local binary, or docker)
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck --severity=warning $(SHELL_SCRIPTS); \
+	else docker run --rm -v "$$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning $(SHELL_SCRIPTS); fi
 
 # Real kopicode against a real model (the `requires_live_credential` tests): cents per run, and
 # they were once spent on every `make test-all` whenever `.env` held a key.
