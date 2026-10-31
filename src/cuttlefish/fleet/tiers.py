@@ -92,6 +92,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("PATCH", "/api/projects/{project_id}/limits"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/mode"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/presets"): Tier.ADMIN,
+    ("PATCH", "/api/projects/{project_id}/terminal-command"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/roles"): Tier.ADMIN,
     ("GET", "/api/projects/{project_id}/secrets"): Tier.ADMIN,
     ("PUT", "/api/projects/{project_id}/secrets/{name}"): Tier.ADMIN,

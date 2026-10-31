@@ -3,7 +3,9 @@
 import { describe, expect, it } from "vitest";
 import type { AgentSession } from "./api";
 import {
+  TERMINAL_COMMAND_NOTE,
   backendLabel,
+  isTerminalCommand,
   explanation,
   lastActionText,
   stateText,
@@ -72,5 +74,26 @@ describe("backendLabel", () => {
     expect(backendLabel("codex")).toBe("Codex");
     expect(backendLabel("other")).toBe("other");
     expect(backendLabel(null)).toBe("the agent");
+  });
+});
+
+describe("a terminal command (CUT-233)", () => {
+  const cmd = session({ backend: "terminal", asks: "none", session_id: null });
+
+  it("says plainly there is no live status or Needs you for it", () => {
+    expect(isTerminalCommand(cmd)).toBe(true);
+    expect(isTerminalCommand(session({}))).toBe(false);
+    expect(TERMINAL_COMMAND_NOTE).toContain("no live status");
+    expect(TERMINAL_COMMAND_NOTE).toContain("no Needs you cards");
+    expect(TERMINAL_COMMAND_NOTE).toContain("only in the Terminal tab");
+    expect(explanation(cmd)).toBe(TERMINAL_COMMAND_NOTE);
+    expect(explanation({ ...cmd, asks: undefined })).toBe(TERMINAL_COMMAND_NOTE);
+  });
+
+  it("never claims a resume it did not do", () => {
+    expect(backendLabel("terminal")).toBe("Terminal command");
+    const text = lastActionText({ ...cmd, last_action: "relaunched" });
+    expect(text).toContain("from the start");
+    expect(text).not.toContain("conversation carries on");
   });
 });

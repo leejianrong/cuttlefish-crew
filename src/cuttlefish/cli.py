@@ -692,6 +692,7 @@ def _project_dict(project: Project) -> dict[str, Any]:
         "root": project.root,
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
+        "terminal_command": project.terminal_command,
         "mode": project.mode,
         "roles": [
             {
@@ -808,6 +809,7 @@ def _projects(args: argparse.Namespace) -> int:
                 max_cost_usd=args.max_cost_usd,
                 backend=backend,
                 mode=args.mode,
+                terminal_command=(args.terminal_command or "").strip() or None,
             )
             print(json.dumps(_project_dict(project)))
             return EXIT_OK
@@ -1513,6 +1515,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "This project's default agent backend (KAN-1809); a role's own "
             f"--role-backend wins. Default: ${AGENT_BACKEND_ENV}."
+        ),
+    )
+    add_parser.add_argument(
+        "--terminal-command",
+        dest="terminal_command",
+        default=None,
+        metavar="CMD",
+        help=(
+            "Run this shell command in the project's tmux agent session instead of Claude Code, "
+            "Codex or kopicode (ADR-0047). The Terminal tab attaches to it; there is no live "
+            "status, chat, goal or Needs you card for it."
         ),
     )
     add_parser.add_argument(

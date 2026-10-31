@@ -2,6 +2,8 @@
 // items into the rows it draws. The daemon reads the agent's own session record (ADR-0044); nothing
 // here touches the network or the DOM, so each rule is unit-tested.
 
+import { TERMINAL_COMMAND_NOTE } from "./agentsession";
+
 export interface ChatBase {
   /** The transcript line's id plus the block's place in it; null only for a record with no ids. */
   id: string | null;
@@ -213,6 +215,9 @@ export function clockTime(iso: string | null): string {
 /** What to show in place of a thread, or null when there is one to show. */
 export function chatNotice(response: ChatResponse | null, held: number): string | null {
   if (response === null) return "Reading the conversation…";
+  if (response.backend === "terminal") {
+    return `This project runs a terminal command in tmux. ${TERMINAL_COMMAND_NOTE}`;
+  }
   if (!response.supported) {
     return "No builder has been started for this project. Give it a goal on the Overview and its conversation appears here.";
   }

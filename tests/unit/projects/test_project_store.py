@@ -437,3 +437,24 @@ def test_a_persisted_roles_limits_survive_for_a_resume(tmp_path: Path) -> None:
     )
     assert store.get(project.id).last_team_roles[0].limits == {"max_turns": 7}
     store.close()
+
+
+def test_terminal_command_round_trips_and_an_older_db_is_migrated(tmp_path: Path) -> None:
+    import sqlite3
+
+    store = ProjectStore.open(tmp_path / "p.db")
+    project = store.register(name="a", root="/r", terminal_command="aider")
+    assert store.get(project.id).terminal_command == "aider"
+    assert store.update_terminal_command(project.id, None).terminal_command is None
+    store.close()
+    raw = sqlite3.connect(tmp_path / "old.db")
+    raw.execute(
+        "CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, root TEXT NOT NULL, "
+        "secrets_scope TEXT NOT NULL, roles_json TEXT NOT NULL, last_team_id TEXT)"
+    )
+    raw.execute("INSERT INTO projects VALUES ('x', 'n', '/r', 'n', '[]', NULL)")
+    raw.commit()
+    raw.close()
+    old = ProjectStore.open(tmp_path / "old.db")
+    assert old.get("x").terminal_command is None
+    old.close()

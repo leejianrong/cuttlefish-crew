@@ -105,7 +105,8 @@ Manage the `Project` registry the fleet daemon reads from
 (`~/.cuttlefish/projects.db`). `projects add --backend B` sets a project's
 default agent backend and `--role-backend NAME=B` a single role's; resolution is
 role, then project, then `CUTTLEFISH_AGENT_BACKEND`. The dashboard's register
-form takes the same (`name@backend: persona` per role).
+form takes the same (`name@backend: persona` per role). `--terminal-command CMD` runs a command in the
+project's tmux session instead of a known backend, with no live status, chat or Needs you for it (ADR-0047).
 
 ```bash
 uv run cuttlefish projects add \

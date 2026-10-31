@@ -39,10 +39,13 @@ from cuttlefish.sessions.hooks import permission_mode
 from cuttlefish.sessions.tmux import Tmux, TmuxError, session_name, shell_session_name
 
 Action = Literal["started", "reattached", "relaunched"]
-Asks = Literal["needs-you", "auto", "terminal"]
+Asks = Literal["needs-you", "auto", "terminal", "none"]
 State = Literal["running", "stopped", "none"]
 
 BACKENDS = ("claude-code", "codex", "kopicode")
+
+#: What the record says for a project whose session runs its own command (ADR-0047).
+TERMINAL_BACKEND = "terminal"
 
 
 class SessionError(RuntimeError):
@@ -78,7 +81,8 @@ class SessionInfo:
     last_action: Action | None = None
     at: str | None = None
     #: Where this session's permission questions go: ``needs-you`` (a Claude Code session with our
-    #: hooks, ADR-0040), ``auto`` (it never asks) or ``terminal`` (its own terminal, the default).
+    #: hooks, ADR-0040), ``auto`` (it never asks), ``terminal`` (its own terminal, the default) or
+    #: ``none`` (a terminal command, ADR-0047: cuttlefish knows nothing about what it asks).
     asks: Asks = "terminal"
 
     def to_json(self) -> dict[str, object]:
@@ -282,8 +286,13 @@ class SessionManager:
         hooks_settings: Path | None = None,
         prompt: str | None = None,
         plan_first: bool = False,
+        command: str | None = None,
     ) -> SessionInfo:
         """Make sure the project's agent is running in tmux, and record which way it got there.
+
+        ``command`` (ADR-0047) runs that shell command instead of a known tool, with no resume, no
+        hooks and no first message: a session that exits is simply gone, and the next start runs
+        the command again. ``backend`` is ignored then.
 
         ``hooks_settings`` (Claude Code only, ADR-0040) is the settings file that gives the session
         its permission hook, launched with the permission mode ``mode`` maps to. A session that is
@@ -291,6 +300,8 @@ class SessionManager:
 
         ``prompt`` is a first message for a tool that is being launched now. A session that is
         already running cannot take it without typing into its terminal, so that is refused."""
+        if command is not None:
+            return self._ensure_command(project_id, root, command, prompt=prompt)
         if backend not in BACKENDS:
             raise SessionError(f"backend {backend!r} has no interactive session")
         name = session_name(project_id)
@@ -336,6 +347,38 @@ class SessionManager:
         _write(root, record)
         return self.status(project_id, root)
 
+    def _ensure_command(
+        self, project_id: str, root: str, command: str, *, prompt: str | None
+    ) -> SessionInfo:
+        if not command.strip():
+            raise SessionError("the terminal command is empty")
+        if prompt:
+            raise SessionError(
+                "this project runs a terminal command, which cannot be given a goal from here; "
+                "type to it in the Terminal tab"
+            )
+        name = session_name(project_id)
+        record = dict(_read(root))
+        try:
+            alive = self._tmux.has_session(name)
+            action: Action = "reattached"
+            if not alive:
+                self._tmux.new_session(
+                    name,
+                    cwd=root,
+                    argv=["sh", "-c", command],
+                    env=self._env_for(root, TERMINAL_BACKEND),
+                )
+                action = "started"
+        except TmuxError as exc:
+            raise SessionError(str(exc)) from exc
+        if action == "started":
+            record.pop("session_id", None)
+            record.update(launched=True, asks="none")
+        record.update(backend=TERMINAL_BACKEND, wanted=True, last_action=action, at=_now())
+        _write(root, record)
+        return self.status(project_id, root)
+
     def ensure_shell(self, project_id: str, root: str) -> str:
         """Make sure the project's plain shell is running in tmux and return its session name
         (CUT-170). It is the person's own shell in the project folder, needs no agent, and is
@@ -369,7 +412,9 @@ class SessionManager:
 
 
 def _asks(value: object) -> Asks:
-    return value if value == "needs-you" or value == "auto" else "terminal"
+    if value == "needs-you" or value == "auto" or value == "none":
+        return value
+    return "terminal"
 
 
 def _action(value: object) -> Action | None:

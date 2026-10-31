@@ -209,6 +209,26 @@ second tmux session (`cf-shell-<project>`), so it keeps running when you close t
 time you open it. It has the same filtered environment as the agents and no project secrets, so a variable
 you need there goes in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`. It needs the same Terminal rights as the agent's terminal.
 
+### Any other terminal agent
+
+A project can name a command to run in its tmux session instead of Claude Code, Codex or kopicode, so a
+tool cuttlefish has no integration for (aider, gemini-cli, your own script) still stays up and is reachable from
+the Terminal tab:
+
+```bash
+uv run cuttlefish projects add --name demo --root /path/to/checkout --terminal-command 'aider'
+```
+
+To change it on an existing project, `PATCH /api/projects/<id>/terminal-command` with
+`{"terminal_command": "aider"}` (or `null` to clear it); it needs the Admin tier, since it is a shell command, and
+applies the next time the session starts. The command runs in the project root with the same filtered environment
+as the agents (no model keys, no project secrets; add what it needs to `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`).
+
+cuttlefish does not know this tool, so there is **no live status, no chat, no goal and no Needs you cards** for it.
+Anything it asks appears only in the Terminal tab, and the project page says so. If it exits, the next start runs it
+again from the start; there is no resume.
+([ADR-0047](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0047-a-project-can-run-any-terminal-command-in-its-tmux-session-with-no-status-integration.md)).
+
 ## Artifacts
 
 Agents are told to write results as markdown files under `.cuttlefish/artifacts/` in the project, and the

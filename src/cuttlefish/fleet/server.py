@@ -145,6 +145,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "root": project.root,
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
+        "terminal_command": project.terminal_command,
         "mode": project.mode,
         "env_prepare": project.env_prepare,
         "limits": dict(project.limits),
@@ -291,6 +292,16 @@ def _mode_from(value: Any) -> str:
     if value not in MODES:
         raise HTTPException(400, f"'mode' must be one of {', '.join(MODES)}")
     return str(value)
+
+
+def _terminal_command_from(value: Any) -> str | None:
+    """A request's optional terminal command (ADR-0047): a non-empty string of at most 2000
+    characters, or null to clear it."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip() or len(value) > 2000 or "\x00" in value:
+        raise HTTPException(400, "'terminal_command' must be a command of at most 2000 characters")
+    return value.strip()
 
 
 def _backend_from(value: Any) -> str | None:
@@ -767,6 +778,7 @@ def create_app(
                 backend=_backend_from(body.get("backend")),
                 mode=_mode_from(body.get("mode")),
                 presets=_presets_from(body.get("presets")),
+                terminal_command=_terminal_command_from(body.get("terminal_command")),
             )
         except (ProjectRootError, ProjectRootInUseError) as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -846,6 +858,20 @@ def create_app(
             return _project_json(daemon, project_id)
         except UnknownPresetError as exc:
             raise HTTPException(400, str(exc)) from exc
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/terminal-command")
+    async def update_terminal_command(project_id: str, request: Request) -> dict[str, Any]:
+        """Set, or with null clear, the command the project's tmux session runs (ADR-0047). It is
+        an arbitrary shell command, so it is Admin. A session already running keeps its command."""
+        body = await _json_body(request)
+        if "terminal_command" not in body:
+            raise HTTPException(400, "'terminal_command' is required; send null to clear it")
+        command = _terminal_command_from(body["terminal_command"])
+        try:
+            daemon.projects.update_terminal_command(project_id, command)
+            return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 

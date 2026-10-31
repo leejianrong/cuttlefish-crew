@@ -554,3 +554,27 @@ def test_typing_in_the_terminal_reaches_the_agent_and_its_output_comes_back(rig:
         _wait_until_detached(rig, project.id)
     # closing the view left the agent running
     assert client.get(f"/api/projects/{project.id}/agent-session").json()["state"] == "running"
+
+
+def test_a_project_with_a_terminal_command_runs_it_and_the_terminal_attaches(rig: Rig) -> None:
+    """CUT-233 / ADR-0047: the command is set over the API, started like any session, reported
+    with no status integration, attached by the Terminal, and refuses a goal."""
+    project = rig.store.register(name="alpha", root=str(rig.root))
+    client = _client(rig.daemon())
+    path = f"/api/projects/{project.id}"
+    command = f"echo hello-tool >> {rig.log}; echo TOOLREADY; exec sleep 300"
+    set_ = client.patch(f"{path}/terminal-command", json={"terminal_command": command})
+    assert set_.status_code == 200 and set_.json()["terminal_command"] == command
+    started = client.post(f"{path}/agent-session/start", json={}).json()
+    assert started["state"] == "running" and started["backend"] == "terminal"
+    assert started["asks"] == "none"
+    assert rig.launches() == ["hello-tool"]
+    with _connect(client, f"{path}/terminal") as ws:
+        _auth(ws, cols=80, rows=24)
+        assert b"TOOLREADY" in _read_until(ws, b"TOOLREADY")
+    goal = client.post(f"{path}/goal", json={"text": "do a thing"})
+    assert goal.status_code == 409 and "terminal command" in goal.json()["detail"]
+    cleared = client.patch(f"{path}/terminal-command", json={"terminal_command": None})
+    assert cleared.json()["terminal_command"] is None
+    blank = client.patch(f"{path}/terminal-command", json={"terminal_command": " "})
+    assert blank.status_code == 400
