@@ -48,6 +48,18 @@ export function pullRequestNote(result: {
   return result.reason ?? "That didn't work.";
 }
 
+/** What the page says after "remove the worktree". */
+export function worktreeRemovalNote(result: {
+  ok: boolean;
+  reason?: string;
+  branch_deleted?: boolean;
+  branch_note?: string;
+}): string {
+  if (!result.ok) return result.reason ?? "That didn't work.";
+  if (result.branch_deleted) return "Worktree and branch removed.";
+  return result.branch_note ? `Worktree removed. ${result.branch_note}` : "Worktree removed; its branch is kept.";
+}
+
 /** Whether the refusal is one that pushing the branch first fixes. */
 export function canPushToFix(result: { ok: boolean; code?: string }): boolean {
   return !result.ok && result.code === "not_pushed";

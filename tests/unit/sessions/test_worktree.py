@@ -77,3 +77,47 @@ def test_a_folder_without_a_commit_or_repository_is_an_error(tmp_path: Path) -> 
     _git(tmp_path, "init", "-q")
     with pytest.raises(worktree.WorktreeError):
         worktree.create(str(tmp_path), "x")
+
+
+def test_remove_takes_the_worktree_and_keeps_the_branch(repo: Path) -> None:
+    branch, path = worktree.create(str(repo), "Add a summary", now=NOW)
+    result = worktree.remove(str(repo), path, branch)
+    assert result.ok and not result.branch_deleted
+    assert not Path(path).exists()
+    assert branch in _git(repo, "branch", "--list")
+
+
+def test_remove_refuses_uncommitted_and_untracked_changes_with_the_reason(repo: Path) -> None:
+    branch, path = worktree.create(str(repo), "Add a summary", now=NOW)
+    (Path(path) / "new.txt").write_text("work")
+    result = worktree.remove(str(repo), path, branch)
+    assert not result.ok and result.code == "uncommitted"
+    assert result.reason and "uncommitted" in result.reason
+    assert (Path(path) / "new.txt").exists()
+
+
+def test_remove_deletes_a_merged_branch_on_request_and_keeps_an_unmerged_one(repo: Path) -> None:
+    branch, path = worktree.create(str(repo), "Merged", now=NOW)
+    assert worktree.remove(str(repo), path, branch, delete_branch=True).branch_deleted
+    assert branch not in _git(repo, "branch", "--list")
+
+    branch, path = worktree.create(str(repo), "Unmerged", now=NOW)
+    (Path(path) / "a.txt").write_text("a")
+    _git(Path(path), "add", "a.txt")
+    _git(Path(path), "commit", "-q", "-m", "work")
+    result = worktree.remove(str(repo), path, branch, delete_branch=True)
+    assert result.ok and not result.branch_deleted and result.branch_note
+    assert branch in _git(repo, "branch", "--list")
+
+
+def test_remove_refuses_a_folder_that_is_not_a_goal_worktree(repo: Path) -> None:
+    result = worktree.remove(str(repo), str(repo), None)
+    assert not result.ok and result.code == "not_a_worktree"
+    assert repo.exists()
+
+
+def test_remove_of_a_folder_already_gone_still_clears_the_registration(repo: Path) -> None:
+    branch, path = worktree.create(str(repo), "Gone", now=NOW)
+    shutil.rmtree(path)
+    assert worktree.remove(str(repo), path, branch).ok
+    assert str(Path(path).resolve()) not in _git(repo, "worktree", "list")

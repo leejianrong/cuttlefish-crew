@@ -486,6 +486,15 @@ export interface PullRequestResult {
   base?: string;
 }
 
+/** The answer to "remove the worktree" (CUT-250). `branch_note` says why a branch was kept. */
+export interface WorktreeRemoval {
+  ok: boolean;
+  code?: string;
+  reason?: string;
+  branch_deleted?: boolean;
+  branch_note?: string;
+}
+
 /** A password-mode daemon sends a fresh session token in this header once the one in use is past
  * half its life (ADR-0038). */
 export const TOKEN_REFRESH_HEADER = "x-cuttlefish-token-refresh";
@@ -662,6 +671,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/pull-request`, {
       method: "POST",
       body: JSON.stringify({ push }),
+    });
+  }
+
+  /** Remove the last goal's worktree (CUT-250). A refusal is `ok: false` with a plain reason. */
+  removeGoalWorktree(id: string, deleteBranch = false): Promise<WorktreeRemoval> {
+    return this.request(`/api/projects/${id}/goal/worktree/remove`, {
+      method: "POST",
+      body: JSON.stringify({ delete_branch: deleteBranch }),
     });
   }
 

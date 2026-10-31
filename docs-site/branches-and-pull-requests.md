@@ -34,8 +34,22 @@ Your checkout and its branch are not touched. If the folder is not a repository,
 with the reason; it does not quietly run in your checkout.
 
 !!! note "Worktrees are kept"
-    A finished goal's worktree stays, with its work on it. Remove one you no longer need with
-    `git worktree remove <path>`. cuttlefish never merges it and never deletes a worktree that has work.
+    A finished goal's worktree stays, with its work on it. cuttlefish never merges it and never removes one on its own.
+    See [Remove a worktree](#remove-a-worktree).
+
+## Remove a worktree
+
+When a goal is finished with, press **Remove worktree** under it on the project page, or run:
+
+```bash
+uv run cuttlefish projects remove-worktree <project-id>
+uv run cuttlefish projects remove-worktree <project-id> --delete-branch   # also delete the branch, if it is merged
+```
+
+It removes the last goal's worktree folder. A worktree with uncommitted or untracked changes is refused, with the
+reason, and so is one while the builder is still running; nothing is forced. The branch stays unless you ask for
+`--delete-branch` (the page has a checkbox), and then only a merged branch goes: an unmerged one is kept and the
+answer says so. The page's route is `POST /api/projects/{id}/goal/worktree/remove` (Admin tier).
 
 ## Open a pull request
 

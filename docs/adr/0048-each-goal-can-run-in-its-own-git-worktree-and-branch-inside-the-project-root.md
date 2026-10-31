@@ -34,5 +34,6 @@ as a write outside it.
 - The kopicode `--root` lock is unchanged: a kopicode round and a goal still share the project's root lock. The
   interactive session cannot take a goal for kopicode, so this affects Claude Code and Codex goals only. Lifting the
   lock per role is the separate fan-out card.
-- Worktrees accumulate until the person removes them (`git worktree remove`); a cleanup command is a later card.
+- Worktrees accumulate until the person removes them: `cuttlefish projects remove-worktree` and the page's Remove
+  worktree button (CUT-250) refuse uncommitted changes and keep the branch unless asked. Never automatic.
 - A builder already running is not moved: the setting applies when a goal starts a session.

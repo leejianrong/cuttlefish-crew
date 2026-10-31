@@ -97,6 +97,19 @@ describe("FleetClient.openPullRequest (CUT-241)", () => {
   });
 });
 
+describe("FleetClient.removeGoalWorktree (CUT-250)", () => {
+  it("posts whether to delete the branch and returns a refusal as an answer", async () => {
+    const answer = { ok: false, code: "uncommitted", reason: "The worktree has uncommitted changes." };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(answer), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FleetClient("http://x", "t");
+    await expect(client.removeGoalWorktree("p1", true)).resolves.toEqual(answer);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://x/api/projects/p1/goal/worktree/remove");
+    expect(JSON.parse(init.body as string)).toEqual({ delete_branch: true });
+  });
+});
+
 describe("FleetClient session refresh (ADR-0038)", () => {
   const reply = (headers: Record<string, string> = {}, status = 200) =>
     vi.fn(async () => new Response(JSON.stringify({ projects: [] }), { status, headers }));
