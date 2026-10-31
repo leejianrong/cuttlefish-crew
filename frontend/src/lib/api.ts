@@ -460,6 +460,20 @@ export interface Goal {
   pr_url?: string;
 }
 
+/** A goal asked of a project's builder on a recurrence (CUT-246). Times are ISO 8601 in UTC. */
+export interface Schedule {
+  id: string;
+  project_id: string;
+  goal: string;
+  /** `every <N>m`, `every <N>h` or `daily HH:MM`, always UTC. */
+  recurrence: string;
+  enabled: boolean;
+  next_due: string;
+  last_run: string | null;
+  /** `started`, or `skipped: <why>`. */
+  last_result: string | null;
+}
+
 /** The answer to "open a pull request" (CUT-241). A refusal is `ok: false` with a plain reason;
  * `code` is `not_pushed` when pushing the branch first would fix it. */
 export interface PullRequestResult {
@@ -649,6 +663,28 @@ export class FleetClient {
       method: "POST",
       body: JSON.stringify({ push }),
     });
+  }
+
+  async getSchedules(id: string): Promise<Schedule[]> {
+    return (await this.request<{ schedules: Schedule[] }>(`/api/projects/${id}/schedules`)).schedules;
+  }
+
+  addSchedule(id: string, goal: string, recurrence: string): Promise<Schedule> {
+    return this.request(`/api/projects/${id}/schedules`, {
+      method: "POST",
+      body: JSON.stringify({ goal, recurrence }),
+    });
+  }
+
+  setScheduleEnabled(scheduleId: string, enabled: boolean): Promise<Schedule> {
+    return this.request(`/api/schedules/${scheduleId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  deleteSchedule(scheduleId: string): Promise<{ status: string }> {
+    return this.request(`/api/schedules/${scheduleId}`, { method: "DELETE" });
   }
 
   async getGoal(id: string): Promise<Goal | null> {

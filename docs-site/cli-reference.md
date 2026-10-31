@@ -122,6 +122,19 @@ uv run cuttlefish projects add \
 | `pr` | Open a pull request for the project's goal branch with `gh` and print its URL (`--push` pushes the branch to `origin` first). Needs `gh` installed and logged in; never merges ([ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)). |
 | `remove` | Deregister a project — never touches its files. |
 
+## `cuttlefish schedule`
+
+Ask a project's builder for a goal on a repeat; `cuttlefish serve` starts each one when it is due (see
+[Scheduled goals](quickstart.md#scheduled-goals)). Output is one JSON object per line. A running daemon sees a change
+at its next pass, so nothing needs restarting.
+
+| Subcommand | What it does |
+|---|---|
+| `add PROJECT_ID --goal TEXT --recurrence R` | Add a schedule. `R` is `every <N>m`, `every <N>h` or `daily HH:MM`, always UTC. |
+| `list [--project ID]` | List schedules, soonest first, with `next_due`, `last_run` and `last_result`. |
+| `remove ID` | Delete a schedule. |
+| `enable ID` / `disable ID` | Turn one on (counting from now) or off. |
+
 ## `cuttlefish serve`
 
 Start the fleet daemon: launches and owns every registered project's team

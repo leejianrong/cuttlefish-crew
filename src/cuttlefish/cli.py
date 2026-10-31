@@ -32,6 +32,7 @@ import subprocess
 import sys
 import uuid
 from collections.abc import Coroutine
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -67,7 +68,7 @@ from cuttlefish.fleet.serve_token import default_serve_token_path
 from cuttlefish.handover import DEFAULT_TOKEN_BUDGET
 from cuttlefish.limits import LIMIT_SPECS, validate_limits
 from cuttlefish.permissions import DEFAULT_MODE, MODES
-from cuttlefish.projects.schedules import ScheduleStore
+from cuttlefish.projects.schedules import ScheduleNotFoundError, ScheduleStore
 from cuttlefish.projects.store import (
     Project,
     ProjectNotFoundError,
@@ -877,6 +878,47 @@ def _projects(args: argparse.Namespace) -> int:
         store.close()
 
 
+def _schedule(args: argparse.Namespace) -> int:
+    """`schedule add|list|remove|enable|disable` (CUT-246). Prints JSON lines. A running daemon
+    reads the table on every pass, so a change here needs no restart."""
+    store = ScheduleStore.open()
+    try:
+        if args.schedule_command == "add":
+            projects = ProjectStore.open()
+            try:
+                projects.get(args.project_id)
+            finally:
+                projects.close()
+            print(
+                json.dumps(
+                    store.add(
+                        args.project_id, args.goal, args.recurrence, now=datetime.now(UTC)
+                    ).to_json()
+                )
+            )
+        elif args.schedule_command == "list":
+            for entry in store.entries(args.project):
+                print(json.dumps(entry.to_json()))
+        elif args.schedule_command == "remove":
+            if not store.remove(args.schedule_id):
+                raise ScheduleNotFoundError(args.schedule_id)
+            print(f"cuttlefish: removed schedule {args.schedule_id!r}")
+        else:
+            on = args.schedule_command == "enable"
+            entry = store.set_enabled(args.schedule_id, on, now=datetime.now(UTC))
+            print(json.dumps(entry.to_json()))
+        return EXIT_OK
+    except ScheduleNotFoundError as exc:
+        print(f"cuttlefish: no schedule {str(exc)!r}", file=sys.stderr)
+    except ProjectNotFoundError:
+        print(f"cuttlefish: no project {args.project_id!r} registered", file=sys.stderr)
+    except ValueError as exc:  # a recurrence that is not one of the spellings, or an empty goal
+        print(f"cuttlefish: {exc}", file=sys.stderr)
+    finally:
+        store.close()
+    return EXIT_TASK_FAILED
+
+
 async def _serve(args: argparse.Namespace) -> int:
     try:
         request_window = resolve_request_window()
@@ -1637,6 +1679,28 @@ def build_parser() -> argparse.ArgumentParser:
         "--push", action="store_true", help="Push the branch to origin first if it is not there"
     )
 
+    schedule_parser = subparsers.add_parser(
+        "schedule",
+        help="Ask a project's builder for a goal on a recurrence; `cuttlefish serve` starts it",
+    )
+    schedule_sub = schedule_parser.add_subparsers(dest="schedule_command", required=True)
+    sched_add = schedule_sub.add_parser("add", help="Add a schedule")
+    sched_add.add_argument("project_id")
+    sched_add.add_argument("--goal", required=True, help="What the builder is asked")
+    sched_add.add_argument(
+        "--recurrence",
+        required=True,
+        help="'every <N>m', 'every <N>h' or 'daily HH:MM'. Always UTC.",
+    )
+    sched_list = schedule_sub.add_parser("list", help="List schedules, soonest first")
+    sched_list.add_argument("--project", default=None, help="Only this project's")
+    for name, text in (
+        ("remove", "Delete a schedule"),
+        ("enable", "Turn a schedule on (it counts from now)"),
+        ("disable", "Turn a schedule off"),
+    ):
+        schedule_sub.add_parser(name, help=text).add_argument("schedule_id")
+
     remove_parser = projects_sub.add_parser(
         "remove", help="Deregister a project (never touches its files)"
     )
@@ -1907,6 +1971,8 @@ def main(argv: list[str] | None = None) -> int:
         return _init(args)
     if args.command == "projects":
         return _projects(args)
+    if args.command == "schedule":
+        return _schedule(args)
     if args.command == "doctor":
         return _doctor(args)
     if args.command == "serve":
