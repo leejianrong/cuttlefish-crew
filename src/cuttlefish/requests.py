@@ -202,6 +202,8 @@ class RequestBroker:
         )
         self._grants: dict[str, list[tuple[str, ...]]] = {}
         self._closed: set[str] = set()
+        #: Called with each permission request as it is raised (CUT-230, ADR-0053).
+        self.on_permission: Callable[[PendingRequest], None] | None = None
 
     # -- raising ----------------------------------------------------------------------
 
@@ -413,6 +415,8 @@ class RequestBroker:
             _line=line,
         )
         self._pending[pending.id] = pending
+        if self.on_permission is not None and stored.kind == "permission":
+            self.on_permission(pending)
         return pending
 
     # -- holding ----------------------------------------------------------------------

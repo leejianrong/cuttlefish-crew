@@ -85,6 +85,14 @@ def resolve_request_window() -> float:
     return seconds
 
 
+#: Wake the manager agent when a permission request is raised, so it can answer (ADR-0053).
+DELEGATE_APPROVALS_ENV = "CUTTLEFISH_DELEGATE_APPROVALS"
+
+
+def delegate_approvals() -> bool:
+    return os.environ.get(DELEGATE_APPROVALS_ENV, "").lower() in ("1", "true", "yes", "on")
+
+
 def validate_backend_name(choice: str, *, source: str) -> str:
     if choice not in ("kopicode", "claude-code", "codex"):
         raise ConfigError(

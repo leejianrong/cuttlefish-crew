@@ -41,7 +41,7 @@ from cuttlefish.artifacts import Artifact
 from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
-from cuttlefish.config import PreparedRun, prepare_run, resolve_agent_backend
+from cuttlefish.config import PreparedRun, delegate_approvals, prepare_run, resolve_agent_backend
 from cuttlefish.delegate import codex_live
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import (
@@ -75,6 +75,7 @@ from cuttlefish.requests import (
     HistoryEntry,
     ManagerNotAllowedError,
     Outcome,
+    PendingRequest,
     RequestBroker,
     RequestContext,
     RequestError,
@@ -119,6 +120,13 @@ from cuttlefish.steering import (
 from cuttlefish.team import RoleInput, TeamInput, run_team
 
 logger = logging.getLogger(__name__)
+
+_WAKE_BATCH_S = 2.0
+_WAKE_SPACING_S = 30.0
+_WAKE_MESSAGE = (
+    "Approvals are waiting in project ids: {projects}. Run list_attention, read project_digest for "
+    "each, then answer_attention (allow once or deny) what is routine; raise_decision for the rest."
+)
 
 #: How long a paste is given to be taken in before Enter is pressed (CUT-173).
 _PASTE_SETTLE_S = 0.3
@@ -332,6 +340,11 @@ class FleetDaemon:
         #: The project that hosts the manager agent's own session, if any (ADR-0046): the manager
         #: credential may answer nothing there and message nothing there. CUT-137 sets it.
         self.manager_project: str | None = os.environ.get(MANAGER_PROJECT_ENV) or None
+        #: Opt-in (CUT-230, ADR-0053): a permission request wakes the manager agent.
+        self.delegate_approvals = delegate_approvals()
+        self._wake_task: asyncio.Task[None] | None = None
+        self._last_wake = 0.0
+        self.requests.on_permission = self._wake_manager
         #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
         self._claude_hooks = ClaudeHooks(self)
         #: project id -> the Codex rollout its chat reads, and when it was last looked for.
@@ -1047,6 +1060,34 @@ class FleetDaemon:
         if outcome.rule is not None:
             self._projects.add_allow(project_id, outcome.rule)
         return outcome
+
+    def _wake_manager(self, request: PendingRequest) -> None:
+        """Tell the manager's session a permission request waits (CUT-230, ADR-0053). Coalesced and
+        spaced out so a burst is one message; the request stays in Needs you either way, so a
+        manager that is down or cannot decide leaves it to the person."""
+        if (
+            not self.delegate_approvals
+            or self.manager_project is None
+            or request.project_id == self.manager_project
+            or (self._wake_task is not None and not self._wake_task.done())
+        ):
+            return
+        self._wake_task = asyncio.ensure_future(self._send_wake())
+
+    async def _send_wake(self) -> None:
+        assert self.manager_project is not None
+        await asyncio.sleep(
+            max(_WAKE_BATCH_S, self._last_wake + _WAKE_SPACING_S - time.monotonic())
+        )
+        waiting = [p for p in self.requests.pending() if p.record.kind == "permission"]
+        if not waiting or self.manager_project is None:
+            return
+        self._last_wake = time.monotonic()
+        projects = ", ".join(sorted({p.project_id for p in waiting}))
+        try:
+            await self.send_chat(self.manager_project, _WAKE_MESSAGE.format(projects=projects))
+        except FleetError as exc:
+            logger.info("manager not woken for approvals: %s", exc)
 
     def check_manager_may_touch(self, project_id: str) -> None:
         """Refuse the manager credential a project that hosts the manager's own session."""
