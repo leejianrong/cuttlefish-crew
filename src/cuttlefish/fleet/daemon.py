@@ -94,6 +94,7 @@ from cuttlefish.sessions import (
     Tmux,
     agent_env,
     default_socket,
+    worktree,
 )
 from cuttlefish.sessions.chat_input import MessageError, clean_message, dialog_open
 from cuttlefish.sessions.codex_record import find_rollout, read_rollout
@@ -599,13 +600,48 @@ class FleetDaemon:
                 "Start it from the Agent session card and type to it in the Terminal tab."
             )
         chosen = resolve_agent_backend(backend or project.backend)
-        info = await self.start_agent_session(
-            project_id, chosen, prompt=goal, plan_first=autopilot is not None
+        made: tuple[str, str] | None = None
+        if project.worktree_per_goal:
+            made = await self._goal_worktree(project, goal)
+        try:
+            info = await self.start_agent_session(
+                project_id,
+                chosen,
+                prompt=goal,
+                plan_first=autopilot is not None,
+                cwd=made[1] if made else None,
+            )
+        except BaseException:
+            if made:
+                await asyncio.to_thread(worktree.discard, project.root, *made)
+            raise
+        record = await asyncio.to_thread(
+            functools.partial(
+                write_goal,
+                project.root,
+                goal,
+                chosen,
+                branch=made[0] if made else None,
+                worktree=made[1] if made else None,
+            )
         )
-        record = await asyncio.to_thread(write_goal, project.root, goal, chosen)
         if autopilot is not None:
             await self.autopilot.begin(project, goal, chosen, autopilot)
         return record, info
+
+    async def _goal_worktree(self, project: Project, goal: str) -> tuple[str, str] | None:
+        """A fresh worktree and branch for ``goal`` (ADR-0048), or ``None`` when the builder is
+        already running, which `start_agent_session` then refuses with its own message."""
+        info = await asyncio.to_thread(self._session_manager().status, project.id, project.root)
+        if info.state == "running":
+            return None
+        await asyncio.to_thread(gitexclude.ensure_excluded, project.root)
+        try:
+            return await asyncio.to_thread(worktree.create, project.root, goal)
+        except worktree.WorktreeError as exc:
+            raise FleetError(
+                f"This project gives each goal its own git worktree, and that failed: {exc}"
+            ) from exc
 
     async def start_agent_session(
         self,
@@ -614,10 +650,12 @@ class FleetDaemon:
         *,
         prompt: str | None = None,
         plan_first: bool = False,
+        cwd: str | None = None,
     ) -> SessionInfo:
         """Start the project's agent in tmux, or reattach to it, or relaunch it with its resume
         command. ``backend`` defaults to the project's own, else `CUTTLEFISH_AGENT_BACKEND`.
-        ``prompt`` is its first message, for a session being launched now."""
+        ``prompt`` is its first message, for a session being launched now. ``cwd`` is the goal's
+        worktree (ADR-0048); a relaunch without one goes back to the last goal's, if it is there."""
         project = self._projects.get(project_id)
         if project.terminal_command:
             # A terminal command (ADR-0047): no backend, no hooks, nothing cuttlefish reads back.
@@ -642,6 +680,10 @@ class FleetDaemon:
                 write_settings, project.root, project.id, self._request_window_s
             )
             self.requests.reopen(session_scope(project.id))
+        if cwd is None:
+            last = await asyncio.to_thread(read_goal, project.root)
+            kept = last.get("worktree") if last else None
+            cwd = kept if kept and Path(kept).is_dir() else None
         try:
             return await asyncio.to_thread(
                 functools.partial(
@@ -653,6 +695,7 @@ class FleetDaemon:
                     hooks_settings=settings,
                     prompt=prompt,
                     plan_first=plan_first,
+                    cwd=cwd,
                 )
             )
         except SessionError as exc:

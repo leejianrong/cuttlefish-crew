@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import shutil
 import stat
+import subprocess
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -578,3 +579,55 @@ def test_a_project_with_a_terminal_command_runs_it_and_the_terminal_attaches(rig
     assert cleared.json()["terminal_command"] is None
     blank = client.patch(f"{path}/terminal-command", json={"terminal_command": " "})
     assert blank.status_code == 400
+
+
+def _repo(root: Path) -> None:
+    for args in (["init", "-q"], ["commit", "-q", "--allow-empty", "-m", "first"]):
+        subprocess.run(
+            ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        )
+
+
+def _out(root: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=root, capture_output=True, text=True, check=True
+    ).stdout
+
+
+def test_a_goal_runs_in_its_own_worktree_only_when_the_project_opts_in(rig: Rig) -> None:
+    """CUT-238 / ADR-0048: off by default, the builder runs in the checkout; on, in a worktree
+    under the project's own .cuttlefish folder, on a new branch the goal record names."""
+    _repo(rig.root)
+    (rig.bin / "claude").write_text(f"#!/bin/sh\npwd >> {rig.log}\nexec sleep 300\n")
+    project = rig.store.register(name="alpha", root=str(rig.root))
+    client = _client(rig.daemon())
+    path = f"/api/projects/{project.id}"
+    plain = client.post(f"{path}/goal", json={"text": "Add a summary", "backend": "claude-code"})
+    assert plain.status_code == 200 and "branch" not in plain.json()["goal"]
+    assert rig.launches() == [str(rig.root.resolve())]
+    client.post(f"{path}/agent-session/stop")
+
+    on = client.patch(f"{path}/worktree-per-goal", json={"worktree_per_goal": True})
+    assert on.json()["worktree_per_goal"] is True
+    assert client.patch(f"{path}/worktree-per-goal", json={}).status_code == 400
+    given = client.post(f"{path}/goal", json={"text": "Add a summary!", "backend": "claude-code"})
+    goal = given.json()["goal"]
+    assert goal["branch"].startswith("cuttlefish/add-a-summary-")
+    assert goal["worktree"].startswith(str(rig.root / ".cuttlefish" / "worktrees"))
+    assert rig.launches()[-1] == str(Path(goal["worktree"]).resolve())
+    assert client.get(f"{path}/goal").json()["goal"]["branch"] == goal["branch"]
+    assert goal["branch"] in _out(rig.root, "branch", "--list")
+    assert _out(rig.root, "status", "--porcelain") == ""  # not an untracked folder
+
+
+def test_a_worktree_goal_in_a_folder_that_is_not_a_repository_is_refused(rig: Rig) -> None:
+    project = rig.store.register(name="alpha", root=str(rig.root))
+    client = _client(rig.daemon())
+    path = f"/api/projects/{project.id}"
+    client.patch(f"{path}/worktree-per-goal", json={"worktree_per_goal": True})
+    refused = client.post(f"{path}/goal", json={"text": "x", "backend": "claude-code"})
+    assert refused.status_code == 409 and "worktree" in refused.json()["detail"]
+    assert client.get(f"{path}/agent-session").json()["state"] == "none"

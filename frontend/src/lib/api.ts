@@ -220,6 +220,8 @@ export interface ProjectSummary {
   backend?: string | null;
   /** CUT-233: a command run in the tmux agent session instead of a known tool, or null. */
   terminal_command?: string | null;
+  /** CUT-238: each new goal runs in its own git worktree and branch. */
+  worktree_per_goal?: boolean;
   /** V4-C: applies the next time the team starts, not to a team already running. */
   mode: PermissionMode;
   /** V4-F: the command groups switched on (names from the permissions catalogue). */
@@ -449,6 +451,9 @@ export interface Goal {
   /** When it was given, ISO 8601 in UTC. */
   at?: string;
   backend?: string;
+  /** CUT-238: the branch the goal is worked on, when the project gives each goal a worktree. */
+  branch?: string;
+  worktree?: string;
 }
 
 /** A password-mode daemon sends a fresh session token in this header once the one in use is past
@@ -611,6 +616,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/chat`, {
       method: "POST",
       body: JSON.stringify({ text }),
+    });
+  }
+
+  /** Run each new goal in its own git worktree and branch (CUT-238); the next goal picks it up. */
+  setWorktreePerGoal(id: string, on: boolean): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/worktree-per-goal`, {
+      method: "PATCH",
+      body: JSON.stringify({ worktree_per_goal: on }),
     });
   }
 

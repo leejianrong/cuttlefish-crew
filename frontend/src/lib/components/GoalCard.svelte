@@ -5,7 +5,7 @@
   import type { AgentSession, FleetClient, Goal } from "../api";
   import { phaseLabel, type AutopilotStatus } from "../autopilot";
   import { TERMINAL_COMMAND_NOTE } from "../agentsession";
-  import { BUILDERS, GOAL_EXAMPLES, builderLabel, canGive, defaultBuilder } from "../goal";
+  import { BUILDERS, GOAL_EXAMPLES, branchLine, builderLabel, canGive, defaultBuilder } from "../goal";
   import type { ProjectTab } from "../route";
 
   let {
@@ -13,12 +13,14 @@
     projectId,
     projectBackend,
     terminalCommand = null,
+    worktreePerGoal = false,
     onTabChange,
   }: {
     client: FleetClient;
     projectId: string;
     projectBackend: string | null | undefined;
     terminalCommand?: string | null;
+    worktreePerGoal?: boolean;
     onTabChange: (tab: ProjectTab) => void;
   } = $props();
 
@@ -33,6 +35,9 @@
   let hours = $state(24);
   let tokensMillion = $state(5);
   let autopilot = $state<AutopilotStatus | null>(null);
+  // Seeded from the project; the switch below saves it.
+  // svelte-ignore state_referenced_locally
+  let worktreeOn = $state(worktreePerGoal);
   let busy = $state(false);
   let error = $state<string | null>(null);
   let shownFor = "";
@@ -93,6 +98,16 @@
     }
   }
 
+  async function setWorktree() {
+    const wanted = worktreeOn;
+    try {
+      await client.setWorktreePerGoal(projectId, wanted);
+    } catch (e) {
+      worktreeOn = !wanted;
+      error = e instanceof Error ? e.message : "That didn't work.";
+    }
+  }
+
   function onKey(event: KeyboardEvent) {
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
       event.preventDefault();
@@ -119,6 +134,9 @@
       {#if goal}
         <p class="label-medium muted">{builderLabel(session?.backend ?? goal.backend)} is working on</p>
         <p class="body-large goal-text">{goal.text}</p>
+        {#if branchLine(goal)}
+          <p class="body-medium" data-testid="goal-branch">Working <code>{branchLine(goal)}</code>.</p>
+        {/if}
       {:else}
         <p class="body-medium">
           {builderLabel(session?.backend)} is running in tmux, and no goal was given from here.
@@ -147,7 +165,9 @@
       Say what you want done; it starts with this as its first message.
     </p>
     {#if goal}
-      <p class="body-small muted" data-testid="last-goal">Last goal: {goal.text}</p>
+      <p class="body-small muted" data-testid="last-goal">
+        Last goal: {goal.text}{branchLine(goal) ? ` (${branchLine(goal)})` : ""}
+      </p>
     {/if}
     <div class="examples">
       <span class="label-medium muted">Try</span>
@@ -207,6 +227,16 @@
         </div>
       {/if}
     </div>
+    <label class="switch-row">
+      <input type="checkbox" role="switch" bind:checked={worktreeOn} onchange={setWorktree} />
+      <span class="switch-text">
+        <span class="title-small">Its own branch</span>
+        <span class="body-small muted">
+          Each goal gets a new git worktree and branch, so the builder never touches your checkout
+          or its branch. The worktree is kept when the goal ends, with the work on it.
+        </span>
+      </span>
+    </label>
     {#if projectBackend === "kopicode"}
       <p class="body-small muted">
         This project's own backend is kopicode, whose interactive session cannot take a first message

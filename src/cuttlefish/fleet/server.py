@@ -146,6 +146,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
         "terminal_command": project.terminal_command,
+        "worktree_per_goal": project.worktree_per_goal,
         "mode": project.mode,
         "env_prepare": project.env_prepare,
         "limits": dict(project.limits),
@@ -871,6 +872,20 @@ def create_app(
         command = _terminal_command_from(body["terminal_command"])
         try:
             daemon.projects.update_terminal_command(project_id, command)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/worktree-per-goal")
+    async def update_worktree_per_goal(project_id: str, request: Request) -> dict[str, Any]:
+        """Run each new goal in its own git worktree and branch, or stop (ADR-0048). The next
+        goal picks it up; a builder already running stays where it is."""
+        body = await _json_body(request)
+        value = body.get("worktree_per_goal")
+        if not isinstance(value, bool):
+            raise HTTPException(400, "'worktree_per_goal' must be true or false")
+        try:
+            daemon.projects.update_worktree_per_goal(project_id, value)
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc

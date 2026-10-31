@@ -330,6 +330,7 @@
           {projectId}
           projectBackend={project.backend}
           terminalCommand={project.terminal_command}
+          worktreePerGoal={project.worktree_per_goal}
           {onTabChange}
         />
       {/if}

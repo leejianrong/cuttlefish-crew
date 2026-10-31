@@ -124,8 +124,13 @@ def read_goal(root: str) -> dict[str, str] | None:
     return {k: v for k, v in data.items() if isinstance(v, str)}
 
 
-def write_goal(root: str, text: str, backend: str) -> dict[str, str]:
+def write_goal(
+    root: str, text: str, backend: str, *, branch: str | None = None, worktree: str | None = None
+) -> dict[str, str]:
+    """Record the goal. ``branch`` and ``worktree`` (ADR-0048) say where it is being worked on."""
     goal = {"text": text, "at": _now(), "backend": backend}
+    if branch and worktree:
+        goal.update(branch=branch, worktree=worktree)
     path = _goal_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     scratch = path.with_suffix(".tmp")
@@ -287,6 +292,7 @@ class SessionManager:
         prompt: str | None = None,
         plan_first: bool = False,
         command: str | None = None,
+        cwd: str | None = None,
     ) -> SessionInfo:
         """Make sure the project's agent is running in tmux, and record which way it got there.
 
@@ -297,6 +303,9 @@ class SessionManager:
         ``hooks_settings`` (Claude Code only, ADR-0040) is the settings file that gives the session
         its permission hook, launched with the permission mode ``mode`` maps to. A session that is
         found already running keeps the way it was launched.
+
+        ``cwd`` (ADR-0048) is where a tool being launched now runs, a worktree inside ``root``;
+        the session's record and the hooks stay with ``root``.
 
         ``prompt`` is a first message for a tool that is being launched now. A session that is
         already running cannot take it without typing into its terminal, so that is refused."""
@@ -337,7 +346,9 @@ class SessionManager:
                 ),
             )
             try:
-                self._tmux.new_session(name, cwd=root, argv=argv, env=self._env_for(root, backend))
+                self._tmux.new_session(
+                    name, cwd=cwd or root, argv=argv, env=self._env_for(root, backend)
+                )
             except TmuxError as exc:
                 raise SessionError(str(exc)) from exc
             action = "relaunched" if previous else "started"
