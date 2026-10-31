@@ -64,9 +64,11 @@ from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
+from cuttlefish.fleet.scheduler import Scheduler
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
+from cuttlefish.projects.schedules import ScheduleStore
 from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
 from cuttlefish.requests import (
     AlreadyResolvedError,
@@ -309,6 +311,7 @@ class FleetDaemon:
         request_window_s: float = 600.0,
         secrets_db: Path | None = None,
         sessions: SessionManager | None = None,
+        schedules: ScheduleStore | None = None,
     ) -> None:
         self._projects = project_store
         #: Each project's agent in tmux (CUT-95); built on first use unless a test supplies one.
@@ -337,6 +340,8 @@ class FleetDaemon:
         self.autopilot = Autopilot(self)
         #: The credential broker (ADR-0031): started with the first team that needs it.
         self._broker: Broker | None = None
+        #: Gives a builder its scheduled goal (CUT-245); only when a schedule store is supplied.
+        self.scheduler = Scheduler(self, schedules) if schedules is not None else None
 
     def broker_enabled(self) -> bool:
         return broker_requested(os.environ)
@@ -810,7 +815,9 @@ class FleetDaemon:
         return results
 
     async def close(self) -> None:
-        """Release what the daemon holds open: the broker, and with it every lease."""
+        """Release what the daemon holds open: the schedule loop, the broker and every lease."""
+        if self.scheduler is not None:
+            await self.scheduler.close()
         if self._broker is not None:
             await self._broker.close()
             self._broker = None

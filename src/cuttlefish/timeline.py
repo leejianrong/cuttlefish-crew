@@ -18,7 +18,13 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from cuttlefish.artifacts import Artifact
-from cuttlefish.episodic.events import AutopilotUpdated, PullRequestOpened, RequestRaised
+from cuttlefish.episodic.events import (
+    AutopilotUpdated,
+    PullRequestOpened,
+    RequestRaised,
+    ScheduleRan,
+    ScheduleSkipped,
+)
 
 Kind = Literal["needs_you", "autopilot", "refresh", "image", "tests", "commit", "note"]
 
@@ -74,6 +80,10 @@ def journal_events(events: Iterable[Any]) -> list[Event]:
             )
         elif isinstance(payload, PullRequestOpened):
             found.append(Event(at, "note", f"Pull request: {payload.url}", payload.url))
+        elif isinstance(payload, ScheduleRan):
+            found.append(Event(at, "note", "A schedule gave the builder its goal."))
+        elif isinstance(payload, ScheduleSkipped):
+            found.append(Event(at, "note", f"A schedule was skipped: {_clip(payload.reason)}"))
         elif isinstance(payload, AutopilotUpdated) and payload.phase != previous:
             text = _autopilot_text(payload)
             if text:
