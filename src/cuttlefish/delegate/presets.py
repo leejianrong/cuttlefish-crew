@@ -67,6 +67,10 @@ PRESETS: Mapping[str, tuple[Command, ...]] = {
         ("git", "switch", "-c"),
         ("git", "checkout", "-b"),
     ),
+    # Opt in. `("git", "push")` opens only a push that names a branch: the never-allowed list
+    # (never_allowed.py) refuses the default branch and every force form, and `ConsentPolicy`
+    # asks about a push that names none.
+    "git-push": (("git", "push"),),
     "python": (
         ("uv", "run", "pytest"),
         ("uv", "run", "ruff"),
@@ -144,6 +148,11 @@ PRESET_INFO: Mapping[str, tuple[str, str]] = {
     ),
     "git-read": ("Git, read only", "Look at status, history and diffs."),
     "git-save": ("Git, save work", "Stage and commit. Never pushes."),
+    "git-push": (
+        "Git, push a branch",
+        "Push a named branch other than main or master. Never forces, never deletes. Off by "
+        "default: a push leaves the machine.",
+    ),
     "python": ("Python", "Run tests, linters and type checks with uv."),
     "javascript": (
         "JavaScript and TypeScript",

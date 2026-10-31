@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, Any
 
 from cuttlefish.delegate.codex_app_server import inside
 from cuttlefish.delegate.consent import ConsentPolicy, command_line
+from cuttlefish.delegate.never_allowed import repo_default_branches
 from cuttlefish.delegate.presets import resolve_allow
 from cuttlefish.projects.store import Project
 from cuttlefish.requests import WHY, UnknownRequestError
@@ -194,7 +195,10 @@ class ClaudeHooks:
                 return {}
             line = f"/bin/sh -c {command}"
             allow = [] if mode == "ask-first" else resolve_allow(project.allow, project.presets)
-            policy = ConsentPolicy([*allow, *broker.grants(scope)])
+            policy = ConsentPolicy(
+                [*allow, *broker.grants(scope)],
+                default_branches=repo_default_branches(Path(project.root)),
+            )
             decision = policy.decide("run_shell", line)
             if decision.answer == "allow":
                 return {"decision": "allow"}
