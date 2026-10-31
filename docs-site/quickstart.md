@@ -8,7 +8,22 @@ This walks through the path most people actually want: a dashboard showing
 one or more registered projects, each running its own small crew of coding
 agents.
 
-## 1. Bring up the daemon and dashboard together
+## 1. Install, then bring up the daemon and dashboard together
+
+On macOS or Linux, one line installs it for your user (no sudo):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/leejianrong/cuttlefish-crew/main/scripts/install.sh | sh
+cuttlefish serve
+```
+
+The script installs uv if needed, clones the repository to `~/.local/share/cuttlefish/app`, installs the
+`cuttlefish` command into `~/.local/bin`, builds the dashboard (Node 20.19+ or 22.12+), and runs
+`cuttlefish doctor`. It names what it could not install: Node, tmux, and a coding-agent CLI (`kopicode`,
+`claude` or `codex`) are yours to add. Run it again to update. `sh install.sh --check` only checks;
+`sh install.sh --uninstall` removes it and leaves `~/.cuttlefish` alone.
+
+From a checkout instead (for hacking on cuttlefish itself):
 
 ```bash
 make demo

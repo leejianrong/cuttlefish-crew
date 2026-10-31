@@ -68,10 +68,16 @@ below.
 **1. Install and make two practice repos.**
 
 ```bash
-git clone https://github.com/leejianrong/cuttlefish-crew.git
-cd cuttlefish-crew
-uv sync
+curl -fsSL https://raw.githubusercontent.com/leejianrong/cuttlefish-crew/main/scripts/install.sh | sh
+```
 
+The script (read it first: it is short and commented) installs uv if missing, clones this repo into
+`~/.local/share/cuttlefish/app`, puts `cuttlefish` in `~/.local/bin`, builds the dashboard, and runs
+`cuttlefish doctor`. No sudo. It names anything it cannot install (Node 20.19+/22.12+, tmux, an agent CLI) and
+changes nothing else; run it again to update. `sh install.sh --check` only checks, `--uninstall` removes it
+(ADR-0045). Prefer a checkout to hack on? `git clone`, `uv sync`, `make demo` still work.
+
+```bash
 mkdir -p ~/crew-demo && cd ~/crew-demo
 for p in todo-api notes-site; do mkdir $p && git -C $p init -q -b main; printf '.cuttlefish/\n.satay/\n' > $p/.gitignore; done
 printf 'class TodoList:\n    def __init__(self):\n        self.items = []\n\n    def add(self, item):\n        self.items.append(item)\n' > todo-api/todo.py
@@ -84,10 +90,10 @@ cd -
 
 ```bash
 export OPENROUTER_API_KEY=...        # or the key your agent CLI uses
-make demo
+cuttlefish serve                     # installed with the script; from a checkout: make demo
 ```
 
-This builds the dashboard once, then runs `cuttlefish serve`: one process
+`make demo` builds the dashboard once; either way `cuttlefish serve` is one process
 serving the API and the UI. It prints a URL and a token. Open the URL, check
 that the address box on the Connect screen matches it (it starts as the address
 the page was served from), and paste the token. The token is kept in

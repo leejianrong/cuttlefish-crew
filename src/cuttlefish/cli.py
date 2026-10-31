@@ -108,7 +108,16 @@ DEFAULT_DASHBOARD_DIR = Path("frontend/dist")
 def _resolve_dashboard_dir(explicit: str | None) -> Path | None:
     if explicit is not None:
         return Path(explicit)
-    return DEFAULT_DASHBOARD_DIR if (DEFAULT_DASHBOARD_DIR / "index.html").exists() else None
+    for candidate in (DEFAULT_DASHBOARD_DIR, installed_dashboard_dir()):
+        if (candidate / "index.html").exists():
+            return candidate
+    return None
+
+
+def installed_dashboard_dir() -> Path:
+    """Where `scripts/install.sh` builds the dashboard (ADR-0045), whatever the CWD is."""
+    data_home = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return Path(data_home) / "cuttlefish" / "app" / "frontend" / "dist"
 
 
 def _resolve_tailscale_host() -> str:
