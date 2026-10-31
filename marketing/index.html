@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>cuttlefish-crew — a fleet manager for coding agents</title>
-<meta name="description" content="Register your software projects, name a small crew of coding agents for each one, and direct all of it from one dashboard — durably, resumably, remotely.">
+<meta name="description" content="A fleet manager for coding agents. Register your projects, give each a small crew of Claude Code, Codex or kopicode agents, and run them all from one dashboard.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -85,9 +85,9 @@
 
   /* ---- hero ---- */
   .hero {
-    padding: 40px 0 80px;
+    padding: 40px 24px 80px;
     display: grid;
-    grid-template-columns: 1.05fr 1fr;
+    grid-template-columns: 0.9fr 1.1fr;
     gap: 56px;
     align-items: center;
   }
@@ -97,9 +97,9 @@
   .hero h1 .accent { color: var(--glow); }
   .hero p.sub {
     color: var(--foam-dim);
-    font-size: 1.15rem;
-    max-width: 44ch;
-    margin: 20px 0 28px;
+    font-size: 1.1rem;
+    max-width: 48ch;
+    margin: 20px 0 20px;
   }
   .install {
     display: flex;
@@ -113,7 +113,7 @@
   .install code {
     flex: 1;
     padding: 13px 16px;
-    font-size: 0.88rem;
+    font-size: 0.8rem;
     color: var(--foam);
     white-space: nowrap;
     overflow-x: auto;
@@ -152,7 +152,23 @@
     width: 9px; height: 9px; border-radius: 50%;
     background: var(--kelp-line);
   }
-  .chrome video, .chrome img { display: block; width: 100%; }
+  .chrome video, .chrome img { display: block; width: 100%; height: auto; }
+  .hero > div { min-width: 0; }
+  .hero .install { max-width: 580px; }
+
+  .agents-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 20px; }
+  .agents-label { color: var(--foam-dim); font-size: 0.9rem; margin-right: 4px; }
+  .agent-chip {
+    border: 1px solid var(--kelp-line); background: var(--ink-panel); border-radius: 999px;
+    padding: 4px 12px; font-size: 0.88rem; color: var(--foam);
+  }
+  .platforms { color: var(--foam-dim); font-size: 0.88rem; max-width: 52ch; margin: 12px 0 0; }
+  .platforms code { font-size: 0.85em; }
+  .staged { color: var(--foam-dim); font-size: 0.8rem; text-align: right; margin: 10px 4px 0; }
+  .video-section { padding: 72px 0 24px; text-align: center; }
+  .video-section h2 { font-size: clamp(1.5rem, 3vw, 2rem); max-width: 28ch; margin: 0 auto; }
+  .video-section p.lede { color: var(--foam-dim); max-width: 50ch; margin: 16px auto 32px; }
+  .video-section .chrome { max-width: 800px; margin: 0 auto; }
 
   /* ---- quote ---- */
   .quote {
@@ -226,7 +242,7 @@
   footer a:hover { color: var(--foam); }
 
   @media (max-width: 860px) {
-    .hero { grid-template-columns: 1fr; padding-top: 8px; }
+    .hero { grid-template-columns: 1fr; padding-top: 8px; gap: 36px; }
     .features { grid-template-columns: 1fr; }
     footer { flex-direction: column; gap: 12px; text-align: center; }
   }
@@ -249,26 +265,46 @@
 
 <header class="wrap hero">
   <div>
-    <h1>Run a crew of coding agents,<br>not a spreadsheet of<br><span class="accent">terminal tabs</span>.</h1>
-    <p class="sub">Register your software projects, name a small team of agents for each one, and direct all of it from one dashboard — durably, resumably, remotely.</p>
+    <h1>A fleet manager for <span class="accent">coding agents</span>.</h1>
+    <p class="sub">Register your software projects, give each a small crew of coding agents, and run all of them from one dashboard. An agent stops and asks before a command you have not approved, and a restarted daemon picks up unfinished teams.</p>
+    <p class="agents-row" aria-label="Supported coding agents">
+      <span class="agents-label">Works with</span>
+      <span class="agent-chip">Claude Code</span>
+      <span class="agent-chip">Codex</span>
+      <span class="agent-chip">kopicode</span>
+    </p>
+    <!-- INSTALL: the one line a visitor copies (scripts/install.sh, ADR-0045). -->
     <div class="install">
-      <code id="install-cmd">git clone https://github.com/leejianrong/cuttlefish-crew.git &amp;&amp; cd cuttlefish-crew &amp;&amp; uv sync</code>
+      <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/leejianrong/cuttlefish-crew/main/scripts/install.sh | sh</code>
       <button class="copy-btn" id="copy-btn" type="button">copy</button>
     </div>
+    <p class="platforms">Runs on Linux and WSL2; macOS is untested. Needs git and curl. The installer adds <a href="https://docs.astral.sh/uv/">uv</a> and tells you if Node.js, tmux or an agent CLI is missing.</p>
     <div class="hero-links">
       <a href="docs/quickstart/">Quickstart →</a>
-      <a href="https://github.com/leejianrong/cuttlefish-crew">Source on GitHub →</a>
+      <a href="https://github.com/leejianrong/cuttlefish-crew">Star or read the source on GitHub →</a>
     </div>
   </div>
-  <div class="chrome">
+  <div>
+   <div class="chrome">
     <div class="chrome-bar"><span></span><span></span><span></span></div>
-    <video src="assets/demo.mp4" autoplay muted loop playsinline aria-label="Screen recording: registering projects, opening the sprite gallery, and starting a team from the cuttlefish-crew dashboard"></video>
+    <img src="assets/dashboard-fleet-hero.png" width="2000" height="960" alt="The cuttlefish-crew Projects screen with four projects: a builder is working in each, a reviewer is queued, and two projects show a 1 waiting for you badge for a command that needs approval">
+   </div>
+    <p class="staged">A staged scene: scripted agents, no model calls.</p>
   </div>
 </header>
 
 <section class="quote wrap">
   <h2>A crew, not a company.</h2>
   <p>No org chart. No hiring workflow. No performance reviews. Just a handful of named agents, each with its own job, directed from one place.</p>
+</section>
+
+<section class="video-section wrap">
+  <h2>A crew of agents, not a spreadsheet of terminal tabs.</h2>
+  <p class="lede">A 57-second recording of three real Codex agents building three small tools: starting teams, answering their questions, steering one mid-run.</p>
+  <div class="chrome">
+    <div class="chrome-bar"><span></span><span></span><span></span></div>
+    <video src="assets/demo.mp4" controls muted loop playsinline preload="metadata" aria-label="Screen recording: registering projects, starting teams and answering their questions from the cuttlefish-crew dashboard"></video>
+  </div>
 </section>
 
 <section class="legend wrap">

@@ -7,7 +7,7 @@ coding to a pluggable backend
 ([kopicode](https://github.com/leejianrong/kopicode), headless Claude Code, or
 headless Codex), and everything that happens lands in one readable journal.
 
-![The Projects screen: two projects, each with working agents, and a Needs you badge](docs/assets/dashboard-projects.png)
+![The Projects screen: three projects with a builder working in each and two showing a "1 waiting for you" badge (a staged scene: scripted agents, no model calls)](docs/assets/dashboard-fleet-hero.png)
 
 When an agent wants to run a command you have not approved, it stops and waits
 for you. You answer from the dashboard, and the agent carries on:
@@ -45,6 +45,7 @@ continues it.
 
 | You need | For |
 |---|---|
+| Linux or WSL2 (CI runs on Ubuntu; macOS is untested) | everything |
 | Python 3.12+ and [uv](https://docs.astral.sh/uv/) | everything |
 | Node.js and npm | the dashboard (`make demo` builds it once) |
 | One coding-agent CLI on `PATH`, logged in or keyed: [`kopicode`](https://github.com/leejianrong/kopicode#readme) (the default; v0.3.0 or later, v0.4.0 for cost, the turn cap, the context limit and questions; needs `OPENROUTER_API_KEY`), `claude`, or `codex` (after `codex login`) | delegating work |
