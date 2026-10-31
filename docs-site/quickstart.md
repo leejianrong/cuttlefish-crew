@@ -229,52 +229,14 @@ Anything it asks appears only in the Terminal tab, and the project page says so.
 again from the start; there is no resume.
 ([ADR-0047](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0047-a-project-can-run-any-terminal-command-in-its-tmux-session-with-no-status-integration.md)).
 
-## A branch per goal
+## A branch per goal, pull requests, schedules
 
-By default the builder works in your own checkout. Turn on **Its own branch** on the goal box (or
-`PATCH /api/projects/<id>/worktree-per-goal` with `{"worktree_per_goal": true}`, Admin tier) and each new goal gets
-a git worktree under `<project>/.cuttlefish/worktrees/` on a new `cuttlefish/<goal words>` branch, made from your
-checkout's current commit. The builder runs there, your checkout and its branch are not touched, and the project
-page names the branch. The folder must be a git repository with a commit, or the goal is refused with the reason.
-The worktree is kept when the goal ends, with the work on it; remove it with `git worktree remove`. cuttlefish never
-merges it
-([ADR-0048](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md)).
+Three things build on the goal box, each with its own page:
 
-### Open a pull request
-
-Under the goal on the project page, **Open a pull request** runs `gh pr create` for the goal's branch, using the
-`gh` login already on this machine (`cuttlefish projects pr <id> [--push]` does the same from a terminal). The title
-is the goal's first line; the body is the goal, what happened and the commit subjects, with known secrets removed.
-There is no model call and nothing is merged. It tells you why when it cannot: `gh` missing or logged out, the branch
-is the default branch, no commits ahead, or not pushed yet, in which case **Push and open it** pushes that one branch
-to `origin` (never `main`, never a force push). The URL shows on the page and in the timeline. It needs the Admin
-tier, and GitHub only
-([ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)).
-
-## Scheduled goals
-
-On the project page, **Scheduled goals** asks the builder for a goal on a repeat while you are away. Write the goal,
-pick **Every N minutes**, **Every N hours** or **Daily at (UTC)**, and add it. The list shows each schedule's next run
-and what happened the last time it was due. From a terminal:
-
-```bash
-uv run cuttlefish schedule add <project-id> --goal "Triage the open issues" --recurrence "daily 06:30"
-uv run cuttlefish schedule list
-```
-
-What to know before you rely on it:
-
-- **Times are UTC**, all year, so a daylight-saving change never moves a run.
-- **Only `cuttlefish serve` runs a schedule.** It looks every 20 seconds. If the daemon was down when a run was due,
-  that schedule runs once when it comes back, not once per missed slot.
-- It starts the goal the way **Give the builder a goal** does, with Autopilot on and your **Its own branch** setting
-  respected. Autopilot plans first, so an unattended run waits at the plan under Needs you until you approve it.
-- **It never interrupts a builder that is still on its last goal.** That run is skipped, journaled as a skipped
-  schedule and shown on the page with the reason. A builder whose last goal has ended (done, stopped, hit a limit or
-  stuck) is restarted with the new goal. A builder you started without Autopilot cannot be told apart from one still
-  working, so it counts as busy until you stop it.
-- Adding, pausing or removing a schedule needs the Admin tier, since it starts work unattended
-  ([ADR-0051](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0051-a-schedule-asks-a-projects-builder-for-a-goal-from-the-fleet-daemon-and-never-interrupts-one.md)).
+- **Its own branch** runs a goal in a new git worktree and branch, and **Open a pull request** turns that branch into
+  a GitHub pull request with your own `gh` login: [branches and pull requests](branches-and-pull-requests.md).
+- **Scheduled goals** ask the builder for a goal on a repeat while you are away: [schedules](schedules.md).
+- A manager agent can watch every project over MCP: [manager tools](manager-tools.md).
 
 ## Artifacts
 
