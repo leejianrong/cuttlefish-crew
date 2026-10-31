@@ -17,7 +17,8 @@ one-at-a-time dispatch for exactly that case instead — real, but not concurren
 that case, rather than a hard `DelegationFailed`. A separate git worktree/checkout
 per role is the actual fix for genuine concurrent editing, deliberately deferred
 until this fallback's own cost is felt (ADR-0002's "don't build ahead of a proven
-need").
+need"). ADR-0054 designs it and ``sessions.role_trees`` is its git half (CUT-239); this
+module does not call it yet.
 """
 
 from __future__ import annotations
