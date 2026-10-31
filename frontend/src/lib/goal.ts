@@ -27,6 +27,11 @@ export function builderLabel(id: string | null | undefined): string {
   return BUILDERS.find((b) => b.id === id)?.label ?? "The builder";
 }
 
+/** What the page says about where a goal is being worked on, or null when it shares the checkout. */
+export function branchLine(goal: { branch?: string } | null | undefined): string | null {
+  return goal?.branch ? `on branch ${goal.branch}` : null;
+}
+
 /** Whether the box holds something to send. */
 export function canGive(text: string): boolean {
   return text.trim().length > 0;

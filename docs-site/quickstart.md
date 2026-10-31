@@ -229,6 +229,17 @@ Anything it asks appears only in the Terminal tab, and the project page says so.
 again from the start; there is no resume.
 ([ADR-0047](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0047-a-project-can-run-any-terminal-command-in-its-tmux-session-with-no-status-integration.md)).
 
+## A branch per goal
+
+By default the builder works in your own checkout. Turn on **Its own branch** on the goal box (or
+`PATCH /api/projects/<id>/worktree-per-goal` with `{"worktree_per_goal": true}`, Admin tier) and each new goal gets
+a git worktree under `<project>/.cuttlefish/worktrees/` on a new `cuttlefish/<goal words>` branch, made from your
+checkout's current commit. The builder runs there, your checkout and its branch are not touched, and the project
+page names the branch. The folder must be a git repository with a commit, or the goal is refused with the reason.
+The worktree is kept when the goal ends, with the work on it; remove it with `git worktree remove`. cuttlefish does
+not push or merge it
+([ADR-0048](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md)).
+
 ## Artifacts
 
 Agents are told to write results as markdown files under `.cuttlefish/artifacts/` in the project, and the

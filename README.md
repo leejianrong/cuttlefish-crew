@@ -117,7 +117,8 @@ does the same; add `--max-tokens 200000` to cap a project's token use.)
 interactive session cannot take a first message yet, so use **Advanced: run a team of roles** on the
 Overview, give the builder a task, and press **Start team**. (For a project you want to work on with
 Claude Code or Codex, the main box is **Give the builder a goal**: it starts that agent in its own
-terminal with your goal as its first message.)
+terminal with your goal as its first message. Switch on **Its own branch** there and each goal runs in a
+new git worktree and branch, leaving your checkout alone: [ADR-0048](docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md).)
 
 > Add a remove(item) method to TodoList in todo.py, and a test for it. Then run
 > `uname -a` and tell me what it prints.

@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS projects (
     presets_json TEXT,
     env_prepare TEXT,
     limits_json TEXT,
-    terminal_command TEXT
+    terminal_command TEXT,
+    worktree_per_goal INTEGER NOT NULL DEFAULT 0
 )
 """
 
@@ -122,6 +123,11 @@ _ADD_LIMITS_COLUMN = "ALTER TABLE projects ADD COLUMN limits_json TEXT"
 #: `terminal_command` was added for CUT-233/ADR-0047 -- a shell command the project's tmux agent
 #: session runs instead of one of the three known tools. `NULL` is none, so a row is unchanged.
 _ADD_TERMINAL_COMMAND_COLUMN = "ALTER TABLE projects ADD COLUMN terminal_command TEXT"
+
+#: `worktree_per_goal` was added for CUT-238/ADR-0048.
+_ADD_WORKTREE_COLUMN = (
+    "ALTER TABLE projects ADD COLUMN worktree_per_goal INTEGER NOT NULL DEFAULT 0"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -202,6 +208,9 @@ class Project:
     #: A command to run in the project's tmux agent session instead of a known backend
     #: (ADR-0047). cuttlefish has no status integration for it: no chat, goal or Needs you.
     terminal_command: str | None = None
+    #: Whether each goal given to the builder runs in its own git worktree and branch
+    #: (ADR-0048). Off by default: the builder works in the project's own checkout.
+    worktree_per_goal: bool = False
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -336,6 +345,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         env_prepare=row["env_prepare"] or DEFAULT_PREPARE_MODE,
         limits=json.loads(row["limits_json"]) if row["limits_json"] else {},
         terminal_command=row["terminal_command"],
+        worktree_per_goal=bool(row["worktree_per_goal"]),
     )
 
 
@@ -369,6 +379,8 @@ class ProjectStore:
             self._conn.execute(_ADD_LIMITS_COLUMN)
         if "terminal_command" not in columns:
             self._conn.execute(_ADD_TERMINAL_COMMAND_COLUMN)
+        if "worktree_per_goal" not in columns:
+            self._conn.execute(_ADD_WORKTREE_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -521,6 +533,15 @@ class ProjectStore:
         self._conn.execute(
             "UPDATE projects SET presets_json = ? WHERE id = ?",
             (None if presets is None else json.dumps(list(presets)), project_id),
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_worktree_per_goal(self, project_id: str, on: bool) -> Project:
+        """Turn on or off a worktree and branch per goal. Applies to the next goal."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET worktree_per_goal = ? WHERE id = ?", (int(on), project_id)
         )
         self._conn.commit()
         return self.get(project_id)
