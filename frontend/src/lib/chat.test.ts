@@ -157,6 +157,9 @@ describe("chatNotice", () => {
     expect(chatNotice(read([], { waiting: true, backend: "kopicode" }), 0)).toContain("kopicode has written");
     expect(chatNotice(read([], { supported: false, backend: null }), 0)).toContain("Give it a goal");
     expect(chatNotice(read([], { waiting: true }), 0)).toContain("trust it first");
+    const terminal = chatNotice(read([], { supported: false, backend: "terminal" }), 0);
+    expect(terminal).toContain("no Needs you cards");
+    expect(terminal).not.toContain("Give it a goal");
     expect(chatNotice(read([]), 0)).toBe("Nothing has been said yet.");
     expect(chatNotice(read([], { session: "stopped" }), 0)).toBe("This session has no messages.");
     expect(chatNotice(read([say("a", "user", "x")]), 1)).toBeNull();

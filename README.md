@@ -168,6 +168,11 @@ Open the project's **Terminal** tab, which is the real tmux session in
 the browser (xterm.js, dark by default in both app themes, with a Match app / Dark / Light switch remembered per browser), with a key row for a phone that sits right under the terminal, above the bottom bar. The **Shell** switch beside it opens a plain shell in the project folder (no agent needed, the agents' filtered environment, no project secrets). It needs the same
 sign-in as the rest of the dashboard, and closing it leaves the agent running. The page title shows the
 Needs you count, and if the daemon restarts under an open page it asks you to sign in again.
+Any other terminal agent works too: `cuttlefish projects add --terminal-command 'aider'` (or `PATCH
+/api/projects/<id>/terminal-command`) makes the project's tmux session run that command instead. The Terminal tab
+attaches to it, but cuttlefish reads nothing back: the page says it has **no live status, no chat, no goal and no
+Needs you cards** for it, and a session that exits is run again from the start, not resumed
+([ADR-0047](docs/adr/0047-a-project-can-run-any-terminal-command-in-its-tmux-session-with-no-status-integration.md)).
 
 **8. Read what an agent made.** Agents are told to write a result (a plan, a review, a summary) as a
 markdown file under `.cuttlefish/artifacts/` in the project. The project's **Artifacts** tab lists those

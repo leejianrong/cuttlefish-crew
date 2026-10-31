@@ -4,6 +4,7 @@
   // the round and team workflow is under Advanced on the same page.
   import type { AgentSession, FleetClient, Goal } from "../api";
   import { phaseLabel, type AutopilotStatus } from "../autopilot";
+  import { TERMINAL_COMMAND_NOTE } from "../agentsession";
   import { BUILDERS, GOAL_EXAMPLES, builderLabel, canGive, defaultBuilder } from "../goal";
   import type { ProjectTab } from "../route";
 
@@ -11,11 +12,13 @@
     client,
     projectId,
     projectBackend,
+    terminalCommand = null,
     onTabChange,
   }: {
     client: FleetClient;
     projectId: string;
     projectBackend: string | null | undefined;
+    terminalCommand?: string | null;
     onTabChange: (tab: ProjectTab) => void;
   } = $props();
 
@@ -99,6 +102,16 @@
 </script>
 
 <section class="card filled goal" aria-labelledby="goal-heading">
+  {#if terminalCommand}
+    <h2 id="goal-heading" class="title-large">Terminal agent</h2>
+    <p class="body-medium" data-testid="terminal-command-card">
+      This project runs <code>{terminalCommand}</code> in its tmux session.
+    </p>
+    <p class="body-small muted">{TERMINAL_COMMAND_NOTE}</p>
+    <div class="actions">
+      <button class="btn btn-filled open" onclick={() => onTabChange("terminal")}>Open the terminal</button>
+    </div>
+  {:else}
   <h2 id="goal-heading" class="title-large">Give the builder a goal</h2>
 
   {#if running}
@@ -204,6 +217,7 @@
     <button class="btn btn-filled give" disabled={busy || !canGive(text)} onclick={give}>
       {busy ? "Starting…" : "Give the builder this goal"}
     </button>
+  {/if}
   {/if}
 </section>
 

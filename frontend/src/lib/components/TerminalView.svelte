@@ -13,6 +13,7 @@
     type CloseInfo,
     type TerminalKind,
   } from "../terminal";
+  import { TERMINAL_COMMAND_NOTE } from "../agentsession";
   import { keyboardOpen, screenHeight } from "../terminallayout";
   import {
     TERMINAL_THEME_CHOICES,
@@ -29,7 +30,13 @@
     client,
     projectId,
     active,
-  }: { client: FleetClient; projectId: string; active: boolean } = $props();
+    terminalCommand = null,
+  }: {
+    client: FleetClient;
+    projectId: string;
+    active: boolean;
+    terminalCommand?: string | null;
+  } = $props();
 
   let host: HTMLDivElement | undefined = $state();
   let status = $state<"idle" | "connecting" | "connected" | "closed">("idle");
@@ -309,6 +316,12 @@
         <button class="btn btn-tonal" onclick={connect}>Reconnect</button>
       {/if}
     </div>
+  {/if}
+
+  {#if kind === "agent" && terminalCommand}
+    <p class="body-small muted shell-note" data-testid="terminal-command-note">
+      Running <code>{terminalCommand}</code>. {TERMINAL_COMMAND_NOTE}
+    </p>
   {/if}
 
   {#if kind === "shell"}

@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS projects (
     mode TEXT,
     presets_json TEXT,
     env_prepare TEXT,
-    limits_json TEXT
+    limits_json TEXT,
+    terminal_command TEXT
 )
 """
 
@@ -117,6 +118,10 @@ _ADD_ENV_PREPARE_COLUMN = "ALTER TABLE projects ADD COLUMN env_prepare TEXT"
 #: token budget, context, time per round, continuations, rounds with no change) as a JSON object.
 #: `NULL` is none set, so an existing row keeps reading the environment's values.
 _ADD_LIMITS_COLUMN = "ALTER TABLE projects ADD COLUMN limits_json TEXT"
+
+#: `terminal_command` was added for CUT-233/ADR-0047 -- a shell command the project's tmux agent
+#: session runs instead of one of the three known tools. `NULL` is none, so a row is unchanged.
+_ADD_TERMINAL_COMMAND_COLUMN = "ALTER TABLE projects ADD COLUMN terminal_command TEXT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,6 +199,9 @@ class Project:
     #: The project's own limits (``cuttlefish.limits``); a role's override them, the
     #: environment fills what neither sets.
     limits: Mapping[str, int] = field(default_factory=dict)
+    #: A command to run in the project's tmux agent session instead of a known backend
+    #: (ADR-0047). cuttlefish has no status integration for it: no chat, goal or Needs you.
+    terminal_command: str | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -327,6 +335,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         presets=_decode_presets(row["presets_json"]),
         env_prepare=row["env_prepare"] or DEFAULT_PREPARE_MODE,
         limits=json.loads(row["limits_json"]) if row["limits_json"] else {},
+        terminal_command=row["terminal_command"],
     )
 
 
@@ -358,6 +367,8 @@ class ProjectStore:
             self._conn.execute(_ADD_ENV_PREPARE_COLUMN)
         if "limits_json" not in columns:
             self._conn.execute(_ADD_LIMITS_COLUMN)
+        if "terminal_command" not in columns:
+            self._conn.execute(_ADD_TERMINAL_COMMAND_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -395,6 +406,7 @@ class ProjectStore:
         backend: str | None = None,
         mode: str = DEFAULT_MODE,
         presets: tuple[str, ...] | None = None,
+        terminal_command: str | None = None,
     ) -> Project:
         """Register a new project. `secrets_scope` defaults to `name` (Q38). Does not check that
         `root` exists (`check_root` is for the CLI and HTTP routes a person types it into)."""
@@ -410,12 +422,14 @@ class ProjectStore:
             backend=backend,
             mode=mode,
             presets=presets,
+            terminal_command=terminal_command,
         )
         self._conn.execute(
             "INSERT INTO projects "
             "(id, name, root, secrets_scope, roles_json, last_team_id, allow_json, "
-            "last_team_roles_json, max_tokens, max_cost_usd, backend, mode, presets_json) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "last_team_roles_json, max_tokens, max_cost_usd, backend, mode, presets_json, "
+            "terminal_command) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 project.id,
                 project.name,
@@ -430,6 +444,7 @@ class ProjectStore:
                 project.backend,
                 project.mode,
                 None if project.presets is None else json.dumps(list(project.presets)),
+                project.terminal_command,
             ),
         )
         self._conn.commit()
@@ -506,6 +521,16 @@ class ProjectStore:
         self._conn.execute(
             "UPDATE projects SET presets_json = ? WHERE id = ?",
             (None if presets is None else json.dumps(list(presets)), project_id),
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_terminal_command(self, project_id: str, command: str | None) -> Project:
+        """Set (or, with ``None``, clear) the command the tmux agent session runs. It applies
+        the next time the session starts."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET terminal_command = ? WHERE id = ?", (command, project_id)
         )
         self._conn.commit()
         return self.get(project_id)

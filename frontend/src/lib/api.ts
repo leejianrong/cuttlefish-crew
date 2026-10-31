@@ -218,6 +218,8 @@ export interface ProjectSummary {
   secrets_scope: string;
   /** KAN-1809: the project's default backend; null uses the daemon's. */
   backend?: string | null;
+  /** CUT-233: a command run in the tmux agent session instead of a known tool, or null. */
+  terminal_command?: string | null;
   /** V4-C: applies the next time the team starts, not to a team already running. */
   mode: PermissionMode;
   /** V4-F: the command groups switched on (names from the permissions catalogue). */
@@ -438,7 +440,7 @@ export interface AgentSession {
   last_action: "started" | "reattached" | "relaunched" | null;
   at: string | null;
   /** Where its permission questions go: Needs you (hooks), nowhere (Auto), or its terminal. */
-  asks?: "needs-you" | "auto" | "terminal";
+  asks?: "needs-you" | "auto" | "terminal" | "none";
 }
 
 /** The goal last given to a project's builder (CUT-171). */

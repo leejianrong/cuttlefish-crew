@@ -99,7 +99,7 @@ from cuttlefish.sessions.chat_input import MessageError, clean_message, dialog_o
 from cuttlefish.sessions.codex_record import find_rollout, read_rollout
 from cuttlefish.sessions.hooks import write_settings
 from cuttlefish.sessions.kopicode_record import find_events, read_events
-from cuttlefish.sessions.manager import read_goal, write_goal
+from cuttlefish.sessions.manager import TERMINAL_BACKEND, read_goal, write_goal
 from cuttlefish.sessions.manager import wanted as session_wanted
 from cuttlefish.sessions.tmux import TmuxError
 from cuttlefish.sessions.transcript import candidate_paths, read_thread
@@ -593,6 +593,11 @@ class FleetDaemon:
                 f"A goal is at most {MAX_GOAL_CHARS} characters; put the detail in a file."
             )
         project = self._projects.get(project_id)
+        if project.terminal_command:
+            raise FleetError(
+                "This project runs a terminal command, which has no goal or chat. "
+                "Start it from the Agent session card and type to it in the Terminal tab."
+            )
         chosen = resolve_agent_backend(backend or project.backend)
         info = await self.start_agent_session(
             project_id, chosen, prompt=goal, plan_first=autopilot is not None
@@ -614,6 +619,21 @@ class FleetDaemon:
         command. ``backend`` defaults to the project's own, else `CUTTLEFISH_AGENT_BACKEND`.
         ``prompt`` is its first message, for a session being launched now."""
         project = self._projects.get(project_id)
+        if project.terminal_command:
+            # A terminal command (ADR-0047): no backend, no hooks, nothing cuttlefish reads back.
+            try:
+                return await asyncio.to_thread(
+                    functools.partial(
+                        self._session_manager().ensure,
+                        project.id,
+                        project.root,
+                        TERMINAL_BACKEND,
+                        prompt=prompt,
+                        command=project.terminal_command,
+                    )
+                )
+            except SessionError as exc:
+                raise FleetError(str(exc)) from exc
         chosen = resolve_agent_backend(backend or project.backend)
         settings: Path | None = None
         if chosen == "claude-code":

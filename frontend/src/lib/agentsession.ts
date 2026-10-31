@@ -7,7 +7,17 @@ export const BACKEND_LABELS: Record<string, string> = {
   "claude-code": "Claude Code",
   codex: "Codex",
   kopicode: "kopicode",
+  terminal: "Terminal command",
 };
+
+/** What a project that runs its own command is told, on the page and above the terminal
+ * (CUT-233, ADR-0047). cuttlefish reads nothing from such a tool, so it never implies it does. */
+export const TERMINAL_COMMAND_NOTE =
+  "cuttlefish does not know this tool, so it has no live status, no chat, no goal and no Needs you cards for it. Anything it asks appears only in the Terminal tab.";
+
+export function isTerminalCommand(session: Pick<AgentSession, "backend">): boolean {
+  return session.backend === "terminal";
+}
 
 export function backendLabel(backend: string | null): string {
   return backend ? (BACKEND_LABELS[backend] ?? backend) : "the agent";
@@ -22,7 +32,9 @@ export function lastActionText(session: AgentSession): string | null {
     case "reattached":
       return `Found ${who} still running in tmux and reattached to it. Nothing was restarted.`;
     case "relaunched":
-      return `tmux had stopped, so cuttlefish started ${who} again with its resume command. The conversation carries on.`;
+      return isTerminalCommand(session)
+        ? "tmux had stopped, so cuttlefish ran the command again from the start."
+        : `tmux had stopped, so cuttlefish started ${who} again with its resume command. The conversation carries on.`;
     default:
       return null;
   }
@@ -40,12 +52,14 @@ export function stateText(session: AgentSession): string {
 }
 
 export function explanation(session: AgentSession): string {
+  if (isTerminalCommand(session) && session.state === "running") return TERMINAL_COMMAND_NOTE;
   if (session.state === "none") {
     return "Keeps one agent running in tmux for this project. It stays up when you close the browser or the daemon restarts, and comes back with its own resume command after a reboot.";
   }
   if (session.state === "stopped") {
     return "Start it to pick the conversation up where it left off.";
   }
+  if (session.asks === "none") return TERMINAL_COMMAND_NOTE;
   if (session.asks === "needs-you") {
     return "Permission questions appear under Needs you, and in the session's terminal too. Answer in either place.";
   }

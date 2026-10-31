@@ -325,7 +325,13 @@
       <MissionControl {client} {projectId} active={tab === "overview"} {onTabChange} />
 
       {#if !project.running}
-        <GoalCard {client} {projectId} projectBackend={project.backend} {onTabChange} />
+        <GoalCard
+          {client}
+          {projectId}
+          projectBackend={project.backend}
+          terminalCommand={project.terminal_command}
+          {onTabChange}
+        />
       {/if}
 
       <AgentSessionCard {client} {projectId} />
@@ -551,7 +557,12 @@
     </div>
 
     <div id="panel-terminal" role="tabpanel" aria-labelledby="tab-terminal" hidden={tab !== "terminal"}>
-      <TerminalView {client} {projectId} active={tab === "terminal"} />
+      <TerminalView
+        {client}
+        {projectId}
+        active={tab === "terminal"}
+        terminalCommand={project.terminal_command}
+      />
     </div>
 
     <div id="panel-settings" hidden={!inSettings}>

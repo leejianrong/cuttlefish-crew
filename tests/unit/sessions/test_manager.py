@@ -277,3 +277,35 @@ def test_the_goal_is_recorded_beside_the_session_and_read_back(rig: Rig) -> None
     written = write_goal(str(rig.root), "Ship it", "claude-code")
     assert read_goal(str(rig.root)) == written
     assert written["text"] == "Ship it" and written["backend"] == "claude-code"
+
+
+def test_a_terminal_command_runs_in_tmux_with_no_status_integration(rig: Rig) -> None:
+    """ADR-0047: the command runs as given, nothing is resumed, and the record says it asks
+    nowhere cuttlefish can see."""
+    command = f"echo mytool $PWD >> {rig.log}; exec sleep 300"
+    info = rig.manager.ensure("p1", str(rig.root), "ignored", command=command)
+    assert info.state == "running" and info.last_action == "started"
+    assert info.backend == "terminal" and info.asks == "none" and info.session_id is None
+    assert rig.launches() == [f"mytool {rig.root}"]
+    assert wanted(str(rig.root))
+    again = rig.manager.ensure("p1", str(rig.root), "ignored", command=command)
+    assert again.last_action == "reattached"
+    assert rig.launches() == [f"mytool {rig.root}"]
+
+
+def test_a_terminal_command_starts_again_without_a_resume_after_it_is_gone(rig: Rig) -> None:
+    command = f"echo run >> {rig.log}; exec sleep 300"
+    rig.manager.ensure("p1", str(rig.root), "x", command=command)
+    rig.manager.stop("p1", str(rig.root))
+    info = rig.manager.ensure("p1", str(rig.root), "x", command=command)
+    assert info.last_action == "started"
+    time.sleep(0.5)
+    assert rig.log.read_text().splitlines() == ["run", "run"]
+
+
+def test_a_terminal_command_refuses_a_first_message_and_an_empty_command(rig: Rig) -> None:
+    with pytest.raises(SessionError, match="cannot be given a goal"):
+        rig.manager.ensure("p1", str(rig.root), "x", command="sleep 300", prompt="do it")
+    with pytest.raises(SessionError, match="empty"):
+        rig.manager.ensure("p1", str(rig.root), "x", command="  ")
+    assert rig.manager.status("p1", str(rig.root)).state == "none"
