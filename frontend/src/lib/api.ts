@@ -276,7 +276,7 @@ export type RequestResolution =
  * asking a question (kind `question`), or one stuck on its environment (kind `blocked`). */
 export interface NeedsYouRequest {
   id: string;
-  kind: "permission" | "question" | "blocked";
+  kind: "permission" | "question" | "blocked" | "decision";
   /** `pending`, or how it ended. */
   state: "pending" | RequestResolution;
   title: string;
@@ -287,6 +287,8 @@ export interface NeedsYouRequest {
   suggested_rule: string[] | null;
   /** A question's choices, when the agent offered some; shown as buttons. */
   options?: string[];
+  /** A decision's recommended option, one of `options`. */
+  recommended?: string | null;
   role: string | null;
   backend: string | null;
   /** When an answer takes effect: `now` is a live prompt, the others are not. */
@@ -310,7 +312,7 @@ export interface NeedsYouRequest {
 export interface AnswerResult {
   request_id: string;
   resolution: RequestResolution;
-  by: "person" | "timeout" | "system";
+  by: "person" | "manager" | "timeout" | "system";
   rule: string[] | null;
   already: boolean;
 }

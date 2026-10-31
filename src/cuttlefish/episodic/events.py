@@ -319,7 +319,7 @@ class RequestRaised:
     EVENT_TYPE: ClassVar[str] = "RequestRaised"
 
     request_id: str
-    kind: Literal["permission", "question", "blocked"]
+    kind: Literal["permission", "question", "blocked", "decision"]
     title: str
     detail: str
     why: str
@@ -335,6 +335,8 @@ class RequestRaised:
     #: Raised by a project's agent session in tmux (ADR-0040), whose terminal can also answer. So an
     #: expiry or a stop leaves the terminal's own dialog standing rather than denying the command.
     session: bool = False
+    #: A ``decision``'s recommended option, one of ``options`` (ADR-0046).
+    recommended: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -356,10 +358,14 @@ class RequestResolved:
         "answered",
         "declined",
     ]
-    by: Literal["person", "timeout", "system"]
+    by: Literal["person", "manager", "timeout", "system"]
     rule: list[str] | None = None
     #: What a person typed to answer a ``question`` (the store redacts it at write time).
     text: str | None = None
+    #: The tier of whoever answered, a person or the manager: `owner` for the PC's own session,
+    #: else a paired device's tier or `approve` for the manager. `None` for a timeout or the system
+    #: (ADR-0046).
+    tier: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

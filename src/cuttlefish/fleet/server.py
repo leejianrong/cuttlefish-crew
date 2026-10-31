@@ -79,7 +79,7 @@ from cuttlefish.fleet.digest import DEFAULT_EVENTS
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings, TierRefusal
 from cuttlefish.fleet.serve_token import load_or_create_token
-from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, parse_tier
+from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, manager_may, parse_tier
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
     ACCESS_LEVELS,
@@ -185,20 +185,22 @@ def _pending_json(daemon: FleetDaemon, pending: PendingRequest) -> dict[str, Any
     agent's raw command line (ADR-0028)."""
     record = pending.record
     try:
-        project_name = daemon.projects.get(pending.project_id).name
+        project = daemon.projects.get(pending.project_id)
+        project_name, project_root = project.name, project.root
     except ProjectNotFoundError:
-        project_name = pending.project_id
+        project_name, project_root = pending.project_id, None
     return {
         **dataclasses.asdict(record),
         "id": record.request_id,
         "state": "pending",
         "project_id": pending.project_id,
         "project_name": project_name,
+        "project_root": project_root,
         "team_id": pending.team_id,
-        # A `blocked` request has no deadline: nothing is waiting to be denied.
+        # A `blocked` request or a `decision` has no deadline: nothing is waiting to be denied.
         "expires_in_s": (
             None
-            if record.kind == "blocked"
+            if record.kind in ("blocked", "decision")
             else max(0, round((pending.deadline - datetime.now(UTC)).total_seconds()))
         ),
     }
@@ -415,6 +417,7 @@ def create_app(
     folders: FolderBrowser | None = None,
     relay: RelayLink | None = None,
     hook_token: str | None = None,
+    manager_token: str | None = None,
 ) -> FastAPI:
     """`login` is only non-`None` in non-loopback/password mode (ADR-0011) -- it
     both backs `POST /api/login` and doubles as `security` in that mode, since
@@ -430,6 +433,8 @@ def create_app(
     # Without one the hook route answers nothing, so a daemon built without hooks (a test of
     # something else) has no way in through it.
     hook_token = hook_token or secrets.token_urlsafe(32)
+    # The manager's credential (ADR-0050): Approve tier, and only the routes in `MANAGER_ROUTES`.
+    manager_token = manager_token or secrets.token_urlsafe(32)
 
     @app.middleware("http")
     async def _check_security(
@@ -449,6 +454,20 @@ def create_app(
                 return JSONResponse(status_code=401, content={"detail": "invalid hook token"})
             return await call_next(request)
         if path.startswith("/api/") and path not in _PUBLIC_PATHS:
+            presented = request.headers.get(TOKEN_HEADER, "")
+            if presented and secrets.compare_digest(presented.encode(), manager_token.encode()):
+                if not manager_may(request.method, path):
+                    _LOG.warning("manager token refused: %s %s", request.method, path)
+                    return JSONResponse(
+                        status_code=403,
+                        content={
+                            "detail": "The manager credential is held to the approve tier and "
+                            "cannot reach this route."
+                        },
+                    )
+                request.state.caller = ("manager", Tier.APPROVE.label)
+                return await call_next(request)
+            request.state.caller = ("person", "owner")
             try:
                 security.check(
                     token=request.headers.get(TOKEN_HEADER),
@@ -458,11 +477,12 @@ def create_app(
                 if relay is not None and relay.guard.is_relay(request.headers.get(TOKEN_HEADER)):
                     # Through the relay: the connector vouches for who it is, and the daemon holds
                     # that device to its tier (ADR-0039).
-                    relay.guard.authorize(
+                    device = relay.guard.authorize(
                         device_id=request.headers.get(DEVICE_HEADER),
                         method=request.method,
                         path=path,
                     )
+                    request.state.caller = ("person", device.tier.label)
             except satay.control.AuthError as exc:
                 _LOG.warning("%s %s rejected: %s %s", request.method, path, exc.status, exc.detail)
                 return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
@@ -1320,9 +1340,13 @@ def create_app(
         if not role or not text:
             raise HTTPException(400, "'role' and 'text' are required")
         try:
+            if request.state.caller[0] == "manager":
+                daemon.check_manager_may_touch(project_id)
             await daemon.steer(project_id, role, text)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+        except RequestError as exc:  # the manager's own project
+            raise HTTPException(exc.status, str(exc)) from exc
         except FleetError as exc:
             raise HTTPException(409, str(exc)) from exc
         return {"status": "sent"}
@@ -1373,15 +1397,18 @@ def create_app(
             raise HTTPException(400, "'rule', if given, must be a list of words")
         if text is not None and not isinstance(text, str):
             raise HTTPException(400, "'text', if given, must be a string")
+        by, tier = request.state.caller
         try:
-            outcome = daemon.answer_request(project_id, request_id, answer, rule=rule, text=text)
+            outcome = daemon.answer_request(
+                project_id, request_id, answer, rule=rule, text=text, by=by, tier=tier
+            )
             already = False
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except AlreadyResolvedError as exc:
             outcome = exc.outcome
             if (
-                outcome.by != "person"
+                outcome.by != by
                 or outcome.resolution != _ANSWER_RESOLUTION.get(answer)
                 or (answer == "answer" and (text or "").strip() != outcome.text)
             ):
@@ -1396,15 +1423,41 @@ def create_app(
             already = True  # the same answer again: done, not an error
         except RequestError as exc:
             raise HTTPException(exc.status, str(exc)) from exc
-        return JSONResponse(
-            {
-                "request_id": outcome.request_id,
-                "resolution": outcome.resolution,
-                "by": outcome.by,
-                "rule": list(outcome.rule) if outcome.rule else None,
-                "already": already,
-            }
+        result: dict[str, Any] = {
+            "request_id": outcome.request_id,
+            "resolution": outcome.resolution,
+            "by": outcome.by,
+            "rule": list(outcome.rule) if outcome.rule else None,
+            "already": already,
+        }
+        if outcome.resolution == "denied" and answer.startswith("allow") and outcome.text:
+            result["refused"] = outcome.text  # never-allowed: denied whatever the answer (ADR-0046)
+        return JSONResponse(result)
+
+    @app.post("/api/projects/{project_id}/decisions")
+    async def raise_decision(project_id: str, request: Request) -> dict[str, Any]:
+        """Put a choice to the person: a question, two to four options and the recommended one
+        (ADR-0046). It waits until answered; nothing picks an option on its own."""
+        body = await _json_body(request)
+        question, options, recommended = (
+            body.get("question"),
+            body.get("options"),
+            body.get("recommended"),
         )
+        if (
+            not isinstance(question, str)
+            or not isinstance(recommended, str)
+            or not (isinstance(options, list) and all(isinstance(o, str) for o in options))
+        ):
+            raise HTTPException(
+                400, "'question', 'options' (a list) and 'recommended' are required"
+            )
+        try:
+            return {"request_id": daemon.raise_decision(project_id, question, options, recommended)}
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except RequestError as exc:
+            raise HTTPException(exc.status, str(exc)) from exc
 
     if dashboard_dir is not None:
         # Registered last (ADR-0012): Starlette matches routes in registration
@@ -1576,6 +1629,7 @@ async def run_daemon(
         folders=FolderBrowser(browse_roots or [Path.home()]),
         relay=link,
         hook_token=hook_files.hook_token(),
+        manager_token=hook_files.manager_token(),
     )
     config = uvicorn.Config(
         app,

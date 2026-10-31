@@ -32,6 +32,7 @@ from cuttlefish.delegate.consent import (
     suggest_rule,
     validate_always_rule,
 )
+from cuttlefish.delegate.never_allowed import never_allowed_reason
 from cuttlefish.episodic.events import (
     EventPayload,
     RequestRaised,
@@ -131,15 +132,23 @@ class InvalidAnswerError(RequestError):
     status = 422
 
 
+class ManagerNotAllowedError(RequestError):
+    """The manager may not answer this request (ADR-0046): its own session's, a decision, or
+    with an answer other than allow once or deny."""
+
+    status = 403
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class Outcome:
     """How a request ended, and what to tell the agent."""
 
     request_id: str
     resolution: Resolution
-    by: Literal["person", "timeout", "system"]
+    by: Literal["person", "manager", "timeout", "system"]
     rule: tuple[str, ...] | None = None
     text: str | None = None
+    tier: str | None = None
 
     @property
     def allows(self) -> bool:
@@ -307,6 +316,45 @@ class RequestBroker:
             window_s=NO_DEADLINE_S,
         )
 
+    def raise_decision(
+        self,
+        *,
+        project_id: str,
+        team_id: str,
+        question: str,
+        options: Sequence[str],
+        recommended: str,
+    ) -> PendingRequest:
+        """A choice the manager puts to a person (ADR-0046): a question, two to four options and
+        one it recommends. Nothing waits on it and nothing picks an option for the person, so it
+        has no deadline and lands when answered. Raises :class:`InvalidAnswerError` for a bad set.
+        """
+        choices = [_clip_option(o.strip()) for o in options]
+        if not 2 <= len(choices) <= 4 or len(set(choices)) != len(choices) or "" in choices:
+            raise InvalidAnswerError("a decision needs two to four distinct, non-empty options")
+        if _clip_option(recommended.strip()) not in choices:
+            raise InvalidAnswerError("'recommended' must be one of the options")
+        if not question.strip():
+            raise InvalidAnswerError("a decision needs a question")
+        return self._raise(
+            project_id,
+            team_id,
+            line=None,
+            record=RequestRaised(
+                request_id=uuid.uuid4().hex,
+                kind="decision",
+                title="The manager needs a decision from you",
+                detail=_clip(question.strip()),
+                why=f"It recommends: {_clip_option(recommended.strip())}",
+                answers=["answer"],
+                expires_at="",
+                role="manager",
+                options=choices,
+                recommended=_clip_option(recommended.strip()),
+            ),
+            window_s=NO_DEADLINE_S,
+        )
+
     def restore_blocked(
         self, project_id: str, team_id: str, records: Iterable[RequestRaised]
     ) -> list[PendingRequest]:
@@ -392,9 +440,12 @@ class RequestBroker:
         rule: Sequence[str] | None = None,
         text: str | None = None,
         project_id: str | None = None,
+        by: Literal["person", "manager"] = "person",
+        tier: str | None = None,
     ) -> Outcome:
-        """A person's answer. Raises :class:`UnknownRequestError`, :class:`AlreadyResolvedError`
-        or :class:`InvalidAnswerError`; a refused Always leaves the request pending. With
+        """An answer, by a person or the manager (``tier`` is the caller's, journaled). Raises
+        :class:`UnknownRequestError`, :class:`AlreadyResolvedError` or :class:`InvalidAnswerError`;
+        a refused Always leaves the request pending. With
         ``project_id`` the request must belong to that project (the route's own)."""
         pending = self._pending.get(request_id)
         if pending is None:
@@ -412,9 +463,17 @@ class RequestBroker:
                 raise InvalidAnswerError("an answer needs some text")
             if len(text) > ANSWER_TEXT_CHARS:
                 raise InvalidAnswerError(f"an answer is at most {ANSWER_TEXT_CHARS} characters")
+            if pending.record.kind == "decision" and text.strip() not in pending.record.options:
+                raise InvalidAnswerError("a decision is answered with one of its options")
             return self._finish(
-                pending, Outcome(request_id, "answered", "person", None, text.strip())
+                pending, Outcome(request_id, "answered", by, None, text.strip(), tier)
             )
+        if answer != "deny" and pending._line is not None:
+            # Tier 0 holds below any answerer, the manager included: the command is denied and the
+            # journal says who tried to allow it (ADR-0046).
+            reason = never_allowed_reason(pending._line)
+            if reason:
+                return self._finish(pending, Outcome(request_id, "denied", by, None, reason, tier))
         if answer == "allow_always":
             assert pending._line is not None  # only offered for a command
             candidate = rule if rule is not None else pending.record.suggested_rule
@@ -424,7 +483,7 @@ class RequestBroker:
                 raise InvalidAnswerError(str(exc)) from exc
             self._grants.setdefault(pending.team_id, []).append(chosen)
         return self._finish(
-            pending, Outcome(request_id, _ANSWER_RESOLUTION[answer], "person", chosen)
+            pending, Outcome(request_id, _ANSWER_RESOLUTION[answer], by, chosen, None, tier)
         )
 
     def resolve_system(
@@ -481,6 +540,7 @@ class RequestBroker:
                     by=outcome.by,
                     rule=list(outcome.rule) if outcome.rule else None,
                     text=outcome.text,
+                    tier=outcome.tier,
                 ),
             )
         del self._pending[pending.id]

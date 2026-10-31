@@ -49,7 +49,9 @@
   });
 
   const left = $derived(secondsLeft(request, fetchedAt, now));
-  const expired = $derived(left <= 0 && !offline);
+  // A decision waits for the person with no time limit (ADR-0046).
+  const decision = $derived(request.kind === "decision");
+  const expired = $derived(left <= 0 && !offline && !decision);
   const locked = $derived(busy !== null || expired || offline);
   const urgent = $derived(left > 0 && left <= 30);
   const canAlways = $derived(request.answers.includes("allow_always"));
@@ -92,17 +94,21 @@
 
 <article class="card filled request" aria-labelledby="{idPrefix}-{request.id}">
   <div class="meta">
-    <span class="tag attn">{blocked ? "Stuck" : question ? "Question" : "Permission"}</span>
+    <span class="tag attn">{blocked ? "Stuck" : decision ? "Decision" : question ? "Question" : "Permission"}</span>
     {#if request.role}<span class="label-large who">{request.role}</span>{/if}
     {#if request.backend}<span class="tag">{request.backend}</span>{/if}
     {#if showProject}<span class="label-medium muted">{request.project_name}</span>{/if}
     <span class="label-medium lands" class:live>
-      {blocked ? "Waits for your message, no time limit" : landsLabel(request.lands, request.session)}
+      {blocked || decision
+        ? decision
+          ? "Waits for you, no time limit"
+          : "Waits for your message, no time limit"
+        : landsLabel(request.lands, request.session)}
     </span>
   </div>
 
   <h3 id="{idPrefix}-{request.id}" class="title-medium">{request.title}</h3>
-  {#if question}
+  {#if question || decision}
     <p class="asked body-large" aria-label="The question">{request.detail}</p>
     <p class="body-medium muted why">{request.why}</p>
   {:else}
@@ -110,7 +116,22 @@
     <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
   {/if}
 
-  {#if question}
+  {#if decision}
+    <div class="choices" role="group" aria-label="Choices">
+      {#each options as option (option)}
+        <button
+          class={option === request.recommended ? "btn btn-filled" : "btn btn-tonal"}
+          disabled={locked}
+          onclick={() => answer("answer", option)}
+        >
+          {option}{option === request.recommended ? " (recommended)" : ""}
+        </button>
+      {/each}
+    </div>
+    <p class="body-small muted">
+      Nothing is chosen for you. The manager reads your answer back through its own tools.
+    </p>
+  {:else if question}
     {#if options.length > 0}
       <div class="choices" role="group" aria-label="Choices">
         {#each options as option (option)}

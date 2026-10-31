@@ -15,8 +15,8 @@ reference), headless Claude Code, headless Codex. Python, `uv`, `ruff`,
 - **Never read or open `.env`.** It holds the real `OPENROUTER_API_KEY` for
   this repo. Refer to `.env.example` instead — the committed template with
   no real values.
-- **Never read or open `.cuttlefish/devices.db`, `.cuttlefish/relay-key` or `.cuttlefish/hook-token`.** They hold each
-  paired device's secret, the daemon's relay key, and the token a Claude Code session's hook script uses. Use `GET
+- **Never read or open `.cuttlefish/devices.db`, `.cuttlefish/relay-key`, `.cuttlefish/hook-token` or `.cuttlefish/manager-token`.** They hold each
+  paired device's secret, the daemon's relay key, the token a Claude Code session's hook script uses, and the manager's credential. Use `GET
   /api/devices`, which shows neither.
 - **Never read or open `.cuttlefish/secrets.db`.** It's encrypted at rest,
   but still holds every project's real secrets; use `cuttlefish secrets

@@ -71,6 +71,7 @@ from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, Role
 from cuttlefish.requests import (
     AlreadyResolvedError,
     HistoryEntry,
+    ManagerNotAllowedError,
     Outcome,
     RequestBroker,
     RequestContext,
@@ -122,6 +123,10 @@ _PASTE_SETTLE_S = 0.3
 
 #: The longest goal given to a builder (CUT-171): it is one command-line argument.
 MAX_GOAL_CHARS = 8000
+
+#: Names the project that hosts the manager agent's own session (ADR-0046); the manager
+#: credential may not answer a request or message an agent there.
+MANAGER_PROJECT_ENV = "CUTTLEFISH_MANAGER_PROJECT"
 
 
 class SecretsUnavailableError(Exception):
@@ -321,6 +326,9 @@ class FleetDaemon:
         #: team id -> the episodic store its requests are journaled to, while it runs.
         self._team_stores: dict[str, EpisodicStore] = {}
         self.requests = RequestBroker(self._append_for_team)
+        #: The project that hosts the manager agent's own session, if any (ADR-0046): the manager
+        #: credential may answer nothing there and message nothing there. CUT-137 sets it.
+        self.manager_project: str | None = os.environ.get(MANAGER_PROJECT_ENV) or None
         #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
         self._claude_hooks = ClaudeHooks(self)
         #: project id -> the Codex rollout its chat reads, and when it was last looked for.
@@ -973,14 +981,25 @@ class FleetDaemon:
         *,
         rule: Sequence[str] | None = None,
         text: str | None = None,
+        by: Literal["person", "manager"] = "person",
+        tier: str | None = None,
     ) -> Outcome:
         """Answer a pending request of `project_id` (ADR-0028). Raises the broker's
         `RequestError`s. An "Always allow" is applied to the running team by the broker and
-        saved to the project's own commands here, for the starts after this one."""
+        saved to the project's own commands here, for the starts after this one. The manager
+        (ADR-0046) may only allow once or deny, never in its own session's project, and never a
+        decision (that is the person's)."""
         project = self._projects.get(project_id)
+        if by == "manager":
+            self.check_manager_may_touch(project_id)
+            kind = next((p.record.kind for p in self.requests.pending() if p.id == request_id), "")
+            if answer not in ("allow_once", "deny") or kind == "decision":
+                raise ManagerNotAllowedError(
+                    "the manager may allow once or deny a request, and may not answer a decision"
+                )
         try:
             outcome = self.requests.answer(
-                request_id, answer, rule=rule, text=text, project_id=project_id
+                request_id, answer, rule=rule, text=text, project_id=project_id, by=by, tier=tier
             )
         except UnknownRequestError:
             # Not in memory: a request from before a restart, or from a finished team. The
@@ -989,6 +1008,27 @@ class FleetDaemon:
         if outcome.rule is not None:
             self._projects.add_allow(project_id, outcome.rule)
         return outcome
+
+    def check_manager_may_touch(self, project_id: str) -> None:
+        """Refuse the manager credential a project that hosts the manager's own session."""
+        if project_id == self.manager_project:
+            raise ManagerNotAllowedError("the manager may not act on its own session's project")
+
+    def raise_decision(
+        self, project_id: str, question: str, options: Sequence[str], recommended: str
+    ) -> str:
+        """Put a decision to the person, in the project's agent-session journal (ADR-0046).
+        Returns its request id. Raises the broker's `RequestError`s for a bad set of options."""
+        project = self._projects.get(project_id)
+        self.open_session_journal(project)
+        pending = self.requests.raise_decision(
+            project_id=project.id,
+            team_id=session_scope(project.id),
+            question=question,
+            options=options,
+            recommended=recommended,
+        )
+        return pending.id
 
     def _from_journal(self, project: Project, request_id: str) -> RequestError:
         for entry in history([*self._last_team_events(project), *self._session_events(project)]):

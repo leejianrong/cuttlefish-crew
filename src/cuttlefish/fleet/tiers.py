@@ -70,6 +70,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/approve"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/requests/{request_id}/answer"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/steer"): Tier.APPROVE,
+    ("POST", "/api/projects/{project_id}/decisions"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/start"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/stop"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/goal"): Tier.APPROVE,
@@ -127,12 +128,42 @@ _COMPILED = sorted(
 )
 
 
+def _route(method: str, path: str) -> tuple[str, str] | None:
+    """The `ROUTE_TIERS` key a request matches, most specific template first."""
+    for known, template, pattern in _COMPILED:
+        if known == method.upper() and pattern.match(path):
+            return known, template
+    return None
+
+
 def required_tier(method: str, path: str) -> Tier | None:
     """The tier a request needs, or `None` for a path that is not the API (the dashboard's own
     files). An API route with no entry in the table needs ADMIN."""
     if not path.startswith("/api/"):
         return None
-    for known, _template, pattern in _COMPILED:
-        if known == method.upper() and pattern.match(path):
-            return ROUTE_TIERS[(known, _template)]
-    return Tier.ADMIN
+    route = _route(method, path)
+    return ROUTE_TIERS[route] if route else Tier.ADMIN
+
+
+#: The routes the manager credential may reach (ADR-0046, ADR-0050): what its MCP tools call, and
+#: nothing more. It is held to APPROVE as well, so every route here must need APPROVE or less (a
+#: test checks it); the list narrows it further, because APPROVE alone would let it revoke a
+#: paired device or start and stop teams.
+MANAGER_ROUTES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("GET", "/api/projects"),
+        ("GET", "/api/projects/{project_id}"),
+        ("GET", "/api/projects/{project_id}/digest"),
+        ("GET", "/api/requests"),
+        ("GET", "/api/projects/{project_id}/requests"),
+        ("POST", "/api/projects/{project_id}/requests/{request_id}/answer"),
+        ("POST", "/api/projects/{project_id}/steer"),
+        ("POST", "/api/projects/{project_id}/decisions"),
+    }
+)
+
+
+def manager_may(method: str, path: str) -> bool:
+    """Whether the manager credential may make this request."""
+    route = _route(method, path)
+    return route in MANAGER_ROUTES

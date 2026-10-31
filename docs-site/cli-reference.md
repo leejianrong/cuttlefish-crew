@@ -302,6 +302,26 @@ question), which wrap the
 fine, a different or late one is a 409, an unknown request a 404 and a refused rule a 422. Answering
 lets an agent run a shell command, so it is as weighty as `start_project`.
 
+### The manager's tools
+
+`cuttlefish mcp --manager --base-url <url>` serves a smaller set for a manager agent that watches many projects
+(ADR-0046, ADR-0050). It uses the daemon's manager credential from `~/.cuttlefish/manager-token` (made by the daemon,
+mode 0600, never printed; delete it to rotate), not `--token`. The daemon holds that credential to the Approve tier and
+to the routes these tools call, so it is refused on settings, modes, secrets, devices, the terminal and starting or
+stopping a team (a 403).
+
+| Tool | What it does |
+|---|---|
+| `list_attention` | Every pending request across projects, oldest first. A permission shows its command, directory, role and the rule that did not match; other text is clipped and marked untrusted. |
+| `project_digest` | A compact digest: status, last events, blockers, pending requests, spend. No code, output or secrets. |
+| `recent_answers` | How a project's last requests ended, and the option a person chose for a decision. |
+| `answer_attention` | `allow_once` or `deny` only. Never an always-allow rule, never a decision. A command on the never-allowed list is denied whatever the answer. |
+| `message_agent` | Steers a running role, as a person's steer does. |
+| `raise_decision` | Asks the person to choose: a question, two to four options and a recommended one. It waits with no timer; the dashboard shows it as a Decision card. |
+
+Every answer is journaled with who gave it (`person` or `manager`) and the caller's tier. A manager cannot answer or
+message in the project named by `CUTTLEFISH_MANAGER_PROJECT` (the project hosting its own session).
+
 ## Configuration
 
 | Variable | Default | What it does |
