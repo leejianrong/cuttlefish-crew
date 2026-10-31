@@ -120,6 +120,21 @@ def test_resolve_dashboard_dir_returns_the_explicit_path_verbatim(tmp_path: Path
     assert _resolve_dashboard_dir(str(missing)) == missing
 
 
+def test_resolve_dashboard_dir_falls_back_to_the_installed_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # `scripts/install.sh` builds into $XDG_DATA_HOME/cuttlefish/app (ADR-0045).
+    data = tmp_path / "data"
+    dist = data / "cuttlefish" / "app" / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<html></html>")
+    monkeypatch.setenv("XDG_DATA_HOME", str(data))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    assert _resolve_dashboard_dir(None) == dist
+
+
 def test_resolve_dashboard_dir_auto_detects_frontend_dist(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
