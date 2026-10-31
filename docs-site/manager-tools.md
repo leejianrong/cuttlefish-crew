@@ -37,7 +37,7 @@ token file to rotate it.
 | `project_digest` | Read one project's status, last events, blockers, pending requests and spend. |
 | `recent_answers` | See how a project's last requests ended. |
 | `answer_attention` | Allow once or deny a permission. Never an always-allow rule. |
-| `message_agent` | Steer a running role. |
+| `message_agent` | Steer a running role, or message the builder when it runs as an agent session (typed into its chat). Says so when neither exists. |
 | `raise_decision` | Ask you to choose between two to four options, with a recommendation. It waits with no timer. |
 
 Every answer is journaled with who gave it and the tier, so the timeline shows `manager` apart from you. A command on the
