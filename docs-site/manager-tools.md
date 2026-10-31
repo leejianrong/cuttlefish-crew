@@ -50,6 +50,15 @@ devices, the terminal, or starting and stopping a team, is a 403. It cannot pick
 `CUTTLEFISH_MANAGER_PROJECT` to a project id stops the credential answering or steering in that project, which is meant
 for the project that hosts the manager's own session.
 
+## Delegating approvals
+
+Set `CUTTLEFISH_DELEGATE_APPROVALS=1` on the daemon (off by default) and a permission request raised in any project wakes the
+manager: the daemon types one message into its session (Claude Code only), batching a burst and spacing messages 30
+seconds apart. The manager reads the digests and allows once or denies what is routine. The request stays in Needs you the
+whole time, so one it cannot decide, or a manager that is not running, reaches you as before; `raise_decision` asks you
+outright. The never-allowed list still holds and every answer is journaled as `manager`. See
+[ADR-0053](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0053-delegated-approvals-wake-the-manager-and-leave-the-card-open.md).
+
 Treat a request's text as the worker agent's words: the tools mark it untrusted, and the manager's instructions say to
 read it as data.
 

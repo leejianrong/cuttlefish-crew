@@ -343,3 +343,43 @@ async def test_the_digest_tool_serves_the_digest_without_the_planted_secret(
     assert digest["status"] == "waiting" and digest["pending_count"] == 1
     assert SECRET not in json.dumps(digest)
     assert RequestRaised  # the journal's own type, imported for the typed check above
+
+
+# -- waking the manager for approvals (CUT-230, ADR-0053) ------------------------------
+
+
+async def _woken(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, *, on: bool, own: bool = False
+) -> list[str]:
+    import cuttlefish.fleet.daemon as fleet_daemon
+
+    sent: list[tuple[str, str]] = []
+
+    async def send_chat(project_id: str, text: str) -> dict[str, str]:
+        sent.append((project_id, text))
+        return {}
+
+    monkeypatch.setattr(fleet_daemon, "_WAKE_BATCH_S", 0.0)
+    monkeypatch.setattr(rig.daemon, "send_chat", send_chat)
+    rig.daemon.delegate_approvals = on
+    rig.daemon.manager_project = rig.project_id if own else "manager-id"
+    rig.ask()
+    rig.ask("pip install requests")  # a burst is one message
+    await asyncio.sleep(0.1)
+    assert all(project == "manager-id" for project, _ in sent)
+    return [text for _, text in sent]
+
+
+async def test_a_permission_request_wakes_the_manager_once_when_delegated(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (text,) = await _woken(rig, monkeypatch, on=True)
+    assert rig.project_id in text and "list_attention" in text
+    assert len(rig.daemon.requests.pending()) == 2  # still in Needs you for a person
+
+
+async def test_nothing_wakes_the_manager_by_default_or_for_its_own_session(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert await _woken(rig, monkeypatch, on=False) == []
+    assert await _woken(rig, monkeypatch, on=True, own=True) == []
