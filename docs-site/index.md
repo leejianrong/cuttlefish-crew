@@ -29,13 +29,13 @@ scattered logs that disagree with each other.
 
 ## Install
 
-cuttlefish-crew runs on Linux and WSL2 (CI runs on Ubuntu); macOS is untested. It needs Python 3.12+, [uv](https://docs.astral.sh/uv/) and Node.js.
+cuttlefish-crew runs on Linux and WSL2 (CI runs on Ubuntu); macOS is untested. It needs git and curl; the installer adds [uv](https://docs.astral.sh/uv/) and tells you if Node.js, tmux or an agent CLI is missing.
 
 ```bash
-git clone https://github.com/leejianrong/cuttlefish-crew.git
-cd cuttlefish-crew
-uv sync
+curl -fsSL https://raw.githubusercontent.com/leejianrong/cuttlefish-crew/main/scripts/install.sh | sh
 ```
+
+To work from a checkout instead, see the [quickstart](quickstart.md).
 
 You'll also need at least one coding-agent backend on `PATH` —
 [kopicode](https://github.com/leejianrong/kopicode) (the default), the

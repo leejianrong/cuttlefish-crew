@@ -273,13 +273,12 @@
       <span class="agent-chip">Codex</span>
       <span class="agent-chip">kopicode</span>
     </p>
-    <!-- INSTALL: the one line a visitor copies. When the one-line install script ships (CUT-224),
-         replace the text of #install-cmd below and nothing else. -->
+    <!-- INSTALL: the one line a visitor copies (scripts/install.sh, ADR-0045). -->
     <div class="install">
-      <code id="install-cmd">git clone https://github.com/leejianrong/cuttlefish-crew.git &amp;&amp; cd cuttlefish-crew &amp;&amp; uv sync</code>
+      <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/leejianrong/cuttlefish-crew/main/scripts/install.sh | sh</code>
       <button class="copy-btn" id="copy-btn" type="button">copy</button>
     </div>
-    <p class="platforms">Runs on Linux and WSL2. Needs Python 3.12+, <a href="https://docs.astral.sh/uv/">uv</a> and Node.js, plus one agent CLI on your <code>PATH</code>. macOS is untested.</p>
+    <p class="platforms">Runs on Linux and WSL2; macOS is untested. Needs git and curl. The installer adds <a href="https://docs.astral.sh/uv/">uv</a> and tells you if Node.js, tmux or an agent CLI is missing.</p>
     <div class="hero-links">
       <a href="docs/quickstart/">Quickstart →</a>
       <a href="https://github.com/leejianrong/cuttlefish-crew">Star or read the source on GitHub →</a>
