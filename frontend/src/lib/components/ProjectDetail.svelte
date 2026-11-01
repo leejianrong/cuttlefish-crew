@@ -296,6 +296,12 @@
   {#if project}
     <header>
       <h1 class="headline-small">{project.name}</h1>
+      {#if project.is_manager}
+        <p class="body-medium muted" data-testid="manager-note">
+          <strong>Manager.</strong> This agent watches your other projects and answers their permission
+          questions when you allow it; it does not build anything itself.
+        </p>
+      {/if}
       <p class="root mono">{project.root}</p>
     </header>
 
@@ -326,7 +332,7 @@
         </section>
       {/if}
 
-      <MissionControl {client} {projectId} active={tab === "overview"} {onTabChange} />
+      <MissionControl {client} {projectId} active={tab === "overview"} {onTabChange} onAutopilotChange={() => sessionChanges++} />
 
       {#if !project.running}
         <GoalCard
@@ -544,6 +550,7 @@
         onAnswered={refresh}
         offline={unreachable}
         onOpenTerminal={() => onTabChange("terminal")}
+        onAutopilotChange={() => sessionChanges++}
         onOpenArtifacts={() => onTabChange("artifacts")}
       />
     </div>

@@ -13,6 +13,7 @@ export const KINDS: { id: RecurrenceKind; label: string }[] = [
 export function buildRecurrence(kind: RecurrenceKind, every: number, time: string): string | null {
   if (kind === "daily") return /^([01]\d|2[0-3]):[0-5]\d$/.test(time) ? `daily ${time}` : null;
   if (!Number.isInteger(every) || every < 1) return null;
+  if (every > (kind === "every-m" ? 43200 : 720)) return null; // 30 days, as the daemon allows
   return `every ${every}${kind === "every-m" ? "m" : "h"}`;
 }
 

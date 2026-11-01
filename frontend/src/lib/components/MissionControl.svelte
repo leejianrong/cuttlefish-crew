@@ -32,11 +32,13 @@
     projectId,
     active,
     onTabChange,
+    onAutopilotChange = () => {},
   }: {
     client: FleetClient;
     projectId: string;
     active: boolean;
     onTabChange: (tab: "chat" | "needs-you" | "artifacts" | "terminal") => void;
+    onAutopilotChange?: () => void;
   } = $props();
 
   let data = $state<OverviewData | null>(null);
@@ -84,6 +86,7 @@
     error = null;
     try {
       await client.autopilotAction(projectId, action);
+      onAutopilotChange();
       data = await client.getOverview(projectId, since);
     } catch (e) {
       error = e instanceof Error ? e.message : "That didn't work.";

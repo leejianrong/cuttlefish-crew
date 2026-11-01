@@ -6,8 +6,8 @@ stores schedules and works out which are due; the daemon loop that starts a goal
 A recurrence is one of two spellings, **always read in UTC** (so a daylight-saving change
 never moves or repeats a run; ``daily 09:30`` is 09:30 UTC all year):
 
-- ``every <N>m`` or ``every <N>h`` (N a positive whole number): N minutes or hours after the
-  last run, or after the schedule was created if it has not run yet.
+- ``every <N>m`` or ``every <N>h`` (N a positive whole number, at most 30 days): N minutes or
+  hours after the last run, or after the schedule was created if it has not run yet.
 - ``daily HH:MM``: the next HH:MM UTC after the last run (or creation).
 
 A schedule that was due while the daemon was down is due once, not once per missed slot:
@@ -28,6 +28,8 @@ from typing import Any
 from cuttlefish.projects.store import default_projects_db
 
 _EVERY = re.compile(r"every (\d+)([mh])")
+#: The longest "every" gap: a month. Longer is a typo (``every 99999h`` is a run in 2038).
+_MAX_EVERY = timedelta(days=30)
 _DAILY = re.compile(r"daily (\d{2}):(\d{2})")
 
 _CREATE_TABLE = """
@@ -57,6 +59,8 @@ def next_after(recurrence: str, after: datetime) -> datetime:
     after = after.astimezone(UTC)
     if (m := _EVERY.fullmatch(recurrence)) and int(m[1]) > 0:
         n = int(m[1])
+        if n > _MAX_EVERY.total_seconds() / (60 if m[2] == "m" else 3600):
+            raise RecurrenceError(f"{recurrence!r} is longer than 30 days; use a shorter gap")
         return after + (timedelta(minutes=n) if m[2] == "m" else timedelta(hours=n))
     if (m := _DAILY.fullmatch(recurrence)) and int(m[1]) < 24 and int(m[2]) < 60:
         slot = after.replace(hour=int(m[1]), minute=int(m[2]), second=0, microsecond=0)

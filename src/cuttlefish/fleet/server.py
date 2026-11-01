@@ -150,6 +150,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "backend": project.backend,
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
+        "is_manager": project.id == daemon.manager_project,
         "mode": project.mode,
         "env_prepare": project.env_prepare,
         "limits": dict(project.limits),

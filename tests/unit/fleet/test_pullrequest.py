@@ -82,6 +82,16 @@ def test_a_pull_request_already_open_is_reported_not_duplicated(pr_rig: PrRig) -
     assert result.ok and result.existing and result.url == "https://example.test/o/r/pull/7"
 
 
+def test_uncommitted_files_are_named_as_left_out(pr_rig: PrRig) -> None:
+    pr_rig.git("push", "-q", "-u", "origin", BRANCH)
+    clean = open_pull_request(str(pr_rig.root), GOAL, [], push=False)
+    assert clean.ok and clean.warning is None
+    (pr_rig.root / "scratch.txt").write_text("not committed")
+    result = open_pull_request(str(pr_rig.root), GOAL, [], push=False)
+    assert result.ok and result.warning and "1 uncommitted or untracked file" in result.warning
+    assert result.warning in str(result.to_json())
+
+
 def test_a_secret_in_the_goal_or_a_commit_never_reaches_the_pull_request_text(
     pr_rig: PrRig, monkeypatch: pytest.MonkeyPatch
 ) -> None:

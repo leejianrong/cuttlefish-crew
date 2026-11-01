@@ -222,6 +222,8 @@ export interface ProjectSummary {
   terminal_command?: string | null;
   /** CUT-238: each new goal runs in its own git worktree and branch. */
   worktree_per_goal?: boolean;
+  /** ADR-0052: this is the manager agent's project, not a builder's. */
+  is_manager?: boolean;
   /** V4-C: applies the next time the team starts, not to a team already running. */
   mode: PermissionMode;
   /** V4-F: the command groups switched on (names from the permissions catalogue). */
@@ -484,6 +486,8 @@ export interface PullRequestResult {
   reason?: string;
   branch?: string;
   base?: string;
+  /** Changes left out of the pull request because they are not committed. */
+  warning?: string;
 }
 
 /** The answer to "remove the worktree" (CUT-250). `branch_note` says why a branch was kept. */

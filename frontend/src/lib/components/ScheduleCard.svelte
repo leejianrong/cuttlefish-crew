@@ -20,6 +20,7 @@
   let every = $state(1);
   let time = $state("06:00");
   let busy = $state(false);
+  let confirming = $state<string | null>(null);
   let error = $state<string | null>(null);
   let now = $state(new Date());
   let shownFor = "";
@@ -97,9 +98,20 @@
             >
               {s.enabled ? "Pause" : "Resume"}
             </button>
-            <button class="btn btn-text" onclick={() => act(() => client.deleteSchedule(s.id))}>
-              Remove
-            </button>
+            {#if confirming === s.id}
+              <button
+                class="btn btn-text"
+                onclick={() => {
+                  confirming = null;
+                  void act(() => client.deleteSchedule(s.id));
+                }}
+              >
+                Yes, remove it
+              </button>
+              <button class="btn btn-text" onclick={() => (confirming = null)}>Keep it</button>
+            {:else}
+              <button class="btn btn-text" onclick={() => (confirming = s.id)}>Remove</button>
+            {/if}
           </div>
         </li>
       {/each}
@@ -134,7 +146,7 @@
       {:else}
         <label class="field">
           <span class="field-label">N</span>
-          <input type="number" min="1" step="1" bind:value={every} />
+          <input type="number" min="1" max={kind === "every-m" ? 43200 : 720} step="1" bind:value={every} />
         </label>
       {/if}
     </div>
