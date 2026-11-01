@@ -63,6 +63,7 @@ from cuttlefish.delegate.presets import (
     UnknownPresetError,
     validate_presets,
 )
+from cuttlefish.episodic.events import DelegateApprovalsSet
 from cuttlefish.episodic.store import EpisodicEvent
 from cuttlefish.fleet import hook_files
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
@@ -150,6 +151,8 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "backend": project.backend,
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
+        "delegate_approvals": project.delegate_approvals,
+        "delegate_approvals_effective": daemon.delegates_approvals(project.id),
         "mode": project.mode,
         "env_prepare": project.env_prepare,
         "limits": dict(project.limits),
@@ -909,6 +912,24 @@ def create_app(
             raise HTTPException(400, "'worktree_per_goal' must be true or false")
         try:
             daemon.projects.update_worktree_per_goal(project_id, value)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/delegate-approvals")
+    async def update_delegate_approvals(project_id: str, request: Request) -> dict[str, Any]:
+        """Wake the manager for this project's permission requests, or not; null follows the
+        daemon's setting (CUT-259, ADR-0053). The change is journaled."""
+        body = await _json_body(request)
+        if "delegate_approvals" not in body or not (
+            body["delegate_approvals"] is None or isinstance(body["delegate_approvals"], bool)
+        ):
+            raise HTTPException(400, "'delegate_approvals' must be true, false or null")
+        try:
+            project = daemon.projects.update_delegate_approvals(
+                project_id, body["delegate_approvals"]
+            )
+            daemon.append_session_event(project, DelegateApprovalsSet(project.delegate_approvals))
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc

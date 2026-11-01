@@ -56,7 +56,8 @@ CREATE TABLE IF NOT EXISTS projects (
     env_prepare TEXT,
     limits_json TEXT,
     terminal_command TEXT,
-    worktree_per_goal INTEGER NOT NULL DEFAULT 0
+    worktree_per_goal INTEGER NOT NULL DEFAULT 0,
+    delegate_approvals INTEGER
 )
 """
 
@@ -128,6 +129,9 @@ _ADD_TERMINAL_COMMAND_COLUMN = "ALTER TABLE projects ADD COLUMN terminal_command
 _ADD_WORKTREE_COLUMN = (
     "ALTER TABLE projects ADD COLUMN worktree_per_goal INTEGER NOT NULL DEFAULT 0"
 )
+
+#: `delegate_approvals` was added for CUT-259: `NULL` follows the daemon, 1 and 0 override.
+_ADD_DELEGATE_APPROVALS_COLUMN = "ALTER TABLE projects ADD COLUMN delegate_approvals INTEGER"
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,6 +215,9 @@ class Project:
     #: Whether each goal given to the builder runs in its own git worktree and branch
     #: (ADR-0048). Off by default: the builder works in the project's own checkout.
     worktree_per_goal: bool = False
+    #: Wake the manager for this project's permission requests (ADR-0053). ``None`` follows
+    #: ``CUTTLEFISH_DELEGATE_APPROVALS``; ``True``/``False`` override it for this project.
+    delegate_approvals: bool | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -346,6 +353,9 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         limits=json.loads(row["limits_json"]) if row["limits_json"] else {},
         terminal_command=row["terminal_command"],
         worktree_per_goal=bool(row["worktree_per_goal"]),
+        delegate_approvals=None
+        if row["delegate_approvals"] is None
+        else bool(row["delegate_approvals"]),
     )
 
 
@@ -381,6 +391,8 @@ class ProjectStore:
             self._conn.execute(_ADD_TERMINAL_COMMAND_COLUMN)
         if "worktree_per_goal" not in columns:
             self._conn.execute(_ADD_WORKTREE_COLUMN)
+        if "delegate_approvals" not in columns:
+            self._conn.execute(_ADD_DELEGATE_APPROVALS_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -542,6 +554,16 @@ class ProjectStore:
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute(
             "UPDATE projects SET worktree_per_goal = ? WHERE id = ?", (int(on), project_id)
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_delegate_approvals(self, project_id: str, value: bool | None) -> Project:
+        """Set the project's own delegated-approvals choice; ``None`` follows the daemon's."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET delegate_approvals = ? WHERE id = ?",
+            (None if value is None else int(value), project_id),
         )
         self._conn.commit()
         return self.get(project_id)

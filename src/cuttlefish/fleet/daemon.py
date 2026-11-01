@@ -69,7 +69,13 @@ from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
 from cuttlefish.projects.schedules import ScheduleStore
-from cuttlefish.projects.store import PersistedRole, Project, ProjectStore, RoleDefinition
+from cuttlefish.projects.store import (
+    PersistedRole,
+    Project,
+    ProjectNotFoundError,
+    ProjectStore,
+    RoleDefinition,
+)
 from cuttlefish.requests import (
     AlreadyResolvedError,
     HistoryEntry,
@@ -1100,20 +1106,35 @@ class FleetDaemon:
         spaced out so a burst is one message; the request stays in Needs you either way, so a
         manager that is down or cannot decide leaves it to the person."""
         if (
-            not self.delegate_approvals
-            or self.manager_project is None
+            self.manager_project is None
             or request.project_id == self.manager_project
+            or not self.delegates_approvals(request.project_id)
             or (self._wake_task is not None and not self._wake_task.done())
         ):
             return
         self._wake_task = asyncio.ensure_future(self._send_wake())
+
+    def delegates_approvals(self, project_id: str) -> bool:
+        """Whether the manager is woken for ``project_id``'s requests: the project's own choice,
+        else the daemon-wide ``CUTTLEFISH_DELEGATE_APPROVALS`` (CUT-259)."""
+        try:
+            own = self._projects.get(project_id).delegate_approvals
+        except ProjectNotFoundError:
+            own = None
+        return self.delegate_approvals if own is None else own
 
     async def _send_wake(self) -> None:
         assert self.manager_project is not None
         await asyncio.sleep(
             max(_WAKE_BATCH_S, self._last_wake + _WAKE_SPACING_S - time.monotonic())
         )
-        waiting = [p for p in self.requests.pending() if p.record.kind == "permission"]
+        waiting = [
+            p
+            for p in self.requests.pending()
+            if p.record.kind == "permission"
+            and p.project_id != self.manager_project
+            and self.delegates_approvals(p.project_id)
+        ]
         if not waiting or self.manager_project is None:
             return
         self._last_wake = time.monotonic()

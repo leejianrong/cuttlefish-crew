@@ -51,6 +51,27 @@
   let saving = $state(false);
   let saveError = $state<string | null>(null);
   let saved = $state(false);
+  let delegateBusy = $state(false);
+  let delegateError = $state<string | null>(null);
+  const delegateChoices: { value: boolean | null; label: string }[] = [
+    { value: null, label: "Follow the daemon" },
+    { value: true, label: "On" },
+    { value: false, label: "Off" },
+  ];
+
+  async function setDelegate(value: boolean | null) {
+    if (delegateBusy || value === (project.delegate_approvals ?? null)) return;
+    delegateBusy = true;
+    delegateError = null;
+    try {
+      await client.setDelegateApprovals(project.id, value);
+      await onChanged();
+    } catch (error) {
+      delegateError = error instanceof Error ? error.message : "That didn't work.";
+    } finally {
+      delegateBusy = false;
+    }
+  }
 
   const savedExtras = $derived(allowToLines(project.allow));
   // A rule saved from outside this tab (Always allow on Needs you) joins the draft at once.
@@ -243,6 +264,33 @@
       </ul>
     </section>
 
+    <section class="card panel" aria-labelledby="delegate-heading">
+      <h2 class="title-medium" id="delegate-heading">Manager approvals</h2>
+      <p class="body-small muted">
+        Wake the manager agent when this project asks for a permission, so it can allow once or deny
+        a routine one. The request stays in Needs you either way, and the always-blocked list still
+        holds. Now: {project.delegate_approvals_effective ? "on" : "off"}.
+      </p>
+      <div class="delegate" role="radiogroup" aria-labelledby="delegate-heading" use:radiogroup>
+        {#each delegateChoices as choice (String(choice.value))}
+          <button
+            type="button"
+            role="radio"
+            class="btn sm"
+            class:btn-tonal={(project.delegate_approvals ?? null) === choice.value}
+            class:btn-outlined={(project.delegate_approvals ?? null) !== choice.value}
+            aria-checked={(project.delegate_approvals ?? null) === choice.value}
+            tabindex={(project.delegate_approvals ?? null) === choice.value ? 0 : -1}
+            disabled={delegateBusy}
+            onclick={() => setDelegate(choice.value)}
+          >
+            {choice.label}
+          </button>
+        {/each}
+      </div>
+      {#if delegateError}<p class="error" role="alert">{delegateError}</p>{/if}
+    </section>
+
     <section class="card panel">
       <h2 class="title-medium">How each agent receives this</h2>
       {#each catalog?.backends ?? [] as backend, index (backend.name)}
@@ -300,6 +348,12 @@
 {/if}
 
 <style>
+  .delegate {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
   .layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 23rem;

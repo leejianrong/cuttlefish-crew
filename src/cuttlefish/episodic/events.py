@@ -541,6 +541,16 @@ class ScheduleSkipped:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class DelegateApprovalsSet:
+    """A person changed whether the manager is woken for this project's permission requests
+    (CUT-259, ADR-0053). ``value`` is ``None`` for "follow the daemon's setting"."""
+
+    EVENT_TYPE: ClassVar[str] = "DelegateApprovalsSet"
+
+    value: bool | None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class UnknownPayload:
     """A payload whose event type this build does not recognise, preserved verbatim.
 
@@ -585,6 +595,7 @@ EventPayload = (
     | PullRequestOpened
     | ScheduleRan
     | ScheduleSkipped
+    | DelegateApprovalsSet
     | UnknownPayload
 )
 
@@ -620,6 +631,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         PullRequestOpened,
         ScheduleRan,
         ScheduleSkipped,
+        DelegateApprovalsSet,
     )
 }
 
