@@ -72,11 +72,19 @@ def test_a_conflict_is_aborted_and_reported_and_that_role_keeps_its_work(repo: P
     assert trees.roles["b"].branch in _git(repo, "branch", "--list")
 
 
-def test_a_second_team_with_the_same_id_is_refused_without_damage(repo: Path) -> None:
+def test_a_team_with_the_same_id_reuses_its_trees_and_keeps_their_work(repo: Path) -> None:
     first = role_trees.prepare(str(repo), "t1", ["dev"])
+    (Path(first.roles["dev"].path) / "kept.py").write_text("x\n")
+    again = role_trees.prepare(str(repo), "t1", ["dev"])
+    assert again == first
+    assert (Path(again.roles["dev"].path) / "kept.py").exists()
+
+
+def test_a_branch_left_without_its_worktree_is_refused_without_damage(repo: Path) -> None:
+    _git(repo, "branch", "cuttlefish/team-t1")
     with pytest.raises(WorktreeError):
         role_trees.prepare(str(repo), "t1", ["dev"])
-    assert Path(first.roles["dev"].path).is_dir()
+    assert _git(repo, "branch", "--list", "cuttlefish/team-t1").strip()
 
 
 def test_a_repository_with_no_commit_is_refused(tmp_path: Path) -> None:
