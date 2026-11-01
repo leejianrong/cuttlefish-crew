@@ -1,8 +1,8 @@
 # ADR-0054: Each team role gets its own worktree, merged back through an integration branch
 
-- Status: Proposed (first slice built, CUT-239; the wiring into `team.py` is not)
+- Status: Accepted by Jian, 2026-11-01 (first slice built, CUT-239; the wiring into `team.py` is not)
 - Date: 2026-11-01
-- Deciders: development agent for CUT-239, for Jian to confirm before the wiring
+- Deciders: Jian (confirmed 2026-11-01), on the design from the CUT-239 development agent
 
 ## Context
 
@@ -44,5 +44,5 @@ Wiring it is more than a dispatch change, which is why this card stops at a desi
   directory while `root` stays the project's for keys and journal; (b) `merge_back` at the end of a round and a journal
   event naming conflicts; (c) drop the sequential branch for git roots and update the known gap; (d) show the team's
   branch and any conflicted role on the team tab.
-- A team's work no longer appears in the checkout for a git project with two kopicode roles. That is a visible change and
-  is why this is Proposed.
+- A team's work no longer appears in the checkout for a git project with two kopicode roles. That is a visible change, which
+  Jian accepted on 2026-11-01.
