@@ -63,7 +63,8 @@ differs, and lives under `.cuttlefish/`, which is already kept out of `git statu
 
 ## Deferred
 
-- Text-to-speech narration (CUT-201). Present mode (CUT-199) shipped without speech: the agent writes
+- Text-to-speech narration: built (CUT-201) as a Play button that speaks the `say` lines with the browser's own speech
+  synthesis. No tool, endpoint or audio file; a voice picker is still deferred. Present mode (CUT-199) shipped without speech: the agent writes
   `.cuttlefish/artifacts/present.json` (`{title, items: [{path, say}]}`), the listing gives that one top-level name the kind
   `manifest`, and the dashboard steps through it full screen. Still no new endpoint or renderer.
 - A second origin for HTML that needs a network or libraries (CUT-115), and rendered block types in markdown (CUT-114).
