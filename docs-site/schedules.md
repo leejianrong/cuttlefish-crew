@@ -18,7 +18,7 @@ uv run cuttlefish schedule list
 ```
 
 `list` prints one JSON object per line, soonest first, with `next_due`, `last_run` and `last_result`. The recurrence is
-`every <N>m`, `every <N>h` or `daily HH:MM`. `enable <id>`, `disable <id>` and `remove <id>` do the rest. A running
+`every <N>m`, `every <N>h` (at most 30 days) or `daily HH:MM`. `enable <id>`, `disable <id>` and `remove <id>` do the rest. A running
 daemon notices a change at its next pass, so nothing needs a restart.
 
 ## What happens when one is due

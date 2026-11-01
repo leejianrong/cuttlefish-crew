@@ -41,6 +41,7 @@
     offline,
     onOpenTerminal,
     onOpenArtifacts,
+    onAutopilotChange = () => {},
   }: {
     client: FleetClient;
     projectId: string;
@@ -51,6 +52,7 @@
     offline: boolean;
     onOpenTerminal: () => void;
     onOpenArtifacts: () => void;
+    onAutopilotChange?: () => void;
   } = $props();
 
   let thread = $state<ChatState>(EMPTY_CHAT);
@@ -215,6 +217,7 @@
     controlError = null;
     try {
       autopilot = await client.autopilotAction(projectId, action);
+      onAutopilotChange();
     } catch (e) {
       controlError = e instanceof Error ? e.message : "That didn't work.";
     } finally {

@@ -666,7 +666,18 @@ class FleetDaemon:
                 scrub=lambda text: Redactor().scrub(text)[0],
             )
         )
-        if result.ok and result.url and result.branch and result.base and result.title:
+        already = result.existing and any(
+            isinstance(e.payload, PullRequestOpened) and e.payload.url == result.url
+            for e in self.session_events(project)
+        )
+        if (
+            result.ok
+            and result.url
+            and result.branch
+            and result.base
+            and result.title
+            and not already
+        ):
             self.append_session_event(
                 project,
                 PullRequestOpened(
@@ -869,13 +880,15 @@ class FleetDaemon:
         await self.autopilot.stop(project, "The builder's session was stopped.")
         return await asyncio.to_thread(self._session_manager().stop, project.id, project.root)
 
-    async def reconcile_agent_sessions(self) -> list[tuple[str, SessionInfo | str]]:
+    async def reconcile_agent_sessions(
+        self, skip: frozenset[str] = frozenset()
+    ) -> list[tuple[str, SessionInfo | str]]:
         """At daemon start, bring back every project whose agent was wanted: reattach to one tmux
         kept running, relaunch one that is gone. A failure is reported, never raised, so one
-        project cannot hold the daemon back."""
+        project cannot hold the daemon back. ``skip`` names projects started a moment ago."""
         results: list[tuple[str, SessionInfo | str]] = []
         for project in self._projects.list():
-            if not await asyncio.to_thread(session_wanted, project.root):
+            if project.id in skip or not await asyncio.to_thread(session_wanted, project.root):
                 continue
             try:
                 results.append((project.name, await self.start_agent_session(project.id)))
