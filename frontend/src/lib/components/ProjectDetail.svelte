@@ -342,7 +342,7 @@
 
       <AgentSessionCard {client} {projectId} onChange={() => sessionChanges++} />
 
-      <ScheduleCard {client} {projectId} />
+      <ScheduleCard {client} {projectId} manager={project.is_manager === true} />
 
       {#if project.running && installing}
         <p class="banner" role="status">

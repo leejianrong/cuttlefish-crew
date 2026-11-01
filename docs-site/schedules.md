@@ -28,6 +28,9 @@ Autopilot is on, and your [**Its own branch**](branches-and-pull-requests.md) se
 first, so an unattended run waits at the plan under **Needs you** until you approve it. It does not act with nobody
 watching.
 
+On the manager's project a due schedule is a check-in typed into its session instead of a goal; see
+[waking the manager](manager-tools.md#waking-the-manager-on-a-schedule).
+
 ## What it will not do
 
 - **Run in your time zone.** Times are UTC all year, so a daylight-saving change never moves or repeats a run.

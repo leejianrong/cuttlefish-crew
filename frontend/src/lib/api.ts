@@ -222,6 +222,8 @@ export interface ProjectSummary {
   terminal_command?: string | null;
   /** CUT-238: each new goal runs in its own git worktree and branch. */
   worktree_per_goal?: boolean;
+  /** CUT-257: this is the manager agent's own project. */
+  is_manager?: boolean;
   /** V4-C: applies the next time the team starts, not to a team already running. */
   mode: PermissionMode;
   /** V4-F: the command groups switched on (names from the permissions catalogue). */
