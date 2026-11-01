@@ -31,7 +31,10 @@ leaked cuttlefish's venv.
    wrapper as `CUTTLEFISH_KOPICODE_BIN` (see `test_kopicode_serve.py` for scenarios, for
    example a `max_turns` failure). A live run with real kopicode is a separate, deliberate
    choice that costs cents.
-4. Stop processes by pid. Never `pkill -f cuttlefish` (it can match a live daemon or the
+4. Run every drive from a scratch directory outside the repo tree. The CLI reads only `./.env`
+   now (CUT-272), but a scratch cwd under the repo is how a real key reached a real kopicode
+   once.
+5. Stop processes by pid. Never `pkill -f cuttlefish` (it can match a live daemon or the
    shell running the command). Never read `.env` or `secrets.db`; redact tokens and keys in
    reports.
 
