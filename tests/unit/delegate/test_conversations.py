@@ -60,3 +60,11 @@ def test_the_switch_and_its_legacy_name(
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     assert conversations.resume_enabled(backend) is expected
+
+
+def test_a_team_role_worktree_shares_its_projects_registry(tmp_path: Path) -> None:
+    tree = tmp_path / ".cuttlefish" / "worktrees" / "team-t1-dev"
+    tree.mkdir(parents=True)
+    conversations.remember(str(tree), "kopicode", "dev", "ses-1")
+    assert conversations.recall(str(tmp_path), "kopicode", "dev") == "ses-1"
+    assert not (tree / ".cuttlefish").exists()

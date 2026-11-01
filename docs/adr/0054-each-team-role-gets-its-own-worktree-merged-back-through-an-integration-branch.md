@@ -1,8 +1,8 @@
 # ADR-0054: Each team role gets its own worktree, merged back through an integration branch
 
-- Status: Proposed (first slice built, CUT-239; the wiring into `team.py` is not)
+- Status: Accepted (Jian, 2026-11-01); built in slices under CUT-239
 - Date: 2026-11-01
-- Deciders: development agent for CUT-239, for Jian to confirm before the wiring
+- Deciders: development agent for CUT-239, for Jian, accepted
 
 ## Context
 
