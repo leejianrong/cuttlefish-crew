@@ -628,7 +628,7 @@ def test_the_permissions_catalogue_lists_modes_presets_blocked_and_backends(
     assert presets["python"]["default"] is True and presets["containers"]["default"] is False
     assert "uv run pytest" in presets["python"]["commands"]
     assert any("sudo" in item["label"] for item in body["never_allowed"])
-    assert [b["name"] for b in body["backends"]] == ["kopicode", "claude-code", "codex"]
+    assert [b["name"] for b in body["backends"]] == ["kopicode", "claude-code", "codex", "acp"]
 
 
 def test_a_project_reports_the_default_presets_until_it_chooses_others(
