@@ -43,13 +43,12 @@ _KINDS: dict[str, tuple[str, str, int]] = {
 
 #: What an agent is told, appended to a round's task and to a session's system prompt.
 AGENT_NOTE = (
-    "To show a person a result (a plan, a review, a summary, a diagram as an image), write it as a "
-    "markdown file under .cuttlefish/artifacts/ in the project root, for example "
-    ".cuttlefish/artifacts/review.md. Markdown, png, jpg, gif, webp or svg images, mp4 or webm "
-    "video and self-contained .html designs (inline CSS and JavaScript, no external files or "
-    "network) are shown in the dashboard, and an image is referenced from markdown by its relative "
-    "path. Raw HTML and scripts inside markdown are not shown. To present slides, a wireframe, an "
-    "animation, a demo or a dashboard, read .cuttlefish/present/SKILL.md first."
+    "To show a person a result (a plan, a review, a summary, a diagram), write it under "
+    ".cuttlefish/artifacts/ in the project root, for example .cuttlefish/artifacts/review.md. "
+    "Markdown, png, jpg, gif, webp or svg images, mp4 or webm video and self-contained .html "
+    "designs (inline CSS and JavaScript, no network) are shown in the dashboard. Raw HTML inside "
+    "markdown is not. For slides, a wireframe, an animation, a demo or a dashboard, read "
+    ".cuttlefish/present/SKILL.md first."
 )
 
 
