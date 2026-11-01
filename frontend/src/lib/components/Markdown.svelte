@@ -4,6 +4,7 @@
   import type { Block, Inline } from "../markdown";
   import ArtifactImage from "./ArtifactImage.svelte";
   import ChartBlock from "./ChartBlock.svelte";
+  import FlowBlock from "./FlowBlock.svelte";
 
   let {
     blocks,
@@ -63,6 +64,8 @@
       <hr />
     {:else if block.t === "chart"}
       <ChartBlock spec={block.spec} />
+    {:else if block.t === "flow"}
+      <FlowBlock spec={block.spec} />
     {:else if block.t === "diff"}
       <pre class="diff" aria-label="Diff">{#each block.lines as line, k (k)}<span class="dl {line.kind}">{line.text || " "}</span>{/each}</pre>
     {:else if block.t === "checklist"}
