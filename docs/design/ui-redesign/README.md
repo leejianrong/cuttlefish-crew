@@ -321,7 +321,7 @@ and this folder disagree after a slice lands, update this folder.
   changing the mode", or the old "its own terminal" for Codex, kopicode and sessions started before. A card from such a session
   reads "Claude Code wants to run a command that isn't on the list" (or "wants to use WebFetch"), says "Paused until you answer
   here or in the terminal", and ends in the log as "Answered in the terminal", "No answer in time: the terminal still asks" (it
-  denied nothing), "Ended: the agent session was stopped" or "Ended: the agent session ended". Coral as for every Needs you card.
+  denied nothing), "Ended: the agent session was stopped" or, when the daemon restarted or its hook ended, "Can no longer be answered here: it may still be open in the terminal". Coral as for every Needs you card.
 - **Fewer steps to sign in and a right address to pair (CUT-133, 2026-10-18).** A dashboard the daemon serves goes straight to the
   password or token, with no Base URL step; a failed check, or a notice to read, still shows the address step. Under Devices, when
   the daemon was started with `--tailscale-https` it offers its https page as the address a pairing link opens (`page_url` in

@@ -143,7 +143,7 @@ describe("a request from a project's agent session in tmux", () => {
     const from = (state: NeedsYouRequest["state"]) => outcomeLabel(request({ session: true, state }));
     expect(from("expired")).toBe("No answer in time: the terminal still asks");
     expect(from("cancelled")).toBe("Ended: the agent session was stopped");
-    expect(from("abandoned")).toBe("Ended: the agent session ended");
+    expect(from("abandoned")).toBe("Can no longer be answered here: it may still be open in the terminal");
     expect(from("superseded")).toBe("Answered in the terminal");
     expect(from("allowed_once")).toBe("Allowed once");
     expect(from("denied")).toBe("Denied");
