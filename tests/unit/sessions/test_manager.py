@@ -317,3 +317,21 @@ def test_codex_takes_extra_flags_on_a_start_and_on_a_resume() -> None:
     assert start == ["codex", *flags]
     resumed = launch_argv("codex", root="/r", session_id="s", resume=True, extra_args=flags)
     assert resumed[2].count("mcp_servers.x.command") == 2
+
+
+def test_note_session_id_records_the_newest_conversation_of_a_claude_session(
+    tmp_path: Path,
+) -> None:
+    from cuttlefish.sessions.manager import _read, _write, note_session_id
+
+    first, second = "11111111-1111-4111-8111-111111111111", "22222222-2222-4222-8222-222222222222"
+    note_session_id(str(tmp_path), second)  # no record: nothing to update
+    assert _read(str(tmp_path)) == {}
+    _write(str(tmp_path), {"backend": "claude-code", "session_id": first, "launched": True})
+    note_session_id(str(tmp_path), "not-a-uuid")
+    assert _read(str(tmp_path))["session_id"] == first
+    note_session_id(str(tmp_path), second)  # after a /clear
+    assert _read(str(tmp_path))["session_id"] == second
+    _write(str(tmp_path), {"backend": "codex", "session_id": first})
+    note_session_id(str(tmp_path), second)
+    assert _read(str(tmp_path))["session_id"] == first

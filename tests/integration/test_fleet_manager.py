@@ -359,7 +359,8 @@ async def _woken(
 
     sent: list[tuple[str, str]] = []
 
-    async def send_chat(project_id: str, text: str) -> dict[str, str]:
+    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+        assert not fresh  # clearing is opt-in (CUT-273, ADR-0055)
         sent.append((project_id, text))
         return {}
 
@@ -427,7 +428,8 @@ async def test_a_scheduled_check_in_is_typed_unless_the_manager_is_busy_or_refus
     sent: list[str] = []
     refusal: list[str] = []
 
-    async def send_chat(project_id: str, text: str) -> dict[str, str]:
+    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+        assert not fresh
         if refusal:
             raise FleetError(refusal[0])
         sent.append(text)
@@ -486,3 +488,66 @@ async def test_steer_messages_the_builder_session_when_there_is_no_team(
     sessions.state = "running"
     assert (await rig.manager.post(path, json=body)).status_code == 200
     assert sent == ["go on"]
+
+
+class _Tmux:
+    def __init__(self) -> None:
+        self.typed: list[str] = []
+
+    def paste(self, _name: str, text: str) -> None:
+        self.typed.append(text)
+
+    def press_enter(self, _name: str) -> None:
+        self.typed.append("<enter>")
+
+
+async def _typed(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, *, state: str, fresh: bool
+) -> tuple[list[str], dict[str, str]]:
+    import cuttlefish.fleet.daemon as fleet_daemon
+
+    tmux = _Tmux()
+
+    class Sessions:
+        def status(self, *_: object) -> SessionInfo:
+            return SessionInfo(state="running", backend="claude-code", tmux_session="s")  # type: ignore[arg-type]
+
+        def tmux_session(self, _id: str) -> tuple[_Tmux, str]:
+            return tmux, "s"
+
+    monkeypatch.setattr(fleet_daemon, "_PASTE_SETTLE_S", 0.0)
+    monkeypatch.setattr(fleet_daemon, "_CLEAR_SETTLE_S", 0.0)
+    monkeypatch.setattr(rig.daemon, "_session_manager", lambda: Sessions())
+    monkeypatch.setattr(rig.daemon, "_screen", lambda *_: "")
+    monkeypatch.setattr(rig.daemon._claude_hooks, "activity", lambda _: (state, None))
+    reply = await rig.daemon.send_chat(rig.project_id, "wake", fresh=fresh)
+    return tmux.typed, reply
+
+
+async def test_a_fresh_send_clears_an_idle_session_first_and_never_a_busy_one(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    typed, reply = await _typed(rig, monkeypatch, state="idle", fresh=True)
+    assert typed == ["/clear", "<enter>", "wake", "<enter>"] and reply["context"] == "fresh"
+    typed, reply = await _typed(rig, monkeypatch, state="busy", fresh=True)
+    assert typed == ["wake", "<enter>"] and "context" not in reply
+    typed, _ = await _typed(rig, monkeypatch, state="idle", fresh=False)
+    assert typed == ["wake", "<enter>"]
+
+
+async def test_the_manager_is_cleared_only_when_clear_context_is_set(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[bool] = []
+
+    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+        calls.append(fresh)
+        return {}
+
+    monkeypatch.setattr(rig.daemon, "send_chat", send_chat)
+    monkeypatch.setattr(rig.daemon._claude_hooks, "activity", lambda _: ("idle", None))
+    rig.daemon.manager_project = rig.project_id
+    await rig.daemon.check_in_manager("a")
+    monkeypatch.setenv("CUTTLEFISH_MANAGER_CLEAR_CONTEXT", "1")
+    await rig.daemon.check_in_manager("b")
+    assert calls == [False, True]
