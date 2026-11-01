@@ -141,8 +141,12 @@ _HOOK_BODY_LIMIT = 256 * 1024
 _LOG = logging.getLogger(__name__)
 
 
-def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
+def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False) -> dict[str, Any]:
+    """A project as the dashboard and MCP see it. With `summary` (the list) a role's persona text
+    is left out: it is over half the payload, and the list never shows it (CUT-192); a project's
+    own route has it."""
     project = daemon.projects.get(project_id)
+    journal = daemon.journal_view(project.id)
     return {
         "id": project.id,
         "name": project.name,
@@ -162,7 +166,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "roles": [
             {
                 "name": r.name,
-                "persona": r.persona,
+                **({} if summary else {"persona": r.persona}),
                 "backend": r.backend,
                 "access": r.access,
                 "limits": dict(r.limits),
@@ -177,12 +181,12 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "allow": [list(command) for command in project.allow],
         "running": daemon.is_running(project.id),
         "stopping": daemon.is_stopping(project.id),
-        "status": daemon.status(project.id),
-        "last_event_at": daemon.last_event_at(project.id),
+        "status": journal.status,
+        "last_event_at": journal.last_event_at,
         "budget": {"max_tokens": project.max_tokens, "max_cost_usd": project.max_cost_usd},
         "usage": {
             name: {"tokens": totals.tokens, "cost_usd": totals.cost_usd}
-            for name, totals in daemon.usage(project.id).items()
+            for name, totals in journal.usage.items()
         },
     }
 
@@ -783,7 +787,9 @@ def create_app(
 
     @app.get("/api/projects")
     async def list_projects() -> dict[str, Any]:
-        return {"projects": [_project_json(daemon, p.id) for p in daemon.projects.list()]}
+        return {
+            "projects": [_project_json(daemon, p.id, summary=True) for p in daemon.projects.list()]
+        }
 
     @app.post("/api/projects", status_code=201)
     async def register_project(request: Request) -> dict[str, Any]:

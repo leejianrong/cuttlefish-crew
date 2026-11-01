@@ -126,7 +126,8 @@ def build_mcp_server(*, base_url: str, token: str) -> MCPServer:
 
     @server.tool()
     async def list_projects() -> dict[str, Any]:
-        """Every registered project: its roles, running state, and per-role status."""
+        """Every registered project: its roles, running state, and per-role status. A role's
+        persona text is left out here to keep the list small; get_project has it."""
         return await asyncio.to_thread(_request, base_url, token, "GET", "/api/projects")
 
     @server.tool()
