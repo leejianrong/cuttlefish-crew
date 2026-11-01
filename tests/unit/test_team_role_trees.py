@@ -23,13 +23,18 @@ from cuttlefish.team import run_team
 
 #: Writes ``<file>`` with ``<text>`` where the task says ``WRITE <file> <text>``, in its cwd.
 _FAKE = """#!{python}
-import json, os, sys
+import json, os, sys, time
+with open(os.environ["FAKE_KOPICODE_SPANS"], "a") as spans:
+    spans.write(f"start {{time.time()}}\\n")
+time.sleep(float(os.environ.get("FAKE_KOPICODE_SLEEP", "0")))
 task = sys.argv[-1]
 words = task.split("WRITE ", 1)[1].split()
 with open(os.path.join(os.getcwd(), words[0]), "w") as f:
     f.write(" ".join(words[1:]) + "\\n")
 with open(os.environ["FAKE_KOPICODE_CWDS"], "a") as log:
     log.write(os.getcwd() + "\\n")
+with open(os.environ["FAKE_KOPICODE_SPANS"], "a") as spans:
+    spans.write(f"end {{time.time()}}\\n")
 print(json.dumps({{"kind": "session_started", "detail": "s"}}))
 print(json.dumps({{"kind": "edit_applied", "path": words[0]}}))
 print(json.dumps({{"kind": "session_ended", "reason": "completed", "exit_code": 0}}))
@@ -64,6 +69,7 @@ def _fake(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("CUTTLEFISH_KOPICODE_TRANSPORT", "print")
     monkeypatch.setenv("FAKE_KOPICODE_CWDS", str(tmp_path / "cwds.log"))
+    monkeypatch.setenv("FAKE_KOPICODE_SPANS", str(tmp_path / "spans.log"))
     return binary
 
 
@@ -189,3 +195,29 @@ async def test_a_killed_run_resumes_without_making_the_worktrees_twice(
     assert len([p for p in payloads if isinstance(p, TeamBranchMade)]) == 1
     assert len([p for p in payloads if isinstance(p, RoleMergeReported)]) == 2
     store.close()
+
+
+def _overlapped(tmp_path: Path) -> bool:
+    """Whether a second agent started before the first one ended."""
+    events = [line.split()[0] for line in (tmp_path / "spans.log").read_text().splitlines()]
+    return events[:2] == ["start", "start"]
+
+
+async def test_roles_in_a_git_project_run_at_the_same_time(
+    tmp_path: Path, repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_KOPICODE_SLEEP", "0.5")
+    result, _ = await _run(tmp_path, _team(repo, dev="dev.py x=1", docs="README.md hello"))
+    assert result["status"] == "completed"
+    assert _overlapped(tmp_path)
+
+
+async def test_roles_in_a_folder_that_is_not_a_repository_still_run_one_at_a_time(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_KOPICODE_SLEEP", "0.2")
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    result, _ = await _run(tmp_path, _team(plain, dev="a.txt 1", docs="b.txt 2"))
+    assert result["status"] == "completed"
+    assert not _overlapped(tmp_path)

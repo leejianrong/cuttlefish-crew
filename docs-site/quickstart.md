@@ -126,9 +126,10 @@ uv run cuttlefish run-team \
   --role reviewer:"review the last commit for style issues"
 ```
 
-Both roles start together (`satay.gather`) against the project's shared
-checkout; two kopicode-backed roles are dispatched one at a time instead,
-because kopicode locks a working tree per session. Watch progress live in the dashboard — each role renders as a
+Both roles start together (`satay.gather`). With two kopicode-backed roles in a git project, each works in its own
+worktree and the results are merged into a `cuttlefish/team-<id>` branch, leaving your checkout alone; in a folder that
+is not a git repository they share it and are dispatched one at a time, because kopicode locks a working tree per
+session. Watch progress live in the dashboard — each role renders as a
 small animated sprite whose pose reflects its status.
 
 ## 4. Steer it, or require your sign-off before it finalizes

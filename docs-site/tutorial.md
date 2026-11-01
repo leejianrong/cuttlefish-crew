@@ -74,8 +74,9 @@ Go back to Projects, open **notes-site**, and start its builder on:
 > Add a short About section to index.html.
 
 The two teams run side by side; each agent is a small sprite whose pose is its
-status. Roles inside one kopicode project run one at a time, because kopicode
-locks a working tree per session.
+status. Roles on kopicode in a git project each work in their own
+worktree and run together; in a folder that is not a git repository they run one at a time, because kopicode locks a
+working tree per session.
 
 ## 5. Answer what needs you
  The bell in the rail and the **Needs you** tab show

@@ -142,20 +142,13 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   (satay-runtime#100), which remains just as unneeded as it was for one
   project's own `satay.gather`-based team concurrency. `docs/QUESTIONS.md`
   Q33, Q42, Q48.
-- Two kopicode-backed team roles sharing one `--root` used to collide on
-  kopicode's own per-working-tree session lock; `cuttlefish.team
-  ._dispatch_round` now dispatches them one-at-a-time instead of via
-  `satay.gather` whenever that collision would otherwise happen (Q54) — real,
-  but not concurrent for that case. Real concurrent *editing* still needs
-  separate checkouts per role, deliberately deferred until this fallback's
-  own cost is felt (kopicode's lock itself is correctly guarding against two
-  agents editing one uncommitted working tree at once, not a bug). Unaffected
-  by the fleet daemon (every role in one project's team still shares that
-  project's one `root`). `docs/QUESTIONS.md` Q44, Q54. **CUT-239 (ADR-0054, accepted):** a git project's team with
-  two or more kopicode roles gives each role its own worktree and merges them into `cuttlefish/team-<id>` at the end of
-  every round (a conflict is aborted and journaled as `RoleMergeReported`, never resolved; that role's branch and
-  worktree stay). This PR makes the worktrees and merges; the dispatch is still one at a time until the fallback is
-  dropped for git roots (next PR). A team's work lands on that branch, never in the checkout.
+- Two kopicode-backed team roles sharing one `--root` collide on kopicode's own per-working-tree session
+  lock, so `cuttlefish.team._dispatch_round` dispatches them one at a time (Q44, Q54) **only when the root is not a git
+  repository with a commit**. In a git project each role gets its own worktree and branch and the roles run
+  concurrently (CUT-239, ADR-0054): their work is merged into `cuttlefish/team-<id>` at the end of every round, a
+  conflict is aborted and journaled as `RoleMergeReported` (never resolved; that role's branch and worktree stay), and
+  the checkout is never touched, so the person merges the team branch. A team that falls back (a root with no commit, or
+  worktrees that could not be made) is still sequential and still edits the root. `docs/QUESTIONS.md` Q44, Q54.
 - Secrets are injected directly: the agent process itself holds every project secret it's given in
   the clear. A project's secret is the code's own, so there is nothing to broker. The agent's own model
   API key *can* be brokered (`CUTTLEFISH_CREDENTIAL_BROKER=1`, ADR-0031). `docs/QUESTIONS.md` Q34, ADR-0006.

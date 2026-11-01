@@ -53,8 +53,8 @@ where we are behind.
   WSL2 (macOS is untested), and you still add Node.js, tmux and an agent CLI yourself.
 - **Git workflow.** Paseo and Conductor advertise worktree isolation and a pull-request flow, and Paseo a
   scheduled run. cuttlefish-crew has a worktree and branch per goal (opt-in) and a button that opens a GitHub pull
-  request through your own `gh` login, but no merge, no PR status and no cron-style schedule; two roles that use
-  kopicode on the same project still run one at a time. Autopilot
+  request through your own `gh` login, but no merge, no PR status and no cron-style schedule; two kopicode roles on a git
+  project each get a worktree and run together, merged into a team branch. Autopilot
   keeps one builder working toward a goal, which is not a schedule.
 - **People and cloud.** Conductor's cloud workspaces run for you. cuttlefish-crew runs only on machines you
   own, and it has one operator with one password: no accounts, roles or single sign-on.

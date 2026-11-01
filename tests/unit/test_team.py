@@ -40,6 +40,9 @@ def test_needs_sequential_dispatch_only_for_two_or_more_kopicode_backed_roles() 
     active role, dispatches concurrently exactly as before."""
     both_kopicode = {"builder": "kopicode", "reviewer": "kopicode"}
     assert _needs_sequential_dispatch(["builder", "reviewer"], both_kopicode) is True
+    assert (
+        _needs_sequential_dispatch(["builder", "reviewer"], both_kopicode, isolated=True) is False
+    )
     assert _needs_sequential_dispatch(["builder"], both_kopicode) is False
     both_claude = {"builder": "claude-code", "reviewer": "claude-code"}
     assert _needs_sequential_dispatch(["builder", "reviewer"], both_claude) is False
