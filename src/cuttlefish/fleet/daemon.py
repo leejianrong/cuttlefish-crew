@@ -1248,7 +1248,8 @@ class FleetDaemon:
 
         ``keep_blocked`` names teams about to be resumed: their ``blocked`` requests (a stuck or
         held role, nothing waiting on them) are left open, and `_launch_team` puts them back in
-        the broker, because the resumed role is still waiting for a steer."""
+        the broker, because the resumed role is still waiting for a steer. A manager's
+        ``decision`` is always left open and put back by `restore_decisions` (CUT-254)."""
         count = 0
         for project in self._projects.list():
             path = Path(project.root) / ".cuttlefish" / "episodic.db"
@@ -1262,8 +1263,10 @@ class FleetDaemon:
             try:
                 for scope in scopes:
                     for raised in unresolved(store.read(scope)):
-                        if raised.kind == "blocked" and scope in keep_blocked:
-                            continue
+                        if raised.kind == "decision" or (
+                            raised.kind == "blocked" and scope in keep_blocked
+                        ):
+                            continue  # nothing waits on these; restore_decisions / _launch_team
                         store.append(
                             scope,
                             RequestResolved(
@@ -1273,6 +1276,24 @@ class FleetDaemon:
                         count += 1
             finally:
                 store.close()
+        return count
+
+    def restore_decisions(self) -> int:
+        """Put back the manager's decisions a project's agent-session journal raised and nobody
+        answered (CUT-254). A decision has no process waiting on it, so a restart leaves it for
+        the person; the sweep skips it. A permission card is different and is not restored: its
+        hook died with the daemon, so an answer here would reach nothing."""
+        count = 0
+        for project in self._projects.list():
+            records = [r for r in unresolved(self._session_events(project)) if r.kind == "decision"]
+            if not records:
+                continue
+            self.open_session_journal(project)
+            count += len(
+                self.requests.restore_blocked(
+                    project.id, session_scope(project.id), records, kind="decision"
+                )
+            )
         return count
 
     @property
@@ -1625,6 +1646,7 @@ class FleetDaemon:
             if await self._is_resumable(project, team_id):
                 resumable.append((project, team_id))
         self.sweep_abandoned(keep_blocked={team_id for _, team_id in resumable})
+        self.restore_decisions()
         attempts: list[ResumeAttempt] = []
         for project, team_id in resumable:
             role_inputs = _persisted_roles_to_inputs(project.last_team_roles)

@@ -8,8 +8,9 @@ ever served), and the rules a person granted "always" to a running team.
 
 Everything here runs on the daemon's event loop and never blocks it. An answer resolves a
 future in this process; no satay control call is involved, so the ``asyncio.to_thread`` rule
-does not apply. Nothing survives a restart, and nothing needs to: a pending request cannot
-outlive the child process that is waiting for it.
+does not apply. A held request does not survive a restart, and nothing needs it to: it cannot
+outlive the child process that is waiting for it. The two kinds nothing waits on, ``blocked`` and
+a manager's ``decision``, are put back from the journal (:meth:`RequestBroker.restore_blocked`).
 """
 
 from __future__ import annotations
@@ -358,7 +359,11 @@ class RequestBroker:
         )
 
     def restore_blocked(
-        self, project_id: str, team_id: str, records: Iterable[RequestRaised]
+        self,
+        project_id: str,
+        team_id: str,
+        records: Iterable[RequestRaised],
+        kind: Literal["blocked", "decision"] = "blocked",
     ) -> list[PendingRequest]:
         """Put back the ``blocked`` requests a resumed team's journal raised and never resolved.
 
@@ -366,10 +371,11 @@ class RequestBroker:
         kills a held command: the resumed workflow replays to the same wait for a steer, and the
         card must be there to say so. Not journaled again; the journal already holds the raise,
         and the eventual resolution lands against the same id. Any other kind is skipped (its
-        agent process is gone)."""
+        agent process is gone). ``kind="decision"`` restores a manager's decision the same way
+        (CUT-254): it has no agent behind it either, only a person to answer."""
         restored: list[PendingRequest] = []
         for record in records:
-            if record.kind != "blocked" or record.request_id in self._pending:
+            if record.kind != kind or record.request_id in self._pending:
                 continue
             pending = PendingRequest(
                 project_id=project_id,
@@ -509,17 +515,23 @@ class RequestBroker:
         return self._finish(pending, Outcome(request_id, resolution, by))
 
     def end_team(
-        self, team_id: str, resolution: Literal["cancelled", "abandoned"]
+        self,
+        team_id: str,
+        resolution: Literal["cancelled", "abandoned"],
+        *,
+        keep_decisions: bool = False,
     ) -> list[Outcome]:
         """End every request a team still has pending: ``cancelled`` when the operator stops
         the team (the held agent is told no and its round can end), ``abandoned`` when the
         process that was waiting is gone. A team ended this way asks nobody anything more
-        (:meth:`is_closed`), so an agent that carries on after a stop cannot raise a fresh one."""
+        (:meth:`is_closed`), so an agent that carries on after a stop cannot raise a fresh one.
+        ``keep_decisions`` leaves a manager's decision pending: nothing waits on it, so a daemon
+        shutdown does not end it (CUT-254)."""
         self._closed.add(team_id)
         return [
             self.resolve_system(p.id, resolution, by="system")
             for p in list(self._pending.values())
-            if p.team_id == team_id
+            if p.team_id == team_id and not (keep_decisions and p.record.kind == "decision")
         ]
 
     def reopen(self, team_id: str) -> None:

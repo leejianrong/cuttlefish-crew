@@ -357,3 +357,37 @@ def test_the_sweep_keeps_a_blocked_request_of_a_team_about_to_resume(tmp_path: P
     root, team = _journal_two_requests(daemon, tmp_path)
     assert daemon.sweep_abandoned(keep_blocked={team}) == 1
     assert _unresolved_ids(root) == {"stuck"}
+
+
+async def test_a_managers_decision_survives_a_restart_and_a_stop_cancels_it(
+    tmp_path: Path,
+) -> None:
+    """CUT-254: nothing waits on a decision, so the sweep leaves it and the new daemon puts it
+    back; a permission card from the same journal is abandoned (its hook died)."""
+    from cuttlefish.fleet.claude_hooks import session_scope
+
+    first = _daemon(tmp_path)
+    root = tmp_path / "alpha"
+    root.mkdir()
+    project = first.projects.register(name="alpha", root=str(root))
+    store = EpisodicStore.open(root / ".cuttlefish" / "episodic.db")
+    scope = session_scope(project.id)
+    store.append(scope, _raised("choose", "decision"))
+    store.append(scope, _raised("held", "permission"))
+    store.close()
+
+    daemon = _daemon(tmp_path)  # the restart
+    daemon.sweep_abandoned()
+    assert daemon.restore_decisions() == 1
+    assert [p.id for p in daemon.requests.pending()] == ["choose"]
+
+    daemon.release_held_hooks()  # a graceful shutdown keeps it too
+    daemon.requests.end_team(scope, "abandoned", keep_decisions=True)
+    assert [p.id for p in daemon.requests.pending()] == ["choose"]
+
+    daemon.requests.end_team(scope, "cancelled")  # the session is stopped
+    events = EpisodicStore.open(root / ".cuttlefish" / "episodic.db")
+    try:
+        assert unresolved(events.read(scope)) == []
+    finally:
+        events.close()
