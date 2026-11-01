@@ -151,9 +151,11 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   own cost is felt (kopicode's lock itself is correctly guarding against two
   agents editing one uncommitted working tree at once, not a bug). Unaffected
   by the fleet daemon (every role in one project's team still shares that
-  project's one `root`). `docs/QUESTIONS.md` Q44, Q54. **Still the case (CUT-239):** the fix is designed in ADR-0054
-  (a worktree per role, merged into a team integration branch) and its git half is built and tested
-  (`sessions/role_trees.py`), but nothing in `team.py` calls it yet, so the sequential fallback is unchanged.
+  project's one `root`). `docs/QUESTIONS.md` Q44, Q54. **CUT-239 (ADR-0054, accepted):** a git project's team with
+  two or more kopicode roles gives each role its own worktree and merges them into `cuttlefish/team-<id>` at the end of
+  every round (a conflict is aborted and journaled as `RoleMergeReported`, never resolved; that role's branch and
+  worktree stay). This PR makes the worktrees and merges; the dispatch is still one at a time until the fallback is
+  dropped for git roots (next PR). A team's work lands on that branch, never in the checkout.
 - Secrets are injected directly: the agent process itself holds every project secret it's given in
   the clear. A project's secret is the code's own, so there is nothing to broker. The agent's own model
   API key *can* be brokered (`CUTTLEFISH_CREDENTIAL_BROKER=1`, ADR-0031). `docs/QUESTIONS.md` Q34, ADR-0006.

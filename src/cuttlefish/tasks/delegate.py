@@ -58,6 +58,7 @@ async def delegate_to_agent_backend(
     access: str | None = None,
     presets: list[str] | None = None,
     limits: dict[str, int] | None = None,
+    workdir: str | None = None,
 ) -> DelegationOutcome:
     """``agent_backend`` (KAN-1809) is a per-call override of the runtime's default;
     callers pass it only when set, so a call that names none has the identical
@@ -76,7 +77,13 @@ async def delegate_to_agent_backend(
     the defaults, for the same replay reason.
 
     ``limits`` (ADR-0030) is the role's own turn, token, context and time settings, passed only
-    when it sets any; only kopicode takes them (the others have no such controls)."""
+    when it sets any; only kopicode takes them (the others have no such controls).
+
+    ``workdir`` (CUT-239, ADR-0054) is the folder the agent runs in when a team gave this role its
+    own git worktree, inside ``root`` and passed only then. ``root`` stays the project root for the
+    journal and handover; the conversation registry maps a worktree back to it
+    (``conversations.project_root``), and the agent's own never-allowed check holds the role to
+    its worktree, which is inside the project root."""
     runtime_ = runtime.current()
     backend = resolve_backend(
         agent_backend or runtime_.agent_backend,
@@ -145,7 +152,7 @@ async def delegate_to_agent_backend(
     try:
         outcome = await backend.delegate(
             task_text=f"{AGENT_NOTE}\n\n{task_text}",
-            root=root,
+            root=workdir or root,
             allow=effective_allow,
             secrets=resolved_secrets,
             sandbox_provider=runtime_.sandbox_provider,

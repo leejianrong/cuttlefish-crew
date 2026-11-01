@@ -36,8 +36,18 @@ def resume_enabled(backend: str) -> bool:
     return False
 
 
+def project_root(root: str) -> str:
+    """The project root a delegation directory belongs to: a team role's worktree
+    (``<project>/.cuttlefish/worktrees/<name>``, ADR-0054) answers with its project, so every
+    role's conversation key lives in the one project registry, not in a folder that is removed."""
+    path = Path(root)
+    if path.parent.name == "worktrees" and path.parent.parent.name == ".cuttlefish":
+        return str(path.parent.parent.parent)
+    return root
+
+
 def _path(root: str) -> Path:
-    return Path(root) / ".cuttlefish" / "conversations.json"
+    return Path(project_root(root)) / ".cuttlefish" / "conversations.json"
 
 
 def _read(root: str) -> dict[str, dict[str, str]]:

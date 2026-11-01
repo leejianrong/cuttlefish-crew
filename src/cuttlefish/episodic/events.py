@@ -522,6 +522,31 @@ class PullRequestOpened:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class TeamBranchMade:
+    """A git project's team got its own branch, and each role a branch to work on (CUT-239,
+    ADR-0054). The person merges ``branch``; the checkout is never touched. ``roles`` maps a role
+    name to its own branch."""
+
+    EVENT_TYPE: ClassVar[str] = "TeamBranchMade"
+
+    branch: str
+    roles: dict[str, str]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RoleMergeReported:
+    """What merging one role's branch into the team's branch did at the end of a round: ``merged``,
+    ``nothing`` (it changed nothing) or ``conflict``, with the files that conflicted. A conflict was
+    aborted, not resolved; the role's branch keeps its work (ADR-0054)."""
+
+    EVENT_TYPE: ClassVar[str] = "RoleMergeReported"
+
+    role: str
+    status: str
+    files: list[str] = dataclasses.field(default_factory=list)
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class ScheduleRan:
     """A schedule was due and the daemon gave the project's builder its goal (CUT-245)."""
 
@@ -596,6 +621,8 @@ EventPayload = (
     | ScheduleRan
     | ScheduleSkipped
     | DelegateApprovalsSet
+    | TeamBranchMade
+    | RoleMergeReported
     | UnknownPayload
 )
 
@@ -632,6 +659,8 @@ _REGISTRY: Mapping[str, type[Any]] = {
         ScheduleRan,
         ScheduleSkipped,
         DelegateApprovalsSet,
+        TeamBranchMade,
+        RoleMergeReported,
     )
 }
 

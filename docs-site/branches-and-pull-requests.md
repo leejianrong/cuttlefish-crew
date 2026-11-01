@@ -75,6 +75,17 @@ and prints the URL. It uses the `gh` login already on this machine; cuttlefish s
 
 The CLI's description has the goal and commits but not the page's digest lines, since those come from the daemon.
 
+## A team's roles in a git project
+
+A team with two or more kopicode-backed roles in a git project gives each role its own worktree and branch under
+`<project>/.cuttlefish/worktrees/`, and merges them into one branch, `cuttlefish/team-<team id>`, at the end of every
+round. **Your checkout is never touched:** the work lands on that branch, and you merge it or open a pull request from
+it. A role that left files uncommitted has them committed on its branch first.
+
+A merge that conflicts is aborted, not resolved. The timeline records the role and the files, and that role's branch
+(`cuttlefish/team-<id>-<role>`) and worktree stay so its work is not lost. A project that is not a git repository with a
+commit keeps today's behaviour. [ADR-0054](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0054-each-team-role-gets-its-own-worktree-merged-back-through-an-integration-branch.md).
+
 ## See also
 
 - [Scheduled goals](schedules.md) start a goal on a repeat and respect this setting.

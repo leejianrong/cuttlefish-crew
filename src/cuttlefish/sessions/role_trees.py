@@ -41,19 +41,24 @@ def _safe(name: str) -> str:
     return "-".join(re.findall(r"[a-z0-9]+", name.lower())) or "role"
 
 
-def _add(root: str, name: str, start: str | None) -> RoleTree:
+def _add(root: str, name: str, start: str | None, made: list[RoleTree]) -> RoleTree:
     path = Path(root) / ".cuttlefish" / "worktrees" / name
     branch = f"cuttlefish/{name}"
-    if path.resolve() in _registered(root) or _branch_exists(root, branch):
+    here, branched = path.resolve() in _registered(root), _branch_exists(root, branch)
+    if here and branched:
+        return RoleTree(branch, str(path))  # made by an earlier, interrupted run: reuse it
+    if here or branched:
         raise WorktreeError(f"{name} already exists; remove it first")
     path.parent.mkdir(parents=True, exist_ok=True)
     _git(root, "worktree", "add", "-b", branch, str(path), *([start] if start else []))
-    return RoleTree(branch, str(path))
+    made.append(RoleTree(branch, str(path)))
+    return made[-1]
 
 
 def prepare(root: str, team_id: str, roles: list[str]) -> TeamTrees:
     """Make the integration worktree from ``HEAD`` and one worktree per role from it. A failure
-    part way removes what this call made."""
+    part way removes what this call made. One a crashed earlier call already made is reused, so
+    a resumed team keeps the work already in it."""
     _git(root, "rev-parse", "--verify", "HEAD")
     _git(root, "worktree", "prune")
     team = f"team-{_safe(team_id)}"
@@ -62,12 +67,10 @@ def prepare(root: str, team_id: str, roles: list[str]) -> TeamTrees:
         raise WorktreeError("two roles have the same name once made branch-safe")
     made: list[RoleTree] = []
     try:
-        integration = _add(root, team, None)
-        made.append(integration)
+        integration = _add(root, team, None, made)
         trees = {}
         for role, safe in zip(roles, names, strict=True):
-            trees[role] = _add(root, f"{team}-{safe}", integration.branch)
-            made.append(trees[role])
+            trees[role] = _add(root, f"{team}-{safe}", integration.branch, made)
     except WorktreeError:
         for tree in reversed(made):
             _git(root, "worktree", "remove", "--force", tree.path)

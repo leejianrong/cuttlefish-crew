@@ -34,6 +34,9 @@ Agents spend your model credit, usually cents for a small task.
    worktree and branch, so your checkout is left alone ([ADR-0048](docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md)).
    When it is done, **Open a pull request** runs `gh pr create` with your own `gh` login and never merges
    ([ADR-0049](docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)).
+   A team with two or more kopicode roles in a git project works the same way: each role gets its own worktree, merged
+   into `cuttlefish/team-<id>` after every round, a conflict reported and never resolved
+   ([ADR-0054](docs/adr/0054-each-team-role-gets-its-own-worktree-merged-back-through-an-integration-branch.md)).
 3. **Answer what needs you.** When an agent wants a command you have not approved, it stops and waits. Choose
    **Allow once**, **Always allow** or **Deny** in the **Needs you** tab. `sudo`, a forced `git push`, a download
    piped into a shell and writes outside the project are refused in every permission mode.

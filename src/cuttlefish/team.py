@@ -14,11 +14,10 @@ already does, ``TeamInput.root`` being singular) are the one exception: kopicode
 own per-working-tree session lock refuses a second concurrent invocation against
 the same root (docs/QUESTIONS.md Q44), so ``_dispatch_round`` falls back to
 one-at-a-time dispatch for exactly that case instead — real, but not concurrent for
-that case, rather than a hard `DelegationFailed`. A separate git worktree/checkout
-per role is the actual fix for genuine concurrent editing, deliberately deferred
-until this fallback's own cost is felt (ADR-0002's "don't build ahead of a proven
-need"). ADR-0054 designs it and ``sessions.role_trees`` is its git half (CUT-239); this
-module does not call it yet.
+that case, rather than a hard `DelegationFailed`. In a git project each role also gets its
+own worktree and branch (ADR-0054, CUT-239: ``tasks.role_trees``), merged into one team branch
+at the end of every round, a conflict reported and never resolved; dispatch there is still
+one-at-a-time until the fallback is dropped for git roots.
 """
 
 from __future__ import annotations
@@ -41,12 +40,14 @@ from cuttlefish.episodic.events import (
     DelegationFailed,
     DelegationRefused,
     DelegationStarted,
+    RoleMergeReported,
     RoundContinued,
     SteeringMessage,
     StopRequested,
     TaskCompleted,
     TaskFailed,
     TaskSubmitted,
+    TeamBranchMade,
     ToolCallRecorded,
     decode_payload,
 )
@@ -62,6 +63,7 @@ from cuttlefish.secrets.store import DEFAULT_PROJECT
 from cuttlefish.steering import DEFAULT_STEERING_GRACE_SECONDS, compose_steered_text, steering_key
 from cuttlefish.tasks.delegate import delegate_to_agent_backend, raise_no_progress_card
 from cuttlefish.tasks.journal import journal, read_episodic_events
+from cuttlefish.tasks.role_trees import finish_role_trees, merge_role_trees, prepare_role_trees
 
 
 class RoleInput(TypedDict):
@@ -231,6 +233,7 @@ async def _dispatch_round(
     root: str,
     project: str,
     backend_by_name: dict[str, str],
+    workdirs: dict[str, str] | None = None,
 ) -> list[DelegationOutcome | BaseException]:
     """Run one round's delegations, choosing concurrent (``satay.gather``) or
     sequential dispatch per :func:`_needs_sequential_dispatch` (Q44) -- the
@@ -242,6 +245,12 @@ async def _dispatch_round(
     if requests is not None:
         for name in active_names:
             requests.note_role(name, current_text[name])
+    # A role with its own worktree (ADR-0054) gets it as `workdir`, passed only then so every other
+    # call's recorded arguments are unchanged (replay-safe).
+    extra: dict[str, dict[str, Any]] = {
+        name: ({"workdir": workdirs[name]} if workdirs and name in workdirs else {})
+        for name in active_names
+    }
     if _needs_sequential_dispatch(active_names, backend_by_name):
         outcomes: list[DelegationOutcome | BaseException] = []
         for name in active_names:
@@ -254,6 +263,7 @@ async def _dispatch_round(
                         project=project,
                         secret_names=role_by_name[name].get("secret_names"),
                         **_backend_kwargs(role_by_name[name]),
+                        **extra[name],
                     )
                 )
             except Exception as exc:
@@ -271,6 +281,7 @@ async def _dispatch_round(
                 project=project,
                 secret_names=role_by_name[name].get("secret_names"),
                 **_backend_kwargs(role_by_name[name]),
+                **extra[name],
             )
             for name in active_names
         ],
@@ -325,6 +336,22 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
     backend_by_name = {
         role["name"]: role.get("backend") or runtime_.agent_backend for role in roles
     }
+    # ADR-0054: a git project with two or more kopicode roles gives each its own worktree, made by a
+    # journaled task so a resumed run reuses them. Empty for everything else (no git, or fewer than
+    # two kopicode roles), which then runs exactly as before.
+    trees: dict[str, Any] = {}
+    if _needs_sequential_dispatch([r["name"] for r in roles], backend_by_name):
+        trees = await prepare_role_trees(root, team_id, [r["name"] for r in roles])
+        if trees:
+            await journal(
+                team_id,
+                TeamBranchMade(
+                    branch=trees["branch"],
+                    roles={name: tree["branch"] for name, tree in trees["roles"].items()},
+                ),
+            )
+    workdirs = {name: tree["path"] for name, tree in trees.get("roles", {}).items()}
+    last_merge: dict[str, Any] = {}
     current_text: dict[str, str] = {role["name"]: role["text"] for role in roles}
     round_summaries: dict[str, list[str]] = {role["name"]: [] for role in roles}
     team_continuations = team_input.get("max_continuations")
@@ -381,7 +408,20 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             root=root,
             project=project,
             backend_by_name=backend_by_name,
+            workdirs=workdirs,
         )
+
+        if trees:
+            # Merge what each role did into the team's branch before anything waits on a person.
+            # A conflict is aborted and reported, never resolved (ADR-0054).
+            merged = await merge_role_trees(trees, active_names)
+            for name in active_names:
+                result = merged[name]
+                last_merge[name] = result
+                await journal(
+                    team_id,
+                    RoleMergeReported(role=name, status=result["status"], files=result["files"]),
+                )
 
         next_active: list[str] = []
         for name, outcome in zip(active_names, outcomes, strict=True):
@@ -654,6 +694,8 @@ async def run_team(team_input: TeamInput) -> dict[str, Any]:
             role_results[name] = {"status": "failed", "error": reason}
         await maybe_handover(team_id, token_budget=token_budget, role=name, root=root)
 
+    if trees:
+        await finish_role_trees(root, trees, last_merge)
     return {"status": _overall_status(role_results), "roles": role_results}
 
 
