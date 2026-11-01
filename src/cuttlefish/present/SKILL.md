@@ -69,6 +69,8 @@ To have the dashboard step through files in order, with a line of what you would
 ```
 
 - `path` is relative to `.cuttlefish/artifacts/`; `say` is plain text, one or two sentences. `title` is optional.
+- A Play button reads each `say` aloud with the browser's voice, so write it as you would speak it: no markdown, no
+  symbols, spell out what must be pronounced. There is no other narration tool.
 - At most 50 items. An item whose file is missing or cannot be shown is skipped, so write the files first.
 - Write it again when the walk-through changes; the dashboard reads it each time Present is opened.
 

@@ -76,4 +76,15 @@ one item at a time and its `say` line underneath (as plain text, never HTML).
   file is missing or cannot be shown is skipped and counted at the bottom; a file that is not valid JSON, or has no
   `items` list, shows a one-line message instead.
 
-Not here yet: narration (speaking the `say` lines) and HTML that needs the network.
+## Hear the walk-through
+
+When the browser has speech synthesis, a **Play** button sits beside Next. It reads the current item's `say` line aloud
+(or the file name if there is none), moves to the next item when the line ends, and stops after the last one. **Pause**
+and closing silence it at once; Back, Next or the list while it plays reads the new item instead.
+
+The voice is the browser's own, so it differs between a laptop and a phone. The text never leaves the page: cuttlefish
+makes no model call to narrate, and no audio is made, sent or stored anywhere, the relay included. There is no separate
+tool for an agent to call: the `say` lines are the narration, so write them as you would say them. A browser with no
+speech synthesis shows no Play button.
+
+Not here yet: choosing a voice, and HTML that needs the network.
