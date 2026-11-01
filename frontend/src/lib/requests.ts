@@ -65,7 +65,7 @@ export const OUTCOMES: Record<RequestResolution, string> = {
 const SESSION_OUTCOMES: Partial<Record<RequestResolution, string>> = {
   expired: "No answer in time: the terminal still asks",
   cancelled: "Ended: the agent session was stopped",
-  abandoned: "Ended: the agent session ended",
+  abandoned: "Can no longer be answered here: it may still be open in the terminal",
   superseded: "Answered in the terminal",
 };
 
@@ -100,6 +100,15 @@ export function outcomeLabel(request: NeedsYouRequest): string {
   return request.state === "allowed_always" && request.rule?.length
     ? `${base}: ${ruleText(request.rule)}`
     : base;
+}
+
+/** A View-tier device can read Needs you but every answer route needs Approve (fleet/tiers.py), so
+ * its buttons would only return a 403. */
+export const VIEW_ONLY_NOTE =
+  "This device can look but not answer. Answer on the PC, or ask the owner to raise this device to Approve.";
+
+export function cannotAnswer(tier: string | null | undefined): boolean {
+  return tier === "view";
 }
 
 /** A refused or conflicting answer, in words the card can show under its buttons. */
