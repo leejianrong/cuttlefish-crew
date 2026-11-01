@@ -14,10 +14,11 @@ already does, ``TeamInput.root`` being singular) are the one exception: kopicode
 own per-working-tree session lock refuses a second concurrent invocation against
 the same root (docs/QUESTIONS.md Q44), so ``_dispatch_round`` falls back to
 one-at-a-time dispatch for exactly that case instead — real, but not concurrent for
-that case, rather than a hard `DelegationFailed`. In a git project each role also gets its
-own worktree and branch (ADR-0054, CUT-239: ``tasks.role_trees``), merged into one team branch
-at the end of every round, a conflict reported and never resolved; dispatch there is still
-one-at-a-time until the fallback is dropped for git roots.
+that case, rather than a hard `DelegationFailed`. In a git project each role instead gets its
+own worktree and branch (ADR-0054, CUT-239: ``tasks.role_trees``), so the roles do run
+concurrently, and are merged into one team branch at the end of every round, a conflict
+reported and never resolved. Only a root with no git repository keeps the one-at-a-time
+fallback.
 """
 
 from __future__ import annotations
@@ -193,7 +194,9 @@ def _continue_text(outcome: DelegationOutcome, why: str) -> str:
     )
 
 
-def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[str, str]) -> bool:
+def _needs_sequential_dispatch(
+    active_names: list[str], backend_by_name: dict[str, str], *, isolated: bool = False
+) -> bool:
     """Whether this round's delegations must run one-at-a-time instead of via
     ``satay.gather`` (docs/QUESTIONS.md Q44).
 
@@ -201,8 +204,12 @@ def _needs_sequential_dispatch(active_names: list[str], backend_by_name: dict[st
     singular, not per-role) -- so two or more active kopicode-backed roles in one
     round always collide on kopicode's own per-working-tree session lock, not just
     in some edge case. Any other backend, or fewer than two kopicode-backed active
-    roles (roles may name different backends, KAN-1809), is unaffected.
+    roles (roles may name different backends, KAN-1809), is unaffected. ``isolated``
+    means every role has its own git worktree (ADR-0054), so there is no shared tree
+    to lock and nothing to serialise.
     """
+    if isolated:
+        return False
     return sum(backend_by_name[name] == "kopicode" for name in active_names) > 1
 
 
@@ -251,7 +258,7 @@ async def _dispatch_round(
         name: ({"workdir": workdirs[name]} if workdirs and name in workdirs else {})
         for name in active_names
     }
-    if _needs_sequential_dispatch(active_names, backend_by_name):
+    if _needs_sequential_dispatch(active_names, backend_by_name, isolated=bool(workdirs)):
         outcomes: list[DelegationOutcome | BaseException] = []
         for name in active_names:
             try:
