@@ -141,7 +141,8 @@ These follow directly from the ADRs. Hold them without re-litigating them here.
 - **To see the dashboard against a real team** (UI checks, screenshots), run
   `cuttlefish serve` with `HOME` pointed at a scratch dir and a freshly generated
   `CUTTLEFISH_SECRETS_KEY` exported, never against your own `~/.cuttlefish`. Project roots hold
-  their own `.cuttlefish/` and `.satay/`. Real kopicode runs spend model credit (cents).
+  their own `.cuttlefish/` and `.satay/`. Real kopicode runs spend model credit (cents). For a
+  portfolio of 100 fake projects, no agent launched: `scripts/seed_fleet.py`, `agent_docs/scale-testing.md`.
 - **Exercise a change from the outside before merging a slice that changes what a person
   sees.** Tests missed an MCP client getting no error text and log lines with no project id.
   Have sub-agents drive the browser, the CLI and MCP against a scratch copy and report; setup

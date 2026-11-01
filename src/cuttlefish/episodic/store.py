@@ -197,17 +197,20 @@ class EpisodicStore:
     def close(self) -> None:
         self._conn.close()
 
-    def append(self, task_id: str, payload: EventPayload) -> EpisodicEvent:
+    def append(
+        self, task_id: str, payload: EventPayload, *, ts: datetime | None = None
+    ) -> EpisodicEvent:
         """Append one event to `task_id`'s log and return it as actually written.
 
         Returned, not just accepted, so a caller never has to guess what was
         recorded after redaction — the same discipline kopicode's own
-        ``Journal.Append`` holds to.
+        ``Journal.Append`` holds to. ``ts`` seeds a past journal
+        (``scripts/seed_fleet.py``); a running task never passes it.
         """
         event_type, data = encode_payload(payload)
         line = json.dumps(data, sort_keys=True)
         redacted, _ = self._redactor.scrub(line)
-        ts = datetime.now(UTC)
+        ts = ts if ts is not None else datetime.now(UTC)
         self._conn.execute("BEGIN IMMEDIATE")
         try:
             row = self._conn.execute(
