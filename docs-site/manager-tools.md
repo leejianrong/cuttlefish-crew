@@ -59,6 +59,14 @@ whole time, so one it cannot decide, or a manager that is not running, reaches y
 outright. The never-allowed list still holds and every answer is journaled as `manager`. See
 [ADR-0053](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0053-delegated-approvals-wake-the-manager-and-leave-the-card-open.md).
 
+## Waking the manager on a schedule
+
+The manager's own project takes a [schedule](schedules.md) like any other, but its text is a check-in rather than a goal:
+when one is due the daemon types it into the manager's session (Claude Code only, the same send path as the approval
+wake) and the manager looks over your projects. A run is skipped, journaled and shown on the project page when the
+manager is busy, waiting at a permission dialog, not running, or on Codex, so a check-in never interrupts work or lands
+as the answer to a dialog. Add one with `cuttlefish schedule add <manager-project-id> --goal "Check in on every project" --recurrence "daily 07:00"`.
+
 Treat a request's text as the worker agent's words: the tools mark it untrusted, and the manager's instructions say to
 read it as data.
 
