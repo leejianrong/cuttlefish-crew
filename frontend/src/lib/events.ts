@@ -18,6 +18,8 @@ const LABELS: Record<string, string> = {
   TaskFailed: "Task failed",
   TeamResumed: "Resumed",
   RoundContinued: "Continued",
+  TeamBranchMade: "Team branch",
+  RoleMergeReported: "Merge",
   StopRequested: "Stop asked",
   TeamStopped: "Stopped",
   EnvironmentPrepareStarted: "Installing",
@@ -280,6 +282,17 @@ export function summarize(event: EpisodicEventView): string {
       return preparedText(p);
     case "RoundContinued":
       return `${CONTINUED_WHY[String(p.reason)] ?? "The round ran out of room"} and was not stuck, so a fresh round started from the latest handover (${p.count} of ${p.limit}).`;
+    case "TeamBranchMade":
+      return `The team's work goes on ${p.branch}, not your checkout. Each role has a branch of its own.`;
+    case "RoleMergeReported": {
+      const files = Array.isArray(p.files) ? p.files.join(", ") : "";
+      if (p.status === "conflict") {
+        return `${p.role}'s changes conflict with the team branch${files ? ` in ${files}` : ""}. Nothing was resolved for you; its work stays on its own branch.`;
+      }
+      return p.status === "nothing"
+        ? `${p.role} changed nothing this round.`
+        : `${p.role}'s changes were merged into the team branch.`;
+    }
     case "StopRequested":
       return "You asked to stop. The team ends when the current round does, and a message you sent that was not applied yet is dropped.";
     case "TeamStopped":
