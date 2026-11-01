@@ -288,6 +288,13 @@ Projects is ordered by that state: waiting first, then stuck, then working, then
 most recently active first. **Pin to top** on a card keeps it above the rest whatever its state; pins live in this
 browser only. The order only moves when a project's state does.
 
+With more than a handful of projects, use the bar above the cards. **Tags** on a card takes free-form labels separated
+by commas (`client:acme, rust`; up to 10 per project, 24 characters each) and saves them on the daemon, so every
+browser sees them. The state chips show only projects in those states (any of them); the tag chips show only projects
+that carry every selected tag. **Group by** splits the list by each project's first tag (projects with none go under
+Untagged) or by state; a group's heading collapses it, and the choice is remembered in this browser. **Clear filters**
+puts everything back.
+
 The top bar's account menu (the round icon at the top right) holds the theme (match system, light or dark), the
 sprite gallery and **Disconnect**. The bottom bar on a phone has the four places that span every project: Needs you,
 Projects, Role library and Shared secrets. A project's own Team, Permissions and Secrets are under its **Settings** tab.

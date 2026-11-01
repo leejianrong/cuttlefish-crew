@@ -153,6 +153,7 @@ def _project_json(daemon: FleetDaemon, project_id: str) -> dict[str, Any]:
         "worktree_per_goal": project.worktree_per_goal,
         "is_manager": project.id == daemon.manager_project,
         "delegate_approvals": project.delegate_approvals,
+        "tags": list(project.tags),
         "delegate_approvals_effective": daemon.delegates_approvals(project.id),
         "mode": project.mode,
         "env_prepare": project.env_prepare,
@@ -902,6 +903,21 @@ def create_app(
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/tags")
+    async def update_tags(project_id: str, request: Request) -> dict[str, Any]:
+        """Replace the project's free-form tags (CUT-191); an empty list clears them."""
+        body = await _json_body(request)
+        tags = body.get("tags")
+        if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
+            raise HTTPException(400, "'tags' must be a list of strings")
+        try:
+            daemon.projects.update_tags(project_id, tags)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.patch("/api/projects/{project_id}/worktree-per-goal")
     async def update_worktree_per_goal(project_id: str, request: Request) -> dict[str, Any]:

@@ -713,6 +713,7 @@ def _project_dict(project: Project) -> dict[str, Any]:
         "secrets_scope": project.secrets_scope,
         "backend": project.backend,
         "terminal_command": project.terminal_command,
+        "tags": list(project.tags),
         "mode": project.mode,
         "roles": [
             {

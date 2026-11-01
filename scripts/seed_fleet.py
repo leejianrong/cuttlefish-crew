@@ -39,6 +39,15 @@ from cuttlefish.roles import template_roles
 PREFIX = "seed-"
 _WORDS = ("billing", "docs", "api", "web", "mobile", "infra", "search", "auth", "etl", "ml")
 
+_CLIENTS = ("acme", "globex", "initech", "umbrella", "hooli")
+_STACKS = ("python", "typescript", "go", "rust")
+
+
+def _tags(index: int) -> list[str]:
+    tags = [f"client:{_CLIENTS[index % len(_CLIENTS)]}", f"stack:{_STACKS[index % len(_STACKS)]}"]
+    return [*tags, "priority"] if index % 7 == 0 else tags
+
+
 #: (state, how many of every 100, minutes since the last event, min and max).
 _PLAN: tuple[tuple[str, int, tuple[int, int]], ...] = (
     ("working", 30, (1, 20)),
@@ -103,6 +112,8 @@ def seed(home: Path, count: int) -> int:
             root = home / "seed-projects" / name
             root.mkdir(parents=True, exist_ok=True)
             project = projects.register(name=name, root=str(root), roles=template_roles())
+            if index % 9:  # one in nine stays untagged
+                projects.update_tags(project.id, _tags(index))
             if state == "idle":
                 continue
             team_id = f"team-{project.id[:8]}"

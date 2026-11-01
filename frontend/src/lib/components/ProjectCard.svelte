@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ProjectSummary, RoleStatus } from "../api";
   import { agoIso } from "../artifacts";
+  import { parseTags } from "../grouping";
   import { projectState, STATE_LABEL, type ProjectState } from "../projectstate";
   import RoleSprite from "./RoleSprite.svelte";
   import StatusChip from "./StatusChip.svelte";
@@ -13,6 +14,7 @@
     waiting = 0,
     pinned = false,
     onPin,
+    onTags,
   }: {
     project: ProjectSummary;
     /** Requests of this project waiting for a person (the Needs-you list). */
@@ -23,6 +25,8 @@
     /** CUT-189: kept at the top of the list; the choice lives in this browser. */
     pinned?: boolean;
     onPin?: () => void;
+    /** CUT-191: replaces the project's tags. */
+    onTags?: (tags: string[]) => void;
   } = $props();
 
   const roleEntries = $derived(Object.entries(project.status));
@@ -32,6 +36,16 @@
   const statusWord = (status: RoleStatus): string =>
     status === "queued" && !project.running && hasRun ? "not run" : status;
   let confirming = $state<"stop" | "remove" | null>(null);
+  let editingTags = $state(false);
+  let tagText = $state("");
+  function startTags() {
+    tagText = (project.tags ?? []).join(", ");
+    editingTags = true;
+  }
+  function saveTags() {
+    onTags?.(parseTags(tagText));
+    editingTags = false;
+  }
 
   // The card's one line of "what is going on", from what the summary already carries.
   const tokens = $derived(Object.values(project.usage ?? {}).reduce((sum, u) => sum + u.tokens, 0));
@@ -63,6 +77,21 @@
     <span class="chip-slot"><StatusChip status="queued" tone={TONE[line.state]} label={STATE_LABEL[line.state]} /></span>
     <span class="reason">{line.reason}</span>
   </p>
+
+  {#if editingTags}
+    <form class="tag-edit" onsubmit={(e) => { e.preventDefault(); saveTags(); }}>
+      <label class="body-small">
+        Tags, separated by commas
+        <input bind:value={tagText} placeholder="client:acme, rust" maxlength="300" />
+      </label>
+      <button class="btn btn-filled sm" type="submit">Save tags</button>
+      <button class="btn btn-text sm" type="button" onclick={() => (editingTags = false)}>Cancel</button>
+    </form>
+  {:else if (project.tags ?? []).length > 0}
+    <p class="tags">
+      {#each project.tags ?? [] as tag (tag)}<span class="tag">{tag}</span>{/each}
+    </p>
+  {/if}
 
   {#if roleEntries.length > 0}
     <div class="roles">
@@ -107,6 +136,9 @@
         <button class="btn btn-text sm" aria-pressed={pinned} onclick={onPin}>
           {pinned ? "Unpin" : "Pin to top"}
         </button>
+      {/if}
+      {#if onTags}
+        <button class="btn btn-text sm" onclick={startTags}>Tags</button>
       {/if}
       <button class="btn btn-text sm remove" onclick={() => (confirming = "remove")}>Remove</button>
     {/if}
@@ -201,6 +233,37 @@
     gap: 0.6rem;
     margin: 0;
     min-width: 0;
+  }
+
+  .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0;
+  }
+
+  .tag-edit {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .tag-edit label {
+    flex-basis: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--text-muted);
+  }
+
+  .tag-edit input {
+    min-height: 40px;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-extra-small);
+    background: transparent;
+    color: var(--text);
+    padding: 0 0.75rem;
   }
 
   .chip-slot {
