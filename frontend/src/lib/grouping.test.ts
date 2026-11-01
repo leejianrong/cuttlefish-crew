@@ -5,6 +5,7 @@ import type { ProjectSummary, RoleStatus } from "./api";
 import {
   filterProjects,
   groupProjects,
+  limitGroups,
   loadCollapsed,
   NO_FILTER,
   parseTags,
@@ -91,6 +92,18 @@ describe("groupProjects", () => {
 
   it("is one group with no grouping", () => {
     expect(groupProjects(list, "none", {}, NOW)).toHaveLength(1);
+  });
+});
+
+describe("limitGroups", () => {
+  it("draws the first n projects across groups and keeps each heading's full count", () => {
+    const groups = groupProjects(list, "tag", {}, NOW);
+    const drawing = limitGroups(groups, 3);
+    expect(drawing.map((g) => [g.label, g.projects.length, ids(g.shown)])).toEqual([
+      ["client:acme", 2, ["a", "b"]],
+      ["rust", 1, ["c"]],
+    ]);
+    expect(limitGroups(groups, 100).flatMap((g) => ids(g.shown))).toEqual(["a", "b", "c", "d"]);
   });
 });
 

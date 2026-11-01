@@ -147,6 +147,10 @@
 
 <style>
   .project {
+    /* A fleet of 100 lays out and paints only the cards near the screen (CUT-192); the guess is
+     * a card's usual height, so the scrollbar does not jump as the real ones are measured. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 22rem;
     padding: 1.1rem 1.2rem;
     display: flex;
     flex-direction: column;
