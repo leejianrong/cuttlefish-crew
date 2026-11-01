@@ -661,6 +661,7 @@ async def test_the_manager_session_has_its_tools_and_survives_a_restart(
     assert manager is not None and daemon.manager_project == manager.id
     first = await daemon.start_agent_session(manager.id)
     assert "--mcp-config" in rig.launches()[0] and "--disallowedTools" in rig.launches()[0]
+    assert "--strict-mcp-config" in rig.launches()[0]  # not the person's claude.ai connectors
     assert "cuttlefish-manager" in (Path(manager.root) / ".cuttlefish/manager-mcp.json").read_text()
     assert "mcp --manager" not in (Path(manager.root) / "CLAUDE.md").read_text()  # tools, not shell
 
