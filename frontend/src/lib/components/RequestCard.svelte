@@ -2,6 +2,8 @@
   import { FleetApiError, type FleetClient, type NeedsYouRequest, type RequestAnswer } from "../api";
   import {
     answerProblem,
+    cannotAnswer,
+    VIEW_ONLY_NOTE,
     formatRemaining,
     isStartOfCommand,
     landsLabel,
@@ -37,6 +39,17 @@
   // overwrite what the person is typing.
   // svelte-ignore state_referenced_locally
   let rule = $state(ruleText(request.suggested_rule));
+  let tier = $state<string | null>(null);
+  const viewOnly = $derived(cannotAnswer(tier));
+  $effect(() => {
+    let live = true;
+    void client.myTier().then((value) => {
+      if (live) tier = value;
+    });
+    return () => {
+      live = false;
+    };
+  });
   let busy = $state<RequestAnswer | null>(null);
   let problem = $state<string | null>(null);
 
@@ -116,7 +129,9 @@
     <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
   {/if}
 
-  {#if decision}
+  {#if viewOnly && !blocked}
+    <p class="body-small muted" role="status">{VIEW_ONLY_NOTE}</p>
+  {:else if decision}
     <div class="choices" role="group" aria-label="Choices">
       {#each options as option (option)}
         <button

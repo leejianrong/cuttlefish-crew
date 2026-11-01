@@ -57,3 +57,14 @@ def test_examples_are_viewable_artifacts(tmp_path: Path) -> None:
         (folder / kind / src.name).write_bytes(src.read_bytes())
     kinds = {a.path.split("/")[0]: a.kind for a in list_artifacts(str(tmp_path / "p"))}
     assert kinds["slides"] == "html" and kinds["doc"] == "markdown"
+
+
+def test_example_manifest_names_files_that_exist_in_the_examples(tmp_path: Path) -> None:
+    import json
+
+    present.install(tmp_path)
+    examples = tmp_path / present.PRESENT_DIR / "examples"
+    manifest = json.loads((examples / "present.json").read_text())
+    for item in manifest["items"]:
+        assert (examples / item["path"].split("/")[0] / Path(item["path"]).name).is_file()
+    assert "present.json" in (tmp_path / present.SKILL_PATH).read_text()

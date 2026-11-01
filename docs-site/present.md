@@ -48,4 +48,27 @@ a `mermaid` block shows as code.
 An HTML file must be self-contained: inline CSS and JavaScript, no network and no files from outside. It runs in a
 frame with no access to the dashboard, so a `fetch` or a look at `window.parent` fails. See ADR-0056 and ADR-0036.
 
-Not here yet: narration, a present mode, and HTML that needs the network.
+## Present mode: a walk-through in order
+
+To walk you through several files, an agent writes `.cuttlefish/artifacts/present.json`, at the top of the artifacts
+folder and with exactly that name:
+
+```json
+{"title": "Checkout redesign", "items": [
+  {"path": "slides/overview.html", "say": "Here is the plan in four slides."},
+  {"path": "wireframe/cart.svg", "say": "The cart, with the new total row."}
+]}
+```
+
+When the file exists, the Artifacts tab and the chat canvas show a **Present** button. It opens a full-screen view with
+one item at a time and its `say` line underneath (as plain text, never HTML).
+
+- Next and Back are buttons, the right and left arrow keys, Page Down and Page Up, and Space steps forward. Home and End
+  jump to the first and last item, and the list jumps to any item.
+- Escape, the Close button, or leaving full screen ends it. While an HTML design has focus, keys go to it and not to
+  the dashboard, so click outside the frame to use the arrow keys, or use the buttons.
+- The file is read each time Present is opened. At most 50 items and 1,000 characters of `say` are used. An item whose
+  file is missing or cannot be shown is skipped and counted at the bottom; a file that is not valid JSON, or has no
+  `items` list, shows a one-line message instead.
+
+Not here yet: narration (speaking the `say` lines) and HTML that needs the network.

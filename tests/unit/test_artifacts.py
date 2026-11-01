@@ -129,3 +129,23 @@ def test_a_file_over_its_limit_is_refused(root: Path) -> None:
     _write(root, "big.md", b"x" * 1_000_001)
     with pytest.raises(ArtifactTooLargeError):
         read_artifact(str(root), "big.md")
+
+
+def test_present_json_at_the_top_is_a_served_manifest_and_elsewhere_just_a_file(root: Path) -> None:
+    _write(root, "present.json", '{"items": []}')
+    _write(root, "sub/present.json", "{}")
+    assert {a.path: a.kind for a in list_artifacts(str(root))} == {
+        "present.json": "manifest",
+        "sub/present.json": "other",
+    }
+    body, content_type = read_artifact(str(root), "present.json")
+    assert body == b'{"items": []}' and content_type.startswith("text/plain")
+    assert read_artifact(str(root), "./present.json")[0] == body
+    with pytest.raises(ArtifactNotPreviewableError):
+        read_artifact(str(root), "sub/present.json")
+
+
+def test_an_oversized_manifest_is_refused(root: Path) -> None:
+    _write(root, "present.json", b"x" * 100_001)
+    with pytest.raises(ArtifactTooLargeError):
+        read_artifact(str(root), "present.json")

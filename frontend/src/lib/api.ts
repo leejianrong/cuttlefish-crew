@@ -435,7 +435,7 @@ export interface Artifact {
   path: string;
   name: string;
   /** `other` is listed by name only; the daemon will not serve it. `html` is served as text and run only in the dashboard's sandboxed frame. */
-  kind: "markdown" | "image" | "video" | "html" | "other";
+  kind: "markdown" | "image" | "video" | "html" | "manifest" | "other";
   size: number;
   /** Seconds since the epoch. */
   modified: number;
@@ -765,6 +765,25 @@ export class FleetClient {
 
   getRelay(): Promise<RelayInfo> {
     return this.request("/api/relay");
+  }
+
+  private tierRead: { at: number; tier: Promise<DeviceTier | null> } | null = null;
+
+  /** The tier of the device using this client (ADR-0039), or `null` for the PC's own dashboard and
+   * when the daemon cannot say. Kept for 30 s so a screen of cards asks once; the daemon still
+   * decides every request, this only lets the page stop offering what would be refused. */
+  myTier(): Promise<DeviceTier | null> {
+    const now = Date.now();
+    if (this.tierRead === null || now - this.tierRead.at > 30_000) {
+      this.tierRead = {
+        at: now,
+        tier: this.getRelay().then(
+          (relay) => relay.you?.tier ?? null,
+          () => null,
+        ),
+      };
+    }
+    return this.tierRead.tier;
   }
 
   listDevices(): Promise<DevicesState> {
