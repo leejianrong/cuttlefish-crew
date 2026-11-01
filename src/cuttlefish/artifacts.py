@@ -48,7 +48,8 @@ AGENT_NOTE = (
     ".cuttlefish/artifacts/review.md. Markdown, png, jpg, gif, webp or svg images, mp4 or webm "
     "video and self-contained .html designs (inline CSS and JavaScript, no external files or "
     "network) are shown in the dashboard, and an image is referenced from markdown by its relative "
-    "path. Raw HTML and scripts inside markdown are not shown."
+    "path. Raw HTML and scripts inside markdown are not shown. To present slides, a wireframe, an "
+    "animation, a demo or a dashboard, read .cuttlefish/present/SKILL.md first."
 )
 
 

@@ -33,6 +33,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from cuttlefish import present
 from cuttlefish.artifacts import AGENT_NOTE
 from cuttlefish.plan import PLAN_INSTRUCTION
 from cuttlefish.sessions.hooks import permission_mode
@@ -333,6 +334,7 @@ class SessionManager:
             return self._ensure_command(project_id, root, command, prompt=prompt)
         if backend not in BACKENDS:
             raise SessionError(f"backend {backend!r} has no interactive session")
+        present.install(cwd or root)  # ADR-0056: the file AGENT_NOTE points at
         name = session_name(project_id)
         record = dict(_read(root))
         try:
