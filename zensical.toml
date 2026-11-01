@@ -14,6 +14,7 @@ nav = [
   { "Tutorial" = "tutorial.md" },
   { "Branches and pull requests" = "branches-and-pull-requests.md" },
   { "Scheduled goals" = "schedules.md" },
+  { "Present your work" = "present.md" },
   { "Manager tools" = "manager-tools.md" },
   { "ACP backend" = "acp-backend.md" },
   { "CLI reference" = "cli-reference.md" },
