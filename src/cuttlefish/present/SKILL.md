@@ -34,6 +34,26 @@ The file runs in a locked frame: no network, no access to the app, no way to nav
 
 For a doc, start with a `# Title` line. Raw HTML inside markdown is not shown.
 
+## Blocks in a doc
+
+Four fenced blocks in a `.md` file are drawn, not shown as code. One that is malformed shows as plain code, so check
+the JSON or the columns.
+
+````
+```chart
+{"type": "bar", "title": "Tests per module", "labels": ["api", "cli", "core"],
+ "series": [{"name": "unit", "values": [40, 12, 75]}, {"name": "integration", "values": [8, 3, 20]}]}
+```
+````
+
+- `chart`: JSON. `type` is `bar` (default) or `line`. `labels` and every series' `values` have the same length (numbers
+  only, at most 60 labels and 6 series). `"values": [..]` instead of `series` is one unnamed series.
+- `table`: CSV, the first line is the header, at least two columns and one row. Quote a cell that holds a comma.
+- `diff`: a unified diff; `+` lines are green, `-` red, `@@` headers coloured.
+- `checklist`: one item per line, `- [x] done` or `- [ ] to do`. Read-only.
+
+There is no diagram language yet: draw a flow as an SVG or HTML file instead.
+
 ## Walk the person through several files
 
 To have the dashboard step through files in order, with a line of what you would say under each, write

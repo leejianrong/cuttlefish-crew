@@ -7,6 +7,12 @@
 // Supported: headings, paragraphs, bold, italic, inline code, fenced code, block quotes,
 // bullet and numbered lists (nested by indent), tables, rules, links and images. Anything else
 // is shown as the text it is.
+//
+// Four fenced languages are drawn rather than shown as code (CUT-114): `chart` (a small JSON
+// spec), `table` (CSV), `diff` and `checklist`. Each is parsed into a tree like everything else;
+// a block that does not parse stays a plain code block, so a bad one never breaks the page.
+
+import { parseChartSpec, type ChartSpec } from "./chart";
 
 export type Inline =
   | { t: "text"; text: string }
@@ -29,7 +35,74 @@ export type Block =
   | { t: "quote"; children: Block[] }
   | { t: "list"; ordered: boolean; items: Block[][] }
   | { t: "table"; head: Inline[][]; rows: Inline[][][] }
-  | { t: "rule" };
+  | { t: "rule" }
+  | { t: "chart"; spec: ChartSpec }
+  | { t: "diff"; lines: { kind: "add" | "del" | "hunk" | "ctx"; text: string }[] }
+  | { t: "checklist"; items: { done: boolean; text: Inline[] }[] };
+
+const MAX_BLOCK_LINES = 500;
+
+/** CSV as rows: commas, double-quoted cells with `""` for a quote, and no multi-line cells. */
+function csvRow(line: string): string[] {
+  const out: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (quoted) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else if (ch === '"') quoted = false;
+      else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ",") {
+      out.push(cell.trim());
+      cell = "";
+    } else cell += ch;
+  }
+  out.push(cell.trim());
+  return out;
+}
+
+/** What a fenced block of `lang` draws as, or `null` to leave it as code. */
+export function richBlock(lang: string, text: string, fromPath = ""): Block | null {
+  const name = lang.toLowerCase();
+  const lines = text.split("\n");
+  if (name === "chart") {
+    const spec = parseChartSpec(text);
+    return spec ? { t: "chart", spec } : null;
+  }
+  if (name === "table") {
+    const rows = lines.filter((l) => l.trim() !== "").map(csvRow);
+    if (rows.length < 2 || rows.length > MAX_BLOCK_LINES) return null;
+    const width = rows[0].length;
+    if (width < 2 || width > 20) return null;
+    const fit = (row: string[]) => Array.from({ length: width }, (_, k) => parseInline(row[k] ?? "", fromPath));
+    return { t: "table", head: fit(rows[0]), rows: rows.slice(1).map(fit) };
+  }
+  if (name === "diff" || name === "patch") {
+    if (lines.length > MAX_BLOCK_LINES || !lines.some((l) => /^[+-]/.test(l))) return null;
+    return {
+      t: "diff",
+      lines: lines.map((l) => ({
+        kind: l.startsWith("@@") ? "hunk" : /^(\+\+\+|---) /.test(l) ? "hunk" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : "ctx",
+        text: l,
+      })),
+    };
+  }
+  if (name === "checklist") {
+    const items: { done: boolean; text: Inline[] }[] = [];
+    for (const l of lines) {
+      if (l.trim() === "") continue;
+      const m = /^\s*(?:[-*+]\s+)?\[([ xX])\]\s+(.*)$/.exec(l);
+      if (!m) return null;
+      items.push({ done: m[1] !== " ", text: parseInline(m[2], fromPath) });
+    }
+    return items.length > 0 && items.length <= MAX_BLOCK_LINES ? { t: "checklist", items } : null;
+  }
+  return null;
+}
 
 const SAFE_DATA_IMAGE = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/;
 
@@ -191,7 +264,8 @@ function blocks(lines: string[], fromPath: string): Block[] {
         i += 1;
       }
       i += 1;
-      out.push({ t: "code", lang: fence[2], text: body.join("\n") });
+      const text = body.join("\n");
+      out.push(richBlock(fence[2], text, fromPath) ?? { t: "code", lang: fence[2], text });
       continue;
     }
     const heading = HEADING.exec(line);

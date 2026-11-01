@@ -18,6 +18,22 @@ touched, and `.cuttlefish/` stays out of `git status`.
 The file is rewritten if it differs, so an edit to it does not last. A Codex or kopicode session in tmux is not given the
 note (neither has a launch flag for it), so name the file in your message if you want one to present.
 
+## Charts, tables, diffs and checklists in markdown
+
+A `.md` file can hold four fenced blocks that the dashboard draws instead of showing as code. They follow the theme (light
+and dark) and fit a phone. Nothing in them becomes HTML. A block that does not parse shows as plain code, so a mistake
+never breaks the page.
+
+| Fence | Content | Drawn as |
+|---|---|---|
+| `chart` | JSON: `type` (`bar` or `line`), `title`, `labels`, and `series` of `{name, values}` (or `values` for one series) | an inline SVG chart with a legend |
+| `table` | CSV, header on the first line, at least two columns | a table |
+| `diff` | a unified diff | lines coloured as added, removed or header |
+| `checklist` | `- [x] done` and `- [ ] to do`, one per line | a read-only checklist |
+
+Limits: 60 labels and 6 series per chart, 500 lines per block, numbers only in a chart. Mermaid diagrams are not drawn yet;
+a `mermaid` block shows as code.
+
 ## The kinds
 
 | Kind | File under `.cuttlefish/artifacts/` |

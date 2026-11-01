@@ -3,6 +3,7 @@
   import type { FleetClient } from "../api";
   import type { Block, Inline } from "../markdown";
   import ArtifactImage from "./ArtifactImage.svelte";
+  import ChartBlock from "./ChartBlock.svelte";
 
   let {
     blocks,
@@ -60,6 +61,20 @@
       </div>
     {:else if block.t === "rule"}
       <hr />
+    {:else if block.t === "chart"}
+      <ChartBlock spec={block.spec} />
+    {:else if block.t === "diff"}
+      <pre class="diff" aria-label="Diff">{#each block.lines as line, k (k)}<span class="dl {line.kind}">{line.text || " "}</span>{/each}</pre>
+    {:else if block.t === "checklist"}
+      <ul class="checklist" aria-label="Checklist">
+        {#each block.items as item, k (k)}
+          <li class:done={item.done}>
+            <span class="box" aria-hidden="true">{item.done ? "\u2713" : ""}</span>
+            <span class="sr-only">{item.done ? "Done: " : "To do: "}</span>
+            <span>{@render inline(item.text)}</span>
+          </li>
+        {/each}
+      </ul>
     {/if}
   {/each}
 {/snippet}
@@ -108,4 +123,35 @@
   }
   th { background: var(--md-sys-color-surface-container); }
   .inline-img { max-width: 100%; height: auto; }
+  .diff { padding: 0.5rem 0; font-family: var(--md-ref-typeface-mono); font-size: 0.85rem; }
+  .dl { display: block; padding: 0 1rem; white-space: pre; }
+  .dl.add { background: color-mix(in srgb, var(--md-sys-color-tertiary) 18%, transparent); }
+  .dl.del { background: color-mix(in srgb, var(--md-sys-color-error) 16%, transparent); }
+  .dl.hunk { color: var(--md-sys-color-primary); }
+  .md :global(.checklist) { list-style: none; padding-left: 0.25rem; }
+  .checklist li { display: flex; gap: 0.6rem; align-items: baseline; margin: 0.25rem 0; }
+  .checklist .box {
+    flex: none;
+    width: 1.1rem;
+    height: 1.1rem;
+    line-height: 1.1rem;
+    text-align: center;
+    border: 2px solid var(--md-sys-color-outline);
+    border-radius: 3px;
+    font-size: 0.8rem;
+  }
+  .checklist .done .box {
+    background: var(--md-sys-color-primary);
+    border-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+  }
+  .checklist .done { color: var(--md-sys-color-on-surface-variant); }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 </style>
