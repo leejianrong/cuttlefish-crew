@@ -22,6 +22,7 @@
     roleFromBuiltin,
     roleNameProblem,
   } from "../team";
+  import { mergeLabel, teamBranch, type TeamBranch } from "../teambranch";
   import { clearDraft, loadDraft, saveDraft } from "../drafts";
   import { overrideCount, sameLimits } from "../limits";
   import Icon from "./Icon.svelte";
@@ -72,6 +73,22 @@
   const limitsDirty = $derived(!sameLimits(projectLimits, project.limits));
   // A box holding something that cannot be saved keeps Save off (the stored value is the last valid one).
   const limitsSavable = $derived(limitsDirty && !limitsInvalid);
+
+  // The last team's branch and each role's merge result (CUT-239). Re-read when a role's state
+  // changes, since a merge is reported at the end of a round. A failure leaves the card out.
+  let branch = $state<TeamBranch | null>(null);
+  $effect(() => {
+    void project.last_team_id;
+    void JSON.stringify(project.status);
+    let live = true;
+    client
+      .getEvents(project.id)
+      .then(({ events }) => {
+        if (live) branch = teamBranch(events);
+      })
+      .catch(() => {});
+    return () => (live = false);
+  });
 
   let builtins = $state<BuiltinRole[]>([]);
   let templates = $state<TeamTemplate[]>([]);
@@ -272,6 +289,40 @@
   {/if}
   {#if loadError}
     <p class="error" role="alert">{loadError}</p>
+  {/if}
+
+  {#if branch}
+    <section aria-labelledby="branch-heading">
+      <h2 id="branch-heading" class="title-large">The team's branch</h2>
+      <p class="body-medium muted">
+        The last team's work is on <code class="mono">{branch.branch}</code>, not in your checkout. Merge it, or open a
+        pull request from it.
+      </p>
+      <ul class="merges">
+        {#each branch.roles as role (role.role)}
+          <li class="card filled merge" class:conflict={role.status === "conflict"}>
+            <div class="merge-head">
+              <span class="title-medium">{role.role}</span>
+              <span
+                class="tag"
+                class:primary={role.status === "merged"}
+                class:error={role.status === "conflict"}
+              >
+                {mergeLabel(role.status)}
+              </span>
+            </div>
+            <code class="mono body-small branch-name">{role.branch}</code>
+            {#if role.status === "conflict"}
+              <p class="body-small" role="status">
+                Its changes clash with the team branch{role.files.length ? " in" : ""}
+                {#each role.files as file, i (file)}<code class="mono">{file}</code>{i < role.files.length - 1 ? ", " : ""}{/each}.
+                cuttlefish did not resolve it. Its work is safe on its own branch.
+              </p>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </section>
   {/if}
 
   <section aria-labelledby="templates-heading">
@@ -546,6 +597,40 @@
 
   .error {
     color: var(--md-sys-color-error);
+  }
+
+  .merges {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: 12px;
+  }
+
+  .merge {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .merge.conflict {
+    outline: 2px solid var(--md-sys-color-error);
+    outline-offset: -2px;
+  }
+
+  .merge-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .branch-name {
+    overflow-wrap: anywhere;
+    color: var(--md-sys-color-on-surface-variant);
   }
 
   .heading-row {

@@ -359,3 +359,10 @@ and this folder disagree after a slice lands, update this folder.
   left ("…e/jianlee/projects/scratch-testing/ledger") so the project's own folder name, the part that tells two cards apart, is
   always visible; the full path is the card's tooltip. Plain CSS (`direction: rtl` on the line, `<bdi>` around the text); the
   project page still shows the whole path.
+
+- **The team's branch on the Team tab (CUT-239, 2026-11-01).** Under Settings, Team, a git project's last team shows "The
+  team's branch": the branch name in mono (the work is there, not in the checkout) and one filled card per role with its own
+  branch and a tag: Merged (primary), No changes, Working, or Conflict (error-container tag, a 2 px `--md-sys-color-error`
+  outline, the clashing files in mono, and "cuttlefish did not resolve it"). Nothing offers to resolve it. Read from
+  `TeamBranchMade` and `RoleMergeReported` in the journal (`lib/teambranch.ts`) and re-read when a role's state changes;
+  absent for a project with no team branch. The activity log words both events. Checked at 1280 and 390 px, no sideways scroll.
