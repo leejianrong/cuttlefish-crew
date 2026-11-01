@@ -63,7 +63,9 @@ differs, and lives under `.cuttlefish/`, which is already kept out of `git statu
 
 ## Deferred
 
-- Text-to-speech narration (CUT-201) and present mode (CUT-199: full screen, step through, speak).
+- Text-to-speech narration (CUT-201). Present mode (CUT-199) shipped without speech: the agent writes
+  `.cuttlefish/artifacts/present.json` (`{title, items: [{path, say}]}`), the listing gives that one top-level name the kind
+  `manifest`, and the dashboard steps through it full screen. Still no new endpoint or renderer.
 - A second origin for HTML that needs a network or libraries (CUT-115), and rendered block types in markdown (CUT-114).
 - Dashboard UI for kind badges and manifest reading.
 - Telling Codex and kopicode sessions in tmux (no launch flag); they find the file only when a task names it.

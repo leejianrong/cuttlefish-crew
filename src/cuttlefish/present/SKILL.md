@@ -34,6 +34,23 @@ The file runs in a locked frame: no network, no access to the app, no way to nav
 
 For a doc, start with a `# Title` line. Raw HTML inside markdown is not shown.
 
+## Walk the person through several files
+
+To have the dashboard step through files in order, with a line of what you would say under each, write
+`.cuttlefish/artifacts/present.json` (top level, exactly that name). The person gets a Present button. See
+`.cuttlefish/present/examples/present.json`.
+
+```json
+{"title": "Checkout redesign", "items": [
+  {"path": "slides/overview.html", "say": "Here is the plan in four slides."},
+  {"path": "wireframe/cart.svg", "say": "The cart, with the new total row."}
+]}
+```
+
+- `path` is relative to `.cuttlefish/artifacts/`; `say` is plain text, one or two sentences. `title` is optional.
+- At most 50 items. An item whose file is missing or cannot be shown is skipped, so write the files first.
+- Write it again when the walk-through changes; the dashboard reads it each time Present is opened.
+
 ## Check it
 
 Read your file once as the person would. Nothing may depend on a file or address outside it. Say in chat what you

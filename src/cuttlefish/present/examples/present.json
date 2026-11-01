@@ -1,0 +1,8 @@
+{
+  "title": "What I built today",
+  "items": [
+    {"path": "slides/example.html", "say": "A short walk-through of the change."},
+    {"path": "wireframe/example.html", "say": "How the screen will look."},
+    {"path": "doc/example.md", "say": "The plan and what is left."}
+  ]
+}

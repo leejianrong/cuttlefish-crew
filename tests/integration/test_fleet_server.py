@@ -799,11 +799,17 @@ def test_artifacts_are_listed_and_served_as_data_and_nothing_outside_the_folder(
     (folder / "plan.md").write_text("# Plan")
     (folder / "page.html").write_text("<script>1</script>")
     (folder / "run.sh").write_text("echo hi")
+    (folder / "present.json").write_text('{"items": []}')
     (tmp_path / "secret.md").write_text("no")
     (folder / "link.md").symlink_to(tmp_path / "secret.md")
 
     listed = {a["path"]: a["kind"] for a in client.get(base).json()["artifacts"]}
-    assert listed == {"plan.md": "markdown", "page.html": "html", "run.sh": "other"}
+    assert listed == {
+        "plan.md": "markdown",
+        "page.html": "html",
+        "run.sh": "other",
+        "present.json": "manifest",
+    }
 
     served = client.get(f"{base}/file", params={"path": "plan.md"})
     assert served.status_code == 200 and served.text == "# Plan"
@@ -812,6 +818,7 @@ def test_artifacts_are_listed_and_served_as_data_and_nothing_outside_the_folder(
     html = client.get(f"{base}/file", params={"path": "page.html"})
     assert html.status_code == 200 and html.headers["content-type"].startswith("text/plain")
     assert "sandbox" in html.headers["content-security-policy"]
+    assert client.get(f"{base}/file", params={"path": "present.json"}).status_code == 200
     assert client.get(f"{base}/file", params={"path": "run.sh"}).status_code == 415
     assert client.get(f"{base}/file", params={"path": "link.md"}).status_code == 404
     assert client.get(f"{base}/file", params={"path": "../../secret.md"}).status_code == 404

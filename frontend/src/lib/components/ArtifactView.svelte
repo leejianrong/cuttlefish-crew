@@ -3,7 +3,7 @@
   // an image or video from a blob URL, an HTML design in a sandboxed frame. Used by the Artifacts
   // tab and by the chat's canvas, so a file looks the same in both.
   import { FleetApiError, type Artifact, type FleetClient } from "../api";
-  import { refusalText } from "../artifacts";
+  import { isViewable, refusalText } from "../artifacts";
   import { parseMarkdown } from "../markdown";
   import ArtifactFrame from "./ArtifactFrame.svelte";
   import ArtifactImage from "./ArtifactImage.svelte";
@@ -44,7 +44,7 @@
   });
 </script>
 
-{#if file.kind === "other"}
+{#if !isViewable(file.kind)}
   <p class="muted body-medium">
     {file.name} is listed but not shown here. Markdown, images, video and HTML designs are.
   </p>

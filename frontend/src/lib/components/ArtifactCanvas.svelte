@@ -4,8 +4,9 @@
   // here; the Artifacts tab keeps the full list. It follows the newest file until the person picks
   // another, so a chart the builder just drew appears without a click.
   import type { Artifact, FleetClient } from "../api";
-  import { ago, canvasFiles, sameArtifacts } from "../artifacts";
+  import { ago, canvasFiles, manifestFile, sameArtifacts } from "../artifacts";
   import ArtifactView from "./ArtifactView.svelte";
+  import PresentMode from "./PresentMode.svelte";
 
   let {
     client,
@@ -26,7 +27,9 @@
   let pinned = $state<string | null>(null);
   let now = $state(Date.now() / 1000);
   let shownFor = "";
+  let presenting = $state(false);
 
+  const manifest = $derived(manifestFile(files));
   const shown = $derived(canvasFiles(files));
   const current = $derived(shown.find((f) => f.path === pinned) ?? shown[0] ?? null);
 
@@ -39,6 +42,7 @@
     if (shownFor !== id) {
       files = [];
       pinned = null;
+      presenting = false;
       shownFor = id;
     }
     if (!active) return;
@@ -89,8 +93,15 @@
       </div>
     {/if}
   {/if}
+  {#if manifest}
+    <button type="button" class="link" onclick={() => (presenting = true)}>Present</button>
+  {/if}
   <button type="button" class="link" onclick={onOpenAll}>All artifacts</button>
 </aside>
+
+{#if presenting && manifest}
+  <PresentMode {client} {projectId} {files} {manifest} onClose={() => (presenting = false)} />
+{/if}
 
 <style>
   .canvas {

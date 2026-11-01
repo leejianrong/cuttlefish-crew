@@ -3,8 +3,9 @@
   // HTML designs (CUT-175) are shown; other files are listed by name. The list is read again every few seconds while the tab is
   // open, so a file written now appears without a refresh.
   import type { Artifact, FleetClient } from "../api";
-  import { EMPTY_TEXT, ago, sameArtifacts, sizeText } from "../artifacts";
+  import { EMPTY_TEXT, ago, isViewable, manifestFile, sameArtifacts, sizeText } from "../artifacts";
   import ArtifactView from "./ArtifactView.svelte";
+  import PresentMode from "./PresentMode.svelte";
 
   let {
     client,
@@ -18,7 +19,9 @@
   let selected = $state<string | null>(null);
   let now = $state(Date.now() / 1000);
   let shownFor = "";
+  let presenting = $state(false);
 
+  const manifest = $derived(manifestFile(files));
   const current = $derived(files.find((f) => f.path === selected) ?? null);
 
   // Read the list while this tab is open. A different project starts from nothing.
@@ -28,6 +31,7 @@
       files = [];
       loaded = false;
       selected = null;
+      presenting = false;
       shownFor = id;
     }
     if (!active) return;
@@ -51,7 +55,7 @@
 
   // With nothing chosen, show the newest file that can be shown.
   $effect(() => {
-    const fallback = (files.find((f) => f.kind !== "other") ?? files[0])?.path ?? null;
+    const fallback = (files.find((f) => isViewable(f.kind)) ?? files[0])?.path ?? null;
     if (selected === null || !files.some((f) => f.path === selected)) selected = fallback;
   });
 
@@ -65,6 +69,9 @@
   {:else if files.length === 0}
     <p class="body-medium muted empty">{EMPTY_TEXT}</p>
   {:else}
+    {#if manifest}
+      <button type="button" class="present" onclick={() => (presenting = true)}>Present</button>
+    {/if}
     <div class="layout">
       <ul class="list" aria-label="Files">
         {#each files as file (file.path)}
@@ -77,7 +84,7 @@
             >
               <span class="name label-large">{file.path}</span>
               <span class="meta body-small muted">
-                {file.kind === "other" ? "not shown" : file.kind} · {sizeText(file.size)} · {ago(file.modified, now)}
+                {isViewable(file.kind) ? file.kind : file.kind === "manifest" ? "walk-through" : "not shown"} · {sizeText(file.size)} · {ago(file.modified, now)}
               </span>
             </button>
           </li>
@@ -94,9 +101,14 @@
   {/if}
 </section>
 
+{#if presenting && manifest}
+  <PresentMode {client} {projectId} {files} {manifest} onClose={() => (presenting = false)} />
+{/if}
+
 <style>
   .artifacts { padding: 0.5rem 0 1rem; }
   .empty { max-width: 40rem; }
+  .present { margin-bottom: 0.75rem; min-height: 2.75rem; }
   .layout {
     display: grid;
     grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr);
