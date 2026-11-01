@@ -1,6 +1,7 @@
 <script lang="ts">
   import { keepIfSame } from "../same";
   import { refusal, type FleetClient, type ProjectSummary } from "../api";
+  import { loadPins, rankProjects, savePins } from "../rank";
   import ProjectCard from "./ProjectCard.svelte";
   import Icon from "./Icon.svelte";
 
@@ -16,6 +17,16 @@
 
   let projects = $state<ProjectSummary[]>([]);
   let waitingBy = $state<Record<string, number>>({});
+  let pins = $state<Set<string>>(loadPins());
+  // Ranked on every refresh from the same inputs, so the order only moves when a project's state does.
+  const ranked = $derived(rankProjects(projects, waitingBy, pins));
+
+  function togglePin(id: string) {
+    const next = new Set(pins);
+    if (!next.delete(id)) next.add(id);
+    pins = next;
+    savePins(next);
+  }
   let loaded = $state(false);
   let unreachable = $state(false);
 
@@ -92,10 +103,12 @@
   {/if}
 
   <div class="grid">
-    {#each projects as project (project.id)}
+    {#each ranked as project (project.id)}
       <ProjectCard
         {project}
         waiting={waitingBy[project.id] ?? 0}
+        pinned={pins.has(project.id)}
+        onPin={() => togglePin(project.id)}
         onOpen={() => onOpenProject(project.id)}
         onStop={() => stop(project.id)}
         onRemove={() => remove(project.id)}

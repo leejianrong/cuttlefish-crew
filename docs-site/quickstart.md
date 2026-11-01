@@ -273,6 +273,11 @@ own.
 If the daemon restarts while the dashboard is open, it shows **Sign in again** and carries on where you
 were; a session you keep using stays signed in (12 hours idle, seven days at most).
 
+Projects is ordered by what needs you: projects with a request waiting come first, then ones with a failed or blocked
+role, then ones with a team running, then the rest, each group with the most recently active first. **Pin to top** on a
+card keeps it above the rest whatever its state; pins live in this browser only. The order only moves when a project's
+state does.
+
 The top bar's account menu (the round icon at the top right) holds the theme (match system, light or dark), the
 sprite gallery and **Disconnect**. The bottom bar on a phone has the four places that span every project: Needs you,
 Projects, Role library and Shared secrets. A project's own Team, Permissions and Secrets are under its **Settings** tab.
