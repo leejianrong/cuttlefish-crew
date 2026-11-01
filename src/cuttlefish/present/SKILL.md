@@ -36,7 +36,7 @@ For a doc, start with a `# Title` line. Raw HTML inside markdown is not shown.
 
 ## Blocks in a doc
 
-Four fenced blocks in a `.md` file are drawn, not shown as code. One that is malformed shows as plain code, so check
+Five fenced blocks in a `.md` file are drawn, not shown as code. One that is malformed shows as plain code, so check
 the JSON or the columns.
 
 ````
@@ -51,8 +51,9 @@ the JSON or the columns.
 - `table`: CSV, the first line is the header, at least two columns and one row. Quote a cell that holds a comma.
 - `diff`: a unified diff; `+` lines are green, `-` red, `@@` headers coloured.
 - `checklist`: one item per line, `- [x] done` or `- [ ] to do`. Read-only.
-
-There is no diagram language yet: draw a flow as an SVG or HTML file instead.
+- `mermaid`: a flowchart only. `flowchart TD` (or `LR`), then lines like `A[Start] --> B{Ok?}` and `B -->|yes| C(Ship)`.
+  Nodes `[box]`, `(round)`, `{decision}`; edges `-->`, `---`, `-.->`, `==>`, label in `|bars|`; at most 40 nodes. Other
+  diagram types, `subgraph` and `style` are not drawn: use an SVG file for those.
 
 ## Walk the person through several files
 
@@ -68,6 +69,8 @@ To have the dashboard step through files in order, with a line of what you would
 ```
 
 - `path` is relative to `.cuttlefish/artifacts/`; `say` is plain text, one or two sentences. `title` is optional.
+- A Play button reads each `say` aloud with the browser's voice, so write it as you would speak it: no markdown, no
+  symbols, spell out what must be pronounced. There is no other narration tool.
 - At most 50 items. An item whose file is missing or cannot be shown is skipped, so write the files first.
 - Write it again when the walk-through changes; the dashboard reads it each time Present is opened.
 

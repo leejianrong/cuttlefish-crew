@@ -8,11 +8,12 @@
 // bullet and numbered lists (nested by indent), tables, rules, links and images. Anything else
 // is shown as the text it is.
 //
-// Four fenced languages are drawn rather than shown as code (CUT-114): `chart` (a small JSON
-// spec), `table` (CSV), `diff` and `checklist`. Each is parsed into a tree like everything else;
+// Five fenced languages are drawn rather than shown as code (CUT-114, CUT-278): `chart` (a small JSON
+// spec), `table` (CSV), `diff`, `checklist` and `mermaid` (a flowchart subset, see flow.ts). Each is parsed into a tree like everything else;
 // a block that does not parse stays a plain code block, so a bad one never breaks the page.
 
 import { parseChartSpec, type ChartSpec } from "./chart";
+import { parseFlow, type FlowSpec } from "./flow";
 
 export type Inline =
   | { t: "text"; text: string }
@@ -37,6 +38,7 @@ export type Block =
   | { t: "table"; head: Inline[][]; rows: Inline[][][] }
   | { t: "rule" }
   | { t: "chart"; spec: ChartSpec }
+  | { t: "flow"; spec: FlowSpec }
   | { t: "diff"; lines: { kind: "add" | "del" | "hunk" | "ctx"; text: string }[] }
   | { t: "checklist"; items: { done: boolean; text: Inline[] }[] };
 
@@ -72,6 +74,10 @@ export function richBlock(lang: string, text: string, fromPath = ""): Block | nu
   if (name === "chart") {
     const spec = parseChartSpec(text);
     return spec ? { t: "chart", spec } : null;
+  }
+  if (name === "mermaid") {
+    const spec = parseFlow(text);
+    return spec ? { t: "flow", spec } : null;
   }
   if (name === "table") {
     const rows = lines.filter((l) => l.trim() !== "").map(csvRow);
