@@ -417,6 +417,33 @@ async def test_a_project_can_opt_in_or_out_of_delegated_approvals(
     assert [e.value for e in events if isinstance(e, DelegateApprovalsSet)] == [True, False, None]
 
 
+async def test_a_scheduled_check_in_is_typed_unless_the_manager_is_busy_or_refuses(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cuttlefish.fleet.daemon import FleetError
+
+    sent: list[str] = []
+    refusal: list[str] = []
+
+    async def send_chat(project_id: str, text: str) -> dict[str, str]:
+        if refusal:
+            raise FleetError(refusal[0])
+        sent.append(text)
+        return {}
+
+    activity = ["idle"]
+    monkeypatch.setattr(rig.daemon, "send_chat", send_chat)
+    monkeypatch.setattr(rig.daemon._claude_hooks, "activity", lambda _: (activity[0], None))
+    rig.daemon.manager_project = rig.project_id
+    assert await rig.daemon.check_in_manager("Look around.") is None and sent == ["Look around."]
+    activity[0] = "busy"
+    assert await rig.daemon.check_in_manager("again") == "the manager is busy"
+    activity[0] = "idle"
+    refusal.append("Typing from the chat is only wired in for Claude Code so far")
+    assert "Claude Code" in str(await rig.daemon.check_in_manager("again"))
+    assert sent == ["Look around."]
+
+
 async def test_a_bad_manager_answer_says_what_is_allowed_and_an_unknown_request_is_404(
     rig: Rig,
 ) -> None:

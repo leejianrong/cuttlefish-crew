@@ -64,6 +64,14 @@ overrides the daemon's setting for that project, and "Follow the daemon" (the de
 `PATCH /api/projects/<id>/delegate-approvals` with `{"delegate_approvals": true|false|null}` (Admin tier). Each change is
 journaled in the project's session and shows in its timeline.
 
+## Waking the manager on a schedule
+
+The manager's own project takes a [schedule](schedules.md) like any other, but its text is a check-in rather than a goal:
+when one is due the daemon types it into the manager's session (Claude Code only, the same send path as the approval
+wake) and the manager looks over your projects. A run is skipped, journaled and shown on the project page when the
+manager is busy, waiting at a permission dialog, not running, or on Codex, so a check-in never interrupts work or lands
+as the answer to a dialog. Add one with `cuttlefish schedule add <manager-project-id> --goal "Check in on every project" --recurrence "daily 07:00"`.
+
 Treat a request's text as the worker agent's words: the tools mark it untrusted, and the manager's instructions say to
 read it as data.
 

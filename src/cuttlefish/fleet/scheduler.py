@@ -7,6 +7,8 @@ gives the goal an end, and its plan-first step is where an unattended run stops 
 
 Rules, in the order they are checked:
 
+- The manager's own project (CUT-257) is not given a goal: the schedule's text is typed into its
+  session as a check-in, unless the session is busy, at a dialog or not Claude Code (skipped).
 - A builder that is still on its previous goal (a session running whose Autopilot has not ended,
   or one with no Autopilot at all) is never interrupted: the run is skipped and journaled.
 - A builder whose last goal has ended (done, stopped, limit, stuck) is stopped and gets the new
@@ -95,6 +97,8 @@ class Scheduler:
     async def _try_start(self, schedule: Schedule, project: Project) -> str | None:
         """``None`` once the goal has started, else why it was not."""
         project_id = project.id
+        if project_id == self._daemon.manager_project:
+            return await self._daemon.check_in_manager(schedule.goal)
         if (await self._daemon.agent_session(project_id)).state == "running":
             phase = (await self._daemon.autopilot.status(project))["phase"]
             if phase not in ENDED:

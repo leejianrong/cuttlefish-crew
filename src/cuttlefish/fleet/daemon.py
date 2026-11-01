@@ -616,6 +616,19 @@ class FleetDaemon:
             raise FleetError(str(exc)) from exc
         return {"sent": "queued" if state == "busy" else "delivered", "state": state}
 
+    async def check_in_manager(self, text: str) -> str | None:
+        """Type a scheduled check-in into the manager's session (CUT-257, ADR-0053). ``None`` once
+        it is typed, else why it was not: a busy session is never interrupted, and a missing
+        session, a dialog or a tool without a send path (Codex) refuses in ``send_chat``."""
+        assert self.manager_project is not None
+        if self._claude_hooks.activity(self.manager_project)[0] == "busy":
+            return "the manager is busy"
+        try:
+            await self.send_chat(self.manager_project, text)
+        except FleetError as exc:
+            return str(exc)
+        return None
+
     async def goal(self, project_id: str) -> dict[str, str] | None:
         """The goal last given to the project's builder, or ``None`` (CUT-171). ``pr_url`` is the
         pull request opened for it since, read back from the journal (CUT-241)."""

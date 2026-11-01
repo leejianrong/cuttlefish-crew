@@ -82,7 +82,7 @@ def journal_events(events: Iterable[Any]) -> list[Event]:
         elif isinstance(payload, PullRequestOpened):
             found.append(Event(at, "note", f"Pull request: {payload.url}", payload.url))
         elif isinstance(payload, ScheduleRan):
-            found.append(Event(at, "note", "A schedule gave the builder its goal."))
+            found.append(Event(at, "note", "A schedule ran."))
         elif isinstance(payload, ScheduleSkipped):
             found.append(Event(at, "note", f"A schedule was skipped: {_clip(payload.reason)}"))
         elif isinstance(payload, DelegateApprovalsSet):

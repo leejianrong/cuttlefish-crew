@@ -53,6 +53,14 @@ class FakeDaemon:
         self.goals.append(text)
         self.state, self.phase = "running", "planning"
 
+    manager_project: str | None = None
+    check_in_result: str | None = None
+    check_ins: list[str] = field(default_factory=list)
+
+    async def check_in_manager(self, text: str) -> str | None:
+        self.check_ins.append(text)
+        return self.check_in_result
+
     def append_session_event(self, project: Any, payload: Any) -> None:
         self.events.append(payload)
 
@@ -156,3 +164,20 @@ def test_the_loop_runs_and_cancels_cleanly(tmp_path: Path) -> None:
         assert rig.scheduler._task is None
 
     asyncio.run(scenario())
+
+
+def test_a_schedule_on_the_manager_types_a_check_in_and_never_a_goal(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, FakeDaemon(manager_project="p1", state="running", phase="running"))
+    rig.advance(hours=1)
+    rig.tick()
+    assert rig.daemon.check_ins == ["Triage the issues"] and rig.daemon.goals == []
+    assert rig.daemon.events == [ScheduleRan(rig.schedule.id)] and rig.last() == "started"
+
+
+def test_a_busy_manager_skips_the_check_in_and_journals_it(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, FakeDaemon(manager_project="p1", check_in_result="the manager is busy"))
+    rig.advance(hours=1)
+    rig.tick()
+    [event] = rig.daemon.events
+    assert isinstance(event, ScheduleSkipped) and event.reason == "the manager is busy"
+    assert rig.last() == "skipped: the manager is busy"
