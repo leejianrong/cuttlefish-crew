@@ -483,15 +483,17 @@ def build_manager_mcp_server(*, base_url: str, token: str) -> MCPServer:
         )
 
     @server.tool()
-    async def message_agent(project_id: str, role: str, text: str) -> dict[str, Any]:
-        """Redirect a running role at its next round boundary, as a person's steer does."""
+    async def message_agent(project_id: str, text: str, role: str | None = None) -> dict[str, Any]:
+        """Message a project's agent. A project whose builder is an agent session (no roles in
+        its digest) needs no `role`: the text is typed into the builder's chat. With a running
+        team, pass the `role` to redirect at its next round boundary, as a person's steer does."""
         return await asyncio.to_thread(
             _request,
             base_url,
             token,
             "POST",
             f"/api/projects/{project_id}/steer",
-            {"role": role, "text": text},
+            {"text": text} if role is None else {"role": role, "text": text},
         )
 
     @server.tool()

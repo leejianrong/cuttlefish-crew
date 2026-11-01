@@ -438,8 +438,10 @@ class ConsentPolicy:
         if not self._auto and not self._patterns:
             # Nothing is allowed, so a person may be asked -- but only about a line that no
             # never-allowed rule refuses (ADR-0028).
-            if line is None or never_allowed_reason(line, default_branches=self._defaults):
+            if line is None:
                 return _deny("no_shell_allowed")
+            if (reason := never_allowed_reason(line, default_branches=self._defaults)) is not None:
+                return _deny(reason)
             return _deny("no_shell_allowed", askable=True)
         if line is None:
             return _deny(

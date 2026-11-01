@@ -334,7 +334,7 @@
 
       <MissionControl {client} {projectId} active={tab === "overview"} {onTabChange} onAutopilotChange={() => sessionChanges++} />
 
-      {#if !project.running}
+      {#if !project.running && !project.is_manager}
         <GoalCard
           {client}
           {projectId}
@@ -657,6 +657,7 @@
     color: var(--text-faint);
     font-size: 0.8rem;
     margin: 0.3rem 0 1.25rem;
+    overflow-wrap: anywhere;
   }
 
   .warning {
