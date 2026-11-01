@@ -8,6 +8,8 @@ import {
   canvasFiles,
   htmlFrameDoc,
   isViewable,
+  manifestFile,
+  parsePresentation,
   refusalText,
   sameArtifacts,
   sizeText,
@@ -75,5 +77,49 @@ describe("the sandboxed frame (CUT-175)", () => {
     expect(shown.map((f) => f.path)).toEqual(["a.png", "v.mp4", "d.html"]);
     expect(canvasFiles(Array.from({ length: 20 }, (_, i) => file(`${i}.png`, "image")))).toHaveLength(8);
     expect(isViewable("other")).toBe(false);
+  });
+});
+
+describe("present manifest (CUT-199)", () => {
+  const f = (path: string, kind: Artifact["kind"] = "html"): Artifact => ({
+    path, name: path.split("/").pop() ?? path, kind, size: 1, modified: 1,
+  });
+  const files = [f("present.json", "manifest"), f("slides/a.html"), f("doc/b.md", "markdown"), f("run.sh", "other")];
+
+  it("finds the manifest only at the top level", () => {
+    expect(manifestFile(files)?.path).toBe("present.json");
+    expect(manifestFile([f("sub/present.json", "other")])).toBeNull();
+  });
+  it("keeps order, text and a title, and skips what cannot be shown", () => {
+    const text = JSON.stringify({
+      title: " Demo ",
+      items: [
+        { path: "doc/b.md", say: "second file first" },
+        { path: "./slides/a.html" },
+        { path: "gone.html", say: "x" },
+        { path: "run.sh", say: "x" },
+        "nonsense",
+      ],
+    });
+    const plan = parsePresentation(text, files);
+    expect(plan?.title).toBe("Demo");
+    expect(plan?.steps.map((s) => [s.path, s.say])).toEqual([
+      ["doc/b.md", "second file first"],
+      ["slides/a.html", ""],
+    ]);
+    expect(plan?.skipped).toBe(3);
+  });
+  it("refuses bad JSON and the wrong shape instead of throwing", () => {
+    expect(parsePresentation("{nope", files)).toBeNull();
+    expect(parsePresentation("[]", files)).toBeNull();
+    expect(parsePresentation('{"items": "x"}', files)).toBeNull();
+    expect(parsePresentation('{"items": []}', files)?.title).toBe("Walk-through");
+  });
+  it("caps the steps and the speaker text", () => {
+    const items = Array.from({ length: 60 }, () => ({ path: "doc/b.md", say: "y".repeat(2000) }));
+    const plan = parsePresentation(JSON.stringify({ items }), files);
+    expect(plan?.steps).toHaveLength(50);
+    expect(plan?.skipped).toBe(10);
+    expect(plan?.steps[0].say).toHaveLength(1000);
   });
 });

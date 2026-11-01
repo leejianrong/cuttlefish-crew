@@ -76,3 +76,60 @@ export function refusalText(status: number): string {
   if (status === 404) return "This file is gone.";
   return "Couldn't read this file.";
 }
+
+/** The file an agent writes to have the dashboard walk through its artifacts in order (CUT-199). */
+export const MANIFEST_PATH = "present.json";
+const MAX_STEPS = 50;
+const MAX_SAY = 1000;
+
+export interface PresentStep {
+  path: string;
+  file: Artifact;
+  say: string;
+}
+
+export interface Presentation {
+  title: string;
+  steps: PresentStep[];
+  /** Items left out: a missing or unshowable file, or one that was not an object. */
+  skipped: number;
+}
+
+/** The manifest's file, when the project has one. */
+export function manifestFile(files: readonly Artifact[]): Artifact | null {
+  return files.find((f) => f.path === MANIFEST_PATH && f.kind === "manifest") ?? null;
+}
+
+/** An agent's manifest as steps. It is the agent's file, so nothing in it is trusted: bad JSON or the
+ * wrong shape is `null`, and an item that is malformed or names a file that is not there (or cannot
+ * be shown) is skipped and counted, never thrown. The speaker text is shown as text, never as HTML. */
+export function parsePresentation(text: string, files: readonly Artifact[]): Presentation | null {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  const { title, items } = data as { title?: unknown; items?: unknown };
+  if (!Array.isArray(items)) return null;
+  const steps: PresentStep[] = [];
+  let skipped = 0;
+  for (const item of items.slice(0, MAX_STEPS)) {
+    const raw = typeof item === "object" && item !== null ? (item as Record<string, unknown>) : {};
+    const path = typeof raw.path === "string" ? raw.path.replace(/^\.?\//, "") : "";
+    const file = files.find((f) => f.path === path);
+    if (!file || !isViewable(file.kind)) {
+      skipped += 1;
+      continue;
+    }
+    const say = typeof raw.say === "string" ? raw.say.slice(0, MAX_SAY) : "";
+    steps.push({ path, file, say });
+  }
+  skipped += Math.max(0, items.length - MAX_STEPS);
+  return {
+    title: typeof title === "string" && title.trim() ? title.trim().slice(0, 120) : "Walk-through",
+    steps,
+    skipped,
+  };
+}

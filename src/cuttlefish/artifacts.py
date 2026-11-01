@@ -19,6 +19,11 @@ from pathlib import Path
 
 ARTIFACTS_DIR = Path(".cuttlefish") / "artifacts"
 
+#: The manifest a present mode plays (CUT-199): top level only, so a stray ``present.json`` in a
+#: subfolder is just a file.
+MANIFEST = "present.json"
+MAX_MANIFEST_BYTES = 100_000
+
 #: A listing past this many files is cut (newest first) rather than sent whole.
 MAX_LISTED = 200
 #: How deep below the folder a file is looked for.
@@ -47,8 +52,8 @@ AGENT_NOTE = (
     ".cuttlefish/artifacts/ in the project root, for example .cuttlefish/artifacts/review.md. "
     "Markdown, png, jpg, gif, webp or svg images, mp4 or webm video and self-contained .html "
     "designs (inline CSS and JavaScript, no network) are shown in the dashboard. Raw HTML inside "
-    "markdown is not. For slides, a wireframe, an animation, a demo or a dashboard, read "
-    ".cuttlefish/present/SKILL.md first."
+    "markdown is not. For slides, a wireframe, an animation, a demo, a dashboard or a "
+    "walk-through of several files in order, read .cuttlefish/present/SKILL.md first."
 )
 
 
@@ -73,7 +78,8 @@ class Artifact:
     #: Relative to the artifacts folder, with ``/`` separators.
     path: str
     name: str
-    #: ``markdown``, ``image``, ``video``, ``html`` or ``other`` (listed by name only).
+    #: ``markdown``, ``image``, ``video``, ``html``, ``manifest`` (``present.json``, CUT-199) or
+    #: ``other`` (listed by name only).
     kind: str
     size: int
     #: Seconds since the epoch; the dashboard sorts and detects change on it.
@@ -87,7 +93,9 @@ def folder(root: str) -> Path:
     return Path(root) / ARTIFACTS_DIR
 
 
-def _classify(path: Path) -> tuple[str, str, int] | None:
+def _classify(path: Path, relative: str | None = None) -> tuple[str, str, int] | None:
+    if relative == MANIFEST:
+        return ("manifest", "text/plain; charset=utf-8", MAX_MANIFEST_BYTES)
     return _KINDS.get(path.suffix.lower())
 
 
@@ -120,10 +128,11 @@ def list_artifacts(root: str) -> list[Artifact]:
                 stat = real.stat()
             except OSError:
                 continue
-            kind = _classify(real)
+            relative = (Path(current) / name).relative_to(base).as_posix()
+            kind = _classify(real, relative)
             found.append(
                 Artifact(
-                    path=(Path(current) / name).relative_to(base).as_posix(),
+                    path=relative,
                     name=name,
                     kind=kind[0] if kind else "other",
                     size=stat.st_size,
@@ -145,7 +154,7 @@ def read_artifact(root: str, relative: str) -> tuple[bytes, str]:
     real = _inside(base, base / relative)
     if real is None or not real.is_file() or any(p.startswith(".") for p in Path(relative).parts):
         raise ArtifactNotFoundError(relative)
-    kind = _classify(real)
+    kind = _classify(real, Path(relative).as_posix())
     if kind is None:
         raise ArtifactNotPreviewableError(relative)
     _, content_type, limit = kind
