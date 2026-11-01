@@ -3,7 +3,8 @@
   // in present.json, with its line of speaker text underneath. Arrow keys, Space and the buttons step;
   // the list jumps; Escape (or leaving full screen) closes. An HTML slide deck keeps its own keys
   // while the frame has focus. The manifest is the agent's file, so it is parsed defensively and
-  // its text is shown as text.
+  // its text is shown as text. Play reads each say line aloud with the browser's own speech synthesis
+  // and moves on when one ends; nothing is sent anywhere and no audio is stored (CUT-201).
   import { FleetApiError, type Artifact, type FleetClient } from "../api";
   import { parsePresentation, refusalText, type Presentation } from "../artifacts";
   import ArtifactView from "./ArtifactView.svelte";
@@ -27,6 +28,8 @@
   let index = $state(0);
   let root = $state<HTMLDivElement | null>(null);
   let enteredFullscreen = false;
+  let playing = $state(false);
+  const canSpeak = typeof window !== "undefined" && "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
 
   const step = $derived(plan?.steps[index] ?? null);
   const last = $derived(plan ? plan.steps.length - 1 : 0);
@@ -69,6 +72,29 @@
       document.removeEventListener("fullscreenchange", left);
       enteredFullscreen = false;
       if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    };
+  });
+
+  // A new utterance per step; cancel() first so a jump never queues behind the old line. The
+  // cleanup cancels too, so Pause, a step change and Close all silence it.
+  $effect(() => {
+    if (!playing || !step) return;
+    const text = step.say || step.file.name;
+    const u = new SpeechSynthesisUtterance(text);
+    let stopped = false;
+    u.onend = () => {
+      if (stopped) return;
+      if (index < last) index += 1;
+      else playing = false;
+    };
+    u.onerror = () => {
+      if (!stopped) playing = false;
+    };
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+    return () => {
+      stopped = true;
+      window.speechSynthesis.cancel();
     };
   });
 
@@ -122,6 +148,11 @@
           {/each}
         </select>
         <button type="button" onclick={() => go(index + 1)} disabled={index === last}>Next</button>
+        {#if canSpeak}
+          <button type="button" class="play" aria-pressed={playing} onclick={() => (playing = !playing)}>
+            {playing ? "Pause" : "Play"}
+          </button>
+        {/if}
       </nav>
     </footer>
   {:else}

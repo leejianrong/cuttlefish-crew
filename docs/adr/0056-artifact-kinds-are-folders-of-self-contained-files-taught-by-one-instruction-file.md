@@ -63,10 +63,16 @@ differs, and lives under `.cuttlefish/`, which is already kept out of `git statu
 
 ## Deferred
 
-- Text-to-speech narration (CUT-201). Present mode (CUT-199) shipped without speech: the agent writes
+- Text-to-speech narration: built (CUT-201) as a Play button that speaks the `say` lines with the browser's own speech
+  synthesis. No tool, endpoint or audio file; a voice picker is still deferred. Present mode (CUT-199) shipped without speech: the agent writes
   `.cuttlefish/artifacts/present.json` (`{title, items: [{path, say}]}`), the listing gives that one top-level name the kind
   `manifest`, and the dashboard steps through it full screen. Still no new endpoint or renderer.
-- A second origin for HTML that needs a network or libraries (CUT-115), and rendered block types in markdown (CUT-114).
+- A second origin for HTML that needs a network or libraries (CUT-115), and rendered block types in markdown (CUT-114, built).
+- Mermaid (CUT-278): decided on a small own flowchart subset, `frontend/src/lib/flow.ts`, drawn as inline SVG the way a
+  `chart` block is, not the Mermaid library. The library is large, builds its SVG as markup strings that would need
+  sanitising before they reach the page, and its HTML labels and click handlers are what ADR-0036's no-markup rule
+  exists to keep out. The subset parses text into nodes and edges and draws only numbers and strings, so ADR-0036 is
+  unchanged. Other diagram types stay code; revisit if agents keep reaching for them.
 - Dashboard UI for kind badges and manifest reading.
 - Telling Codex and kopicode sessions in tmux (no launch flag); they find the file only when a task names it.
 
