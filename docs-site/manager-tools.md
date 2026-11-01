@@ -59,6 +59,11 @@ whole time, so one it cannot decide, or a manager that is not running, reaches y
 outright. The never-allowed list still holds and every answer is journaled as `manager`. See
 [ADR-0053](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0053-delegated-approvals-wake-the-manager-and-leave-the-card-open.md).
 
+The setting can also be made per project, on the project's Permissions tab under "Manager approvals": On or Off
+overrides the daemon's setting for that project, and "Follow the daemon" (the default) uses it. Over the API it is
+`PATCH /api/projects/<id>/delegate-approvals` with `{"delegate_approvals": true|false|null}` (Admin tier). Each change is
+journaled in the project's session and shows in its timeline.
+
 ## Waking the manager on a schedule
 
 The manager's own project takes a [schedule](schedules.md) like any other, but its text is a check-in rather than a goal:

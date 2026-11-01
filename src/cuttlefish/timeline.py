@@ -20,6 +20,7 @@ from typing import Any, Literal
 from cuttlefish.artifacts import Artifact
 from cuttlefish.episodic.events import (
     AutopilotUpdated,
+    DelegateApprovalsSet,
     PullRequestOpened,
     RequestRaised,
     ScheduleRan,
@@ -84,6 +85,9 @@ def journal_events(events: Iterable[Any]) -> list[Event]:
             found.append(Event(at, "note", "A schedule ran."))
         elif isinstance(payload, ScheduleSkipped):
             found.append(Event(at, "note", f"A schedule was skipped: {_clip(payload.reason)}"))
+        elif isinstance(payload, DelegateApprovalsSet):
+            choice = {None: "the daemon's setting", True: "on", False: "off"}[payload.value]
+            found.append(Event(at, "note", f"Manager approvals for this project: {choice}."))
         elif isinstance(payload, AutopilotUpdated) and payload.phase != previous:
             text = _autopilot_text(payload)
             if text:

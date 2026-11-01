@@ -15,7 +15,7 @@ import satay.control
 from mcp.server.mcpserver.exceptions import ToolError
 
 from cuttlefish import mcp as mcp_module
-from cuttlefish.episodic.events import RequestRaised, RequestResolved
+from cuttlefish.episodic.events import DelegateApprovalsSet, RequestRaised, RequestResolved
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.claude_hooks import session_scope
 from cuttlefish.fleet.daemon import FleetDaemon
@@ -95,6 +95,7 @@ async def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         ("PATCH", "/api/projects/{p}/allow"),
         ("PATCH", "/api/projects/{p}/terminal-command"),
         ("PATCH", "/api/projects/{p}/worktree-per-goal"),
+        ("PATCH", "/api/projects/{p}/delegate-approvals"),
         ("GET", "/api/projects/{p}/secrets"),
         ("PUT", "/api/secrets/KEY"),
         ("POST", "/api/devices/pairing"),
@@ -384,6 +385,36 @@ async def test_nothing_wakes_the_manager_by_default_or_for_its_own_session(
 ) -> None:
     assert await _woken(rig, monkeypatch, on=False) == []
     assert await _woken(rig, monkeypatch, on=True, own=True) == []
+
+
+async def test_a_project_can_opt_in_or_out_of_delegated_approvals(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = f"/api/projects/{rig.project_id}/delegate-approvals"
+    shown = (await rig.owner.get(f"/api/projects/{rig.project_id}")).json()
+    assert shown["delegate_approvals"] is None and shown["delegate_approvals_effective"] is False
+    assert (await rig.owner.patch(path, json={"delegate_approvals": "yes"})).status_code == 400
+    assert (await rig.owner.patch(path, json={})).status_code == 400
+
+    on = await rig.owner.patch(path, json={"delegate_approvals": True})
+    assert on.json()["delegate_approvals"] is True and on.json()["delegate_approvals_effective"]
+    assert len(await _woken(rig, monkeypatch, on=False)) == 1  # the project beats the daemon
+
+    off = await rig.owner.patch(path, json={"delegate_approvals": False})
+    assert off.json()["delegate_approvals_effective"] is False
+    assert await _woken(rig, monkeypatch, on=True) == []
+
+    follow = await rig.owner.patch(path, json={"delegate_approvals": None})
+    assert follow.json()["delegate_approvals_effective"] is True  # the daemon's, set on above
+    assert (await rig.manager.patch(path, json={"delegate_approvals": True})).status_code == 403
+
+    project = rig.daemon.projects.get(rig.project_id)
+    store = EpisodicStore.open(rig.root / ".cuttlefish" / "episodic.db")
+    try:
+        events = [e.payload for e in store.read(session_scope(project.id))]
+    finally:
+        store.close()
+    assert [e.value for e in events if isinstance(e, DelegateApprovalsSet)] == [True, False, None]
 
 
 async def test_a_scheduled_check_in_is_typed_unless_the_manager_is_busy_or_refuses(

@@ -224,6 +224,10 @@ export interface ProjectSummary {
   worktree_per_goal?: boolean;
   /** ADR-0052: this is the manager agent's project, not a builder's. */
   is_manager?: boolean;
+  /** CUT-259: wake the manager for this project's requests; null follows the daemon's setting. */
+  delegate_approvals?: boolean | null;
+  /** What actually applies: the project's own choice, else the daemon's. */
+  delegate_approvals_effective?: boolean;
   /** V4-C: applies the next time the team starts, not to a team already running. */
   mode: PermissionMode;
   /** V4-F: the command groups switched on (names from the permissions catalogue). */
@@ -667,6 +671,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/worktree-per-goal`, {
       method: "PATCH",
       body: JSON.stringify({ worktree_per_goal: on }),
+    });
+  }
+
+  /** CUT-259: wake the manager for this project's permission requests; null follows the daemon. */
+  setDelegateApprovals(id: string, value: boolean | null): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/delegate-approvals`, {
+      method: "PATCH",
+      body: JSON.stringify({ delegate_approvals: value }),
     });
   }
 
