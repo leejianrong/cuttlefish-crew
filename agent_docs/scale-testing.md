@@ -16,6 +16,8 @@ small episodic journal in each project's own folder under `<home>/seed-projects/
 30 working (last event 1 to 20 minutes ago), 15 waiting (a round finished and a review is
 wanted), 30 done, 15 stuck (half failed, half silent for hours) and 10 idle (never run).
 
+Eight in nine carry tags (`client:acme`, `stack:rust`, and `priority` on some) to try the filter bar.
+
 What it does not do: launch an agent, call a model or touch a tmux socket. The projects have no
 persisted roles, so a daemon's resume skips them, and nothing runs until you press Start on one.
 Journal times are relative to the moment you seed, so a "working" project turns "stuck" after the

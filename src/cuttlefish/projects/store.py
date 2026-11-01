@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS projects (
     limits_json TEXT,
     terminal_command TEXT,
     worktree_per_goal INTEGER NOT NULL DEFAULT 0,
-    delegate_approvals INTEGER
+    delegate_approvals INTEGER,
+    tags_json TEXT
 )
 """
 
@@ -132,6 +133,29 @@ _ADD_WORKTREE_COLUMN = (
 
 #: `delegate_approvals` was added for CUT-259: `NULL` follows the daemon, 1 and 0 override.
 _ADD_DELEGATE_APPROVALS_COLUMN = "ALTER TABLE projects ADD COLUMN delegate_approvals INTEGER"
+
+#: `tags_json` was added for CUT-191 -- free-form labels a person groups and filters projects by (a
+#: JSON list). `NULL` is no tags, so an existing row is unchanged.
+_ADD_TAGS_COLUMN = "ALTER TABLE projects ADD COLUMN tags_json TEXT"
+
+MAX_TAGS = 10
+MAX_TAG_LENGTH = 24
+
+
+def normalise_tags(raw: Sequence[str]) -> tuple[str, ...]:
+    """Trimmed, spaces collapsed, no empties, no repeats (case-insensitive, first spelling kept).
+    Raises ``ValueError`` for too many tags or one that is too long."""
+    tags: list[str] = []
+    for tag in raw:
+        clean = " ".join(tag.split())
+        if not clean or clean.lower() in {t.lower() for t in tags}:
+            continue
+        if len(clean) > MAX_TAG_LENGTH:
+            raise ValueError(f"a tag is at most {MAX_TAG_LENGTH} characters: {clean!r}")
+        tags.append(clean)
+    if len(tags) > MAX_TAGS:
+        raise ValueError(f"a project has at most {MAX_TAGS} tags")
+    return tuple(tags)
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,6 +242,8 @@ class Project:
     #: Wake the manager for this project's permission requests (ADR-0053). ``None`` follows
     #: ``CUTTLEFISH_DELEGATE_APPROVALS``; ``True``/``False`` override it for this project.
     delegate_approvals: bool | None = None
+    #: Free-form labels to group and filter projects by (CUT-191), such as `client:acme`.
+    tags: tuple[str, ...] = ()
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -356,6 +382,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         delegate_approvals=None
         if row["delegate_approvals"] is None
         else bool(row["delegate_approvals"]),
+        tags=tuple(json.loads(row["tags_json"])) if row["tags_json"] else (),
     )
 
 
@@ -393,6 +420,8 @@ class ProjectStore:
             self._conn.execute(_ADD_WORKTREE_COLUMN)
         if "delegate_approvals" not in columns:
             self._conn.execute(_ADD_DELEGATE_APPROVALS_COLUMN)
+        if "tags_json" not in columns:
+            self._conn.execute(_ADD_TAGS_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -554,6 +583,16 @@ class ProjectStore:
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute(
             "UPDATE projects SET worktree_per_goal = ? WHERE id = ?", (int(on), project_id)
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_tags(self, project_id: str, tags: Sequence[str]) -> Project:
+        """Replace the project's tags (see :func:`normalise_tags`)."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET tags_json = ? WHERE id = ?",
+            (json.dumps(normalise_tags(tags)), project_id),
         )
         self._conn.commit()
         return self.get(project_id)
