@@ -809,14 +809,22 @@ def _project_pull_request(store: ProjectStore, project_id: str, *, push: bool) -
     path.parent.mkdir(parents=True, exist_ok=True)
     journal = EpisodicStore.open(path)
     try:
-        journal.append(
-            session_scope(project.id),
-            PullRequestOpened(
-                result.url, result.branch, result.base, result.title, result.existing
-            ),
-        )
+        scope = session_scope(project.id)
+        # A repeated call finds the same open pull request: journal it once.
+        if not result.existing or not any(
+            isinstance(e.payload, PullRequestOpened) and e.payload.url == result.url
+            for e in journal.read(scope)
+        ):
+            journal.append(
+                scope,
+                PullRequestOpened(
+                    result.url, result.branch, result.base, result.title, result.existing
+                ),
+            )
     finally:
         journal.close()
+    if result.warning:
+        print(f"cuttlefish: warning: {result.warning}", file=sys.stderr)
     print(result.url)
     return EXIT_OK
 
@@ -986,13 +994,19 @@ async def _serve(args: argparse.Namespace) -> int:
                     f"(team {attempt.team_id}): {attempt.error}",
                     file=sys.stderr,
                 )
+        started_id: frozenset[str] = frozenset()
         try:
             manager = daemon.adopt_manager(args.manager)
             if manager is not None and args.manager:
-                await daemon.start_agent_session(manager.id)
+                info = await daemon.start_agent_session(manager.id)
+                started_id = frozenset({manager.id})
+                print(
+                    f"cuttlefish serve: agent session for {manager.name!r} {info.last_action}",
+                    flush=True,
+                )
         except FleetError as exc:
             print(f"cuttlefish serve: manager not started: {exc}", file=sys.stderr)
-        for name, restored in await daemon.reconcile_agent_sessions():
+        for name, restored in await daemon.reconcile_agent_sessions(started_id):
             if isinstance(restored, str):
                 print(
                     f"cuttlefish serve: agent session for {name!r} not restored: {restored}",

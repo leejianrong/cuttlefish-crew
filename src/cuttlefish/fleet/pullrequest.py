@@ -44,6 +44,8 @@ class PullRequest:
     branch: str | None = None
     base: str | None = None
     title: str | None = None
+    #: Set when the worktree has changes that are not committed, so not in the pull request.
+    warning: str | None = None
 
     def to_json(self) -> dict[str, object]:
         return {k: v for k, v in dataclasses.asdict(self).items() if v is not None}
@@ -136,7 +138,8 @@ def open_pull_request(
     base = _base(root_path, defaults)
     if base is None or _git(folder, "remote", "get-url", "origin") is None:
         return _refuse(
-            "no_remote", "This repository has no origin remote and default branch to open against."
+            "no_remote",
+            "This repository has no origin remote, or no default branch to open against.",
         )
     upstream = f"origin/{base}" if _git(folder, "rev-parse", "-q", f"origin/{base}") else base
     ahead = _git(folder, "rev-list", "--count", f"{upstream}..{branch}")
@@ -161,6 +164,13 @@ def open_pull_request(
             return _refuse(
                 "push_failed", scrub(tail[-1]) if tail else "git push failed", branch=branch
             )
+    dirty = (_git(folder, "status", "--porcelain") or "").splitlines()
+    warning = (
+        f"{len(dirty)} uncommitted or untracked file{'s' if len(dirty) != 1 else ''} in "
+        "the worktree are not in this pull request."
+        if dirty
+        else None
+    )
     log = _git(folder, "log", f"-n{_MAX_COMMITS}", "--format=%s", f"{upstream}..{branch}") or ""
     title, body = _text(
         scrub((goal or {}).get("text", "")),
@@ -175,11 +185,14 @@ def open_pull_request(
     output = f"{done.stdout}\n{done.stderr}"
     found = _URL.findall(output)
     if done.returncode == 0 and found:
-        return PullRequest(True, url=found[-1], branch=branch, base=base, title=title)
+        return PullRequest(
+            True, url=found[-1], branch=branch, base=base, title=title, warning=warning
+        )
     if "already exists" in output and found:
         return PullRequest(
-            True, url=found[-1], existing=True, branch=branch, base=base, title=title
-        )
+            True, url=found[-1], existing=True, branch=branch, base=base, title=title,
+            warning=warning,
+        )  # fmt: skip
     detail = (done.stderr.strip() or done.stdout.strip()).splitlines()[-1:] or ["gh failed"]
     reason = f"gh could not open the pull request: {scrub(detail[0])}"
     return _refuse("gh_failed", reason, branch=branch)

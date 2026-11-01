@@ -329,6 +329,9 @@
           {worktreeRemovalNote(rmResult)}
         </p>
       {/if}
+      {#if prResult?.ok && prResult.warning}
+        <p class="body-small error" role="status" data-testid="pr-warning">{prResult.warning}</p>
+      {/if}
       {#if prResult && !prResult.ok}
         <p class="body-small error" role="alert" data-testid="pr-refused">{pullRequestNote(prResult)}</p>
         {#if canPushToFix(prResult)}
