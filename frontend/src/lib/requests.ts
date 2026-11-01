@@ -65,7 +65,7 @@ export const OUTCOMES: Record<RequestResolution, string> = {
 const SESSION_OUTCOMES: Partial<Record<RequestResolution, string>> = {
   expired: "No answer in time: the terminal still asks",
   cancelled: "Ended: the agent session was stopped",
-  abandoned: "Ended: the agent session ended",
+  abandoned: "Can no longer be answered here: it may still be open in the terminal",
   superseded: "Answered in the terminal",
 };
 
