@@ -333,6 +333,8 @@ async def test_answer_message_and_raise_through_the_tools(rig: Rig, tools: Any) 
         await tools.call_tool(
             "message_agent", {"project_id": rig.project_id, "role": "builder", "text": "go"}
         )
+    with pytest.raises(ToolError, match="409"):  # no role: reaches the daemon, not a 400
+        await tools.call_tool("message_agent", {"project_id": rig.project_id, "text": "go"})
 
 
 async def test_the_digest_tool_serves_the_digest_without_the_planted_secret(

@@ -37,11 +37,17 @@ token file to rotate it.
 | `project_digest` | Read one project's status, last events, blockers, pending requests and spend. |
 | `recent_answers` | See how a project's last requests ended. |
 | `answer_attention` | Allow once or deny a permission. Never an always-allow rule. |
-| `message_agent` | Steer a running role, or message the builder when it runs as an agent session (typed into its chat). Says so when neither exists. |
+| `message_agent` | `project_id`, `text`, optional `role`. With a running team, pass the `role` to steer; a project whose builder is an agent session has no roles, so leave `role` out and the text is typed into its chat. Says so when neither exists. |
 | `raise_decision` | Ask you to choose between two to four options, with a recommendation. It waits with no timer. |
 
 Every answer is journaled with who gave it and the tier, so the timeline shows `manager` apart from you. A command on the
 never-allowed list (`sudo`, a forced push, a download piped into a shell) is denied whatever the manager answers.
+
+When the manager runs as a Claude Code session it is launched with `--strict-mcp-config`, so it sees only the
+`cuttlefish-manager` server and none of the connectors in your own Claude account. Its tools stay pre-approved.
+
+Deleting a project (`DELETE /api/projects/{id}`) removes its registry row only. It does not stop that project's tmux
+session; stop the agent first from the project page (CUT-271 tracks making delete do it).
 
 ## What it cannot do
 

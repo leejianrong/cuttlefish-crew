@@ -1423,8 +1423,8 @@ def create_app(
     async def steer_project(project_id: str, request: Request) -> dict[str, Any]:
         body = await _json_body(request)
         role, text = body.get("role"), body.get("text")
-        if not role or not text:
-            raise HTTPException(400, "'role' and 'text' are required")
+        if not text:
+            raise HTTPException(400, "'text' is required")
         try:
             if request.state.caller[0] == "manager":
                 daemon.check_manager_may_touch(project_id)

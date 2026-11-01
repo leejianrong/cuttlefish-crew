@@ -1662,7 +1662,7 @@ class FleetDaemon:
         with logsetup.bind(project=project_id, team=running.team_id):
             logger.info("stop requested (%d codex turn(s) interrupted)", interrupted)
 
-    async def steer(self, project_id: str, role: str, text: str) -> None:
+    async def steer(self, project_id: str, role: str | None, text: str) -> None:
         """See `stop`'s own docstring -- `asyncio.to_thread` for the identical
         same-loop-deadlock reason."""
         running = self.running(project_id)
@@ -1677,6 +1677,8 @@ class FleetDaemon:
                 )
             await self.send_chat(project_id, text)
             return
+        if not role:
+            raise FleetError("this project has a running team: say which role to message")
         # A Codex role mid-turn takes the message at once (ADR-0033); anything else, or a turn
         # that has just ended, is queued for the round boundary as before.
         if await codex_live.steer(self._projects.get(project_id).root, role, text):
