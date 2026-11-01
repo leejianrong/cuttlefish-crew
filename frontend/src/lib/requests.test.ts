@@ -9,6 +9,7 @@ import {
   landsLabel,
   outcomeLabel,
   parseRule,
+  queueOrder,
   ruleText,
   secondsLeft,
 } from "./requests";
@@ -152,5 +153,24 @@ describe("a request from a project's agent session in tmux", () => {
   it("says the terminal can answer too while it waits", () => {
     expect(landsLabel("now", true)).toBe("Paused until you answer here or in the terminal");
     expect(landsLabel("now")).toBe("Paused until you answer");
+  });
+});
+
+describe("queueOrder", () => {
+  const r = (id: string, over: Partial<NeedsYouRequest> = {}) =>
+    ({ id, kind: "permission", lands: "now", ...over }) as NeedsYouRequest;
+  it("keeps oldest first within a band, live pauses before later ones, stuck last", () => {
+    const list = [
+      r("stuck", { kind: "blocked", lands: "next_round" }),
+      r("later", { lands: "end_of_turn" }),
+      r("a"),
+      r("b", { kind: "decision" }),
+    ];
+    expect(queueOrder(list).map((x) => x.id)).toEqual(["a", "b", "later", "stuck"]);
+  });
+  it("does not change its input", () => {
+    const list = [r("x", { lands: "end_of_turn" }), r("y")];
+    queueOrder(list);
+    expect(list[0].id).toBe("x");
   });
 });

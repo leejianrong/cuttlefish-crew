@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FleetClient, NeedsYouRequest } from "../api";
+  import { queueOrder } from "../requests";
   import RequestCard from "./RequestCard.svelte";
 
   let {
@@ -18,15 +19,7 @@
     onOpenProject: (id: string) => void;
   } = $props();
 
-  const byProject = $derived.by(() => {
-    const groups = new Map<string, { name: string; items: NeedsYouRequest[] }>();
-    for (const request of requests) {
-      const group = groups.get(request.project_id) ?? { name: request.project_name, items: [] };
-      group.items.push(request);
-      groups.set(request.project_id, group);
-    }
-    return [...groups.entries()].map(([id, group]) => ({ id, ...group }));
-  });
+  const queue = $derived(queueOrder(requests));
 </script>
 
 <div class="page">
@@ -52,17 +45,18 @@
     </div>
   {/if}
 
-  {#each byProject as group (group.id)}
-    <section class="group" aria-labelledby="group-{group.id}">
-      <div class="group-head">
-        <h2 id="group-{group.id}" class="title-large">{group.name}</h2>
-        <button class="btn btn-text" onclick={() => onOpenProject(group.id)}>Open project</button>
-      </div>
-      {#each group.items as request (request.id)}
-        <RequestCard {client} {request} {fetchedAt} {onAnswered} offline={unreachable} />
+  {#if queue.length > 0}
+    <ol class="queue" aria-label="Waiting on you: agents paused now first, oldest first">
+      {#each queue as request (request.project_id + request.id)}
+        <li>
+          <RequestCard {client} {request} {fetchedAt} {onAnswered} offline={unreachable} showProject />
+          <button class="btn btn-text" onclick={() => onOpenProject(request.project_id)}>
+            Open {request.project_name}
+          </button>
+        </li>
       {/each}
-    </section>
-  {/each}
+    </ol>
+  {/if}
 </div>
 
 <style>
@@ -79,17 +73,24 @@
     margin: 4px 0 0;
   }
 
-  .group {
+  .queue {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
 
-  .group-head {
+  .queue li {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .queue li :global(.request) {
+    align-self: stretch;
   }
 
   .empty {

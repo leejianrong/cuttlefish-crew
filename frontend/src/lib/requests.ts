@@ -125,3 +125,14 @@ const BACKEND_NAMES: Record<string, string> = {
 export function backendLabel(backend: string): string {
   return BACKEND_NAMES[backend] ?? backend;
 }
+
+/** The one queue's order (CUT-190). The daemon lists oldest first; this keeps that within each
+ * band and puts the costliest first: an agent paused right now (`lands` is `now`) before one whose
+ * answer is delivered later, and a Stuck card, which has nothing to answer, last. */
+export function queueOrder(requests: readonly NeedsYouRequest[]): NeedsYouRequest[] {
+  const band = (r: NeedsYouRequest) => (r.kind === "blocked" ? 2 : r.lands === "now" ? 0 : 1);
+  return requests
+    .map((request, index) => ({ request, index }))
+    .sort((a, b) => band(a.request) - band(b.request) || a.index - b.index)
+    .map(({ request }) => request);
+}
