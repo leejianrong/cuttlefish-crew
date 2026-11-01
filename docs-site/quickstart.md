@@ -273,10 +273,20 @@ own.
 If the daemon restarts while the dashboard is open, it shows **Sign in again** and carries on where you
 were; a session you keep using stays signed in (12 hours idle, seven days at most).
 
-Projects is ordered by what needs you: projects with a request waiting come first, then ones with a failed or blocked
-role, then ones with a team running, then the rest, each group with the most recently active first. **Pin to top** on a
-card keeps it above the rest whatever its state; pins live in this browser only. The order only moves when a project's
-state does.
+Every project card opens with one state and a sentence saying why. The state comes from the project's journal and the
+requests waiting on it, checked in this order:
+
+| State | When |
+|---|---|
+| Waiting | A request needs you, or a round ended and the review gate wants you ("builder is waiting for your review"). |
+| Idle | No role has started yet, or you stopped the team. |
+| Stuck | A role failed, or a role that should be moving has written nothing to the journal for 3 hours ("No progress for 5 h"). A round's own time limit is 2 hours, so a quieter project than that has lost its round. |
+| Working | A role is mid-round or between rounds, or a team is running, and the journal moved in the last 3 hours. |
+| Done | Every role that started has finished. |
+
+Projects is ordered by that state: waiting first, then stuck, then working, then done and idle, each group with the
+most recently active first. **Pin to top** on a card keeps it above the rest whatever its state; pins live in this
+browser only. The order only moves when a project's state does.
 
 The top bar's account menu (the round icon at the top right) holds the theme (match system, light or dark), the
 sprite gallery and **Disconnect**. The bottom bar on a phone has the four places that span every project: Needs you,

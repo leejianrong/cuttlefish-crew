@@ -44,7 +44,7 @@ _PLAN: tuple[tuple[str, int, tuple[int, int]], ...] = (
     ("working", 30, (1, 20)),
     ("waiting", 15, (5, 240)),
     ("done", 30, (60, 2880)),
-    ("stuck", 15, (180, 1800)),
+    ("stuck", 15, (200, 1800)),
     ("idle", 10, (0, 0)),
 )
 
