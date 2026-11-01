@@ -34,7 +34,7 @@ from typing import Any
 
 import satay
 
-from cuttlefish import runtime
+from cuttlefish import present, runtime
 from cuttlefish.agents.outcome import DelegationOutcome
 from cuttlefish.agents.registry import resolve_backend
 from cuttlefish.artifacts import AGENT_NOTE
@@ -149,6 +149,7 @@ async def delegate_to_agent_backend(
             )
             resolved_secrets = {k: v for k, v in resolved_secrets.items() if k != route.key_env}
             mode_kwargs["lease"] = lease
+    present.install(workdir or root)  # ADR-0056: the file AGENT_NOTE points at
     try:
         outcome = await backend.delegate(
             task_text=f"{AGENT_NOTE}\n\n{task_text}",
