@@ -27,6 +27,13 @@ import json, os, sys, time
 with open(os.environ["FAKE_KOPICODE_SPANS"], "a") as spans:
     spans.write(f"start {{time.time()}}\\n")
 time.sleep(float(os.environ.get("FAKE_KOPICODE_SLEEP", "0")))
+# A rendezvous instead of a sleep: wait (up to 30 s) until N agents have started, so overlap
+# does not depend on how fast a loaded machine starts a process.
+want, deadline = int(os.environ.get("FAKE_KOPICODE_RENDEZVOUS", "0")), time.time() + 30
+while want and time.time() < deadline:
+    if open(os.environ["FAKE_KOPICODE_SPANS"]).read().count("start") >= want:
+        break
+    time.sleep(0.02)
 task = sys.argv[-1]
 words = task.split("WRITE ", 1)[1].split()
 with open(os.path.join(os.getcwd(), words[0]), "w") as f:
@@ -206,7 +213,7 @@ def _overlapped(tmp_path: Path) -> bool:
 async def test_roles_in_a_git_project_run_at_the_same_time(
     tmp_path: Path, repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv("FAKE_KOPICODE_SLEEP", "0.5")
+    monkeypatch.setenv("FAKE_KOPICODE_RENDEZVOUS", "2")
     result, _ = await _run(tmp_path, _team(repo, dev="dev.py x=1", docs="README.md hello"))
     assert result["status"] == "completed"
     assert _overlapped(tmp_path)
