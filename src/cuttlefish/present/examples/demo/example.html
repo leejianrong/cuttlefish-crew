@@ -1,0 +1,17 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Example demo</title>
+<meta name="cuttlefish:artifact" content="demo">
+<meta name="description" content="A to-do list you can click, with fake data.">
+<style>
+body{margin:0;padding:20px;font:16px system-ui,sans-serif;background:#10141c;color:#eef}
+li{margin:6px 0;cursor:pointer}li.done{text-decoration:line-through;opacity:.6}
+button{font:inherit;padding:6px 14px;border-radius:8px;border:0;background:#6aa7ff;color:#001}
+</style></head><body>
+<h1>Tasks</h1><ul id="l"></ul><button id="a">Add task</button>
+<script>
+var items=[{t:"Write the plan",d:true},{t:"Build the thing",d:false}],l=document.getElementById("l");
+function draw(){l.innerHTML="";items.forEach(function(it){var e=document.createElement("li");
+e.textContent=it.t;e.className=it.d?"done":"";e.onclick=function(){it.d=!it.d;draw()};l.appendChild(e)})}
+document.getElementById("a").onclick=function(){items.push({t:"Task "+(items.length+1),d:false});draw()};
+draw();
+</script></body></html>

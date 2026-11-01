@@ -1,0 +1,40 @@
+# Present your work
+
+Show a person what you made by writing a file into `.cuttlefish/artifacts/` in the project root. The dashboard
+shows it next to the chat. Present when a picture or a walk-through says more than a paragraph: a plan, a design, a
+finished feature, a status. Do it once per milestone, not after every edit, and tell the person in chat which file
+to open. Steps: pick the kind, copy its example from `.cuttlefish/present/examples/`, replace the content, save it
+under `.cuttlefish/artifacts/<kind>/<slug>.<ext>`.
+
+## Kinds
+
+| Kind | Path | Use it for |
+|---|---|---|
+| doc | `doc/<slug>.md` | plan, review, summary (markdown) |
+| slides | `slides/<slug>.html` | a short walk-through, one idea per slide |
+| wireframe | `wireframe/<slug>.html` or `.svg` | how a screen or layout will look |
+| animation | `animation/<slug>.html` | how something flows or changes over time |
+| demo | `demo/<slug>.html` | a mock of the feature you can click, with fake data |
+| dashboard | `dashboard/<slug>.html` | numbers drawn as bars, lines or tiles |
+
+`<slug>` is lowercase letters, digits and hyphens. An image (png, jpg, gif, webp, svg) or a video (mp4, webm) may
+sit in any of these folders.
+
+## Rules for an HTML file
+
+The file runs in a locked frame: no network, no access to the app, no way to navigate away. So:
+
+- One self-contained file. Inline `<style>` and `<script>`. No `<script src>`, no `<link>`, no CDN, no web font.
+- No `fetch`, `XMLHttpRequest`, `WebSocket`, `localStorage`, `window.parent` or `window.top`. They fail.
+- Images, audio and fonts only as `data:` URIs. Put the data the page draws inside the file (a JS array or JSON).
+- Start with `<title>` (the name) and `<meta name="cuttlefish:artifact" content="KIND">`. Add
+  `<meta name="description" content="one sentence">`.
+- Make it readable at phone width (390 px) and on a dark or light background: set `color` and `background` yourself.
+- Keep it small, under 200 KB. A slide deck has about 10 slides at most.
+
+For a doc, start with a `# Title` line. Raw HTML inside markdown is not shown.
+
+## Check it
+
+Read your file once as the person would. Nothing may depend on a file or address outside it. Say in chat what you
+made and where it is.

@@ -1,0 +1,14 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Example animation</title>
+<meta name="cuttlefish:artifact" content="animation">
+<meta name="description" content="A request moving from client to server.">
+<style>
+body{margin:0;background:#10141c;color:#eef;font:16px system-ui,sans-serif}
+.lane{position:relative;margin:40px 5vw;height:60px;border-bottom:2px solid #456}
+.dot{position:absolute;top:20px;width:20px;height:20px;border-radius:50%;background:#6aa7ff;animation:go 3s ease-in-out infinite alternate}
+@keyframes go{from{left:0}to{left:calc(100% - 20px)}}
+.l{display:flex;justify-content:space-between;margin:0 5vw}
+</style></head><body>
+<div class="lane"><div class="dot"></div></div>
+<div class="l"><span>Client</span><span>Server</span></div>
+</body></html>
