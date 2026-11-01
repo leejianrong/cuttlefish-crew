@@ -41,7 +41,13 @@ from cuttlefish.artifacts import Artifact
 from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
-from cuttlefish.config import PreparedRun, delegate_approvals, prepare_run, resolve_agent_backend
+from cuttlefish.config import (
+    PreparedRun,
+    delegate_approvals,
+    manager_keep_context,
+    prepare_run,
+    resolve_agent_backend,
+)
 from cuttlefish.delegate import codex_live
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import (
@@ -137,6 +143,8 @@ _WAKE_MESSAGE = (
 
 #: How long a paste is given to be taken in before Enter is pressed (CUT-173).
 _PASTE_SETTLE_S = 0.3
+#: How long Claude Code is given to clear its conversation before the next message (CUT-273).
+_CLEAR_SETTLE_S = 1.5
 
 #: The longest goal given to a builder (CUT-171): it is one command-line argument.
 MAX_GOAL_CHARS = 8000
@@ -574,12 +582,16 @@ class FleetDaemon:
         except TmuxError:
             return ""
 
-    async def send_chat(self, project_id: str, text: str) -> dict[str, str]:
+    async def send_chat(self, project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
         """Type ``text`` into the project's running Claude Code session as one bracketed paste,
         then Enter (CUT-173). Refused when there is no such session, when the tool is not one
         whose input is wired in yet, and while a dialog is open (a permission waiting, here or in
         the terminal), because a dialog would read the message as its answer. A session that is
-        working takes it as a queued message, which the reply says."""
+        working takes it as a queued message, which the reply says.
+
+        ``fresh`` (the manager's wakes, CUT-273, ADR-0055) types ``/clear`` first when the session
+        is idle, so the message starts a short conversation instead of adding to a long one. It
+        is Claude Code's own command, no model call; a busy or unknown session is not cleared."""
         try:
             message = clean_message(text)
         except MessageError as exc:
@@ -604,7 +616,14 @@ class FleetDaemon:
                 "Terminal tab); a message typed now would be read as the answer."
             )
 
+        clear = fresh and state == "idle"
+
         def deliver() -> None:
+            if clear:
+                tmux.paste(name, "/clear")
+                time.sleep(_PASTE_SETTLE_S)
+                tmux.press_enter(name)
+                time.sleep(_CLEAR_SETTLE_S)
             tmux.paste(name, message)
             # A pasted block is taken in before the next key is read, or Enter lands in it.
             time.sleep(_PASTE_SETTLE_S)
@@ -614,7 +633,8 @@ class FleetDaemon:
             await asyncio.to_thread(deliver)
         except TmuxError as exc:
             raise FleetError(str(exc)) from exc
-        return {"sent": "queued" if state == "busy" else "delivered", "state": state}
+        sent = {"sent": "queued" if state == "busy" else "delivered", "state": state}
+        return {**sent, "context": "fresh"} if clear else sent
 
     async def check_in_manager(self, text: str) -> str | None:
         """Type a scheduled check-in into the manager's session (CUT-257, ADR-0053). ``None`` once
@@ -624,7 +644,7 @@ class FleetDaemon:
         if self._claude_hooks.activity(self.manager_project)[0] == "busy":
             return "the manager is busy"
         try:
-            await self.send_chat(self.manager_project, text)
+            await self.send_chat(self.manager_project, text, fresh=not manager_keep_context())
         except FleetError as exc:
             return str(exc)
         return None
@@ -1166,7 +1186,11 @@ class FleetDaemon:
         self._last_wake = time.monotonic()
         projects = ", ".join(sorted({p.project_id for p in waiting}))
         try:
-            await self.send_chat(self.manager_project, _WAKE_MESSAGE.format(projects=projects))
+            await self.send_chat(
+                self.manager_project,
+                _WAKE_MESSAGE.format(projects=projects),
+                fresh=not manager_keep_context(),
+            )
         except FleetError as exc:
             logger.info("manager not woken for approvals: %s", exc)
 

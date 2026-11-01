@@ -359,7 +359,8 @@ async def _woken(
 
     sent: list[tuple[str, str]] = []
 
-    async def send_chat(project_id: str, text: str) -> dict[str, str]:
+    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+        assert fresh  # a wake starts a short conversation (CUT-273)
         sent.append((project_id, text))
         return {}
 
@@ -427,7 +428,8 @@ async def test_a_scheduled_check_in_is_typed_unless_the_manager_is_busy_or_refus
     sent: list[str] = []
     refusal: list[str] = []
 
-    async def send_chat(project_id: str, text: str) -> dict[str, str]:
+    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+        assert fresh
         if refusal:
             raise FleetError(refusal[0])
         sent.append(text)

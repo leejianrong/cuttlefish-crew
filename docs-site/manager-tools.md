@@ -70,6 +70,17 @@ overrides the daemon's setting for that project, and "Follow the daemon" (the de
 `PATCH /api/projects/<id>/delegate-approvals` with `{"delegate_approvals": true|false|null}` (Admin tier). Each change is
 journaled in the project's session and shows in its timeline.
 
+## Keeping a wake cheap
+
+A long-lived session re-reads its whole conversation on every request, so each wake would cost more than the last. Before
+the daemon types an approval wake or a scheduled check-in it types `/clear` into the manager's session when that is idle
+(never while it is busy), so every wake starts a short conversation: the instructions and tools load again, and the manager
+reads `list_attention` and `project_digest` afresh. A chat you had with the manager is gone at its next wake. Set
+`CUTTLEFISH_MANAGER_KEEP_CONTEXT=1` to keep one growing conversation instead. To see what each wake cost, run
+`python scripts/manager_tokens.py ~/.claude/projects/<the manager folder>`, which reads the usage Claude Code wrote into
+its own transcripts. See
+[ADR-0055](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0055-a-manager-wake-clears-the-sessions-context-first.md).
+
 ## Waking the manager on a schedule
 
 The manager's own project takes a [schedule](schedules.md) like any other, but its text is a check-in rather than a goal:
