@@ -1,8 +1,23 @@
 <script lang="ts">
   import { keepIfSame } from "../same";
-  import { refusal, type FleetClient, type ProjectSummary } from "../api";
+  import { FleetApiError, refusal, type FleetClient, type ProjectSummary } from "../api";
   import { loadPins, rankProjects, savePins } from "../rank";
+  import {
+    filterProjects,
+    groupProjects,
+    isFiltering,
+    loadCollapsed,
+    loadGroupBy,
+    NO_FILTER,
+    saveCollapsed,
+    saveGroupBy,
+    stateCounts,
+    tagCounts,
+    type Filter,
+    type GroupBy,
+  } from "../grouping";
   import ProjectCard from "./ProjectCard.svelte";
+  import ProjectFilters from "./ProjectFilters.svelte";
   import Icon from "./Icon.svelte";
 
   let {
@@ -20,6 +35,36 @@
   let pins = $state<Set<string>>(loadPins());
   // Ranked on every refresh from the same inputs, so the order only moves when a project's state does.
   const ranked = $derived(rankProjects(projects, waitingBy, pins));
+
+  let filter = $state<Filter>(NO_FILTER);
+  let groupBy = $state<GroupBy>(loadGroupBy());
+  let collapsed = $state<Set<string>>(loadCollapsed());
+  const visible = $derived(filterProjects(ranked, filter, waitingBy));
+  const groups = $derived(groupProjects(visible, groupBy, waitingBy));
+  const states = $derived(stateCounts(projects, waitingBy));
+  const tags = $derived(tagCounts(projects));
+
+  function toggleGroup(key: string) {
+    const next = new Set(collapsed);
+    if (!next.delete(key)) next.add(key);
+    collapsed = next;
+    saveCollapsed(next);
+  }
+
+  async function setTags(id: string, next: string[]) {
+    actionError = null;
+    try {
+      await client.setTags(id, next);
+    } catch (error) {
+      // A 400 says which rule the tags broke ("a tag is at most 24 characters").
+      actionError =
+        refusal(error) ??
+        (error instanceof FleetApiError && error.status === 400
+          ? error.message
+          : "Couldn't save those tags. Check that the daemon is still running.");
+    }
+    await refresh();
+  }
 
   function togglePin(id: string) {
     const next = new Set(pins);
@@ -102,19 +147,56 @@
     <p class="warning">Lost connection to the daemon. Retrying…</p>
   {/if}
 
-  <div class="grid">
-    {#each ranked as project (project.id)}
-      <ProjectCard
-        {project}
-        waiting={waitingBy[project.id] ?? 0}
-        pinned={pins.has(project.id)}
-        onPin={() => togglePin(project.id)}
-        onOpen={() => onOpenProject(project.id)}
-        onStop={() => stop(project.id)}
-        onRemove={() => remove(project.id)}
-      />
-    {/each}
-  </div>
+  {#if projects.length > 1}
+    <ProjectFilters
+      {filter}
+      {groupBy}
+      stateCount={states}
+      {tags}
+      onFilter={(next) => (filter = next)}
+      onGroupBy={(next) => {
+        groupBy = next;
+        saveGroupBy(next);
+      }}
+    />
+  {/if}
+
+  {#each groups as group (group.key)}
+    {@const open = groupBy === "none" || !collapsed.has(group.key)}
+    {#if groupBy !== "none"}
+      <h2 class="group-head title-medium">
+        <button aria-expanded={open} onclick={() => toggleGroup(group.key)}>
+          <Icon name={open ? "chevron-down" : "chevron-right"} size={18} />
+          {group.label}
+          <span class="group-count body-small">{group.projects.length}</span>
+        </button>
+      </h2>
+    {/if}
+    {#if open}
+      <div class="grid">
+        {#each group.projects as project (project.id)}
+          <ProjectCard
+            {project}
+            waiting={waitingBy[project.id] ?? 0}
+            pinned={pins.has(project.id)}
+            onPin={() => togglePin(project.id)}
+            onTags={(next) => setTags(project.id, next)}
+            onOpen={() => onOpenProject(project.id)}
+            onStop={() => stop(project.id)}
+            onRemove={() => remove(project.id)}
+          />
+        {/each}
+      </div>
+    {/if}
+  {/each}
+
+  {#if projects.length > 0 && visible.length === 0 && isFiltering(filter)}
+    <div class="card filled empty-state">
+      <h2 class="title-large">No project matches</h2>
+      <p class="body-medium muted">None of your {projects.length} projects fits this filter.</p>
+      <button class="btn btn-tonal" onclick={() => (filter = NO_FILTER)}>Clear filters</button>
+    </div>
+  {/if}
 
   {#if loaded && !unreachable && projects.length === 0}
     <div class="card filled empty-state">
@@ -173,6 +255,33 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
     gap: 1rem;
+  }
+
+  .group-head {
+    margin: 1.5rem 0 0.75rem;
+  }
+
+  .group-head button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--text);
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .group-count {
+    color: var(--text-muted);
+  }
+
+  /* A thumb needs 44px (CUT-98). */
+  @media (max-width: 640px) {
+    .group-head button {
+      min-height: 44px;
+    }
   }
 
   .empty-state {

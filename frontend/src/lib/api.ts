@@ -222,6 +222,8 @@ export interface ProjectSummary {
   terminal_command?: string | null;
   /** CUT-238: each new goal runs in its own git worktree and branch. */
   worktree_per_goal?: boolean;
+  /** CUT-191: free-form labels the project list is grouped and filtered by. */
+  tags?: string[];
   /** ADR-0052: this is the manager agent's project, not a builder's. */
   is_manager?: boolean;
   /** CUT-259: wake the manager for this project's requests; null follows the daemon's setting. */
@@ -663,6 +665,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/chat`, {
       method: "POST",
       body: JSON.stringify({ text }),
+    });
+  }
+
+  /** Replace a project's tags (CUT-191); a refusal says which rule it broke. */
+  setTags(id: string, tags: string[]): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/tags`, {
+      method: "PATCH",
+      body: JSON.stringify({ tags }),
     });
   }
 
