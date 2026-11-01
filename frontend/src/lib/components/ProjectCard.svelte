@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { ProjectSummary, RoleStatus } from "../api";
   import { agoIso } from "../artifacts";
+  import { projectState, STATE_LABEL, type ProjectState } from "../projectstate";
   import RoleSprite from "./RoleSprite.svelte";
+  import StatusChip from "./StatusChip.svelte";
 
   let {
     project,
@@ -39,21 +41,28 @@
     return () => clearInterval(tick);
   });
   const active = $derived(agoIso(project.last_event_at, now));
+  // Each state in the role chip's own palette: waiting reads as blocked, stuck as failed.
+  const TONE: Record<ProjectState, RoleStatus> = {
+    working: "working",
+    waiting: "blocked",
+    done: "done",
+    stuck: "failed",
+    idle: "queued",
+  };
+  const line = $derived(projectState(project, waiting, now * 1000));
 </script>
 
 <article class="card filled project">
   <header>
     <button class="title title-medium" onclick={onOpen}>{project.name}</button>
-    {#if project.running}
-      <span class="running-dot" title="a team is running"></span>
-    {/if}
     {#if pinned}<span class="pinned label-small">Pinned</span>{/if}
   </header>
   <p class="root mono" title={project.root}><bdi>{project.root}</bdi></p>
 
-  {#if waiting > 0}
-    <p class="waiting body-small" role="status">{waiting} waiting for you</p>
-  {/if}
+  <p class="state body-small" data-state={line.state}>
+    <span class="chip-slot"><StatusChip status="queued" tone={TONE[line.state]} label={STATE_LABEL[line.state]} /></span>
+    <span class="reason">{line.reason}</span>
+  </p>
 
   {#if roleEntries.length > 0}
     <div class="roles">
@@ -145,24 +154,6 @@
     color: var(--md-sys-color-on-secondary-container);
   }
 
-  .running-dot {
-    width: 0.5rem;
-    height: 0.5rem;
-    border-radius: 999px;
-    background: var(--status-working-fg);
-    animation: pulse 1.4s ease-in-out infinite;
-  }
-
-  @keyframes pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
-    50% {
-      opacity: 0.35;
-    }
-  }
-
   .root {
     color: var(--text-faint);
     font-size: 0.78rem;
@@ -204,14 +195,21 @@
     color: var(--text-faint);
   }
 
-  .waiting {
-    align-self: flex-start;
+  .state {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
     margin: 0;
-    padding: 0.15rem 0.6rem;
-    border-radius: 999px;
-    background: var(--status-blocked-bg);
-    color: var(--status-blocked-fg);
-    font-weight: 600;
+    min-width: 0;
+  }
+
+  .chip-slot {
+    flex-shrink: 0;
+  }
+
+  .reason {
+    color: var(--text-muted);
+    min-width: 0;
   }
 
   .facts {

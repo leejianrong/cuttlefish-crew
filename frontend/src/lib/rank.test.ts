@@ -58,8 +58,8 @@ describe("rankProjects", () => {
 });
 
 describe("urgency", () => {
-  it("counts a blocked role as stuck", () => {
-    expect(urgency(project("x", { status: "blocked", running: true }), 0)).toBe(1);
+  it("counts a failed role as stuck", () => {
+    expect(urgency(project("x", { status: "failed" }), 0)).toBe(1);
   });
 });
 

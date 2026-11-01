@@ -2,16 +2,15 @@
 // pins, which are a convenience that is safe to lose (like the theme).
 
 import type { ProjectSummary } from "./api";
+import { projectState, type ProjectState } from "./projectstate";
 
 /** Lower sorts first: waiting for you, then stuck, then working, then everything quiet. */
 export type Urgency = 0 | 1 | 2 | 3;
 
+const URGENCY: Record<ProjectState, Urgency> = { waiting: 0, stuck: 1, working: 2, done: 3, idle: 3 };
+
 export function urgency(project: ProjectSummary, waiting: number): Urgency {
-  if (waiting > 0) return 0;
-  const roles = Object.values(project.status);
-  if (roles.some((s) => s === "failed" || s === "blocked")) return 1;
-  if (project.running) return 2;
-  return 3;
+  return URGENCY[projectState(project, waiting).state];
 }
 
 /** The list in the order to show it: pinned first, then by urgency, then the most recently active,
