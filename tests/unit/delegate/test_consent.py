@@ -70,6 +70,12 @@ def test_no_allow_list_denies_every_shell_command() -> None:
         assert (decision.answer, decision.rule) == ("deny", "no_shell_allowed")
 
 
+def test_ask_first_names_the_never_allowed_rule_and_is_not_askable() -> None:
+    decision = ConsentPolicy(None).decide("run_shell", SH + "sudo -n true")
+    assert decision.answer == "deny" and decision.askable is False
+    assert decision.rule != "no_shell_allowed"
+
+
 def test_a_write_outside_root_is_denied_even_for_a_role_with_a_shell_allowlist() -> None:
     assert ConsentPolicy(PYTEST).decide("write_outside_root", "/etc/x").answer == "deny"
 
