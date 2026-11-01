@@ -20,7 +20,7 @@ note (neither has a launch flag for it), so name the file in your message if you
 
 ## Charts, tables, diffs and checklists in markdown
 
-A `.md` file can hold four fenced blocks that the dashboard draws instead of showing as code. They follow the theme (light
+A `.md` file can hold five fenced blocks that the dashboard draws instead of showing as code. They follow the theme (light
 and dark) and fit a phone. Nothing in them becomes HTML. A block that does not parse shows as plain code, so a mistake
 never breaks the page.
 
@@ -30,9 +30,14 @@ never breaks the page.
 | `table` | CSV, header on the first line, at least two columns | a table |
 | `diff` | a unified diff | lines coloured as added, removed or header |
 | `checklist` | `- [x] done` and `- [ ] to do`, one per line | a read-only checklist |
+| `mermaid` | a flowchart: `flowchart TD` or `LR` (or `graph`), then `A[text] -->|label| B{text}` lines | an inline SVG flowchart |
 
-Limits: 60 labels and 6 series per chart, 500 lines per block, numbers only in a chart. Mermaid diagrams are not drawn yet;
-a `mermaid` block shows as code.
+Limits: 60 labels and 6 series per chart, 500 lines per block, numbers only in a chart.
+
+`mermaid` is a small subset written for the dashboard, not the Mermaid library: only flowcharts (`flowchart` or `graph`,
+direction `TD`, `TB` or `LR`), nodes as `A[box]`, `A(round)` or `A{decision}`, edges `-->`, `---`, `-.->` and `==>` with an
+optional `|label|`, at most 40 nodes and 80 edges. Anything else (a sequence or class diagram, `subgraph`, `style`, other
+node shapes) shows as code, so draw those as an SVG file instead. See ADR-0056.
 
 ## The kinds
 

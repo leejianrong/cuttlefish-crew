@@ -96,8 +96,12 @@ describe("fenced blocks", () => {
     const [diff] = parseMarkdown(fence("diff", "+<script>alert(1)</script>"));
     expect(diff).toEqual({ t: "diff", lines: [{ kind: "add", text: "+<script>alert(1)</script>" }] });
   });
-  it("leaves other languages, and mermaid for now, as code", () => {
+  it("leaves other languages, and mermaid outside the flowchart subset, as code", () => {
     expect(parseMarkdown(fence("python", "print(1)"))[0].t).toBe("code");
-    expect(parseMarkdown(fence("mermaid", "graph TD; A-->B"))[0].t).toBe("code");
+    expect(parseMarkdown(fence("mermaid", "sequenceDiagram\n  A->>B: hi"))[0].t).toBe("code");
+    expect(parseMarkdown(fence("mermaid", "graph TD\n  subgraph x\n  A-->B\n  end"))[0].t).toBe("code");
+  });
+  it("draws a mermaid flowchart", () => {
+    expect(parseMarkdown(fence("mermaid", "graph TD; A-->B"))[0].t).toBe("flow");
   });
 });
