@@ -83,6 +83,7 @@ async def delegate_to_agent_backend(
         kopicode_binary=runtime_.kopicode_binary,
         claude_code_binary=runtime_.claude_code_binary,
         codex_binary=runtime_.codex_binary,
+        acp_command=runtime_.acp_command,
     )
     names = sorted(
         set(secret_names or []) | set(backend.CREDENTIAL_ENV_VARS) | set(runtime_.secret_names)
@@ -103,14 +104,14 @@ async def delegate_to_agent_backend(
     requests = runtime_.requests
     if (
         requests is not None
-        and backend.NAME in ("kopicode", "codex", "claude-code")
+        and backend.NAME in ("kopicode", "codex", "claude-code", "acp")
         and access not in ("auto", READ_ONLY)
     ):
         mode_kwargs["asker"] = requests.asker(
             role=requests.role_for(task_text), backend=backend.NAME
         )
     backend_name = getattr(backend, "NAME", None)
-    if backend_name in ("codex", "claude-code", "kopicode"):
+    if backend_name in ("codex", "claude-code", "kopicode", "acp"):
         # CUT-92, CUT-93, CUT-94: the role this round belongs to. Not a task argument, so recorded
         # calls and replay are unchanged. `session` (the conversation to continue) only when
         # continuity is on; `live_role` (who can steer the running turn, ADR-0033) only for

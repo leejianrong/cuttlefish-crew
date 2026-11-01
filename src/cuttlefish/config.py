@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -43,6 +44,9 @@ CLAUDE_CODE_BIN_ENV = "CUTTLEFISH_CLAUDE_CODE_BIN"
 DEFAULT_CLAUDE_CODE_BIN = "claude"
 CODEX_BIN_ENV = "CUTTLEFISH_CODEX_BIN"
 DEFAULT_CODEX_BIN = "codex"
+#: The command that starts an ACP agent (CUT-260, ADR-0055): its own ACP entry point and arguments,
+#: split like a shell would. Unset, the ``acp`` backend cannot be used.
+ACP_AGENT_ENV = "CUTTLEFISH_ACP_AGENT"
 AGENT_BACKEND_ENV = "CUTTLEFISH_AGENT_BACKEND"
 DEFAULT_AGENT_BACKEND = "kopicode"
 SANDBOX_ENV = "CUTTLEFISH_SANDBOX"
@@ -93,10 +97,19 @@ def delegate_approvals() -> bool:
     return os.environ.get(DELEGATE_APPROVALS_ENV, "").lower() in ("1", "true", "yes", "on")
 
 
+def resolve_acp_command() -> tuple[str, ...]:
+    """The ACP agent's command line from ``CUTTLEFISH_ACP_AGENT``, or ``()`` when unset."""
+    raw = os.environ.get(ACP_AGENT_ENV, "").strip()
+    try:
+        return tuple(shlex.split(raw))
+    except ValueError as exc:
+        raise ConfigError(f"{ACP_AGENT_ENV} is not a valid command line: {exc}") from exc
+
+
 def validate_backend_name(choice: str, *, source: str) -> str:
-    if choice not in ("kopicode", "claude-code", "codex"):
+    if choice not in ("kopicode", "claude-code", "codex", "acp"):
         raise ConfigError(
-            f"unknown {source}={choice!r}; expected 'kopicode', 'claude-code', or 'codex'"
+            f"unknown {source}={choice!r}; expected 'kopicode', 'claude-code', 'codex', or 'acp'"
         )
     return choice
 
@@ -228,6 +241,8 @@ class PreparedRun:
     episodic_store: EpisodicStore
     #: The names this run declared; the fleet daemon's are every secret the project can use.
     secret_names: tuple[str, ...] = ()
+    #: The ACP agent's command line (``CUTTLEFISH_ACP_AGENT``); empty when unset.
+    acp_command: tuple[str, ...] = ()
 
     def close(self) -> None:
         self.episodic_store.close()
@@ -240,6 +255,7 @@ class PreparedRun:
             kopicode_binary=self.kopicode_binary,
             claude_code_binary=self.claude_code_binary,
             codex_binary=self.codex_binary,
+            acp_command=self.acp_command,
             agent_backend=self.agent_backend,
             sandbox_provider=self.sandbox_provider,
             secrets_store=self.secrets_store,
@@ -271,6 +287,7 @@ def prepare_run(
     kopicode_binary = resolve_kopicode_binary()
     claude_code_binary = resolve_claude_code_binary()
     codex_binary = resolve_codex_binary()
+    acp_command = resolve_acp_command()
 
     from cuttlefish.agents.registry import resolve_backend
 
@@ -284,6 +301,13 @@ def prepare_run(
                 check_binary_on_path(kopicode_binary, env_hint=KOPICODE_BIN_ENV)
             elif needed == "claude-code":
                 check_binary_on_path(claude_code_binary, env_hint=CLAUDE_CODE_BIN_ENV)
+            elif needed == "acp":
+                if not acp_command:
+                    raise ConfigError(
+                        f"the acp backend needs {ACP_AGENT_ENV}: the command that starts "
+                        "your ACP agent, for example 'my-agent --acp'"
+                    )
+                check_binary_on_path(acp_command[0], env_hint=ACP_AGENT_ENV)
             else:
                 check_binary_on_path(codex_binary, env_hint=CODEX_BIN_ENV)
         _LOG.info(
@@ -298,6 +322,7 @@ def prepare_run(
             kopicode_binary=kopicode_binary,
             claude_code_binary=claude_code_binary,
             codex_binary=codex_binary,
+            acp_command=acp_command,
         )
         secrets_store = resolve_secrets_store(resolved_base_dir, central_db=central_secrets_db)
         sandbox_provider = resolve_sandbox_provider()
@@ -330,6 +355,7 @@ def prepare_run(
         kopicode_binary=kopicode_binary,
         claude_code_binary=claude_code_binary,
         codex_binary=codex_binary,
+        acp_command=acp_command,
         agent_backend=agent_backend,
         sandbox_provider=sandbox_provider,
         secrets_store=secrets_store,

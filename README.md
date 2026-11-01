@@ -49,6 +49,9 @@ Want the whole walk-through, with two practice repos and two crews side by side?
 - **Any agent, three first-class.** kopicode, Claude Code and Codex report status and ask for permission in the
   dashboard. Any other terminal agent (`cuttlefish projects add --terminal-command 'aider'`) runs in the same tmux
   session with a Terminal tab, but with no live status or Needs you cards ([ADR-0047](docs/adr/0047-a-project-can-run-any-terminal-command-in-its-tmux-session-with-no-status-integration.md)).
+  A fourth backend, `acp`, runs any [Agent Client Protocol](https://agentclientprotocol.com) agent named by
+  `CUTTLEFISH_ACP_AGENT` as a team role, with its command requests in Needs you; a wrapped agent keeps its tool's own
+  login ([docs](docs-site/acp-backend.md)).
 - **Survives a restart.** The core loop is a durable [satay](https://github.com/leejianrong/satay-runtime)
   workflow. Restart the fleet daemon and each project's in-flight team resumes. A one-shot `cuttlefish run` does not
   resume by itself: `--resume <id>` with the original arguments continues it.

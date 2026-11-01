@@ -288,6 +288,12 @@
         yet. Pick Claude Code or Codex for a goal; kopicode still runs rounds under Advanced.
       </p>
     {/if}
+    {#if projectBackend === "acp"}
+      <p class="body-small muted">
+        This project's own backend is an ACP agent, which runs rounds under Advanced, not in a
+        terminal session. Pick Claude Code or Codex for a goal.
+      </p>
+    {/if}
     {#if error}<p class="body-small error" role="alert">{error}</p>{/if}
     <button class="btn btn-filled give" disabled={busy || !canGive(text)} onclick={give}>
       {busy ? "Starting…" : "Give the builder this goal"}

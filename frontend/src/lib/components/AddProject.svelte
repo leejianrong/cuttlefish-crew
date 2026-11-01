@@ -9,7 +9,7 @@
   } from "../api";
   import { folderName, parseAllow, parseLimit } from "../folders";
   import { radiogroup } from "../radiogroup";
-  import { presetsForLanguages } from "../team";
+  import { ACP_LOGIN_NOTE, presetsForLanguages } from "../team";
   import FolderPicker from "./FolderPicker.svelte";
   import Icon from "./Icon.svelte";
 
@@ -264,7 +264,11 @@
                 <option value="kopicode">kopicode</option>
                 <option value="claude-code">Claude Code</option>
                 <option value="codex">Codex</option>
+                <option value="acp">ACP agent</option>
               </select>
+              {#if backend === "acp"}
+                <span class="body-small muted" data-testid="acp-login-note">{ACP_LOGIN_NOTE}</span>
+              {/if}
             </label>
             <label class="field wide">
               <span class="field-label">Extra commands the agents may run (one per line)</span>

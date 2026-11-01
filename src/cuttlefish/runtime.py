@@ -63,6 +63,8 @@ class Runtime:
     kopicode_binary: str
     claude_code_binary: str = "claude"
     codex_binary: str = "codex"
+    #: The ACP agent's command line (CUT-260); empty unless the ``acp`` backend is configured.
+    acp_command: tuple[str, ...] = ()
     agent_backend: str = "kopicode"
     sandbox_provider: SandboxProvider | None = None
     secrets_store: SecretsResolver | None = None

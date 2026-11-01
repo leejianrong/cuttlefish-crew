@@ -58,7 +58,7 @@ def ask(session: str, call: dict) -> dict:
 
 def prompt(mid: int, params: dict) -> None:
     session = params["sessionId"]
-    text = params["prompt"][0]["text"]
+    text = params["prompt"][0]["text"].strip().splitlines()[-1]  # cuttlefish prefixes a note
     cwd = str(Path.cwd())
     update(
         session,
