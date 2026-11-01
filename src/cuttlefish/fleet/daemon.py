@@ -44,7 +44,7 @@ from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import (
     PreparedRun,
     delegate_approvals,
-    manager_keep_context,
+    manager_clear_context,
     prepare_run,
     resolve_agent_backend,
 )
@@ -644,7 +644,7 @@ class FleetDaemon:
         if self._claude_hooks.activity(self.manager_project)[0] == "busy":
             return "the manager is busy"
         try:
-            await self.send_chat(self.manager_project, text, fresh=not manager_keep_context())
+            await self.send_chat(self.manager_project, text, fresh=manager_clear_context())
         except FleetError as exc:
             return str(exc)
         return None
@@ -1189,7 +1189,7 @@ class FleetDaemon:
             await self.send_chat(
                 self.manager_project,
                 _WAKE_MESSAGE.format(projects=projects),
-                fresh=not manager_keep_context(),
+                fresh=manager_clear_context(),
             )
         except FleetError as exc:
             logger.info("manager not woken for approvals: %s", exc)

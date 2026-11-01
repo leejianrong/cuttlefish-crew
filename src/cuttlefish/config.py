@@ -97,10 +97,10 @@ def delegate_approvals() -> bool:
     return os.environ.get(DELEGATE_APPROVALS_ENV, "").lower() in ("1", "true", "yes", "on")
 
 
-def manager_keep_context() -> bool:
-    """``CUTTLEFISH_MANAGER_KEEP_CONTEXT=1``: do not clear the manager's context before a wake
-    (CUT-273, ADR-0055). Off by default; it exists to measure the long-lived session."""
-    return os.environ.get("CUTTLEFISH_MANAGER_KEEP_CONTEXT", "").lower() in (
+def manager_clear_context() -> bool:
+    """``CUTTLEFISH_MANAGER_CLEAR_CONTEXT=1``: type ``/clear`` into the idle manager session
+    before a wake (CUT-273, ADR-0055). Opt-in: it only pays once the context is long."""
+    return os.environ.get("CUTTLEFISH_MANAGER_CLEAR_CONTEXT", "").lower() in (
         "1",
         "true",
         "yes",

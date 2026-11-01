@@ -28,6 +28,7 @@ from cuttlefish.delegate.never_allowed import repo_default_branches
 from cuttlefish.delegate.presets import resolve_allow
 from cuttlefish.projects.store import Project
 from cuttlefish.requests import WHY, UnknownRequestError
+from cuttlefish.sessions.manager import note_session_id
 
 if TYPE_CHECKING:
     from cuttlefish.fleet.daemon import FleetDaemon
@@ -139,6 +140,9 @@ class ClaudeHooks:
         reported = _str(payload.get("transcript_path"))
         if reported:
             self._transcripts[project.id] = reported
+        sid = _str(payload.get("session_id"))
+        if sid:
+            await asyncio.to_thread(note_session_id, project.root, sid)
         if event in ("UserPromptSubmit", "PreToolUse", "PostToolUse"):
             self._terminal_dialog.discard(project.id)
             self._activity[project.id] = ("busy", time.monotonic())

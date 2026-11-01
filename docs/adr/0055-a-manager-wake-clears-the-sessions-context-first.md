@@ -1,6 +1,6 @@
-# ADR-0055: A manager wake clears the session's context first
+# ADR-0055: A manager wake can clear the session's context first (opt-in)
 
-- Status: Accepted (built, CUT-273)
+- Status: Accepted (built, CUT-273; opt-in after measurement)
 - Date: 2026-11-01
 - Deciders: development agent for CUT-273, open to review by Jian
 
@@ -22,27 +22,35 @@ A wake (ADR-0053's approval wake, a scheduled check-in) carries no history the m
 3. **A compact wake message only**: already so (it names project ids, no digest). It does not touch the growing context.
 4. **`/clear` typed into the idle session before the message.** Claude Code's own command: it starts a new conversation (a new
    session id and transcript file) in the same process, with no model call. `CLAUDE.md`, `--append-system-prompt`, the MCP
-   server, hooks and the pre-approved tools all load again, so the instructions are intact.
+   server, hooks and the pre-approved tools load again.
 
 ## Decision
 
-Option 4. `FleetDaemon.send_chat(..., fresh=True)` types `/clear`, Enter, waits 1.5 seconds, then the message. The manager's
-two senders (`_send_wake`, `check_in_manager`) pass `fresh=True`. It is done only when the session's hooks say `idle`: a busy or
-unknown session is never cleared (that would drop a turn in flight), and the existing refusals (no session, a dialog open, not
-Claude Code) apply first. The reply says `context: fresh` when it cleared. Builders' chats never clear.
+Option 4 is built, **off by default**: `CUTTLEFISH_MANAGER_CLEAR_CONTEXT=1` turns it on. (An earlier draft cleared by default
+with a `CUTTLEFISH_MANAGER_KEEP_CONTEXT` opt-out; that name never shipped and is removed.)
 
-`CUTTLEFISH_MANAGER_KEEP_CONTEXT=1` turns it off, for measuring the old behaviour.
+`FleetDaemon.send_chat(..., fresh=True)` types `/clear`, Enter, waits 1.5 seconds, then the message. The manager's two senders
+(`_send_wake`, `check_in_manager`) pass `fresh=manager_clear_context()`. It clears only when the session's hooks say `idle`: a
+busy or unknown session is never cleared, and the existing refusals (no session, a dialog open, not Claude Code) apply first.
+The reply says `context: fresh` when it cleared. Builders' chats never clear.
 
-**Measurement.** `src/cuttlefish/sessions/usage.py` reads each turn's `message.usage` from a Claude Code transcript (the
-session's own JSONL, counting a message once) and `python scripts/manager_tokens.py <project dir under ~/.claude/projects>`
-prints requests and in/out/cache-create/cache-read tokens per prompt, file by file. With `/clear` each wake is its own file.
+**Measurement** (real Claude Code 2.1.316 on Haiku, a small context, new in+out+cache-create tokens per wake). Cleared: 5
+requests and about 9-10k tokens, because the system prompt, tools and `CLAUDE.md` are rebuilt in the cache each time and the
+manager re-reads its digests. Kept: 3 requests and about 1-2k tokens, growing about 4k per wake. A clear therefore costs more
+until the kept context outgrows about 8.5k of rebuilt prefix, which the run did not reach. That is why it is opt-in: it pays
+for a manager that has run many wakes (or been chatted with at length), not for a fresh one. The cache-read figure that
+prompted this ticket is the cost of a long context, and clearing bounds it; whether to pay the rebuild is the person's call.
+
+Tooling to see it: `src/cuttlefish/sessions/usage.py` reads each turn's `message.usage` from a Claude Code transcript (a message
+counted once) and `python scripts/manager_tokens.py <project dir under ~/.claude/projects>` prints requests and
+in/out/cache-create/cache-read tokens per prompt, file by file. With `/clear` each wake is its own file.
 
 ## Consequences
 
-- A cleared wake costs the fixed prefix (system prompt, tools, `CLAUDE.md`) plus its own tool calls, and stays flat however many
-  wakes came before. A person who chats with the manager between wakes loses that conversation at the next wake, by design;
-  the journal and `recent_answers` hold what was done.
-- The recorded session id goes stale after a `/clear`; a daemon restart then resumes the older conversation, or falls back to a
-  fresh one, and the next wake clears it again.
-- Not verified here against a live Claude Code (no logged-in scratch HOME was available to the agent): that `/clear` pasted
-  into the TUI is taken as the command, and the tokens per wake before and after, remain to measure with the script.
+- With it on, a wake's cost stays flat however many wakes came before. A person who chats with the manager between wakes loses
+  that conversation at the next wake; the journal and `recent_answers` hold what was done.
+- **The session id (CUT-274).** After a `/clear` the conversation has a new id. The daemon now records the newest `session_id`
+  a hook reports (`sessions.manager.note_session_id`, Claude Code records only), so a restart resumes the latest conversation
+  rather than the first one.
+- **The first wake after a daemon restart is never cleared**: hook activity is in memory, so the state is `unknown` until the
+  session has said something, and an unknown session is not cleared. The next wake clears it.

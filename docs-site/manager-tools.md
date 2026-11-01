@@ -72,11 +72,14 @@ journaled in the project's session and shows in its timeline.
 
 ## Keeping a wake cheap
 
-A long-lived session re-reads its whole conversation on every request, so each wake would cost more than the last. Before
-the daemon types an approval wake or a scheduled check-in it types `/clear` into the manager's session when that is idle
-(never while it is busy), so every wake starts a short conversation: the instructions and tools load again, and the manager
-reads `list_attention` and `project_digest` afresh. A chat you had with the manager is gone at its next wake. Set
-`CUTTLEFISH_MANAGER_KEEP_CONTEXT=1` to keep one growing conversation instead. To see what each wake cost, run
+The manager is one long-lived session that re-reads its whole conversation on every request, so each wake costs a little
+more than the last (measured: about 4k more new tokens per wake on Haiku). By default that is left alone, because it is
+cheap while the conversation is short. Set `CUTTLEFISH_MANAGER_CLEAR_CONTEXT=1` on the daemon and, before an approval wake
+or a scheduled check-in, it types `/clear` into the manager's session when that is idle (never while busy), so each wake
+starts a short conversation. The instructions and tools load again and the manager re-reads `list_attention` and
+`project_digest`. A clear costs more at first (about 9-10k new tokens a wake against 1-2k, because the prefix is rebuilt), so
+it pays only once the kept conversation is long. A chat you had with the manager is gone at its next wake, and the first
+wake after a daemon restart is not cleared. To see what each wake cost, run
 `python scripts/manager_tokens.py ~/.claude/projects/<the manager folder>`, which reads the usage Claude Code wrote into
 its own transcripts. See
 [ADR-0055](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0055-a-manager-wake-clears-the-sessions-context-first.md).

@@ -109,6 +109,20 @@ def _write(root: str, record: Mapping[str, object]) -> None:
     scratch.replace(path)
 
 
+def note_session_id(root: str, session_id: str) -> None:
+    """Record the conversation a running Claude Code session is now in (CUT-274): after a
+    ``/clear`` it is a new one, and a restart should resume that, not the first."""
+    record = _read(root)
+    if record.get("backend") != "claude-code" or record.get("session_id") in (None, session_id):
+        return
+    try:
+        uuid.UUID(session_id)
+    except ValueError:
+        return
+    record["session_id"] = session_id
+    _write(root, record)
+
+
 def _goal_path(root: str) -> Path:
     return Path(root) / ".cuttlefish" / "goal.json"
 
