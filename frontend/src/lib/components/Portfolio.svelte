@@ -6,6 +6,7 @@
     filterProjects,
     groupProjects,
     isFiltering,
+    limitGroups,
     loadCollapsed,
     loadGroupBy,
     NO_FILTER,
@@ -41,6 +42,15 @@
   let collapsed = $state<Set<string>>(loadCollapsed());
   const visible = $derived(filterProjects(ranked, filter, waitingBy));
   const groups = $derived(groupProjects(visible, groupBy, waitingBy));
+  // A fleet of 100 is drawn a chunk at a time, so the first screen does not wait for the last card.
+  const CHUNK = 20;
+  let drawn = $state(CHUNK);
+  const drawing = $derived(limitGroups(groups, drawn));
+  $effect(() => {
+    if (drawn >= visible.length) return;
+    const timer = setTimeout(() => (drawn += CHUNK), 30);
+    return () => clearTimeout(timer);
+  });
   const states = $derived(stateCounts(projects, waitingBy));
   const tags = $derived(tagCounts(projects));
 
@@ -161,7 +171,7 @@
     />
   {/if}
 
-  {#each groups as group (group.key)}
+  {#each drawing as group (group.key)}
     {@const open = groupBy === "none" || !collapsed.has(group.key)}
     {#if groupBy !== "none"}
       <h2 class="group-head title-medium">
@@ -174,7 +184,7 @@
     {/if}
     {#if open}
       <div class="grid">
-        {#each group.projects as project (project.id)}
+        {#each group.shown as project (project.id)}
           <ProjectCard
             {project}
             waiting={waitingBy[project.id] ?? 0}

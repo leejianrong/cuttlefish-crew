@@ -301,7 +301,8 @@ dashboard directly.
 uv run cuttlefish mcp --base-url http://127.0.0.1:8420 --token <token>
 ```
 
-Twenty tools. Run and watch: `list_projects`, `get_project`, `register_project` (also takes
+Twenty tools. Run and watch: `list_projects` (a role's persona text is left out to keep a long
+list small; `get_project` has it), `get_project`, `register_project` (also takes
 `mode` and `template`), `start_project`, `stop_project`, `steer_project`, `approve_project`,
 `get_events`. The agent in tmux: `get_agent_session`, `start_agent_session`, `stop_agent_session`. Environment: `get_project_environment` (what the project's files say it needs:
 ecosystem, package tool, version, whether its own install is present; nothing is run). Permissions: `get_permissions` (modes, command groups, the never-allowed list and the

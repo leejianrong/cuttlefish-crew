@@ -60,6 +60,20 @@ export function stateCounts(
   return counts;
 }
 
+/** The first `limit` projects across `groups`, in order, each group keeping its full `projects`
+ * (its heading counts them all) and gaining `shown`: how many of them to draw yet. A group with
+ * none to draw yet is dropped. Drawing a fleet in chunks lets the first screen appear at once. */
+export function limitGroups(groups: readonly Group[], limit: number): (Group & { shown: ProjectSummary[] })[] {
+  let left = limit;
+  const out: (Group & { shown: ProjectSummary[] })[] = [];
+  for (const group of groups) {
+    const shown = group.projects.slice(0, left);
+    left -= shown.length;
+    if (shown.length > 0) out.push({ ...group, shown });
+  }
+  return out;
+}
+
 export const UNTAGGED = "Untagged";
 
 /** Groups in the order of `projects` (already ranked): a group sits where its first project does.

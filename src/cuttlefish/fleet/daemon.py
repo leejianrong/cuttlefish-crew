@@ -162,6 +162,15 @@ class UnknownRoleError(ValueError):
     """A start named a role the project never registered."""
 
 
+@dataclass(frozen=True, slots=True)
+class JournalView:
+    """What the project list shows of a project's last team, from one read of its journal."""
+
+    status: dict[str, RoleStatus]
+    usage: dict[str, UsageTotals]
+    last_event_at: str | None
+
+
 class FleetError(Exception):
     """A fleet-daemon-level operation failed, distinctly from a workflow's own
     failure (e.g. starting a project that already has a team running)."""
@@ -1788,30 +1797,33 @@ class FleetDaemon:
             store.close()
 
     def status(self, project_id: str) -> dict[str, RoleStatus]:
-        project = self._projects.get(project_id)
-        role_names = [r.name for r in project.roles]
-        events = self._last_team_events(project)
-        if not events:
-            return dict.fromkeys(role_names, "queued")
-        names = role_names or sorted(roles_in(events))
-        return role_statuses(events, names)
+        return self.journal_view(project_id).status
 
     def usage(self, project_id: str) -> dict[str, UsageTotals]:
         """`role name -> its cumulative usage so far` (KAN-1712/ADR-0017), for
         `project_id`'s last team -- derived from the identical journal `status`
         already reads, never a second store."""
+        return self.journal_view(project_id).usage
+
+    def last_event_at(self, project_id: str) -> str | None:
+        """When `project_id`'s last team's journal last changed (ISO 8601), for the portfolio
+        card's "active 12 s ago"; `None` before a team has ever run."""
+        return self.journal_view(project_id).last_event_at
+
+    def journal_view(self, project_id: str) -> JournalView:
+        """Status, usage and last event time from ONE read of the journal. The project list asks
+        for all three for every project on every poll, and a read opens the SQLite file: three
+        reads each made a 100-project list three times slower (CUT-192)."""
         project = self._projects.get(project_id)
         role_names = [r.name for r in project.roles]
         events = self._last_team_events(project)
         names = role_names or sorted(roles_in(events))
         payloads = [event.payload for event in events]
-        return {name: cumulative_usage(payloads, role=name) for name in names}
-
-    def last_event_at(self, project_id: str) -> str | None:
-        """When `project_id`'s last team's journal last changed (ISO 8601), for the portfolio
-        card's "active 12 s ago"; `None` before a team has ever run."""
-        events = self._last_team_events(self._projects.get(project_id))
-        return events[-1].ts.isoformat() if events else None
+        return JournalView(
+            status=role_statuses(events, names) if events else dict.fromkeys(role_names, "queued"),
+            usage={name: cumulative_usage(payloads, role=name) for name in names},
+            last_event_at=events[-1].ts.isoformat() if events else None,
+        )
 
     def events(self, project_id: str) -> list[EpisodicEvent]:
         """`project_id`'s last team's full episodic record, in order -- the same

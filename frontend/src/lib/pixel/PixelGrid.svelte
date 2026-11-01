@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PixelFrame } from "./cuttlefish";
+  import { pixelImage } from "./pixelimage";
 
   let {
     frame,
@@ -11,32 +12,20 @@
   const rows = $derived(frame.length);
 </script>
 
+<!-- One element per sprite: a card draws two, and a fleet of 100 projects drew 20,000 nodes when
+     each pixel was its own span (CUT-192). -->
 <div
   class="pixel-grid"
-  style:--cols={cols}
-  style:--rows={rows}
-  style:--px="{pixelSize}px"
+  style:width="{cols * pixelSize}px"
+  style:height="{rows * pixelSize}px"
+  style:background-image={pixelImage(frame, palette)}
   aria-hidden="true"
->
-  {#each frame as row, y (y)}
-    {#each row.split("") as cell, x (x)}
-      {#if cell !== "."}
-        <span class="px" style:grid-column={x + 1} style:grid-row={y + 1} style:background={palette[cell]}
-        ></span>
-      {/if}
-    {/each}
-  {/each}
-</div>
+></div>
 
 <style>
   .pixel-grid {
-    display: grid;
-    grid-template-columns: repeat(var(--cols), var(--px));
-    grid-template-rows: repeat(var(--rows), var(--px));
-  }
-
-  .px {
-    width: var(--px);
-    height: var(--px);
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    image-rendering: pixelated;
   }
 </style>
