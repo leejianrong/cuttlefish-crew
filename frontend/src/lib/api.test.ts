@@ -17,6 +17,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("FleetClient.myTier", () => {
+  const relay = (body: unknown) =>
+    vi.fn(async () => new Response(JSON.stringify(body), { status: 200 }));
+
+  it("is the paired device's tier, asked once within 30 s", async () => {
+    const fetchMock = relay({ enabled: true, you: { id: "d", name: "phone", tier: "view" } });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FleetClient("http://127.0.0.1:8420", "t");
+    await expect(client.myTier()).resolves.toBe("view");
+    await expect(client.myTier()).resolves.toBe("view");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is null on the PC's own dashboard and when the daemon cannot say", async () => {
+    vi.stubGlobal("fetch", relay({ enabled: true, you: null }));
+    await expect(new FleetClient("http://127.0.0.1:8420", "t").myTier()).resolves.toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("no", { status: 500 })));
+    await expect(new FleetClient("http://127.0.0.1:8420", "t").myTier()).resolves.toBeNull();
+  });
+});
+
 describe("fetchAuthMode", () => {
   it("returns the mode a daemon reports", async () => {
     vi.stubGlobal(
