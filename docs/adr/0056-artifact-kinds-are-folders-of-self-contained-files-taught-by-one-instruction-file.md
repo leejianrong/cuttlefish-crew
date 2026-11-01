@@ -38,7 +38,7 @@ No sidecar file. The manifest is in the file, so one file is one artifact:
 
 - HTML: `<title>` is the name, and `<meta name="cuttlefish:artifact" content="slides">` repeats the kind and
   `<meta name="description" content="...">` gives one sentence. Both are optional and the folder wins on a conflict.
-- Markdown: optional front-matter with `title` and `summary`.
+- Markdown: the first `# heading` is the name. No front-matter, since the canvas would show it as text.
 
 The listing (`GET /api/projects/{id}/artifacts`, unchanged) already returns path, kind and time. Showing a kind badge from
 the first path segment, and reading the manifest, are dashboard work for a later card; nothing depends on it.
