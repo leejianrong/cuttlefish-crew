@@ -102,6 +102,15 @@ export function outcomeLabel(request: NeedsYouRequest): string {
     : base;
 }
 
+/** A View-tier device can read Needs you but every answer route needs Approve (fleet/tiers.py), so
+ * its buttons would only return a 403. */
+export const VIEW_ONLY_NOTE =
+  "This device can look but not answer. Answer on the PC, or ask the owner to raise this device to Approve.";
+
+export function cannotAnswer(tier: string | null | undefined): boolean {
+  return tier === "view";
+}
+
 /** A refused or conflicting answer, in words the card can show under its buttons. */
 export function answerProblem(status: number, detail: string): string {
   if (status === 409) return "This request already ended, so it can't be answered now.";

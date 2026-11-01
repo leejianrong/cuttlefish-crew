@@ -4,6 +4,7 @@ import {
   answerProblem,
   backendLabel,
   badgeText,
+  cannotAnswer,
   formatRemaining,
   isStartOfCommand,
   landsLabel,
@@ -172,5 +173,14 @@ describe("queueOrder", () => {
     const list = [r("x", { lands: "end_of_turn" }), r("y")];
     queueOrder(list);
     expect(list[0].id).toBe("x");
+  });
+});
+
+describe("cannotAnswer", () => {
+  it("is true only for a View device", () => {
+    expect(cannotAnswer("view")).toBe(true);
+    for (const tier of ["approve", "terminal", "admin", null, undefined]) {
+      expect(cannotAnswer(tier)).toBe(false);
+    }
   });
 });
