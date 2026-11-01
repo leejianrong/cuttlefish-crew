@@ -258,3 +258,30 @@ async def test_a_question_is_answered_with_text_and_the_journal_keeps_it(h: Harn
     assert isinstance(resolved, RequestResolved) and resolved.text == "tabs"
     listed = (await h.http.get(f"/api/projects/{h.project_id}/requests")).json()["resolved"][0]
     assert listed["state"] == "answered" and listed["text"] == "tabs"
+
+
+async def test_the_fleet_list_spans_projects_oldest_first(h: Harness, tmp_path: Path) -> None:
+    first = h.raise_request("make test")
+    other_root = tmp_path / "beta"
+    other_root.mkdir()
+    other = h.daemon.projects.register(name="beta", root=str(other_root))
+    h.daemon.projects.record_team_started(other.id, "t-2", ())
+    store = EpisodicStore.open(other_root / ".cuttlefish" / "episodic.db")
+    h.daemon._team_stores["t-2"] = store
+    second = h.daemon.requests.raise_permission(
+        project_id=other.id,
+        team_id="t-2",
+        role="builder",
+        backend="kopicode",
+        line="make lint",
+        why="not on the list",
+        window_s=60,
+    )
+    third = h.raise_request("make build")
+    rows = (await h.http.get("/api/requests")).json()["requests"]
+    assert [(r["id"], r["project_name"]) for r in rows] == [
+        (first.id, "alpha"),
+        (second.id, "beta"),
+        (third.id, "alpha"),
+    ]
+    store.close()

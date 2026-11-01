@@ -558,7 +558,7 @@ the team starts**, not to a team already running.
 
 ### Needs-you requests over HTTP
 
-The dashboard shows these under **Needs you**. When a kopicode agent asks to run a command nothing approves, the daemon holds it as a request:
+The dashboard shows these under **Needs you** in the side navigation: one queue across every project, one column on a phone, each card answerable in place (allow once, deny, or pick a decision's option). An agent that is paused right now comes first, then one whose answer lands later, then a Stuck card; within each, oldest first. A device paired as View sees the queue but the daemon refuses its answers. When a kopicode agent asks to run a command nothing approves, the daemon holds it as a request:
 
 - `GET /api/requests`: every pending request across the fleet, with the project, the role, the
   command, why it stopped, the answers allowed, a suggested "always" rule and `expires_in_s`.
