@@ -12,7 +12,11 @@
     type RecurrenceKind,
   } from "../schedule";
 
-  let { client, projectId }: { client: FleetClient; projectId: string } = $props();
+  let {
+    client,
+    projectId,
+    manager = false,
+  }: { client: FleetClient; projectId: string; manager?: boolean } = $props();
 
   let schedules = $state<Schedule[]>([]);
   let goal = $state("");
@@ -73,12 +77,22 @@
 </script>
 
 <section class="card filled schedules" aria-labelledby="schedules-heading">
-  <h2 id="schedules-heading" class="title-large">Scheduled goals</h2>
-  <p class="body-medium muted">
-    The daemon gives the builder a goal on a schedule, with Autopilot on, while you are away.
-    Each run waits at the plan for your approval under Needs you. It never interrupts a builder that
-    is still on its last goal: that run is skipped and says so here. Times are UTC.
-  </p>
+  <h2 id="schedules-heading" class="title-large">
+    {manager ? "Scheduled check-ins" : "Scheduled goals"}
+  </h2>
+  {#if manager}
+    <p class="body-medium muted">
+      The daemon types this message into the manager's session on a schedule, so it looks over your
+      projects while you are away. Claude Code only. A run is skipped, and says so here, while the
+      manager is busy or waiting on a permission. Times are UTC.
+    </p>
+  {:else}
+    <p class="body-medium muted">
+      The daemon gives the builder a goal on a schedule, with Autopilot on, while you are away.
+      Each run waits at the plan for your approval under Needs you. It never interrupts a builder that
+      is still on its last goal: that run is skipped and says so here. Times are UTC.
+    </p>
+  {/if}
 
   {#if schedules.length}
     <ul class="list" data-testid="schedule-list">
@@ -128,8 +142,12 @@
     }}
   >
     <label class="field">
-      <span class="field-label">Goal for each run</span>
-      <textarea bind:value={goal} rows="2" placeholder="What should the builder do?"></textarea>
+      <span class="field-label">{manager ? "Check-in message" : "Goal for each run"}</span>
+      <textarea
+        bind:value={goal}
+        rows="2"
+        placeholder={manager ? "What should the manager look at?" : "What should the builder do?"}
+      ></textarea>
     </label>
     <div class="when">
       <label class="field">
