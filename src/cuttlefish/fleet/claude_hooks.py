@@ -326,7 +326,9 @@ class ClaudeHooks:
         exits and the terminal's own dialog stays. Without this a held hook keeps the server's
         graceful shutdown waiting for as long as the request window."""
         for project_id in list(self._held):
-            self._daemon.requests.end_team(session_scope(project_id), "abandoned")
+            self._daemon.requests.end_team(
+                session_scope(project_id), "abandoned", keep_decisions=True
+            )
 
     def end_session(self, project_id: str) -> None:
         """The person stopped the agent session: its cards end and its hooks go quiet."""
