@@ -370,7 +370,11 @@ async def _woken(
     rig.daemon.manager_project = rig.project_id if own else "manager-id"
     rig.ask()
     rig.ask("pip install requests")  # a burst is one message
-    await asyncio.sleep(0.1)
+    for _ in range(100):  # poll for the wake rather than guess how long a loaded machine takes
+        if sent:
+            break
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.1)  # then room for a second message, if there were going to be one
     assert all(project == "manager-id" for project, _ in sent)
     return [text for _, text in sent]
 
