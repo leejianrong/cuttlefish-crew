@@ -73,9 +73,15 @@ export function accessLabel(access: AccessLevel | null | undefined, projectMode:
   return access ? modeLabel(access) : `Project default (${modeLabel(projectMode)})`;
 }
 
+/** Said wherever an ACP agent is chosen (CUT-260): the broker cannot hide a tool's own login. */
+export const ACP_LOGIN_NOTE =
+  "An ACP agent keeps its own tool's login: whatever account that tool is signed in to on this " +
+  "machine, the agent uses it, and cuttlefish cannot hide that. It runs the command in " +
+  "CUTTLEFISH_ACP_AGENT on the machine running the daemon.";
+
 /** The agent behind a name from the daemon: "claude-code" is "Claude Code". */
 export function backendLabel(name: string): string {
-  const names: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex" };
+  const names: Record<string, string> = { "claude-code": "Claude Code", codex: "Codex", acp: "ACP agent" };
   return names[name] ?? name;
 }
 

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { FleetApiError, type BuiltinRole, type RoleDefinition } from "./api";
 import {
   accessLabel,
+  ACP_LOGIN_NOTE,
   backendLabel,
   modeLabel,
   addCommand,
@@ -185,6 +186,8 @@ describe("labels", () => {
     expect(modeLabel("auto")).toBe("Auto");
     expect(backendLabel("claude-code")).toBe("Claude Code");
     expect(backendLabel("kopicode")).toBe("kopicode");
+    expect(backendLabel("acp")).toBe("ACP agent");
+    expect(ACP_LOGIN_NOTE).toContain("keeps its own tool");
   });
 });
 

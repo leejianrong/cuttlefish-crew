@@ -83,6 +83,18 @@ BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
         "or with CUTTLEFISH_CODEX_TRANSPORT=exec, it is coarse: two sandboxes, your command "
         "list not enforced, and it cannot pause.",
     ),
+    (
+        "acp",
+        "Asks you live",
+        "Runs the agent named by CUTTLEFISH_ACP_AGENT over the Agent Client Protocol. A command "
+        "it asks to run is decided as it is asked, like kopicode, and shown under Needs you; "
+        "the blocked list holds in every mode. Edits are accepted only inside the project "
+        "folder, and not at all for a read-only role. The agent describes its own command, so "
+        "your command list matches on that text and is weaker than on the other backends. A "
+        "wrapped agent keeps its own tool's login: whatever account that tool is signed in to "
+        "on this machine, the agent uses, and the credential broker cannot hide it. No sandbox "
+        "provider.",
+    ),
 )
 
 

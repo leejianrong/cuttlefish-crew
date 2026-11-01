@@ -18,7 +18,12 @@ class UnknownBackendError(Exception):
 
 
 def resolve_backend(
-    name: str, *, kopicode_binary: str, claude_code_binary: str, codex_binary: str = "codex"
+    name: str,
+    *,
+    kopicode_binary: str,
+    claude_code_binary: str,
+    codex_binary: str = "codex",
+    acp_command: tuple[str, ...] = (),
 ) -> AgentBackend:
     if name == "kopicode":
         from cuttlefish.agents.kopicode import KopicodeBackend
@@ -32,8 +37,14 @@ def resolve_backend(
         from cuttlefish.agents.codex import CodexBackend
 
         return CodexBackend(codex_binary)
+    if name == "acp":
+        from cuttlefish.agents.acp import AcpBackend
+
+        if not acp_command:
+            raise UnknownBackendError("the acp backend needs CUTTLEFISH_ACP_AGENT")
+        return AcpBackend(acp_command[0], acp_command[1:])
     raise UnknownBackendError(
-        f"unknown agent backend {name!r}; expected 'kopicode', 'claude-code', or 'codex'"
+        f"unknown agent backend {name!r}; expected 'kopicode', 'claude-code', 'codex', or 'acp'"
     )
 
 

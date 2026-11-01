@@ -15,6 +15,7 @@ nav = [
   { "Branches and pull requests" = "branches-and-pull-requests.md" },
   { "Scheduled goals" = "schedules.md" },
   { "Manager tools" = "manager-tools.md" },
+  { "ACP backend" = "acp-backend.md" },
   { "CLI reference" = "cli-reference.md" },
   { "How we differ" = "comparison.md" },
   { "Hosting the relay" = "hosted-relay.md" },

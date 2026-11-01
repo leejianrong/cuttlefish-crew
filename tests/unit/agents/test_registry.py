@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import pytest
 
+from cuttlefish.agents.acp import AcpBackend
 from cuttlefish.agents.claude_code import ClaudeCodeBackend
 from cuttlefish.agents.codex import CodexBackend
 from cuttlefish.agents.kopicode import KopicodeBackend
@@ -34,6 +35,22 @@ def test_codex_resolves_to_a_codex_backend_with_the_configured_binary() -> None:
     )
     assert isinstance(backend, CodexBackend)
     assert backend._binary == "my-codex"
+
+
+def test_acp_resolves_to_an_acp_backend_with_the_configured_command() -> None:
+    backend = resolve_backend(
+        "acp",
+        kopicode_binary="kopicode",
+        claude_code_binary="claude",
+        acp_command=("my-agent", "--acp"),
+    )
+    assert isinstance(backend, AcpBackend)
+    assert (backend._binary, backend._args) == ("my-agent", ("--acp",))
+
+
+def test_acp_without_a_command_fails_loudly() -> None:
+    with pytest.raises(UnknownBackendError, match="CUTTLEFISH_ACP_AGENT"):
+        resolve_backend("acp", kopicode_binary="kopicode", claude_code_binary="claude")
 
 
 def test_an_unknown_name_raises_rather_than_falling_back_to_a_default() -> None:

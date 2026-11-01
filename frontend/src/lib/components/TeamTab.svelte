@@ -12,6 +12,7 @@
   } from "../api";
   import {
     addableBuiltins,
+    ACP_LOGIN_NOTE,
     builtinByName,
     canReset,
     isDefaultPrompt,
@@ -44,6 +45,7 @@
     { value: "kopicode", label: "kopicode" },
     { value: "claude-code", label: "Claude Code" },
     { value: "codex", label: "Codex" },
+    { value: "acp", label: "ACP agent" },
   ];
   const ACCESS: { value: string; label: string }[] = [
     { value: "", label: "Project default" },
@@ -407,6 +409,9 @@
               </select>
             </label>
           </div>
+          {#if draft.backend === "acp"}
+            <p class="body-small muted" data-testid="acp-login-note">{ACP_LOGIN_NOTE}</p>
+          {/if}
           {#if draft.access === "read-only"}
             <p class="body-small muted">
               Read-only limits the shell to looking around. It also stops edits on Claude Code and

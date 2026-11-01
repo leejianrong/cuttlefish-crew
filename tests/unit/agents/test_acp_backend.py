@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from cuttlefish.agents.acp import AcpBackend
+from cuttlefish.agents.acp import AcpBackend, _inside
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.delegate import conversations
 
 FAKE = str(Path(__file__).parents[2] / "fixtures" / "fake_acp_agent.py")
 
@@ -77,10 +78,37 @@ async def test_a_timeout_sends_session_cancel_and_fails(tmp_path: Path) -> None:
     assert out.reason == "timeout"
 
 
-async def test_a_known_session_is_loaded_and_its_replay_is_not_the_answer(tmp_path: Path) -> None:
-    out = await _run(tmp_path, "hello", session="s-old")
+async def test_a_remembered_session_is_loaded_and_its_replay_is_not_the_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_RESUME", "1")
+    conversations.remember(str(tmp_path), "acp", "builder", "s-old")
+    out = await _run(tmp_path, "hello", session="builder")
     assert out.record == "s-old"
     assert out.summary == "ok done"
+
+
+async def test_without_resume_a_new_session_is_made_and_nothing_is_remembered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CUTTLEFISH_RESUME", raising=False)
+    conversations.remember(str(tmp_path), "acp", "builder", "s-old")
+    out = await _run(tmp_path, "hello", session="builder")
+    assert out.record == "s-new"
+
+
+async def test_with_resume_the_new_session_id_is_kept_for_the_next_round(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_RESUME", "1")
+    await _run(tmp_path, "hello", session="builder")
+    assert conversations.recall(str(tmp_path), "acp", "builder") == "s-new"
+
+
+async def test_an_edit_is_denied_for_a_read_only_role(tmp_path: Path) -> None:
+    out = await _run(tmp_path, "edit", mode="read-only")
+    assert out.kind == "refused"
+    assert not (tmp_path / "out.txt").exists()
 
 
 async def test_an_agent_that_wants_auth_is_an_error_not_a_hang(
@@ -90,6 +118,14 @@ async def test_an_agent_that_wants_auth_is_an_error_not_a_hang(
     monkeypatch.setenv("FAKE_ACP_AUTH", "1")
     with pytest.raises(DelegationError, match="authentication"):
         await _run(tmp_path, "hello")
+
+
+def test_a_path_that_climbs_out_of_the_root_is_not_inside_it(tmp_path: Path) -> None:
+    root = tmp_path / "proj"
+    root.mkdir()
+    assert _inside(str(root / "a.txt"), str(root))
+    assert not _inside(str(root / ".." / "b.txt"), str(root))
+    assert not _inside("", str(root))
 
 
 async def test_a_missing_binary_is_a_delegation_error(tmp_path: Path) -> None:

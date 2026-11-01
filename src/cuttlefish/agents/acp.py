@@ -1,11 +1,14 @@
-"""SPIKE (CUT-232): an :class:`~cuttlefish.agents.backend.AgentBackend` over the Agent Client
-Protocol, JSON-RPC 2.0 over an agent subprocess's stdio.
+"""An :class:`~cuttlefish.agents.backend.AgentBackend` over the Agent Client Protocol, JSON-RPC
+2.0 over an agent subprocess's stdio (CUT-232 spike, CUT-260 shipped as the fourth backend).
 
-Not registered in ``agents.registry`` and not selectable: the findings are in
-``docs/research/acp-backend-spike.md``. This wraps the protocol as published (ADR-0003, ADR-0005):
+The agent is whatever ``CUTTLEFISH_ACP_AGENT`` names. Findings:
+``docs/research/acp-backend-spike.md``.
+A wrapped agent keeps its own tool's login, which the credential broker (ADR-0031) cannot hide.
+This wraps the protocol as published (ADR-0003, ADR-0005):
 ``initialize``, ``session/new``, ``session/prompt`` with streamed ``session/update``s, the
 agent's ``session/request_permission`` answered by the role's policy, ``session/cancel`` on a
-timeout. ``session/load`` is used when a session id is passed and the agent advertises it.
+timeout. ``session/load`` continues a role's earlier session (``CUTTLEFISH_RESUME=1``) when the
+agent advertises ``loadSession``.
 
 Gaps, on purpose: no sandbox provider, no credential broker, no fs/terminal client methods
 (the agent uses its own tools), no usage figure beyond ``usage_update``.
@@ -16,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import os
 import shlex
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, ClassVar
@@ -27,6 +31,7 @@ from cuttlefish.agents.outcome import (
     DelegationOutcome,
     ToolCallRecord,
 )
+from cuttlefish.delegate import conversations
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.requests import ShellAsker
 from cuttlefish.sandbox.provider import SandboxProvider
@@ -44,6 +49,14 @@ def _pick(options: list[Json], *kinds: str) -> str | None:
             if option.get("kind") == kind and isinstance(option.get("optionId"), str):
                 return str(option["optionId"])
     return None
+
+
+def _inside(path: str, root: str) -> bool:
+    """``path`` is under ``root`` once ``..`` and symlinks are resolved (a write outside the root
+    is never allowed)."""
+    if not path:
+        return False
+    return os.path.realpath(path).startswith(os.path.realpath(root) + os.sep)
 
 
 class _Conn:
@@ -157,8 +170,10 @@ class AcpBackend:
         asker: ShellAsker | None = None,
         session: str | None = None,
     ) -> DelegationOutcome:
-        """``session`` is an ACP session id to ``session/load`` first (agents that advertise
-        ``loadSession``); the new id is in the outcome's ``record``."""
+        """``session`` is the conversation key (normally the role's name). With
+        ``CUTTLEFISH_RESUME=1`` and an agent that advertises ``loadSession``, the id kept for it in
+        the project root (``cuttlefish.delegate.conversations``) is ``session/load``-ed; a load the
+        agent refuses starts a new session. The session id is also in the outcome's ``record``."""
         if sandbox_provider is not None:
             raise DelegationError("the ACP backend does not run inside a sandbox provider")
         decide = command_decider(allow, mode, asker)
@@ -205,7 +220,7 @@ class AcpBackend:
         async def on_request(method: str, params: Json) -> Json:
             if method != "session/request_permission":
                 raise DelegationError(f"unsupported client method {method}")
-            return await self._permission(params, root, decide, calls, consents)
+            return await self._permission(params, root, mode, decide, calls, consents)
 
         conn = _Conn(proc, on_request, on_notify)
         session_id = ""
@@ -222,13 +237,26 @@ class AcpBackend:
                 names = ", ".join(str(m.get("id")) for m in init["authMethods"])
                 raise DelegationError(f"ACP agent wants authentication first ({names})")
             params: Json = {"cwd": root, "mcpServers": []}
-            if session and self.agent_capabilities.get("loadSession"):
-                session_id = session
+            key = session or conversations.DEFAULT_KEY
+            resuming = conversations.resume_enabled(self.NAME)
+            remembered = (
+                conversations.recall(root, self.NAME, key)
+                if resuming and self.agent_capabilities.get("loadSession")
+                else None
+            )
+            session_id = ""
+            if remembered:
                 state["replaying"] = True
-                await conn.call("session/load", {"sessionId": session, **params})
+                try:
+                    await conn.call("session/load", {"sessionId": remembered, **params})
+                    session_id = remembered
+                except DelegationError:
+                    conversations.forget(root, self.NAME, key)
                 state["replaying"] = False
-            else:
+            if not session_id:
                 session_id = str((await conn.call("session/new", params))["sessionId"])
+            if resuming:
+                conversations.remember(root, self.NAME, key, session_id)
             prompt = asyncio.ensure_future(
                 conn.call(
                     "session/prompt",
@@ -307,13 +335,15 @@ class AcpBackend:
     async def _permission(
         params: Json,
         root: str,
+        mode: str,
         decide: Callable[[str, str], Any],
         calls: dict[str, ToolCallRecord],
         consents: list[ConsentDecisionRecord],
     ) -> Json:
         """Map the role's policy onto the options the agent offered. Only ``execute`` goes through
-        the shell policy; edits inside the root are allowed, anything else is denied. An agent that
-        offers no reject option gets ``cancelled``, which the protocol defines for that."""
+        the shell policy; edits inside the root are allowed (not for a read-only role), anything
+        else is denied. An agent that offers no reject option gets ``cancelled``, which the
+        protocol defines for that."""
         options = [o for o in params.get("options") or [] if isinstance(o, dict)]
         call = params.get("toolCall") or {}
         kind = str(call.get("kind") or "other")
@@ -328,9 +358,9 @@ class AcpBackend:
             allowed, rule = decision.answer == "allow", decision.rule
         elif kind in ("read", "search", "think") or (
             kind in _EDIT_KINDS
+            and mode != "read-only"
             and all(
-                str(loc.get("path", "")).startswith(root.rstrip("/") + "/")
-                for loc in call.get("locations") or [{}]
+                _inside(str(loc.get("path", "")), root) for loc in call.get("locations") or [{}]
             )
         ):
             allowed, rule = True, f"acp:{kind}_in_root"
