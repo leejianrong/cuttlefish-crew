@@ -9,6 +9,8 @@
     onStop,
     onRemove,
     waiting = 0,
+    pinned = false,
+    onPin,
   }: {
     project: ProjectSummary;
     /** Requests of this project waiting for a person (the Needs-you list). */
@@ -16,6 +18,9 @@
     onOpen: () => void;
     onStop: () => void;
     onRemove: () => void;
+    /** CUT-189: kept at the top of the list; the choice lives in this browser. */
+    pinned?: boolean;
+    onPin?: () => void;
   } = $props();
 
   const roleEntries = $derived(Object.entries(project.status));
@@ -42,6 +47,7 @@
     {#if project.running}
       <span class="running-dot" title="a team is running"></span>
     {/if}
+    {#if pinned}<span class="pinned label-small">Pinned</span>{/if}
   </header>
   <p class="root mono" title={project.root}><bdi>{project.root}</bdi></p>
 
@@ -88,6 +94,11 @@
       {:else}
         <button class="btn btn-filled sm" onclick={onOpen}>Open</button>
       {/if}
+      {#if onPin}
+        <button class="btn btn-text sm" aria-pressed={pinned} onclick={onPin}>
+          {pinned ? "Unpin" : "Pin to top"}
+        </button>
+      {/if}
       <button class="btn btn-text sm remove" onclick={() => (confirming = "remove")}>Remove</button>
     {/if}
   </footer>
@@ -124,6 +135,14 @@
     .title {
       min-height: 44px;
     }
+  }
+
+  .pinned {
+    margin-left: auto;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
   }
 
   .running-dot {
