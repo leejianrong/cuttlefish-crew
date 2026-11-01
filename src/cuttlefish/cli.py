@@ -107,7 +107,10 @@ from cuttlefish.workflow import run_task
 # tests (never via subprocess - see tests/e2e/test_cli.py's own docstring), and
 # those rely on monkeypatch.delenv clearing a credential for the duration of one
 # test. Reloading .env on every main() call would put it right back.
-load_dotenv()
+#
+# Only ./.env, never a parent's: a run started in a scratch dir under the repo tree
+# once picked up the repo's real key (CUT-272). Bare load_dotenv() walks upward.
+load_dotenv(Path.cwd() / ".env")
 
 #: Exit codes (QUESTIONS.md Q9: "a small fixed set").
 EXIT_OK = 0
