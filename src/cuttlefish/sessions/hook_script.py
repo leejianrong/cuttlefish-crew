@@ -72,13 +72,29 @@ def main(argv: list[str]) -> int:
         )
         with urllib.request.urlopen(request, timeout=timeout) as response:
             answer = json.load(response)
-        if payload.get("hook_event_name") != "PermissionRequest" or not isinstance(answer, dict):
+        event = payload.get("hook_event_name")
+        if event not in ("PermissionRequest", "PreToolUse") or not isinstance(answer, dict):
             return 0
         behavior = answer.get("decision")
+        message = answer.get("message")
+        if event == "PreToolUse":
+            # Only ever a refusal: a `PreToolUse` that is not denied stays silent.
+            if behavior == "deny":
+                print(
+                    json.dumps(
+                        {
+                            "hookSpecificOutput": {
+                                "hookEventName": "PreToolUse",
+                                "permissionDecision": "deny",
+                                "permissionDecisionReason": str(message or "Denied")[:500],
+                            }
+                        }
+                    )
+                )
+            return 0
         if behavior not in ("allow", "deny"):
             return 0
         decision: dict[str, str] = {"behavior": behavior}
-        message = answer.get("message")
         if behavior == "deny" and isinstance(message, str) and message:
             decision["message"] = message[:500]
         print(

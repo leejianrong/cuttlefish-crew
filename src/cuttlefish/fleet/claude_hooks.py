@@ -17,6 +17,7 @@ import collections
 import contextlib
 import json
 import logging
+import subprocess
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from pathlib import Path
@@ -24,7 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from cuttlefish.delegate.codex_app_server import inside
 from cuttlefish.delegate.consent import ConsentPolicy, command_line
-from cuttlefish.delegate.never_allowed import repo_default_branches
+from cuttlefish.delegate.never_allowed import default_branch_reason, repo_default_branches
 from cuttlefish.delegate.presets import resolve_allow
 from cuttlefish.projects.store import Project
 from cuttlefish.requests import WHY, UnknownRequestError
@@ -47,6 +48,24 @@ _REJECTED = "doesn't want to proceed"
 #: A turn with no hook for this long is shown as unknown, not busy: Esc in the terminal ends a turn
 #: without a `Stop`, so silence is the only sign of it.
 _BUSY_SILENCE_S = 300.0
+
+
+def _default_branch_refusal(command: str, cwd: Path, root: str) -> str | None:
+    """:func:`default_branch_reason` for ``command`` run in ``cwd``; ``None`` when it is not a
+    repository or nothing is refused."""
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(cwd), "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True, timeout=5, check=False,
+        )  # fmt: skip
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if done.returncode != 0:
+        return None
+    return default_branch_reason(
+        command, done.stdout.strip(), default_branches=repo_default_branches(Path(root))
+    )
+
 
 Gone = Callable[[], Awaitable[None]]
 
@@ -156,6 +175,8 @@ class ClaudeHooks:
         tool_input: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
         if event == "PreToolUse":
             self._remember(project.id, tool, tool_input, payload.get("tool_use_id"))
+            if project.mode == "auto" and tool == "Bash":
+                return await self._refuse_default_branch(project, payload, tool_input)
         elif event == "PostToolUse":
             # Answered in the terminal and allowed there: the card has nothing left to ask.
             self._supersede(
@@ -171,6 +192,30 @@ class ClaudeHooks:
                 self._terminal_dialog.add(project.id)  # the terminal's own dialog asks
             return answer
         return {}
+
+    async def _refuse_default_branch(
+        self, project: Project, payload: Mapping[str, Any], tool_input: Mapping[str, Any]
+    ) -> dict[str, Any]:
+        """Unattended (Auto) work stays off the default branch (CUT-183): a command that would
+        commit to it, or switch onto it, is denied before it runs, and the refusal is journaled."""
+        command = tool_input.get("command")
+        if not isinstance(command, str) or "git" not in command:
+            return {}
+        cwd = Path(_str(payload.get("cwd")) or project.root)
+        reason = await asyncio.to_thread(_default_branch_refusal, command, cwd, project.root)
+        if reason is None:
+            return {}
+        self._daemon.open_session_journal(project)
+        self._daemon.requests.journal_refusal(
+            session_scope(project.id),
+            title="Auto refused a command that would land on the default branch",
+            line=command,
+            reason=reason,
+        )
+        return {
+            "decision": "deny",
+            "message": "Unattended work stays off the default branch; work on your goal's branch.",
+        }
 
     # -- the decision ------------------------------------------------------------------------
 
