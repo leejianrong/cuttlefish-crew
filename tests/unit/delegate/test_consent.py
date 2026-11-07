@@ -347,6 +347,8 @@ DEV = [
         "sed -n '1,240p' calc.py && sed -n '1,240p' test_calc.py",
         "git add calc.py test_calc.py && git commit -m 'Add subtract' && git status --short",
         'git commit -am "Fix the thing" && git log --oneline',
+        "cd . && ls -la",
+        "cd src/pkg && python3 -m pytest 2>&1 | tail -5",
     ],
 )
 def test_a_chain_of_allowed_commands_is_allowed(line: str) -> None:
@@ -358,6 +360,16 @@ def test_a_chain_of_allowed_commands_is_allowed(line: str) -> None:
 @pytest.mark.parametrize(
     ("line", "rule", "askable"),
     [
+        # `cd` is implicit only inside the root (CUT-280).
+        ("cd .. && ls", "argument_escapes_root", False),
+        ("cd /tmp && ls", "argument_escapes_root", False),
+        ("cd src/../.. && ls", "argument_escapes_root", False),
+        ("cd ~ && ls", "not_a_plain_word_list", True),
+        ("cd - && ls", "no_matching_allow_entry", True),
+        ("cd && ls", "no_matching_allow_entry", True),
+        ("cd a b && ls", "no_matching_allow_entry", True),
+        # `cd` does not excuse the command after it.
+        ("cd . && npm publish", "no_matching_allow_entry", True),
         # One command in the chain is not on the list: ask, and say which kind of no.
         ("git status && npm publish", "no_matching_allow_entry", True),
         ("git status | xargs rm", "no_matching_allow_entry", True),
