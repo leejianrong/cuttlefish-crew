@@ -158,6 +158,11 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "worktree_per_goal": project.worktree_per_goal,
         "is_manager": project.id == daemon.manager_project,
         "decision_wait_minutes": project.decision_wait_minutes,
+        **(
+            {"manager_budget": daemon.manager_budget()}
+            if project.id == daemon.manager_project and not summary
+            else {}
+        ),
         "delegate_approvals": project.delegate_approvals,
         "tags": list(project.tags),
         "delegate_approvals_effective": daemon.delegates_approvals(project.id),

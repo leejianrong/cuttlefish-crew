@@ -216,6 +216,35 @@ def never_allowed_reason(
     return None
 
 
+#: ``git`` subcommands that put work on the branch that is checked out.
+_LANDS_ON_BRANCH = frozenset(
+    {"commit", "merge", "rebase", "cherry-pick", "revert", "am", "pull", "reset"}
+)
+
+
+def default_branch_reason(
+    line: str, current: str, *, default_branches: frozenset[str] = DEFAULT_BRANCHES
+) -> str | None:
+    """Why a command may not run in an unattended goal (CUT-183): it would land work on the default
+    branch, or move the checkout onto it. ``current`` is the branch checked out where the command
+    runs. Best effort on text, like the rest of this module (``git -C other`` and a script are not
+    seen); a push to the default branch is :func:`never_allowed_reason`'s."""
+    for segment in _SEGMENT_SPLIT.split(line):
+        words = _effective_words(segment.split())
+        if words[:1] != ["git"]:
+            continue
+        rest = [
+            w
+            for i, w in enumerate(words[1:])
+            if not w.startswith("-") and words[i] not in ("-C", "-c")
+        ]
+        if rest[:1] and rest[0] in _LANDS_ON_BRANCH and current in default_branches:
+            return "never_allowed:commit_default_branch"
+        if rest[:1] in (["checkout"], ["switch"]) and default_branches.intersection(rest[1:]):
+            return "never_allowed:switch_to_default_branch"
+    return None
+
+
 def unnamed_push(line: str) -> bool:
     """Whether `line` runs a ``git push`` that names no branch (see :func:`push_branches`): the
     branch it sends is decided by the checkout, so it is asked about, never allowed on a rule."""

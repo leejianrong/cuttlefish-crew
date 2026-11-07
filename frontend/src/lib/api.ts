@@ -154,6 +154,17 @@ export interface RoleUsage {
   cost_usd: number | null;
 }
 
+export interface ManagerBudget {
+  /** False when the backend writes no transcript to read (everything but Claude Code). */
+  metered: boolean;
+  tokens_used: number | null;
+  turns_used: number | null;
+  max_tokens: number | null;
+  max_turns: number | null;
+  paused: boolean;
+  error: string | null;
+}
+
 /** A project's own run-scoped usage ceiling (KAN-1712/ADR-0017) -- `null` on
  * either field means "no ceiling," never zero. */
 export interface ProjectBudget {
@@ -226,6 +237,8 @@ export interface ProjectSummary {
   tags?: string[];
   /** ADR-0052: this is the manager agent's project, not a builder's. */
   is_manager?: boolean;
+  /** CUT-151: the manager's use today against its daily ceiling; only on the manager's project. */
+  manager_budget?: ManagerBudget;
   /** CUT-259: wake the manager for this project's requests; null follows the daemon's setting. */
   delegate_approvals?: boolean | null;
   /** CUT-185: minutes a builder's decision waits before its recommended option is taken; null never. */

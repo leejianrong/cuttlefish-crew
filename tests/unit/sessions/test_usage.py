@@ -44,3 +44,28 @@ def test_read_file_reads_a_transcript(tmp_path: Path) -> None:
     path = tmp_path / "s.jsonl"
     path.write_text("\n".join([_user("hi"), _assistant("m", 7)]) + "\n")
     assert [t.cache_read for t in read_file(path)] == [7]
+
+
+def test_day_usage_counts_a_message_once_and_only_on_the_given_day(tmp_path: Path) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from cuttlefish.sessions.transcript import project_dir_name
+    from cuttlefish.sessions.usage import DayUsage, day_usage
+
+    root = tmp_path / "mgr"
+    root.mkdir()
+    folder = tmp_path / ".claude" / "projects" / project_dir_name(str(root.resolve()))
+    folder.mkdir(parents=True)
+    now = datetime.now(UTC)
+
+    def line(mid: str, when: datetime, tokens: int) -> str:
+        usage = {"input_tokens": tokens, "output_tokens": 1, "cache_read_input_tokens": 9999}
+        message = {"id": mid, "usage": usage}
+        return json.dumps({"type": "assistant", "timestamp": when.isoformat(), "message": message})
+
+    old = now - timedelta(days=2)
+    rows = [line("a", now, 10), line("a", now, 10), line("b", now, 20), line("c", old, 500)]
+    (folder / "s.jsonl").write_text("\n".join(rows) + "\nnot json\n")
+    day = now.astimezone().date()
+    assert day_usage(str(root), day, tmp_path) == DayUsage(tokens=32, turns=2)
+    assert day_usage(str(tmp_path / "none"), day, tmp_path) == DayUsage()

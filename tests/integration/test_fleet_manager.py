@@ -643,3 +643,79 @@ async def test_the_decision_wait_is_a_project_setting_for_the_admin_tier(rig: Ri
     assert (await rig.manager.patch(path, json={"decision_wait_minutes": 5})).status_code == 403
     cleared = await rig.owner.patch(path, json={"decision_wait_minutes": None})
     assert cleared.json()["decision_wait_minutes"] is None
+
+
+def _transcript(home: Path, root: Path, turns: int, tokens: int = 100) -> None:
+    from datetime import UTC, datetime
+
+    from cuttlefish.sessions.transcript import project_dir_name
+
+    folder = home / ".claude" / "projects" / project_dir_name(str(root.resolve()))
+    folder.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).isoformat()
+    lines = [
+        {
+            "type": "assistant",
+            "timestamp": stamp,
+            "message": {"id": f"m{i}", "usage": {"input_tokens": tokens, "output_tokens": 0}},
+        }
+        for i in range(turns)
+    ]
+    (folder / "s1.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+
+
+def _claude_code(daemon: FleetDaemon, monkeypatch: pytest.MonkeyPatch, backend: list[str]) -> None:
+    from types import SimpleNamespace
+
+    status = SimpleNamespace(status=lambda *_: SimpleNamespace(backend=backend[0]))
+    monkeypatch.setattr(daemon, "_session_manager", lambda: status)
+
+
+async def test_the_manager_pauses_at_its_daily_budget_and_asks_the_person(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    manager = rig.daemon
+    manager.manager_project = rig.project_id
+    _claude_code(manager, monkeypatch, ["claude-code"])
+    sent: list[str] = []
+
+    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+        sent.append(text)
+        return {}
+
+    monkeypatch.setattr(manager, "send_chat", send_chat)
+    monkeypatch.setattr(manager._claude_hooks, "activity", lambda _: ("idle", None))
+    monkeypatch.setenv("CUTTLEFISH_MANAGER_DAILY_TOKENS", "500")
+    _transcript(home, rig.root, turns=3)  # 300 tokens
+    assert await manager.check_in_manager("hi") is None
+    _transcript(home, rig.root, turns=5)  # 500 tokens: at the ceiling
+    reason = await manager.check_in_manager("hi")
+    assert reason is not None and reason.startswith("paused:") and sent == ["hi"]
+    await manager.check_in_manager("again")  # one card, not one per attempt
+    cards = [p for p in manager.requests.pending() if p.record.kind == "blocked"]
+    assert len(cards) == 1 and "daily budget" in cards[0].record.title
+    body = (await rig.owner.get(f"/api/projects/{rig.project_id}")).json()["manager_budget"]
+    assert body["paused"] and body["tokens_used"] == 500 and body["max_tokens"] == 500
+    monkeypatch.setenv("CUTTLEFISH_MANAGER_DAILY_TOKENS", "5000")  # raised: it resumes, card ends
+    assert await manager.check_in_manager("back") is None
+    assert not [p for p in manager.requests.pending() if p.record.kind == "blocked"]
+
+
+async def test_a_turn_budget_stops_the_manager_and_an_unreadable_backend_is_unmetered(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: home)
+    rig.daemon.manager_project = rig.project_id
+    backend = ["claude-code"]
+    _claude_code(rig.daemon, monkeypatch, backend)
+    monkeypatch.setenv("CUTTLEFISH_MANAGER_DAILY_TURNS", "4")
+    _transcript(home, rig.root, turns=4)
+    assert rig.daemon.manager_budget()["paused"]
+    backend[0] = "codex"
+    budget = rig.daemon.manager_budget()
+    assert budget["metered"] is False and not budget["paused"]
+    monkeypatch.setenv("CUTTLEFISH_MANAGER_DAILY_TURNS", "many")
+    assert "CUTTLEFISH_MANAGER_DAILY_TURNS" in rig.daemon.manager_budget()["error"]
