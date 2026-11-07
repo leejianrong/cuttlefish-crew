@@ -157,6 +157,11 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
         "is_manager": project.id == daemon.manager_project,
+        **(
+            {"manager_budget": daemon.manager_budget()}
+            if project.id == daemon.manager_project and not summary
+            else {}
+        ),
         "delegate_approvals": project.delegate_approvals,
         "tags": list(project.tags),
         "delegate_approvals_effective": daemon.delegates_approvals(project.id),

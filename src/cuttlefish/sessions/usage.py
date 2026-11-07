@@ -12,8 +12,11 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections.abc import Iterable
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+
+from cuttlefish.sessions.transcript import project_dir_name
 
 _FIELDS = (
     "input_tokens",
@@ -88,3 +91,51 @@ def read_turns(lines: Iterable[str]) -> list[TurnUsage]:
 def read_file(path: Path) -> list[TurnUsage]:
     with path.open(encoding="utf-8", errors="replace") as handle:
         return read_turns(handle)
+
+
+@dataclasses.dataclass(frozen=True)
+class DayUsage:
+    """What one session folder used on one local day: tokens (input, output and cache writes; cache
+    reads left out, as in ``UsageMeter``) and turns (model requests). No cost: Claude Code's
+    transcript carries none, and cuttlefish does not estimate one (CUT-151)."""
+
+    tokens: int = 0
+    turns: int = 0
+
+
+def day_usage(root: str, day: date, home: Path | None = None) -> DayUsage:
+    """The usage of every transcript in ``root``'s Claude Code folder on local ``day``.
+
+    A manager that is cleared (ADR-0055) starts a new file, so the day is summed across files."""
+    folder = (home if home is not None else Path.home()) / ".claude" / "projects"
+    folder /= project_dir_name(str(Path(root).resolve()))
+    tokens = turns = 0
+    for path in folder.glob("*.jsonl"):
+        try:
+            if datetime.fromtimestamp(path.stat().st_mtime).date() < day:
+                continue
+            handle = path.open(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        seen: set[str] = set()
+        with handle:
+            for line in handle:
+                if '"usage"' not in line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    stamp = datetime.fromisoformat(entry["timestamp"].replace("Z", "+00:00"))
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    continue
+                message = entry.get("message")
+                if stamp.astimezone().date() != day or not isinstance(message, dict):
+                    continue
+                usage, mid = message.get("usage"), message.get("id")
+                if entry.get("type") != "assistant" or not isinstance(usage, dict):
+                    continue
+                if not isinstance(mid, str) or mid in seen:
+                    continue
+                seen.add(mid)
+                turns += 1
+                tokens += sum(v for k in _FIELDS[:3] if isinstance(v := usage.get(k), int))
+    return DayUsage(tokens, turns)
