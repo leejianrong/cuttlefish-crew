@@ -512,8 +512,11 @@ kopicode, Codex (over `codex app-server`) and Claude Code (over stream-json) che
 command by command. Over `claude -p` (`CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print`, and inside a sandbox
 provider) the list is passed as `--allowedTools` patterns, plus deny patterns for the never-allowed
 prefixes. Over `codex exec` (`CUTTLEFISH_CODEX_TRANSPORT=exec`, and inside a sandbox provider) the list only
-switches the sandbox to `workspace-write` -- see the known gaps. The `print` transport's exact-match
-policy file cannot express prefixes, so it sees the presets but matches almost nothing.
+switches the sandbox to `workspace-write` -- see the known gaps. kopicode's `print` transport writes the list
+as the policy file's `allow_commands` (leading words, every command in a chain must match, `cd` inside the
+project is implicit), so `git status --short` and `cd . && git log | head -3` run. It cannot ask: a command that
+is not on the list is denied. Entries kopicode refuses in that key (`find`, `npx`, shells and wrappers) are left
+out, and kopicode's own never-allowed rules still apply.
 
 ## Built-in roles and teams
 
