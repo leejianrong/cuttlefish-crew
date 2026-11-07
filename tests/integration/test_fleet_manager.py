@@ -587,3 +587,59 @@ async def test_a_builders_decision_is_answered_by_the_person_and_typed_back_as_t
     assert sent == ["You asked: Which store?\nThe person chose: Postgres"]
     (done,) = rig.resolved(session_scope(rig.project_id))
     assert (done.resolution, done.text, done.by) == ("answered", "Postgres", "person")
+
+
+async def test_a_decision_with_a_wait_takes_the_recommended_option_and_says_so(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CUT-185: when the wait runs out the recommended option is taken, journaled as chosen by
+    the timeout, and the builder is told nobody answered."""
+    sent: list[str] = []
+
+    async def send_chat(project_id: str, text: str, **_: Any) -> dict[str, str]:
+        sent.append(text)
+        return {}
+
+    monkeypatch.setattr(rig.daemon, "send_chat", send_chat)
+    rig.daemon.raise_decision(
+        rig.project_id, "Which store?", ["SQLite", "Postgres"], "SQLite", role="builder", wait_s=0.1
+    )
+    (row,) = (await rig.owner.get("/api/requests")).json()["requests"]
+    assert row["expires_in_s"] is not None  # the card counts down
+    await asyncio.sleep(0.5)
+    assert (await rig.owner.get("/api/requests")).json()["requests"] == []
+    (done,) = rig.resolved(session_scope(rig.project_id))
+    assert (done.resolution, done.text, done.by) == ("answered", "SQLite", "timeout")
+    assert sent and "recommended option was taken: SQLite" in sent[0]
+
+
+@pytest.mark.parametrize("recommended", ["Delete the old table", "Keep it"])
+async def test_a_destructive_recommendation_is_never_taken_for_the_person(
+    rig: Rig, recommended: str
+) -> None:
+    flagged = frozenset({"Keep it"})
+    request_id = rig.daemon.raise_decision(
+        rig.project_id,
+        "What next?",
+        [recommended, "Something else"],
+        recommended,
+        role="builder",
+        wait_s=0.05,
+        destructive=flagged,
+    )
+    await asyncio.sleep(0.3)
+    (row,) = (await rig.owner.get("/api/requests")).json()["requests"]
+    assert row["id"] == request_id and row["expires_in_s"] is None  # still waiting, no timer
+    assert rig.daemon.requests.auto_choose(request_id) is None
+
+
+async def test_the_decision_wait_is_a_project_setting_for_the_admin_tier(rig: Rig) -> None:
+    path = f"/api/projects/{rig.project_id}/decision-wait"
+    assert (await rig.owner.patch(path, json={"decision_wait_minutes": 90})).json()[
+        "decision_wait_minutes"
+    ] == 90
+    assert (await rig.owner.patch(path, json={"decision_wait_minutes": 0})).status_code == 400
+    assert (await rig.owner.patch(path, json={})).status_code == 400
+    assert (await rig.manager.patch(path, json={"decision_wait_minutes": 5})).status_code == 403
+    cleared = await rig.owner.patch(path, json={"decision_wait_minutes": None})
+    assert cleared.json()["decision_wait_minutes"] is None

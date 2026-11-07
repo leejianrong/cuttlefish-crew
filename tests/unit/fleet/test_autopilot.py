@@ -32,6 +32,7 @@ class _Project:
     id: str
     name: str
     root: str
+    decision_wait_minutes: int | None = None
 
 
 class _Daemon:
@@ -323,6 +324,8 @@ async def test_a_decision_the_builder_writes_becomes_a_card_and_is_not_nudged(ri
             "options": ["SQLite", "Postgres"],
             "role": "builder",
             "cost_of_waiting": "The migration step is blocked.",
+            "wait_s": None,
+            "destructive": frozenset(),
         }
     ]
     assert not path.exists() and rig.daemon.sent == [APPROVAL_TEXT]
@@ -336,3 +339,19 @@ async def test_a_malformed_decision_file_is_ignored(rig: Rig) -> None:
     (rig.tmp / DECISION_PATH).write_text("not json")
     await rig.stopped()
     assert rig.daemon.decisions == [] and rig.daemon.sent[-1] == NUDGE_TEXT
+
+
+async def test_the_projects_wait_and_the_builders_destructive_options_go_with_the_decision(
+    rig: Rig,
+) -> None:
+    """CUT-185: the project's default wait is the card's deadline; the builder's flags travel."""
+    await rig.approved()
+    rig.project.decision_wait_minutes = 30
+    (rig.tmp / DECISION_PATH).write_text(
+        json.dumps(
+            {"question": "q", "options": ["a", "b"], "recommended": "a", "destructive": ["b"]}
+        )
+    )
+    await rig.stopped()
+    assert rig.daemon.decisions[0]["wait_s"] == 1800
+    assert rig.daemon.decisions[0]["destructive"] == frozenset({"b"})

@@ -368,6 +368,7 @@ class FleetDaemon:
         self.delegate_approvals = delegate_approvals()
         self._wake_task: asyncio.Task[None] | None = None
         self._chat_tasks: set[asyncio.Task[None]] = set()
+        self._decision_timers: dict[str, asyncio.Task[None]] = {}
         self._last_wake = 0.0
         self.requests.on_permission = self._wake_manager
         self.requests.on_decision_resolved = self._tell_builder_the_choice
@@ -949,6 +950,8 @@ class FleetDaemon:
 
     async def close(self) -> None:
         """Release what the daemon holds open: the schedule loop, the broker and every lease."""
+        for timer in list(self._decision_timers.values()):
+            timer.cancel()
         if self.scheduler is not None:
             await self.scheduler.close()
         if self._broker is not None:
@@ -1219,6 +1222,8 @@ class FleetDaemon:
         *,
         role: str = "manager",
         cost_of_waiting: str | None = None,
+        wait_s: float | None = None,
+        destructive: frozenset[str] = frozenset(),
     ) -> str:
         """Put a decision to the person, in the project's agent-session journal (ADR-0046); the
         builder's (CUT-184) names ``role="builder"``. Returns its request id. Raises the broker's
@@ -1233,14 +1238,38 @@ class FleetDaemon:
             recommended=recommended,
             role=role,
             cost_of_waiting=cost_of_waiting,
+            wait_s=wait_s,
+            destructive=destructive,
         )
+        self._arm_decision(pending)
         return pending.id
+
+    def _arm_decision(self, pending: PendingRequest) -> None:
+        """Take a decision's recommended option when its wait runs out (CUT-185)."""
+        if not pending.record.expires_at:
+            return
+
+        async def wait() -> None:
+            await asyncio.sleep(max(0.0, (pending.deadline - datetime.now(UTC)).total_seconds()))
+            self.requests.auto_choose(pending.id)
+
+        task = asyncio.get_running_loop().create_task(wait())
+        self._decision_timers[pending.id] = task
+        task.add_done_callback(lambda _: self._decision_timers.pop(pending.id, None))
 
     def _tell_builder_the_choice(self, pending: PendingRequest, outcome: Outcome) -> None:
         """A builder's decision was answered: type the choice to it as a message (CUT-184)."""
+        timer = self._decision_timers.pop(pending.id, None)
+        if timer is not None and timer is not asyncio.current_task():
+            timer.cancel()
         if pending.record.role != "builder" or outcome.resolution != "answered":
             return
-        text = f"You asked: {pending.record.detail}\nThe person chose: {outcome.text}"
+        who = (
+            "No one answered in time, so your recommended option was taken"
+            if outcome.by == "timeout"
+            else "The person chose"
+        )
+        text = f"You asked: {pending.record.detail}\n{who}: {outcome.text}"
 
         async def send() -> None:
             try:
@@ -1326,11 +1355,12 @@ class FleetDaemon:
             if not records:
                 continue
             self.open_session_journal(project)
-            count += len(
-                self.requests.restore_blocked(
-                    project.id, session_scope(project.id), records, kind="decision"
-                )
+            restored = self.requests.restore_blocked(
+                project.id, session_scope(project.id), records, kind="decision"
             )
+            for pending in restored:
+                self._arm_decision(pending)
+            count += len(restored)
         return count
 
     @property

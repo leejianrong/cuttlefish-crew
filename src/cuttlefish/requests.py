@@ -25,6 +25,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from cuttlefish import logsetup
+from cuttlefish.decision import is_destructive
 from cuttlefish.delegate.consent import (
     ConsentDecision,
     ConsentPolicy,
@@ -331,11 +332,15 @@ class RequestBroker:
         recommended: str,
         role: str = "manager",
         cost_of_waiting: str | None = None,
+        wait_s: float | None = None,
+        destructive: frozenset[str] = frozenset(),
     ) -> PendingRequest:
         """A choice put to a person (ADR-0046): a question, two to four options and one
-        recommended, from the manager or (CUT-184) the project's builder. Nothing waits on it
-        and nothing picks an option for the person, so it has no deadline and lands when answered.
-        Raises :class:`InvalidAnswerError` for a bad set."""
+        recommended, from the manager or (CUT-184) the project's builder. With no ``wait_s``
+        nothing picks an option for the person and it lands when answered. With one (CUT-185) the
+        recommended option is taken once it has run out (:meth:`auto_choose`), unless that option
+        is destructive: such a decision keeps no deadline. Raises :class:`InvalidAnswerError` for
+        a bad set."""
         choices = [_clip_option(o.strip()) for o in options]
         if not 2 <= len(choices) <= 4 or len(set(choices)) != len(choices) or "" in choices:
             raise InvalidAnswerError("a decision needs two to four distinct, non-empty options")
@@ -344,6 +349,9 @@ class RequestBroker:
             raise InvalidAnswerError("'recommended' must be one of the options")
         if not question.strip():
             raise InvalidAnswerError("a decision needs a question")
+        if wait_s is not None and (wait_s <= 0 or is_destructive(picked, destructive)):
+            wait_s = None
+        expires = self._now() + timedelta(seconds=wait_s) if wait_s else None
         return self._raise(
             project_id,
             team_id,
@@ -355,13 +363,32 @@ class RequestBroker:
                 detail=_clip(question.strip()),
                 why=f"It recommends: {picked}",
                 answers=["answer"],
-                expires_at="",
+                expires_at=expires.isoformat() if expires else "",
                 role=role,
                 options=choices,
                 recommended=picked,
                 cost_of_waiting=_clip(cost_of_waiting.strip()) if cost_of_waiting else None,
             ),
-            window_s=NO_DEADLINE_S,
+            window_s=wait_s or NO_DEADLINE_S,
+        )
+
+    def auto_choose(self, request_id: str) -> Outcome | None:
+        """Take the recommended option of a decision whose wait has run out, journaled as chosen
+        by ``timeout``. ``None`` when it ended already, has no wait, or recommends a destructive
+        option (which is never chosen for a person)."""
+        pending = self._pending.get(request_id)
+        record = pending.record if pending else None
+        if (
+            pending is None
+            or record is None
+            or record.kind != "decision"
+            or not record.expires_at
+            or not record.recommended
+            or is_destructive(record.recommended)
+        ):
+            return None
+        return self._finish(
+            pending, Outcome(request_id, "answered", "timeout", None, record.recommended)
         )
 
     def restore_blocked(
@@ -387,7 +414,9 @@ class RequestBroker:
                 project_id=project_id,
                 team_id=team_id,
                 record=record,
-                deadline=self._now() + timedelta(seconds=NO_DEADLINE_S),
+                deadline=datetime.fromisoformat(record.expires_at)
+                if record.expires_at
+                else self._now() + timedelta(seconds=NO_DEADLINE_S),
                 _future=asyncio.get_running_loop().create_future(),
             )
             self._pending[pending.id] = pending

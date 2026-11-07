@@ -228,6 +228,8 @@ export interface ProjectSummary {
   is_manager?: boolean;
   /** CUT-259: wake the manager for this project's requests; null follows the daemon's setting. */
   delegate_approvals?: boolean | null;
+  /** CUT-185: minutes a builder's decision waits before its recommended option is taken; null never. */
+  decision_wait_minutes?: number | null;
   /** What actually applies: the project's own choice, else the daemon's. */
   delegate_approvals_effective?: boolean;
   /** V4-C: applies the next time the team starts, not to a team already running. */
@@ -683,6 +685,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/worktree-per-goal`, {
       method: "PATCH",
       body: JSON.stringify({ worktree_per_goal: on }),
+    });
+  }
+
+  /** CUT-185: how long a builder's decision waits before its recommended option is taken. */
+  setDecisionWait(id: string, minutes: number | null): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/decision-wait`, {
+      method: "PATCH",
+      body: JSON.stringify({ decision_wait_minutes: minutes }),
     });
   }
 
