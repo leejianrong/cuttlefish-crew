@@ -504,6 +504,8 @@ Matching is by argv prefix on a plain word list. A line that chains commands (`a
 command in it is allowed. Quoted arguments are fine (single quotes are literal; double quotes may not
 hold `$`, a backtick, `\` or `!`), and so are `2>&1`, `2>/dev/null` and `>/dev/null`. Anything else
 (a redirect to a file, `$(...)`, a backtick, a glob, a lone `&`) is not matched and waits for you.
+`cd` inside the project is implicit in a chain (`cd . && ls -la`, `cd src && make test`), with no entry needed; `cd ..`,
+`cd /elsewhere` and `cd ~` are not allowed by it (the first two are refused outright, `cd ~` waits for you).
 Inside a chain, `git commit` is allowed only as `git commit -m '<message>'`. When a chain waits because
 one command is not on the list, **Always allow** offers a rule for the start of the first such command
 (for example `git config user.name`), so the same chain runs unasked next time; a launcher (`sh`, `python`, `uv run`, `npx`), including behind a wrapper (`env A=1 uv`), a bare `git`,
