@@ -58,7 +58,8 @@ CREATE TABLE IF NOT EXISTS projects (
     terminal_command TEXT,
     worktree_per_goal INTEGER NOT NULL DEFAULT 0,
     delegate_approvals INTEGER,
-    tags_json TEXT
+    tags_json TEXT,
+    decision_wait_minutes INTEGER
 )
 """
 
@@ -137,6 +138,10 @@ _ADD_DELEGATE_APPROVALS_COLUMN = "ALTER TABLE projects ADD COLUMN delegate_appro
 #: `tags_json` was added for CUT-191 -- free-form labels a person groups and filters projects by (a
 #: JSON list). `NULL` is no tags, so an existing row is unchanged.
 _ADD_TAGS_COLUMN = "ALTER TABLE projects ADD COLUMN tags_json TEXT"
+
+#: `decision_wait_minutes` was added for CUT-185: how long a builder's decision waits for a person
+#: before its recommended option is taken. `NULL` is never.
+_ADD_DECISION_WAIT_COLUMN = "ALTER TABLE projects ADD COLUMN decision_wait_minutes INTEGER"
 
 MAX_TAGS = 10
 MAX_TAG_LENGTH = 24
@@ -244,6 +249,9 @@ class Project:
     delegate_approvals: bool | None = None
     #: Free-form labels to group and filter projects by (CUT-191), such as `client:acme`.
     tags: tuple[str, ...] = ()
+    #: How long a builder's decision waits before its recommended option is taken for the
+    #: person (CUT-185). ``None``: it waits for you with no limit.
+    decision_wait_minutes: int | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -383,6 +391,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         if row["delegate_approvals"] is None
         else bool(row["delegate_approvals"]),
         tags=tuple(json.loads(row["tags_json"])) if row["tags_json"] else (),
+        decision_wait_minutes=row["decision_wait_minutes"],
     )
 
 
@@ -422,6 +431,8 @@ class ProjectStore:
             self._conn.execute(_ADD_DELEGATE_APPROVALS_COLUMN)
         if "tags_json" not in columns:
             self._conn.execute(_ADD_TAGS_COLUMN)
+        if "decision_wait_minutes" not in columns:
+            self._conn.execute(_ADD_DECISION_WAIT_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -603,6 +614,15 @@ class ProjectStore:
         self._conn.execute(
             "UPDATE projects SET delegate_approvals = ? WHERE id = ?",
             (None if value is None else int(value), project_id),
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_decision_wait(self, project_id: str, minutes: int | None) -> Project:
+        """Set how long a builder's decision waits before its recommended option is taken."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET decision_wait_minutes = ? WHERE id = ?", (minutes, project_id)
         )
         self._conn.commit()
         return self.get(project_id)

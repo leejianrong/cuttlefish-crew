@@ -244,6 +244,10 @@ class Autopilot:
                     ask.recommended,
                     role="builder",
                     cost_of_waiting=ask.cost_of_waiting,
+                    wait_s=project.decision_wait_minutes * 60
+                    if project.decision_wait_minutes
+                    else None,
+                    destructive=ask.destructive,
                 )
             except RequestError as exc:
                 with contextlib.suppress(Exception):
