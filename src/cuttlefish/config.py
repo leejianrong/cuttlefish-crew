@@ -97,6 +97,25 @@ def delegate_approvals() -> bool:
     return os.environ.get(DELEGATE_APPROVALS_ENV, "").lower() in ("1", "true", "yes", "on")
 
 
+MANAGER_DAILY_TOKENS_ENV = "CUTTLEFISH_MANAGER_DAILY_TOKENS"
+MANAGER_DAILY_TURNS_ENV = "CUTTLEFISH_MANAGER_DAILY_TURNS"
+
+
+def manager_daily_budget() -> tuple[int | None, int | None]:
+    """The manager's daily ceiling as ``(tokens, turns)``, each ``None`` when unset (CUT-151).
+    Claude Code reports tokens and requests, never dollars, so there is no cost ceiling."""
+    out: list[int | None] = []
+    for name in (MANAGER_DAILY_TOKENS_ENV, MANAGER_DAILY_TURNS_ENV):
+        raw = os.environ.get(name, "").strip()
+        if not raw:
+            out.append(None)
+            continue
+        if not raw.isdigit() or int(raw) < 1:
+            raise ConfigError(f"{name}={raw!r} must be a whole number above zero")
+        out.append(int(raw))
+    return out[0], out[1]
+
+
 def manager_clear_context() -> bool:
     """``CUTTLEFISH_MANAGER_CLEAR_CONTEXT=1``: type ``/clear`` into the idle manager session
     before a wake (CUT-273, ADR-0055). Opt-in: it only pays once the context is long."""

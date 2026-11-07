@@ -37,6 +37,7 @@
   import PermissionsTab from "./PermissionsTab.svelte";
   import RoleSteerCard from "./RoleSteerCard.svelte";
   import SecretsTab from "./SecretsTab.svelte";
+  import { managerBudgetLine } from "../managerbudget";
   import Tabs from "./Tabs.svelte";
   import TerminalView from "./TerminalView.svelte";
   import TeamTab from "./TeamTab.svelte";
@@ -301,6 +302,15 @@
           <strong>Manager.</strong> This agent watches your other projects and answers their permission
           questions when you allow it; it does not build anything itself.
         </p>
+        {#if project.manager_budget}
+          <p
+            class="body-medium muted"
+            class:budget-paused={project.manager_budget.paused}
+            data-testid="manager-budget"
+          >
+            {managerBudgetLine(project.manager_budget)}
+          </p>
+        {/if}
       {/if}
       <p class="root mono">{project.root}</p>
     </header>
@@ -651,6 +661,10 @@
   h1,
   h2 {
     margin: 0;
+  }
+
+  .budget-paused {
+    color: var(--md-sys-color-error);
   }
 
   .root {
