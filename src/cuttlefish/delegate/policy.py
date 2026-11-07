@@ -23,7 +23,6 @@ policy mechanism already rests on.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 #: What a call that declares no policy of its own passes down: an empty declaration.
@@ -61,8 +60,11 @@ def write_policy_file(path: Path, *, root: str, allow: list[list[str]] | None = 
     leading words, with ``cd`` inside `root` implicit. kopicode's own never-allowed rules still
     apply on top.
     """
-    commands = [e for e in (DEFAULT_SHELL_ALLOWLIST if allow is None else allow)
-                if e and os.path.basename(e[0]) not in _UNEXPRESSIBLE]
+    commands = [
+        e
+        for e in (DEFAULT_SHELL_ALLOWLIST if allow is None else allow)
+        if e and Path(e[0]).name not in _UNEXPRESSIBLE
+    ]
     text = f'root = "{root}"\nallow = []\n'
     if commands:
         text += f"allow_commands = {json.dumps(commands)}\n"
