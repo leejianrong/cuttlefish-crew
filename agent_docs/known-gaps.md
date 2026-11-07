@@ -453,3 +453,7 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   Claude Code hook path has the project root at the point it builds a `ConsentPolicy`; kopicode, Codex and
   the one-shot paths pass no `default_branches`, so a repository whose default is `trunk` is guarded there
   by the person's answer, not the list. The `git-push` preset is also off by default.
+- **Auto's "stay off the default branch" is a Claude Code session guard, read from text** (CUT-183). Auto goals always get a
+  worktree branch for every backend, but only the Claude Code `PreToolUse` hook refuses a commit or switch onto the default
+  branch (`never_allowed.default_branch_reason`). `git -C <other folder>`, a script and an alias are not seen; Codex and
+  kopicode sessions are held only by the branch they start on.

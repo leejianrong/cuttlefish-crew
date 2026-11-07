@@ -33,6 +33,15 @@ git log --oneline cuttlefish/<slug>
 Your checkout and its branch are not touched. If the folder is not a repository, or has no commit, the goal is refused
 with the reason; it does not quietly run in your checkout.
 
+## Auto always uses a branch
+
+A project in **Auto** runs unattended, so nothing it does may land on the default branch unreviewed. Its goals get their
+own branch whether or not **Its own branch** is on (a folder that is not a repository refuses the goal, as above). In a
+Claude Code session, a command that would commit, merge, rebase, pull, reset or cherry-pick while the default branch is
+checked out, or that switches to it, is refused before it runs, and the refusal shows in the project's history as denied
+by `system`. A push to the default branch was already on the never-allowed list. This reads the command as text, so
+`git -C <other folder>` and a script are not seen; Codex and kopicode sessions are held only by the branch they start on.
+
 !!! note "Worktrees are kept"
     A finished goal's worktree stays, with its work on it. cuttlefish never merges it and never removes one on its own.
     See [Remove a worktree](#remove-a-worktree).
