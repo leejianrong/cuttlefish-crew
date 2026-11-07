@@ -42,9 +42,11 @@ from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
 from cuttlefish.config import (
+    ConfigError,
     PreparedRun,
     delegate_approvals,
     manager_clear_context,
+    manager_daily_budget,
     prepare_run,
     resolve_agent_backend,
 )
@@ -124,6 +126,7 @@ from cuttlefish.sessions.manager import TERMINAL_BACKEND, read_goal, write_goal
 from cuttlefish.sessions.manager import wanted as session_wanted
 from cuttlefish.sessions.tmux import TmuxError
 from cuttlefish.sessions.transcript import candidate_paths, read_thread
+from cuttlefish.sessions.usage import day_usage
 from cuttlefish.steering import (
     SteeringDeliveryError,
     cancel_run,
@@ -650,6 +653,8 @@ class FleetDaemon:
         it is typed, else why it was not: a busy session is never interrupted, and a missing
         session, a dialog or a tool without a send path (Codex) refuses in ``send_chat``."""
         assert self.manager_project is not None
+        if (over := self._manager_over_budget()) is not None:
+            return over
         if self._claude_hooks.activity(self.manager_project)[0] == "busy":
             return "the manager is busy"
         try:
@@ -1169,6 +1174,75 @@ class FleetDaemon:
             return
         self._wake_task = asyncio.ensure_future(self._send_wake())
 
+    def manager_budget(self) -> dict[str, Any]:
+        """The manager's use today against its daily ceiling (CUT-151). ``metered`` is false when
+        its usage cannot be read (only Claude Code writes a transcript); there is never a dollar
+        figure, because no backend reports one for a resident session."""
+        assert self.manager_project is not None
+        project = self._projects.get(self.manager_project)
+        try:
+            tokens, turns = manager_daily_budget()
+            error = None
+        except ConfigError as exc:
+            tokens = turns = None
+            error = str(exc)
+        metered = self._session_manager().status(project.id, project.root).backend == "claude-code"
+        used = day_usage(project.root, datetime.now().date()) if metered else None
+        over = (
+            metered
+            and used is not None
+            and (
+                (tokens is not None and used.tokens >= tokens)
+                or (turns is not None and used.turns >= turns)
+            )
+        )
+        return {
+            "metered": metered,
+            "tokens_used": used.tokens if used else None,
+            "turns_used": used.turns if used else None,
+            "max_tokens": tokens,
+            "max_turns": turns,
+            "paused": bool(over or error),
+            "error": error,
+        }
+
+    def _manager_over_budget(self) -> str | None:
+        """Why the manager must not be woken now, else ``None``. A pause raises one Needs you card
+        and ends it when the manager is under its ceiling again (a new day, or a raised limit).
+        Only the daemon's own wakes and check-ins stop; a person can still type to it."""
+        assert self.manager_project is not None
+        try:
+            project = self._projects.get(self.manager_project)
+        except ProjectNotFoundError:
+            return None
+        budget = self.manager_budget()
+        scope = session_scope(project.id)
+        pending = [
+            p for p in self.requests.pending()
+            if p.team_id == scope and p.record.kind == "blocked" and p.record.role == "manager"
+        ]  # fmt: skip
+        if not budget["paused"]:
+            if pending:
+                self.requests.supersede(scope, "manager")
+            return None
+        reason = budget["error"] or (
+            f"the manager used {budget['tokens_used']:,} tokens and {budget['turns_used']:,} turns "
+            "today, which is its daily ceiling"
+        )
+        if not pending:
+            self.open_session_journal(project)
+            self.requests.raise_blocked(
+                project_id=project.id,
+                team_id=scope,
+                role="manager",
+                backend=None,
+                title="The manager is paused: it reached its daily budget",
+                detail=f"Wakes and scheduled check-ins are held. {reason[0].upper()}{reason[1:]}.",
+                why="Raise CUTTLEFISH_MANAGER_DAILY_TOKENS or CUTTLEFISH_MANAGER_DAILY_TURNS and "
+                "restart the daemon, or wait for tomorrow. Messages you type still reach it.",
+            )
+        return f"paused: {reason}"
+
     def delegates_approvals(self, project_id: str) -> bool:
         """Whether the manager is woken for ``project_id``'s requests: the project's own choice,
         else the daemon-wide ``CUTTLEFISH_DELEGATE_APPROVALS`` (CUT-259)."""
@@ -1190,7 +1264,7 @@ class FleetDaemon:
             and p.project_id != self.manager_project
             and self.delegates_approvals(p.project_id)
         ]
-        if not waiting or self.manager_project is None:
+        if not waiting or self.manager_project is None or self._manager_over_budget() is not None:
             return
         self._last_wake = time.monotonic()
         projects = ", ".join(sorted({p.project_id for p in waiting}))
