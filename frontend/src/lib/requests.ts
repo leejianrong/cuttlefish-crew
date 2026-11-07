@@ -96,7 +96,12 @@ export function outcomeLabel(request: NeedsYouRequest): string {
         ? "Needs a fix"
         : "Waiting"
       : (specific[request.state] ?? OUTCOMES[request.state]);
-  if (request.state === "answered" && request.text) return `${base}: ${request.text}`;
+  if (request.state === "answered" && request.text) {
+    // A decision whose wait ran out: the recommended option was taken, not picked by a person.
+    return request.by === "timeout"
+      ? `Chosen automatically after the wait: ${request.text}`
+      : `${base}: ${request.text}`;
+  }
   return request.state === "allowed_always" && request.rule?.length
     ? `${base}: ${ruleText(request.rule)}`
     : base;

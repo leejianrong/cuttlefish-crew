@@ -59,6 +59,30 @@
     { value: false, label: "Off" },
   ];
 
+  let waitBusy = $state(false);
+  let waitError = $state<string | null>(null);
+  const waitChoices: { value: number | null; label: string }[] = [
+    { value: null, label: "Never" },
+    { value: 15, label: "15 min" },
+    { value: 60, label: "1 hour" },
+    { value: 240, label: "4 hours" },
+    { value: 1440, label: "24 hours" },
+  ];
+
+  async function setWait(value: number | null) {
+    if (waitBusy || value === (project.decision_wait_minutes ?? null)) return;
+    waitBusy = true;
+    waitError = null;
+    try {
+      await client.setDecisionWait(project.id, value);
+      await onChanged();
+    } catch (error) {
+      waitError = error instanceof Error ? error.message : "That didn't work.";
+    } finally {
+      waitBusy = false;
+    }
+  }
+
   async function setDelegate(value: boolean | null) {
     if (delegateBusy || value === (project.delegate_approvals ?? null)) return;
     delegateBusy = true;
@@ -289,6 +313,35 @@
         {/each}
       </div>
       {#if delegateError}<p class="error" role="alert">{delegateError}</p>{/if}
+    </section>
+
+    <section class="card panel" aria-labelledby="wait-heading">
+      <h2 class="title-medium" id="wait-heading">Decisions the builder asks you</h2>
+      <p class="body-small muted">
+        When the builder asks you to choose, wait this long, then take the option it recommends and
+        tell it so. An option that deletes or overwrites work is never taken for you, whatever you
+        set. Applies to the next decision. Now: {project.decision_wait_minutes
+          ? `${project.decision_wait_minutes} min`
+          : "wait for you with no limit"}.
+      </p>
+      <div class="delegate" role="radiogroup" aria-labelledby="wait-heading" use:radiogroup>
+        {#each waitChoices as choice (String(choice.value))}
+          <button
+            type="button"
+            role="radio"
+            class="btn sm"
+            class:btn-tonal={(project.decision_wait_minutes ?? null) === choice.value}
+            class:btn-outlined={(project.decision_wait_minutes ?? null) !== choice.value}
+            aria-checked={(project.decision_wait_minutes ?? null) === choice.value}
+            tabindex={(project.decision_wait_minutes ?? null) === choice.value ? 0 : -1}
+            disabled={waitBusy}
+            onclick={() => setWait(choice.value)}
+          >
+            {choice.label}
+          </button>
+        {/each}
+      </div>
+      {#if waitError}<p class="error" role="alert">{waitError}</p>{/if}
     </section>
 
     <section class="card panel">

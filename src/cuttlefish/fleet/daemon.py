@@ -371,8 +371,11 @@ class FleetDaemon:
         #: Opt-in (CUT-230, ADR-0053): a permission request wakes the manager agent.
         self.delegate_approvals = delegate_approvals()
         self._wake_task: asyncio.Task[None] | None = None
+        self._chat_tasks: set[asyncio.Task[None]] = set()
+        self._decision_timers: dict[str, asyncio.Task[None]] = {}
         self._last_wake = 0.0
         self.requests.on_permission = self._wake_manager
+        self.requests.on_decision_resolved = self._tell_builder_the_choice
         #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
         self._claude_hooks = ClaudeHooks(self)
         #: project id -> the Codex rollout its chat reads, and when it was last looked for.
@@ -953,6 +956,8 @@ class FleetDaemon:
 
     async def close(self) -> None:
         """Release what the daemon holds open: the schedule loop, the broker and every lease."""
+        for timer in list(self._decision_timers.values()):
+            timer.cancel()
         if self.scheduler is not None:
             await self.scheduler.close()
         if self._broker is not None:
@@ -1284,10 +1289,20 @@ class FleetDaemon:
             raise ManagerNotAllowedError("the manager may not act on its own session's project")
 
     def raise_decision(
-        self, project_id: str, question: str, options: Sequence[str], recommended: str
+        self,
+        project_id: str,
+        question: str,
+        options: Sequence[str],
+        recommended: str,
+        *,
+        role: str = "manager",
+        cost_of_waiting: str | None = None,
+        wait_s: float | None = None,
+        destructive: frozenset[str] = frozenset(),
     ) -> str:
-        """Put a decision to the person, in the project's agent-session journal (ADR-0046).
-        Returns its request id. Raises the broker's `RequestError`s for a bad set of options."""
+        """Put a decision to the person, in the project's agent-session journal (ADR-0046); the
+        builder's (CUT-184) names ``role="builder"``. Returns its request id. Raises the broker's
+        `RequestError`s for a bad set of options."""
         project = self._projects.get(project_id)
         self.open_session_journal(project)
         pending = self.requests.raise_decision(
@@ -1296,8 +1311,50 @@ class FleetDaemon:
             question=question,
             options=options,
             recommended=recommended,
+            role=role,
+            cost_of_waiting=cost_of_waiting,
+            wait_s=wait_s,
+            destructive=destructive,
         )
+        self._arm_decision(pending)
         return pending.id
+
+    def _arm_decision(self, pending: PendingRequest) -> None:
+        """Take a decision's recommended option when its wait runs out (CUT-185)."""
+        if not pending.record.expires_at:
+            return
+
+        async def wait() -> None:
+            await asyncio.sleep(max(0.0, (pending.deadline - datetime.now(UTC)).total_seconds()))
+            self.requests.auto_choose(pending.id)
+
+        task = asyncio.get_running_loop().create_task(wait())
+        self._decision_timers[pending.id] = task
+        task.add_done_callback(lambda _: self._decision_timers.pop(pending.id, None))
+
+    def _tell_builder_the_choice(self, pending: PendingRequest, outcome: Outcome) -> None:
+        """A builder's decision was answered: type the choice to it as a message (CUT-184)."""
+        timer = self._decision_timers.pop(pending.id, None)
+        if timer is not None and timer is not asyncio.current_task():
+            timer.cancel()
+        if pending.record.role != "builder" or outcome.resolution != "answered":
+            return
+        who = (
+            "No one answered in time, so your recommended option was taken"
+            if outcome.by == "timeout"
+            else "The person chose"
+        )
+        text = f"You asked: {pending.record.detail}\n{who}: {outcome.text}"
+
+        async def send() -> None:
+            try:
+                await self.send_chat(pending.project_id, text)
+            except FleetError as exc:
+                logger.info("the builder was not told its decision's answer: %s", exc)
+
+        with contextlib.suppress(RuntimeError):  # no loop: nothing could be sent anyway
+            self._chat_tasks.add(task := asyncio.get_running_loop().create_task(send()))
+            task.add_done_callback(self._chat_tasks.discard)
 
     def _from_journal(self, project: Project, request_id: str) -> RequestError:
         for entry in history([*self._last_team_events(project), *self._session_events(project)]):
@@ -1373,11 +1430,12 @@ class FleetDaemon:
             if not records:
                 continue
             self.open_session_journal(project)
-            count += len(
-                self.requests.restore_blocked(
-                    project.id, session_scope(project.id), records, kind="decision"
-                )
+            restored = self.requests.restore_blocked(
+                project.id, session_scope(project.id), records, kind="decision"
             )
+            for pending in restored:
+                self._arm_decision(pending)
+            count += len(restored)
         return count
 
     @property

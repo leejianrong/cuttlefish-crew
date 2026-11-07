@@ -89,6 +89,12 @@ describe("labels", () => {
 
   it("says how a request ended", () => {
     expect(outcomeLabel(request({ state: "denied" }))).toBe("Denied");
+    expect(
+      outcomeLabel(request({ kind: "decision", state: "answered", by: "timeout", text: "Keep CSV" })),
+    ).toBe("Chosen automatically after the wait: Keep CSV");
+    expect(
+      outcomeLabel(request({ kind: "decision", state: "answered", by: "person", text: "Keep CSV" })),
+    ).toBe("Answered: Keep CSV");
     expect(outcomeLabel(request({ state: "expired" }))).toBe("Denied: no answer in time");
     expect(outcomeLabel(request({ state: "cancelled" }))).toContain("stopped");
     expect(outcomeLabel(request({ state: "abandoned" }))).toContain("ended");

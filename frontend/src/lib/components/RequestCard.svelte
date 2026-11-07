@@ -64,7 +64,9 @@
   const left = $derived(secondsLeft(request, fetchedAt, now));
   // A decision waits for the person with no time limit (ADR-0046).
   const decision = $derived(request.kind === "decision");
-  const expired = $derived(left <= 0 && !offline && !decision);
+  // A decision with a wait counts down to its recommended option being taken (CUT-185).
+  const autoChoice = $derived(decision && request.expires_in_s != null);
+  const expired = $derived(left <= 0 && !offline && (!decision || autoChoice));
   const locked = $derived(busy !== null || expired || offline);
   const urgent = $derived(left > 0 && left <= 30);
   const canAlways = $derived(request.answers.includes("allow_always"));
@@ -114,7 +116,9 @@
     <span class="label-medium lands" class:live>
       {blocked || decision
         ? decision
-          ? "Waits for you, no time limit"
+          ? autoChoice
+            ? "Waits for you, then the recommendation is taken"
+            : "Waits for you, no time limit"
           : "Waits for your message, no time limit"
         : landsLabel(request.lands, request.session)}
     </span>
@@ -124,6 +128,11 @@
   {#if question || decision}
     <p class="asked body-large" aria-label="The question">{request.detail}</p>
     <p class="body-medium muted why">{request.why}</p>
+    {#if decision && request.cost_of_waiting}
+      <p class="body-medium cost" data-testid="cost-of-waiting">
+        <strong>If this waits:</strong> {request.cost_of_waiting}
+      </p>
+    {/if}
   {:else}
     <p class="body-medium muted why">{request.why}</p>
     <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
@@ -143,8 +152,20 @@
         </button>
       {/each}
     </div>
+    {#if autoChoice}
+      <p class="body-small timer-line" class:urgent aria-live="off">
+        <Icon name="clock" size={16} />
+        {offline
+          ? "Countdown paused"
+          : expired
+            ? "Taking the recommended option…"
+            : `"${request.recommended}" is taken in ${formatRemaining(left)} if you do not answer`}
+      </p>
+    {/if}
     <p class="body-small muted">
-      Nothing is chosen for you. The manager reads your answer back through its own tools.
+      {autoChoice ? "Only a safe option is ever taken for you." : "Nothing is chosen for you."} {request.role === "builder"
+        ? "Your answer is typed to the builder as a message."
+        : "The manager reads your answer back through its own tools."}
     </p>
   {:else if question}
     {#if options.length > 0}
@@ -288,6 +309,19 @@
   .why {
     margin: 0;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .timer-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    color: var(--md-sys-color-attention);
+  }
+
+  .cost {
+    margin: 0;
     overflow-wrap: anywhere;
   }
 

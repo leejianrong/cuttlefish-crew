@@ -337,6 +337,9 @@ class RequestRaised:
     session: bool = False
     #: A ``decision``'s recommended option, one of ``options`` (ADR-0046).
     recommended: str | None = None
+    #: What stalls while a ``decision`` waits, in the builder's words (CUT-184). ``expires_at``
+    #: on a decision is when its recommended option is taken for the person (CUT-185).
+    cost_of_waiting: str | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

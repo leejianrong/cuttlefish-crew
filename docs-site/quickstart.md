@@ -126,6 +126,19 @@ gone in well under ten seconds; a team ends when its current round does (a Codex
 is journaled under the project's agent session (`KillSwitchPressed`). A script can use `POST /api/projects/{id}/kill` and
 `POST /api/kill-all`.
 
+When the builder needs a choice only you can make, it is told to write `.cuttlefish/artifacts/decision.json` (a
+`question`, two to four `options`, the `recommended` one and the `cost_of_waiting`) and stop. On that stop Autopilot raises a
+**Decision** card under Needs you, on the phone as on the desktop, with the recommended option filled in and what stalls
+meanwhile, and does not nudge while it waits. Pick an option and it is typed to the builder as a message. The card and who
+answered are in the journal.
+
+By default the card waits with no timer. On the project's Permissions tab, **Decisions the builder asks you** sets a wait
+(15 minutes to 24 hours; `PATCH /api/projects/{id}/decision-wait` with `{"decision_wait_minutes": 60}` is the Admin-tier
+call). When it runs out the recommended option is taken, the card counts down to that, the journal records the answer as
+chosen by `timeout`, the history says "Chosen automatically after the wait", and the builder is told nobody answered. An
+option that deletes or overwrites work is never taken for you: the builder lists such options as `destructive`, and
+wording like "delete", "drop" or "reset" is treated the same way, so that card keeps waiting.
+
 The round and team workflow is under **Advanced: run a team of roles** on the same page. Click **Start team** there, or:
 
 ```bash

@@ -157,6 +157,7 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
         "is_manager": project.id == daemon.manager_project,
+        "decision_wait_minutes": project.decision_wait_minutes,
         **(
             {"manager_budget": daemon.manager_budget()}
             if project.id == daemon.manager_project and not summary
@@ -214,10 +215,11 @@ def _pending_json(daemon: FleetDaemon, pending: PendingRequest) -> dict[str, Any
         "project_name": project_name,
         "project_root": project_root,
         "team_id": pending.team_id,
-        # A `blocked` request or a `decision` has no deadline: nothing is waiting to be denied.
+        # A `blocked` request has no deadline, and a `decision` has one only when its recommended
+        # option is taken for you at the end of a wait (CUT-185): nothing is waiting to be denied.
         "expires_in_s": (
             None
-            if record.kind in ("blocked", "decision")
+            if record.kind == "blocked" or (record.kind == "decision" and not record.expires_at)
             else max(0, round((pending.deadline - datetime.now(UTC)).total_seconds()))
         ),
     }
@@ -941,6 +943,23 @@ def create_app(
             raise HTTPException(400, "'worktree_per_goal' must be true or false")
         try:
             daemon.projects.update_worktree_per_goal(project_id, value)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/decision-wait")
+    async def update_decision_wait(project_id: str, request: Request) -> dict[str, Any]:
+        """How many minutes a builder's decision waits before its recommended option is taken
+        for you (CUT-185); null means it waits for you with no limit. A destructive option is
+        never taken. Applies to the next decision."""
+        body = await _json_body(request)
+        minutes = body.get("decision_wait_minutes", False)
+        if minutes is not None and (
+            not isinstance(minutes, int) or isinstance(minutes, bool) or not 1 <= minutes <= 10080
+        ):
+            raise HTTPException(400, "'decision_wait_minutes' must be 1 to 10080, or null")
+        try:
+            daemon.projects.update_decision_wait(project_id, minutes)
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
