@@ -13,6 +13,7 @@ waits for session.close, writes the messages (``session_ended``), then acknowled
 ``{"usage": {...}}`` waits for a session.usage and answers it with that usage object;
 ``{"handoff": {...}}`` waits for a session.handoff and answers it with that result (or, with
 ``{"handoff_error": <code>}``, with an error);
+``{"sleep": secs}`` blocks that long, deaf to stdin closing (a turn that is mid-model-call);
 ``{"record": [<line>...]}`` appends those JSON lines to the session's own record,
 ``./.kopicode/sessions/<session>/events.jsonl`` (what the stuck-agent detector reads);
 ``{"eof": [<msg>...]}`` blocks until stdin closes, then writes the messages (shutdown's
@@ -24,6 +25,7 @@ import os
 import queue
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -168,6 +170,8 @@ for step in scenario:
         with record.open("a") as handle:
             for entry in step["record"]:
                 handle.write(json.dumps(entry) + "\n")
+    elif "sleep" in step:
+        time.sleep(step["sleep"])
     elif "exit" in step:
         os._exit(0)
     elif "eof" in step:

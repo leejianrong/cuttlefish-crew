@@ -95,8 +95,9 @@ _HTTP_STATUS = re.compile(r"\bhttp (\d{3})\b", re.IGNORECASE)
 #: inside kopicode's fixed 60s, past which kopicode denies and drops a late reply.
 DEFAULT_CONSENT_DEADLINE = 30.0
 
-#: How long to wait, after stdin EOF, for kopicode to close its sessions and exit.
-_SHUTDOWN_GRACE = 15.0
+#: How long to wait, after stdin EOF, for kopicode to close its sessions and exit. A child that
+#: is mid-turn may not answer EOF at once, and `cuttlefish serve` waits this long for each.
+_SHUTDOWN_GRACE = 5.0
 
 #: How long a ``session.usage`` reply may take; it answers inline, even mid-turn.
 _USAGE_TIMEOUT = 10.0
