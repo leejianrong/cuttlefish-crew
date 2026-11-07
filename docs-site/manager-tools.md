@@ -84,6 +84,23 @@ wake after a daemon restart is not cleared. To see what each wake cost, run
 its own transcripts. See
 [ADR-0055](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0055-a-manager-wake-clears-the-sessions-context-first.md).
 
+## Capping the manager's spend
+
+A manager that runs for weeks needs a stop. Set `CUTTLEFISH_MANAGER_DAILY_TOKENS` and/or `CUTTLEFISH_MANAGER_DAILY_TURNS`
+on the daemon (whole numbers; read at each wake, so a restart is the way to change them). Both are counted for the local
+day from the manager's own Claude Code transcripts, summed across the files a `/clear` starts. Tokens are input, output and
+cache writes (cache reads are left out); a turn is one model request.
+
+**There is no dollar cap, on purpose.** Claude Code writes token counts into its transcript and no cost, and cuttlefish
+makes no model call and does not price tokens itself, so it has no real dollar figure to stop at. A metered backend would
+need to report one; the manager runs only on Claude Code or Codex, and neither does for a resident session. The same goes
+for Codex as the manager: its usage is not read, so no daily budget is applied and the manager's page says so.
+
+At the ceiling the daemon holds its own wakes: approval wakes and scheduled check-ins (a check-in is journaled as
+skipped). It raises one card in Needs you, "The manager is paused: it reached its daily budget", which clears itself at the next wake
+or check-in after the day rolls over or the limit is raised. A turn already running is not interrupted, and a message you type still
+reaches the manager. The manager's project page shows today's use against the ceiling.
+
 ## Waking the manager on a schedule
 
 The manager's own project takes a [schedule](schedules.md) like any other, but its text is a check-in rather than a goal:

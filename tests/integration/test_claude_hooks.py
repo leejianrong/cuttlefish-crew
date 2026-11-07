@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import subprocess
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -546,3 +547,33 @@ async def test_the_server_releases_held_hooks_before_it_waits_for_requests(
     server = _FleetServer(uvicorn.Config(lambda *a: None), lambda: order.append("released"))
     await server.shutdown()
     assert order == ["released", "uvicorn waits"]
+
+
+# -- Auto stays off the default branch (CUT-183) -----------------------------------------
+
+
+def _vcs(root: Path, *args: str) -> None:
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        cwd=root, check=True, capture_output=True,
+    )  # fmt: skip
+
+
+async def test_auto_refuses_a_commit_on_the_default_branch_and_journals_it(rig: Rig) -> None:
+    _vcs(rig.root, "init", "-q", "-b", "main")
+    _vcs(rig.root, "commit", "-q", "--allow-empty", "-m", "first")
+    rig.set_mode("auto")
+    commit = {"command": "git add -A && git commit -m x"}
+    here = {"cwd": str(rig.root), "tool_name": "Bash"}
+    assert (await rig.hook("PreToolUse", tool_input=commit, **here))["decision"] == "deny"
+    switch = {"command": "git switch main"}
+    assert (await rig.hook("PreToolUse", tool_input=switch, **here))["decision"] == "deny"
+    refused = await rig.history()
+    assert {r["state"] for r in refused} == {"denied"} and {r["by"] for r in refused} == {"system"}
+    assert [r["detail"] for r in refused] == ["git switch main", "git add -A && git commit -m x"]
+    # on the goal's own branch the same command is left alone, and so is a project not in Auto
+    _vcs(rig.root, "switch", "-q", "-c", "cuttlefish/goal")
+    assert await rig.hook("PreToolUse", tool_input=commit, **here) == {}
+    _vcs(rig.root, "switch", "-q", "main")
+    rig.set_mode("standard")
+    assert await rig.hook("PreToolUse", tool_input=commit, **here) == {}

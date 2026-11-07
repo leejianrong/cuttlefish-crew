@@ -67,6 +67,8 @@ WHY = {
         "It uses shell syntax (a redirect, a variable or a substitution), "
         "so it cannot be matched to the list."
     ),
+    "never_allowed:commit_default_branch": "Unattended work stays off the default branch.",
+    "never_allowed:switch_to_default_branch": "Unattended work stays off the default branch.",
 }
 
 #: A request nobody holds open (``blocked``) has no deadline; this only fills the field.
@@ -401,6 +403,29 @@ class RequestBroker:
             for p in list(self._pending.values())
             if p.team_id == team_id and p.record.kind == "blocked" and p.record.role == role
         ]
+
+    def journal_refusal(self, team_id: str, *, title: str, line: str, reason: str) -> None:
+        """Journal a command the daemon refused on its own, as a request raised and denied at
+        once (so it reads like any other denial in the history). Nothing is held."""
+        request_id = uuid.uuid4().hex
+        self._append(
+            team_id,
+            RequestRaised(
+                request_id=request_id,
+                kind="permission",
+                title=title,
+                detail=_clip(line),
+                why=WHY.get(reason, reason),
+                answers=[],
+                expires_at="",
+                backend="claude-code",
+                session=True,
+            ),
+        )
+        self._append(
+            team_id,
+            RequestResolved(request_id=request_id, resolution="denied", by="system", text=reason),
+        )
 
     def journal(self, team_id: str, payload: EventPayload) -> None:
         """Write one event for ``team_id`` through the same append the requests use."""
