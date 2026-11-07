@@ -1172,6 +1172,21 @@ def create_app(
             raise HTTPException(409, str(exc)) from exc
         return {"status": "stopping"}
 
+    @app.post("/api/projects/{project_id}/kill")
+    async def kill_project(project_id: str) -> dict[str, Any]:
+        """Stop everything this project is running: its team and its builder (CUT-186)."""
+        try:
+            return {"stopped": await daemon.kill(project_id)}
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/kill-all")
+    async def kill_all() -> dict[str, Any]:
+        """Stop everything on every project (CUT-186). The same tier as a single Stop, so a paired
+        phone can press it."""
+        stopped = await daemon.kill_all()
+        return {"stopped": stopped, "projects": len(stopped)}
+
     @app.get("/api/projects/{project_id}/artifacts")
     async def list_artifacts(project_id: str) -> dict[str, Any]:
         """The files in the project's ``.cuttlefish/artifacts/`` (CUT-97), newest first."""

@@ -411,6 +411,18 @@ class StopRequested:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class KillSwitchPressed:
+    """A person pressed Stop everything (CUT-186), for this project or for all of them. ``stopped``
+    names what was running here and was stopped: ``team`` and/or ``builder``. Journaled under the
+    project's agent session, so it reads back in the same place as an Autopilot stop."""
+
+    EVENT_TYPE: ClassVar[str] = "KillSwitchPressed"
+
+    scope: Literal["project", "all"]
+    stopped: list[str]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class RoundUsageUpdated:
     """The tokens a running round has used so far (CUT-102). Codex reports usage after every
     model call, so the daemon journals it while the turn runs, not only when the round ends: the
@@ -616,6 +628,7 @@ EventPayload = (
     | RoundContinued
     | TeamStopped
     | StopRequested
+    | KillSwitchPressed
     | RoundUsageUpdated
     | EnvironmentPrepareStarted
     | EnvironmentPrepared
@@ -654,6 +667,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         RoundContinued,
         TeamStopped,
         StopRequested,
+        KillSwitchPressed,
         RoundUsageUpdated,
         EnvironmentPrepareStarted,
         EnvironmentPrepared,

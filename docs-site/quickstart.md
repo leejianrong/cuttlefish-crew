@@ -119,6 +119,13 @@ state survives a daemon restart (it is in the journal), but a builder that went 
 its next stop or for **Nudge now**. `GET /api/projects/{id}/autopilot` and `POST .../autopilot/{approve|pause|resume|stop|nudge}`
 are the same for a script; the goal route takes `"autopilot": true` or `{"hours": 8, "tokens": 2000000, "nudges": 100}`.
 
+**Stop everything.** A **Stop all agents** button at the top of the Projects page, and **Stop everything here** on each
+project page, end every running builder at once and ask a running team to stop. Each is two taps (the second is **Stop now**),
+and both work from a paired phone, because they need only the Approve tier, the same as Stop. A builder's tmux session is
+gone in well under ten seconds; a team ends when its current round does (a Codex agent is interrupted at once). Each press
+is journaled under the project's agent session (`KillSwitchPressed`). A script can use `POST /api/projects/{id}/kill` and
+`POST /api/kill-all`.
+
 When the builder needs a choice only you can make, it is told to write `.cuttlefish/artifacts/decision.json` (a
 `question`, two to four `options`, the `recommended` one and the `cost_of_waiting`) and stop. On that stop Autopilot raises a
 **Decision** card under Needs you, on the phone as on the desktop, with the recommended option filled in and what stalls

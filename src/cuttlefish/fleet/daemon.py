@@ -56,6 +56,7 @@ from cuttlefish.episodic.events import (
     EnvironmentPrepared,
     EnvironmentPrepareStarted,
     EventPayload,
+    KillSwitchPressed,
     PullRequestOpened,
     RequestResolved,
     SteeringMessage,
@@ -1804,6 +1805,41 @@ class FleetDaemon:
                 continue
             attempts.append(ResumeAttempt(project.id, project.name, team_id, error=None))
         return attempts
+
+    async def kill(
+        self, project_id: str, *, scope: Literal["project", "all"] = "project"
+    ) -> list[str]:
+        """The kill switch for one project (CUT-186): stop its team and its builder session, and
+        journal that it was pressed. Returns what was stopped (``team``, ``builder``). The builder
+        session is gone at once; a team gets its stop request at once and ends when its round does
+        (see `stop`). Journals nothing for a project of ``scope="all"`` that was idle."""
+        project = self._projects.get(project_id)
+        stopped: list[str] = []
+        if self.is_running(project_id):
+            with contextlib.suppress(FleetError):  # it ended while we looked
+                await self.stop(project_id)
+                stopped.append("team")
+        info = await asyncio.to_thread(self._session_manager().status, project.id, project.root)
+        if info.state == "running":
+            await self.stop_agent_session(project_id)
+            stopped.append("builder")
+        if stopped or scope == "project":
+            self.append_session_event(project, KillSwitchPressed(scope, stopped))
+        return stopped
+
+    async def kill_all(self) -> dict[str, list[str]]:
+        """The kill switch for every project at once, each stopped at the same time. A project
+        that fails to stop is reported with no entry and does not hold the others back."""
+        projects = self._projects.list()
+        results = await asyncio.gather(
+            *(self.kill(p.id, scope="all") for p in projects), return_exceptions=True
+        )
+        for project, result in zip(projects, results, strict=True):
+            if isinstance(result, BaseException):
+                logger.warning("kill switch could not stop %s: %s", project.name, result)
+        return {
+            p.id: r for p, r in zip(projects, results, strict=True) if isinstance(r, list) and r
+        }
 
     async def stop(self, project_id: str) -> None:
         """`asyncio.to_thread` is load-bearing, not a style choice: `cancel_run` is a

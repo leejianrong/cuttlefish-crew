@@ -73,6 +73,8 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/decisions"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/start"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/stop"): Tier.APPROVE,
+    ("POST", "/api/projects/{project_id}/kill"): Tier.APPROVE,  # stop everything here
+    ("POST", "/api/kill-all"): Tier.APPROVE,  # stop everything everywhere, from a phone
     ("POST", "/api/projects/{project_id}/goal"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/autopilot/{action}"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/agent-session/start"): Tier.APPROVE,
