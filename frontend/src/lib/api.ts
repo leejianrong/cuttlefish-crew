@@ -310,6 +310,8 @@ export interface NeedsYouRequest {
   options?: string[];
   /** A decision's recommended option, one of `options`. */
   recommended?: string | null;
+  /** What stalls while a decision waits, in the builder's words. */
+  cost_of_waiting?: string | null;
   role: string | null;
   backend: string | null;
   /** When an answer takes effect: `now` is a live prompt, the others are not. */

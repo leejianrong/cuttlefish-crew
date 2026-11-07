@@ -10,11 +10,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from cuttlefish.autopilot import APPROVAL_TEXT, NUDGE_TEXT, STUCK_AFTER, Limits
+from cuttlefish.decision import DECISION_PATH
 from cuttlefish.episodic.events import AutopilotUpdated
 from cuttlefish.fleet.autopilot import Autopilot, AutopilotError
 from cuttlefish.plan import PLAN_PATH
@@ -41,6 +43,20 @@ class _Daemon:
         self.sent: list[str] = []
         self.refuse: Exception | None = None
         self.transcript: Path | None = None
+        self.decisions: list[dict[str, Any]] = []
+        self.requests = SimpleNamespace(pending=self._pending)
+
+    def _pending(self, project_id: str) -> list[Any]:
+        return [
+            SimpleNamespace(record=SimpleNamespace(kind="decision", role=d["role"]))
+            for d in self.decisions
+        ]
+
+    def raise_decision(
+        self, project_id: str, question: str, options: Any, recommended: str, **kw: Any
+    ) -> str:
+        self.decisions.append({"question": question, "options": list(options), **kw})
+        return "r1"
 
     def session_events(self, project: _Project) -> list[_Event]:
         return list(self.events)
@@ -284,3 +300,39 @@ async def test_resuming_after_a_limit_lifts_it_and_restarts_the_clock(rig: Rig) 
         - datetime.fromisoformat((rig.state.approved_at or "").replace("Z", "+00:00")).timestamp()
         < 5
     )
+
+
+async def test_a_decision_the_builder_writes_becomes_a_card_and_is_not_nudged(rig: Rig) -> None:
+    """CUT-184: the builder stops with decision.json: raise it once, remove the file, no nudge."""
+    await rig.approved()
+    path = rig.tmp / DECISION_PATH
+    path.write_text(
+        json.dumps(
+            {
+                "question": "Which store?",
+                "options": ["SQLite", "Postgres"],
+                "recommended": "SQLite",
+                "cost_of_waiting": "The migration step is blocked.",
+            }
+        )
+    )
+    await rig.stopped()
+    assert rig.daemon.decisions == [
+        {
+            "question": "Which store?",
+            "options": ["SQLite", "Postgres"],
+            "role": "builder",
+            "cost_of_waiting": "The migration step is blocked.",
+        }
+    ]
+    assert not path.exists() and rig.daemon.sent == [APPROVAL_TEXT]
+    assert "Which store?" in rig.state.reason
+    await rig.stopped()  # still waiting for the person: not nudged, not raised again
+    assert rig.daemon.sent == [APPROVAL_TEXT] and len(rig.daemon.decisions) == 1
+
+
+async def test_a_malformed_decision_file_is_ignored(rig: Rig) -> None:
+    await rig.approved()
+    (rig.tmp / DECISION_PATH).write_text("not json")
+    await rig.stopped()
+    assert rig.daemon.decisions == [] and rig.daemon.sent[-1] == NUDGE_TEXT

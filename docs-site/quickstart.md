@@ -119,6 +119,12 @@ state survives a daemon restart (it is in the journal), but a builder that went 
 its next stop or for **Nudge now**. `GET /api/projects/{id}/autopilot` and `POST .../autopilot/{approve|pause|resume|stop|nudge}`
 are the same for a script; the goal route takes `"autopilot": true` or `{"hours": 8, "tokens": 2000000, "nudges": 100}`.
 
+When the builder needs a choice only you can make, it is told to write `.cuttlefish/artifacts/decision.json` (a
+`question`, two to four `options`, the `recommended` one and the `cost_of_waiting`) and stop. On that stop Autopilot raises a
+**Decision** card under Needs you, on the phone as on the desktop, with the recommended option filled in and what stalls
+meanwhile, and does not nudge while it waits. Pick an option and it is typed to the builder as a message. The card and who
+answered are in the journal. Nothing is chosen for you; the card waits with no timer.
+
 The round and team workflow is under **Advanced: run a team of roles** on the same page. Click **Start team** there, or:
 
 ```bash

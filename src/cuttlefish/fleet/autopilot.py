@@ -22,9 +22,12 @@ from typing import TYPE_CHECKING, Any
 
 from cuttlefish import autopilot as rules
 from cuttlefish.autopilot import APPROVAL_TEXT, ENDED, NUDGE_TEXT, Decision, Facts, Limits
+from cuttlefish.decision import consume as consume_ask
+from cuttlefish.decision import read_ask
 from cuttlefish.episodic.events import AutopilotUpdated
 from cuttlefish.plan import PLAN_PATH, Plan, read_plan
 from cuttlefish.projects.store import Project
+from cuttlefish.requests import RequestError
 from cuttlefish.sessions.transcript import UsageMeter
 
 if TYPE_CHECKING:
@@ -216,6 +219,8 @@ class Autopilot:
             run = await self._run(project)
             if run is None or run.state.phase not in ("planning", "running"):
                 return
+            if await self._decision_pending(project, run):
+                return
             if run.state.phase == "planning":
                 await self._plan_ready(project, run)
             else:
@@ -224,6 +229,32 @@ class Autopilot:
             raise
         except Exception:
             _LOG.exception("autopilot for %s failed after a stop", project.name)
+
+    async def _decision_pending(self, project: Project, run: _Run) -> bool:
+        """The builder wrote a decision (CUT-184), or one is still waiting for the person: raise
+        the card and do not nudge a builder that is waiting on an answer."""
+        ask = await asyncio.to_thread(read_ask, project.root)
+        if ask is not None:
+            await asyncio.to_thread(consume_ask, project.root)
+            try:
+                self._daemon.raise_decision(
+                    project.id,
+                    ask.question,
+                    ask.options,
+                    ask.recommended,
+                    role="builder",
+                    cost_of_waiting=ask.cost_of_waiting,
+                )
+            except RequestError as exc:
+                with contextlib.suppress(Exception):
+                    await self._daemon.send_chat(project.id, f"Your decision was not raised: {exc}")
+                return True
+            self._journal(project, run, reason=f"Waiting for your decision: {ask.question}"[:200])
+            return True
+        return any(
+            p.record.kind == "decision" and p.record.role == "builder"
+            for p in self._daemon.requests.pending(project.id)
+        )
 
     async def _plan_ready(self, project: Project, run: _Run) -> None:
         plan = await asyncio.to_thread(read_plan, project.root)

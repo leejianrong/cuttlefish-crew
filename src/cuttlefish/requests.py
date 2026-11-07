@@ -207,6 +207,8 @@ class RequestBroker:
         self._closed: set[str] = set()
         #: Called with each permission request as it is raised (CUT-230, ADR-0053).
         self.on_permission: Callable[[PendingRequest], None] | None = None
+        #: Called with each ``decision`` as it ends, however it ended (CUT-184).
+        self.on_decision_resolved: Callable[[PendingRequest, Outcome], None] | None = None
 
     # -- raising ----------------------------------------------------------------------
 
@@ -329,15 +331,18 @@ class RequestBroker:
         question: str,
         options: Sequence[str],
         recommended: str,
+        role: str = "manager",
+        cost_of_waiting: str | None = None,
     ) -> PendingRequest:
-        """A choice the manager puts to a person (ADR-0046): a question, two to four options and
-        one it recommends. Nothing waits on it and nothing picks an option for the person, so it
-        has no deadline and lands when answered. Raises :class:`InvalidAnswerError` for a bad set.
-        """
+        """A choice put to a person (ADR-0046): a question, two to four options and one
+        recommended, from the manager or (CUT-184) the project's builder. Nothing waits on it
+        and nothing picks an option for the person, so it has no deadline and lands when answered.
+        Raises :class:`InvalidAnswerError` for a bad set."""
         choices = [_clip_option(o.strip()) for o in options]
         if not 2 <= len(choices) <= 4 or len(set(choices)) != len(choices) or "" in choices:
             raise InvalidAnswerError("a decision needs two to four distinct, non-empty options")
-        if _clip_option(recommended.strip()) not in choices:
+        picked = _clip_option(recommended.strip())
+        if picked not in choices:
             raise InvalidAnswerError("'recommended' must be one of the options")
         if not question.strip():
             raise InvalidAnswerError("a decision needs a question")
@@ -348,14 +353,15 @@ class RequestBroker:
             record=RequestRaised(
                 request_id=uuid.uuid4().hex,
                 kind="decision",
-                title="The manager needs a decision from you",
+                title=f"The {role} needs a decision from you",
                 detail=_clip(question.strip()),
-                why=f"It recommends: {_clip_option(recommended.strip())}",
+                why=f"It recommends: {picked}",
                 answers=["answer"],
                 expires_at="",
-                role="manager",
+                role=role,
                 options=choices,
-                recommended=_clip_option(recommended.strip()),
+                recommended=picked,
+                cost_of_waiting=_clip(cost_of_waiting.strip()) if cost_of_waiting else None,
             ),
             window_s=NO_DEADLINE_S,
         )
@@ -590,6 +596,8 @@ class RequestBroker:
             self._finished.popitem(last=False)
         if not pending._future.done():
             pending._future.set_result(outcome)
+        if self.on_decision_resolved is not None and pending.record.kind == "decision":
+            self.on_decision_resolved(pending, outcome)
         return outcome
 
     # -- reading ----------------------------------------------------------------------

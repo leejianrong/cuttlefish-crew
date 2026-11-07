@@ -124,6 +124,11 @@
   {#if question || decision}
     <p class="asked body-large" aria-label="The question">{request.detail}</p>
     <p class="body-medium muted why">{request.why}</p>
+    {#if decision && request.cost_of_waiting}
+      <p class="body-medium cost" data-testid="cost-of-waiting">
+        <strong>If this waits:</strong> {request.cost_of_waiting}
+      </p>
+    {/if}
   {:else}
     <p class="body-medium muted why">{request.why}</p>
     <pre class="command mono" aria-label={blocked ? "Its last failing command" : "Command"}>{request.detail}</pre>
@@ -144,7 +149,9 @@
       {/each}
     </div>
     <p class="body-small muted">
-      Nothing is chosen for you. The manager reads your answer back through its own tools.
+      Nothing is chosen for you. {request.role === "builder"
+        ? "Your answer is typed to the builder as a message."
+        : "The manager reads your answer back through its own tools."}
     </p>
   {:else if question}
     {#if options.length > 0}
@@ -288,6 +295,11 @@
   .why {
     margin: 0;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .cost {
+    margin: 0;
     overflow-wrap: anywhere;
   }
 
