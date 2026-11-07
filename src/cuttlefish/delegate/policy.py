@@ -33,17 +33,39 @@ from pathlib import Path
 DEFAULT_SHELL_ALLOWLIST: list[list[str]] = []
 
 
+#: Command names kopicode refuses in ``allow_commands``: a launcher, wrapper or shell would start
+#: commands its matcher never sees, and ``cd`` inside the root is always allowed. One such entry
+#: makes kopicode reject the whole file, so they are dropped here (``find``, ``npx tsc`` among the
+#: presets) and the command waits to be denied rather than breaking every command.
+_UNEXPRESSIBLE = frozenset(
+    {
+        "env", "command", "exec", "nohup", "nice", "ionice", "time", "timeout", "stdbuf", "xargs",
+        "setsid", "watch", "flock", "busybox", "find", "parallel", "unbuffer", "chroot", "strace",
+        "npx", "corepack", "sudo", "doas", "su", "pkexec", "runuser", "sh", "bash", "zsh", "dash",
+        "ksh", "ash", "csh", "tcsh", "fish", "eval", "source", ".", "cd", "pushd", "popd",
+    }
+)  # fmt: skip
+
+
 def write_policy_file(path: Path, *, root: str, allow: list[list[str]] | None = None) -> None:
     """Write a kopicode declared-allowlist policy file at `path`.
 
-    Grammar is kopicode's own (``internal/permission/allowlist_file.go``): two
-    flat top-level keys, `root` (a quoted absolute path) and `allow` (a list of
-    argv lists) — hand-written rather than templated through a library, the same
-    reasoning kopicode's own file gives for not pulling in a TOML dependency for
-    two keys. `json.dumps` happens to render a list of string lists in exactly
-    this grammar's array syntax, so it's reused for `allow` rather than
-    hand-formatting it.
+    Grammar is kopicode's own (``internal/permission/allowlist_file.go``): flat top-level keys,
+    `root` (a quoted absolute path) and the allowlist, hand-written rather than templated
+    through a library. `json.dumps` renders a list of string lists in the grammar's array syntax.
+
+    The `allow` argv prefixes go in ``allow_commands`` (kopicode ADR-0018), not ``allow``: the
+    latter matches ``/bin/sh -c <line>`` byte for byte, so no real shell command ever matched
+    it (CUT-279). ``allow_commands`` tokenizes the line and matches every command in it on whole
+    leading words, with ``cd`` inside `root` implicit. kopicode's own never-allowed rules still
+    apply on top.
     """
-    resolved_allow = DEFAULT_SHELL_ALLOWLIST if allow is None else allow
-    allow_literal = json.dumps(resolved_allow)
-    path.write_text(f'root = "{root}"\nallow = {allow_literal}\n')
+    commands = [
+        e
+        for e in (DEFAULT_SHELL_ALLOWLIST if allow is None else allow)
+        if e and Path(e[0]).name not in _UNEXPRESSIBLE
+    ]
+    text = f'root = "{root}"\nallow = []\n'
+    if commands:
+        text += f"allow_commands = {json.dumps(commands)}\n"
+    path.write_text(text)

@@ -16,6 +16,7 @@ import pytest
 
 from cuttlefish.delegate.kopicode import DelegationError, run_kopicode
 from cuttlefish.delegate.policy import write_policy_file
+from cuttlefish.delegate.presets import PRESETS, preset_allow
 
 
 @pytest.mark.requires_kopicode
@@ -44,14 +45,15 @@ async def test_a_declared_allowlist_parses_cleanly_against_the_real_binary(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """KAN-1011: a non-empty, operator-declared allowlist is still valid kopicode
-    policy grammar, not just V1's original empty one."""
+    policy grammar, not just V1's original empty one. Every preset at once, so one entry
+    kopicode refuses in ``allow_commands`` (``find``, ``npx``) would fail the whole file."""
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     root = tmp_path / "scratch"
     root.mkdir()
     policy_path = tmp_path / "policy.toml"
-    write_policy_file(policy_path, root=str(root), allow=[["go", "test"], ["npm", "test"]])
+    write_policy_file(policy_path, root=str(root), allow=preset_allow(list(PRESETS)))
 
     with pytest.raises(DelegationError, match=r"no session events"):
         await run_kopicode(
