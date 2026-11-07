@@ -771,7 +771,7 @@ class FleetDaemon:
             )
         chosen = resolve_agent_backend(backend or project.backend)
         made: tuple[str, str] | None = None
-        if project.worktree_per_goal:
+        if project.worktree_per_goal or project.mode == "auto":  # Auto is unattended (CUT-183)
             made = await self._goal_worktree(project, goal)
         try:
             info = await self.start_agent_session(

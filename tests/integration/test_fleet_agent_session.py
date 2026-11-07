@@ -722,3 +722,17 @@ def test_the_kill_switch_stops_every_running_builder_within_ten_seconds_and_jour
     pressed = client.post(f"/api/projects/{gamma.id}/kill")
     assert pressed.json() == {"stopped": []}
     assert client.post("/api/projects/nope/kill").status_code == 404
+
+
+def test_an_auto_project_runs_every_goal_in_a_worktree_without_opting_in(rig: Rig) -> None:
+    """CUT-183: Auto is unattended, so its goals are always on their own branch."""
+    _repo(rig.root)
+    (rig.bin / "claude").write_text(f"#!/bin/sh\npwd >> {rig.log}\nexec sleep 300\n")
+    project = rig.store.register(name="alpha", root=str(rig.root))
+    rig.store.update_mode(project.id, "auto")
+    client = _client(rig.daemon())
+    goal = client.post(
+        f"/api/projects/{project.id}/goal", json={"text": "Tidy up", "backend": "claude-code"}
+    ).json()["goal"]
+    assert goal["branch"].startswith("cuttlefish/tidy-up-")
+    assert rig.launches()[-1] == str(Path(goal["worktree"]).resolve())
