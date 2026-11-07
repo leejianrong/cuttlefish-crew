@@ -367,8 +367,10 @@ class FleetDaemon:
         #: Opt-in (CUT-230, ADR-0053): a permission request wakes the manager agent.
         self.delegate_approvals = delegate_approvals()
         self._wake_task: asyncio.Task[None] | None = None
+        self._chat_tasks: set[asyncio.Task[None]] = set()
         self._last_wake = 0.0
         self.requests.on_permission = self._wake_manager
+        self.requests.on_decision_resolved = self._tell_builder_the_choice
         #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
         self._claude_hooks = ClaudeHooks(self)
         #: project id -> the Codex rollout its chat reads, and when it was last looked for.
@@ -1209,10 +1211,18 @@ class FleetDaemon:
             raise ManagerNotAllowedError("the manager may not act on its own session's project")
 
     def raise_decision(
-        self, project_id: str, question: str, options: Sequence[str], recommended: str
+        self,
+        project_id: str,
+        question: str,
+        options: Sequence[str],
+        recommended: str,
+        *,
+        role: str = "manager",
+        cost_of_waiting: str | None = None,
     ) -> str:
-        """Put a decision to the person, in the project's agent-session journal (ADR-0046).
-        Returns its request id. Raises the broker's `RequestError`s for a bad set of options."""
+        """Put a decision to the person, in the project's agent-session journal (ADR-0046); the
+        builder's (CUT-184) names ``role="builder"``. Returns its request id. Raises the broker's
+        `RequestError`s for a bad set of options."""
         project = self._projects.get(project_id)
         self.open_session_journal(project)
         pending = self.requests.raise_decision(
@@ -1221,8 +1231,26 @@ class FleetDaemon:
             question=question,
             options=options,
             recommended=recommended,
+            role=role,
+            cost_of_waiting=cost_of_waiting,
         )
         return pending.id
+
+    def _tell_builder_the_choice(self, pending: PendingRequest, outcome: Outcome) -> None:
+        """A builder's decision was answered: type the choice to it as a message (CUT-184)."""
+        if pending.record.role != "builder" or outcome.resolution != "answered":
+            return
+        text = f"You asked: {pending.record.detail}\nThe person chose: {outcome.text}"
+
+        async def send() -> None:
+            try:
+                await self.send_chat(pending.project_id, text)
+            except FleetError as exc:
+                logger.info("the builder was not told its decision's answer: %s", exc)
+
+        with contextlib.suppress(RuntimeError):  # no loop: nothing could be sent anyway
+            self._chat_tasks.add(task := asyncio.get_running_loop().create_task(send()))
+            task.add_done_callback(self._chat_tasks.discard)
 
     def _from_journal(self, project: Project, request_id: str) -> RequestError:
         for entry in history([*self._last_team_events(project), *self._session_events(project)]):

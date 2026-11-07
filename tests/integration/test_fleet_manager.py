@@ -555,3 +555,35 @@ async def test_the_manager_is_cleared_only_when_clear_context_is_set(
     monkeypatch.setenv("CUTTLEFISH_MANAGER_CLEAR_CONTEXT", "1")
     await rig.daemon.check_in_manager("b")
     assert calls == [False, True]
+
+
+async def test_a_builders_decision_is_answered_by_the_person_and_typed_back_as_text(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CUT-184: it carries the cost of waiting, only a person answers, and the builder is sent
+    the chosen option; the journal says who answered."""
+    sent: list[str] = []
+
+    async def send_chat(project_id: str, text: str, **_: Any) -> dict[str, str]:
+        sent.append(text)
+        return {}
+
+    monkeypatch.setattr(rig.daemon, "send_chat", send_chat)
+    request_id = rig.daemon.raise_decision(
+        rig.project_id,
+        "Which store?",
+        ["SQLite", "Postgres"],
+        "SQLite",
+        role="builder",
+        cost_of_waiting="The schema step is blocked.",
+    )
+    (row,) = (await rig.owner.get("/api/requests")).json()["requests"]
+    assert row["role"] == "builder" and row["cost_of_waiting"] == "The schema step is blocked."
+    path = rig.answer_path(request_id)
+    body = {"answer": "answer", "text": "Postgres"}
+    assert (await rig.manager.post(path, json=body)).status_code == 403
+    assert (await rig.owner.post(path, json=body)).status_code == 200
+    await asyncio.sleep(0.05)
+    assert sent == ["You asked: Which store?\nThe person chose: Postgres"]
+    (done,) = rig.resolved(session_scope(rig.project_id))
+    assert (done.resolution, done.text, done.by) == ("answered", "Postgres", "person")

@@ -14,6 +14,8 @@ import dataclasses
 import re
 from pathlib import Path
 
+from cuttlefish.decision import DECISION_INSTRUCTION
+
 PLAN_PATH = ".cuttlefish/artifacts/plan.md"
 
 #: What a builder is told when it starts on Autopilot (as an addition to its system prompt for
@@ -23,7 +25,8 @@ PLAN_INSTRUCTION = (
     f"{PLAN_PATH}: a short heading, then one '- [ ]' line per step, in order, each small enough "
     "to finish in one go. Then stop and wait for the person to approve it. After it is approved, "
     "work through the steps in order, changing '- [ ]' to '- [x]' in that file as you finish "
-    "each one, and keep going until every step is done. Ask the person only if you are blocked."
+    "each one, and keep going until every step is done. Ask the person only if you are blocked. "
+    f"{DECISION_INSTRUCTION}"
 )
 
 #: A step line: a bullet or a number, then a checkbox. ``x`` or ``X`` is done.
