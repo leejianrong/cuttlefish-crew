@@ -521,6 +521,14 @@ class ConsentPolicy:
             return "command -v"
         if self._commit_messages and _is_commit_message(words):
             return "git commit -m"
+        if words[0] == "cd":
+            # `cd` inside the root is implicit, as in kopicode's allow_commands (CUT-280). Bare
+            # `cd`, `cd -` and flags go somewhere unknowable; `..` and absolute paths leave it.
+            if len(words) != 2 or words[1].startswith("-"):
+                return _deny("no_matching_allow_entry", askable=True)
+            if _escapes_root(words[1]):
+                return _deny("argument_escapes_root")
+            return "cd"
         for pattern in self._patterns:
             if tuple(words[: len(pattern)]) != pattern:
                 continue
