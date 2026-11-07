@@ -17,6 +17,7 @@ import satay.control
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from cuttlefish.episodic.events import KillSwitchPressed
 from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.projects.store import ProjectStore
@@ -688,3 +689,36 @@ def test_kopicode_cannot_be_the_manager_yet(rig: Rig, monkeypatch: pytest.Monkey
     monkeypatch.setenv("HOME", str(rig.tmp))
     with pytest.raises(Exception, match="no MCP client"):
         rig.daemon().adopt_manager("kopicode")
+
+
+def test_the_kill_switch_stops_every_running_builder_within_ten_seconds_and_journals_it(
+    rig: Rig,
+) -> None:
+    """CUT-186: one press stops every project's builder session; the journal says it was pressed,
+    and an idle project is not written to."""
+    alpha = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    other = rig.tmp / "beta"
+    other.mkdir()
+    beta = rig.store.register(name="beta", root=str(other), backend="claude-code")
+    idle = rig.tmp / "gamma"
+    idle.mkdir()
+    gamma = rig.store.register(name="gamma", root=str(idle), backend="claude-code")
+    daemon = rig.daemon()
+    client = _client(daemon)
+    for project in (alpha, beta):
+        client.post(f"/api/projects/{project.id}/agent-session/start", json={})
+    started = time.monotonic()
+    done = client.post("/api/kill-all")
+    assert done.status_code == 200 and time.monotonic() - started < 10
+    assert set(done.json()["stopped"]) == {alpha.id, beta.id}
+    for project in (alpha, beta):
+        assert client.get(f"/api/projects/{project.id}/agent-session").json()["state"] != "running"
+        events = daemon.session_events(project)
+        assert [e.payload.scope for e in events if isinstance(e.payload, KillSwitchPressed)] == [
+            "all"
+        ]
+    assert not any(isinstance(e.payload, KillSwitchPressed) for e in daemon.session_events(gamma))
+    # one project's own button journals even when nothing was running there
+    pressed = client.post(f"/api/projects/{gamma.id}/kill")
+    assert pressed.json() == {"stopped": []}
+    assert client.post("/api/projects/nope/kill").status_code == 404

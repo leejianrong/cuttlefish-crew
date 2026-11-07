@@ -981,6 +981,22 @@ export class FleetClient {
     });
   }
 
+  /** CUT-186: stop one project's team and builder; the names of what was stopped. */
+  async killProject(id: string): Promise<Record<string, string[]>> {
+    const result = await this.request<{ stopped: string[] }>(`/api/projects/${id}/kill`, {
+      method: "POST",
+    });
+    return { [id]: result.stopped };
+  }
+
+  /** CUT-186: stop everything on every project; project id -> what was stopped. */
+  async killAll(): Promise<Record<string, string[]>> {
+    const result = await this.request<{ stopped: Record<string, string[]> }>("/api/kill-all", {
+      method: "POST",
+    });
+    return result.stopped;
+  }
+
   stopProject(id: string): Promise<{ status: string }> {
     return this.request(`/api/projects/${id}/stop`, { method: "POST" });
   }

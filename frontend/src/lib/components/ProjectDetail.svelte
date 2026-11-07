@@ -18,6 +18,7 @@
   import EnvironmentCard from "./EnvironmentCard.svelte";
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
+  import KillSwitch from "./KillSwitch.svelte";
   import ScheduleCard from "./ScheduleCard.svelte";
   import MissionControl from "./MissionControl.svelte";
   import Icon from "./Icon.svelte";
@@ -313,6 +314,7 @@
         {/if}
       {/if}
       <p class="root mono">{project.root}</p>
+      <KillSwitch {client} {projectId} onDone={refresh} />
     </header>
 
     <Tabs tabs={TABS} active={inSettings ? "settings" : tab} label="Project" onSelect={selectTab} />

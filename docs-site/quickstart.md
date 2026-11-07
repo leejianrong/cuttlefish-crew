@@ -119,6 +119,13 @@ state survives a daemon restart (it is in the journal), but a builder that went 
 its next stop or for **Nudge now**. `GET /api/projects/{id}/autopilot` and `POST .../autopilot/{approve|pause|resume|stop|nudge}`
 are the same for a script; the goal route takes `"autopilot": true` or `{"hours": 8, "tokens": 2000000, "nudges": 100}`.
 
+**Stop everything.** A **Stop all agents** button at the top of the Projects page, and **Stop everything here** on each
+project page, end every running builder at once and ask a running team to stop. Each is two taps (the second is **Stop now**),
+and both work from a paired phone, because they need only the Approve tier, the same as Stop. A builder's tmux session is
+gone in well under ten seconds; a team ends when its current round does (a Codex agent is interrupted at once). Each press
+is journaled under the project's agent session (`KillSwitchPressed`). A script can use `POST /api/projects/{id}/kill` and
+`POST /api/kill-all`.
+
 The round and team workflow is under **Advanced: run a team of roles** on the same page. Click **Start team** there, or:
 
 ```bash

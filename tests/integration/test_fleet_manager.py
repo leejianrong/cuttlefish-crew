@@ -103,6 +103,8 @@ async def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         ("DELETE", "/api/devices/abc"),  # approve tier, yet not a manager route
         ("POST", "/api/projects/{p}/start"),
         ("POST", "/api/projects/{p}/stop"),
+        ("POST", "/api/projects/{p}/kill"),
+        ("POST", "/api/kill-all"),
         ("POST", "/api/projects/{p}/chat"),
         ("GET", "/api/not-a-route"),
     ],

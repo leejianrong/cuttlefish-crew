@@ -17,6 +17,7 @@
     type Filter,
     type GroupBy,
   } from "../grouping";
+  import KillSwitch from "./KillSwitch.svelte";
   import ProjectCard from "./ProjectCard.svelte";
   import ProjectFilters from "./ProjectFilters.svelte";
   import Icon from "./Icon.svelte";
@@ -149,6 +150,10 @@
     </button>
   </header>
 
+  {#if projects.length > 0}
+    <div class="kill-row"><KillSwitch {client} onDone={refresh} /></div>
+  {/if}
+
   {#if actionError}
     <p class="warning" role="alert">{actionError}</p>
   {/if}
@@ -245,6 +250,10 @@
   .endpoint {
     color: var(--text-faint);
     font-size: 0.78rem;
+  }
+
+  .kill-row {
+    margin-bottom: 1.25rem;
   }
 
   .add {
