@@ -31,8 +31,9 @@ import dataclasses
 import json
 import logging
 import secrets
+import signal
 import socket
-from collections.abc import Awaitable, Callable, Collection, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterator, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -1604,6 +1605,20 @@ class _FleetServer(uvicorn.Server):
     async def shutdown(self, sockets: list[socket.socket] | None = None) -> None:
         self._on_shutdown()
         await super().shutdown(sockets)
+
+    @contextlib.contextmanager
+    def capture_signals(self) -> Iterator[None]:
+        """uvicorn re-sends a captured signal once it has shut down, so the default SIGTERM then
+        ends the process before `cuttlefish serve`'s own cleanup (resident agents, the broker)
+        runs: the agents were left running, orphaned. Forget SIGTERM so serve returns normally;
+        SIGINT is still re-sent, and `_run_serve` ends on it as it always has."""
+        with super().capture_signals():
+            try:
+                yield
+            finally:
+                self._captured_signals[:] = [
+                    sig for sig in self._captured_signals if sig != signal.SIGTERM
+                ]
 
 
 def find_free_port(host: str, preferred: int, *, attempts: int = 20) -> int:
