@@ -1,7 +1,7 @@
 // The project page's one-line status strip (CUT-286): what is running, how it last came up, what
 // it has used and how long, the branch with its diff stat, and the pull request. Pure, so each part
 // is unit-tested; the component only draws what this returns and keeps nothing of its own.
-import type { AgentSession, Goal, GoalDiffResult, RoleUsage } from "./api";
+import type { AgentSession, Goal, GoalDiffResult, PrStatusResult, RoleUsage } from "./api";
 import { backendLabel } from "./agentsession";
 import { compactTokens, elapsedText, needsPerson, phaseLabel, type AutopilotStatus } from "./autopilot";
 import { statText } from "./diff";
@@ -14,6 +14,8 @@ export interface StripPart {
   /** A link, for the pull request. */
   href?: string;
   mono?: boolean;
+  /** Hover text: which checks are failing. */
+  title?: string;
 }
 
 export interface StripInput {
@@ -24,6 +26,8 @@ export interface StripInput {
   autopilot: AutopilotStatus | null;
   goal: Goal | null;
   stat: GoalDiffResult | null;
+  /** The pull request as gh reports it; null until read or when there is none to report. */
+  pr?: PrStatusResult | null;
 }
 
 const LAST_ACTION: Record<string, string> = {
@@ -68,7 +72,39 @@ export function stripParts(input: StripInput, now = new Date()): StripPart[] {
     parts.push({ key: "branch", text: `${goal.branch}${counts}${dirty}`, tone: "plain", mono: true });
   }
   if (goal?.pr_url) {
-    parts.push({ key: "pr", text: "Pull request", tone: "plain", href: goal.pr_url });
+    const pr = prNote(input.pr);
+    parts.push({
+      key: "pr",
+      text: pr.text ? `Pull request: ${pr.text}` : "Pull request",
+      tone: pr.attention ? "attention" : "plain",
+      href: goal.pr_url,
+      title: pr.title,
+    });
   }
   return parts;
+}
+
+/** What gh says about the pull request in a few words: open, draft, merged or closed, then its
+ * checks and review. Nothing when gh could not say (no gh, not logged in), so the link stands alone. */
+export function prNote(pr: PrStatusResult | null | undefined): {
+  text: string;
+  attention: boolean;
+  title?: string;
+} {
+  if (!pr?.ok || !pr.state) return { text: "", attention: false };
+  const words: string[] = [pr.state === "open" && pr.draft ? "draft" : pr.state];
+  const failing = pr.checks.filter((c) => c.state === "fail").map((c) => c.name);
+  if (pr.state === "open") {
+    if (failing.length > 0) words.push(`${failing.length} of ${pr.checks.length} checks failing`);
+    else if (pr.checks_state === "pending") words.push("checks running");
+    else if (pr.checks_state === "passing") words.push("checks passing");
+    if (pr.review === "changes_requested") words.push("changes requested");
+    else if (pr.review === "approved") words.push("approved");
+  }
+  const attention = pr.state === "open" && (failing.length > 0 || pr.review === "changes_requested");
+  return {
+    text: words.join(", "),
+    attention,
+    title: failing.length > 0 ? `Failing: ${failing.join(", ")}` : undefined,
+  };
 }

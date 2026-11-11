@@ -66,6 +66,9 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     # more: it only reads, and the journal (also View) already carries what the agent wrote and ran.
     ("GET", "/api/projects/{project_id}/goal/diff"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/goal/diff/stat"): Tier.VIEW,  # counts only
+    # The goal's PR state and check names, read-only through the machine's gh (cached); the PR's
+    # address is already in the goal at View, and nothing here changes or merges anything.
+    ("GET", "/api/projects/{project_id}/goal/pull-request"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/overview"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/digest"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/autopilot"): Tier.VIEW,

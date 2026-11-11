@@ -136,6 +136,15 @@ describe("FleetClient.getGoalDiff (CUT-289)", () => {
   });
 });
 
+describe("FleetClient.getPrStatus (CUT-242)", () => {
+  it("reads the pull request's state from its own route", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: false, code: "no_pr", checks: [] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(new FleetClient("http://x", "t").getPrStatus("p1")).resolves.toMatchObject({ code: "no_pr" });
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("http://x/api/projects/p1/goal/pull-request");
+  });
+});
+
 describe("FleetClient.removeGoalWorktree (CUT-250)", () => {
   it("posts whether to delete the branch and returns a refusal as an answer", async () => {
     const answer = { ok: false, code: "uncommitted", reason: "The worktree has uncommitted changes." };
