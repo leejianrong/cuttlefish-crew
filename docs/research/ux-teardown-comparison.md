@@ -1,6 +1,6 @@
-# UX teardown: herdr, Paseo and Claude Squad against our screens (CUT-228, 2026-11-12)
+# UX teardown: herdr, Paseo, Claude Squad and Orca against our screens (CUT-228, 2026-11-12)
 
-Per-product notes: [herdr](herdr.md), [Paseo](paseo.md), [Claude Squad](claude-squad.md). Earlier passes:
+Per-product notes: [herdr](herdr.md), [Paseo](paseo.md), [Claude Squad](claude-squad.md), [Orca](orca.md). Earlier passes:
 `fleet-manager-landscape.md` and `agent-session-ux-comparison.md`. **No competitor was run.** Their screens here are the
 vendors' own marketing images, so they show each product at its best. Ours are real captures of the current `main` dashboard.
 
@@ -83,6 +83,38 @@ Two competitive facts that change earlier notes, for the front door (E28) and th
 - Paseo is **Apache-2.0**, not AGPL; it also has a hosted Hub ($15 per seat per month, free self-hosted) that starts agents from
   GitHub, Slack and Discord. That is the same job as the "Devin in Slack" flow we listed as worth copying.
 
+## Orca against our screens (added 2026-11-12)
+
+Orca (`orca.md`) is the largest product here and the only one whose marketing shots show a coordinator agent starting workers
+on other agents. Its images are the README's own, so best case again. Ours are the same retaken `main` captures above
+(`assets/teardown/cuttlefish-*`); nothing was retaken.
+
+What the Orca hero (`assets/orca/orca-readme-hero.jpg`) shows, and how ours compares:
+
+| Question | Orca | Ours (seen above) |
+|---|---|---|
+| What is the unit of a row? | A worktree, with its agents nested under it as rows: glyph, name, model, age (`opus-5.5 49m`) | A project card with sprites for roles; no model or age |
+| Tree or cards | One narrow sidebar tree: host, project, worktree, agent. About 10 agents visible on a laptop screen | Three tall cards per row; about one card on a phone fold |
+| Where is "needs you" | An amber glyph on the agent row, and a Needs You column in the experimental board | A chip, a sort order and a separate page; one pill among many on Projects |
+| Cost and limits on screen | A status bar with a limit bar and reset time per provider (`42% 2h 48m`) | None |
+| Review | The agent's chat shows "Edited CHANGELOG.md +6"; diff and PR in the same window | Nothing on Projects; PR button on the project page |
+| The phone | The same chat in the corner of the desktop hero, with a reply box ("Ship it. Open the PR.") | A phone capture, empty-state only |
+| Permission state | The composer says "Full access" in amber | A mode setting in a tab; never on the composer |
+| Density | Compact, dark, one font size | Roomy; the path takes a full row |
+
+Findings (each has a card; the full list, with effort and fit, is the copy list in `orca.md`):
+
+1. **Nest the agents, show model and age on each row** (CUT-298; shortening the card is CUT-285).
+2. **Put a usage and reset line on screen** (CUT-292). Orca's status bar is the quietest of its features and the one a
+   subscription user checks most.
+3. **Show what an agent just changed in the row or the chat** ("Edited X +6") and give it a diff (CUT-289, CUT-287).
+4. **Show the permission mode on the composer**, as Orca does with "Full access". Theirs is a risk label; ours would say
+   "Ask first", "Standard" or "Auto". Not carded separately: it belongs in the chat-rework screens (E20) and needs a live team to
+   design (CUT-288).
+5. **Hero with the phone overlaid** (CUT-302).
+
+The hero's model names (`gpt-6-astra`, `grok-4.7`) are mock data. No video was found for Orca on its home page.
+
 ## Image provenance
 
 All competitor images are the vendors' own, kept for internal comparison only, not for the docs site or README.
@@ -95,6 +127,9 @@ All competitor images are the vendors' own, kept for internal comparison only, n
 | `herdr-mobile-terminal.webp` | https://herdr.dev/mobile/terminal.webp |
 | `herdr-mobile-foldable.webp` | https://herdr.dev/mobile/foldable.webp |
 | `claude-squad-screenshot.png` | https://raw.githubusercontent.com/smtg-ai/claude-squad/main/assets/screenshot.png |
+| `../orca/orca-readme-hero.jpg` | https://raw.githubusercontent.com/stablyai/orca/main/docs/assets/readme-hero.jpg |
+| `../orca/orca-mobile-companion.jpg` | https://raw.githubusercontent.com/stablyai/orca/main/docs/assets/readme-features/mobile-companion.poster.jpg |
+| `../orca/orca-orchestration.jpg` | https://raw.githubusercontent.com/stablyai/orca/main/docs/assets/readme-features/orchestration.poster.jpg |
 | `cuttlefish-*.png` | our own capture, 2026-11-12 |
 
 No screenshots from Jian were available (`~/teardown-shots/` did not exist).

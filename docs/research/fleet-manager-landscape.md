@@ -7,6 +7,14 @@ Phase 2 (screenshots, UX and marketing teardown) has a first pass on landing pag
 
 ## 1. Headline findings
 
+**Update 2026-11-12: Orca (`orca.md`) belongs at the top of the set and was missing.** `stablyai/orca`, MIT, Stably AI (YC W2022),
+122k stars eight months after creation, about one release a day, an Electron desktop app with a worktree per task, chat or terminal,
+diffs, a browser, a CLI the agents call, a coordinator-and-workers orchestration mode, SSH, a headless server, cloud VM recipes,
+iOS and Android apps over a hosted relay, schedules. Free; an Enterprise page with no prices. It overlaps us on the goal
+(many agents, a phone, a team) and not on the shape: it is an IDE for the person, defaults agents to full autonomy, and has no
+durable workflow, journal or approval tiers in its docs. The ranked list of features to copy is in `orca.md` and its cards are
+CUT-289 to CUT-302. Paseo (item 3) is still the nearest on remote access; Orca is the nearest on the daily experience.
+
 1. **The space has split into three kinds of product, and we sit between them.**
    - Local multiplexers and managers (herdr, Conductor, Claude Squad, Emdash, Paseo): polished, mostly free or open source.
    - Vendor cloud agents (Devin, Cursor cloud agents, Codex, Jules, Copilot Agent HQ, Claude Code cloud sessions, Warp Oz,
@@ -35,6 +43,7 @@ Backends = how many coding agents the product can drive.
 | Product | What it is | Backends | Phone | Remote / multi-machine | Price (as found) |
 |---|---|---|---|---|---|
 | **herdr** | Open-source native app + `herdr-core` server; spaces per repo, tabs per task | Any terminal agent; status integrations for Claude Code, Codex, Copilot CLI, Cursor Agent, Gemini CLI, OpenCode and more | iOS, iPad, Android over SSH, no account (`herdr.md`) | SSH machines in one sidebar | Free |
+| **Orca** (Stably AI, added 2026-11-12) | Open-source Electron agent IDE; worktree per task, chat or terminal, diff review, browser, orchestration, automations | About 40 CLIs named, any CLI agent; structured chat for 7 | iOS App Store and Android APK, over a hosted relay with sign-in (`orca.md`) | SSH, headless `orca serve` over Tailscale, cloud VM recipes | Free, MIT; Enterprise on request |
 | **Devin** (Cognition) | Cloud engineer with shell, IDE, browser; from web, Slack, Teams, Linear/Jira, CLI | 1 (its own) | iOS beta waitlist; no Android app found | Cloud VMs | Sources conflict: one page showed Free / $20 / $200 / Teams $80 + $40 per seat; others cite ACUs at about $2.25. Verify on devin.ai |
 | **Claude Code Remote Control / Agent View** | Phone, web or desktop window onto local sessions; dashboard of background sessions | 1 (Claude Code) | Yes, Claude app, QR | Local machine, outbound HTTPS only | In Pro, Max, Team, Enterprise |
 | **Claude Code cloud sessions** | Tasks in Anthropic's cloud, PR per task | 1 | iOS app | Cloud | Same limits as the CLI |
@@ -81,7 +90,8 @@ with Autopilot; device pairing with an E2E relay, Tailscale https and a hosted r
 | Audit trail | Redacted episodic journal | Devin and Warp enterprise audit | Equal to ahead for solo use |
 | Credential isolation | Broker leases a token | Few do this | Ahead |
 | Multi-user and SSO | Single operator, one password | Devin, Cursor, Copilot, Jules, Factory | Behind (accepted gap) |
-| Git/PR flow, worktree isolation, scheduled runs | Not checked in this pass | Paseo, Conductor, Codex app | Unknown: read the code first |
+| Git/PR flow, worktree isolation, scheduled runs | Built since this row was written (ADR-0048, 0049, 0051): worktree per goal and role, a PR from the project page, schedules. No in-app diff, no checks feed | Orca, Paseo, Conductor, Codex app | Equal on isolation, behind on review (`orca.md`, CUT-289) |
+| Notifications, usage and limit display, jump palette, session history | None of the four | Orca | Behind (`orca.md`) |
 | Cloud-hosted agents | No | Devin, Cursor, Jules | Different model |
 | First impression, landing page, demo | Pixel-art dashboard, README shots | herdr, Conductor | Behind (phase 2) |
 
