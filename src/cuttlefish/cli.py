@@ -941,7 +941,12 @@ def _schedule(args: argparse.Namespace) -> int:
             print(
                 json.dumps(
                     store.add(
-                        args.project_id, args.goal, args.recurrence, now=datetime.now(UTC)
+                        args.project_id,
+                        args.goal,
+                        args.recurrence,
+                        now=datetime.now(UTC),
+                        grace_minutes=args.grace,
+                        precheck=args.precheck,
                     ).to_json()
                 )
             )
@@ -1765,7 +1770,27 @@ def build_parser() -> argparse.ArgumentParser:
     sched_add.add_argument(
         "--recurrence",
         required=True,
-        help="'every <N>m', 'every <N>h' or 'daily HH:MM'. Always UTC.",
+        help=(
+            "'every <N>m', 'every <N>h', 'daily HH:MM', 'weekdays HH:MM', "
+            "'weekly <mon..sun> HH:MM' "
+            "or 'cron <minute> <hour> <day> <month> <weekday>'. Always UTC, never local time."
+        ),
+    )
+    sched_add.add_argument(
+        "--grace",
+        type=int,
+        default=None,
+        metavar="MINUTES",
+        help="Skip a run reached later than this past its slot (default: run however late)",
+    )
+    sched_add.add_argument(
+        "--precheck",
+        default=None,
+        metavar="COMMAND",
+        help=(
+            "Run first in the project folder; the run is skipped unless it exits 0. Held to the "
+            "project's command rules like an agent's command, and never asks"
+        ),
     )
     sched_list = schedule_sub.add_parser("list", help="List schedules, soonest first")
     sched_list.add_argument("--project", default=None, help="Only this project's")

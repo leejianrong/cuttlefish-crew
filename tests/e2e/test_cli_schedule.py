@@ -53,3 +53,21 @@ def test_refusals_say_why(tmp_path: Path, capsys: pytest.CaptureFixture[str]) ->
     assert "no project" in capsys.readouterr().err
     assert cli.main(["schedule", "remove", "nope"]) == cli.EXIT_TASK_FAILED
     assert "no schedule" in capsys.readouterr().err
+
+
+def test_add_with_a_preset_a_grace_and_a_precheck(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    pid = _project(tmp_path, capsys)
+    args = [
+        "schedule", "add", pid, "--goal", "Triage", "--recurrence", "weekdays 09:00",
+        "--grace", "45", "--precheck", "git diff --quiet",
+    ]  # fmt: skip
+    assert cli.main(args) == cli.EXIT_OK
+    added = json.loads(capsys.readouterr().out)
+    assert added["recurrence"] == "weekdays 09:00"
+    assert added["grace_minutes"] == 45 and added["precheck"] == "git diff --quiet"
+    assert (
+        cli.main(["schedule", "add", pid, "--goal", "x", "--recurrence", "cron 0 0 31 2 *"])
+        != cli.EXIT_OK
+    )

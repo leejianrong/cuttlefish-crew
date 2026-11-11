@@ -10,6 +10,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from cuttlefish.episodic.events import ScheduleRan, ScheduleSkipped
+from cuttlefish.fleet.precheck import PrecheckResult
 from cuttlefish.fleet.scheduler import Scheduler
 from cuttlefish.projects.schedules import ScheduleStore
 from cuttlefish.projects.store import ProjectNotFoundError
@@ -66,12 +67,39 @@ class FakeDaemon:
 
 
 class Rig:
-    def __init__(self, tmp_path: Path, daemon: FakeDaemon) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        daemon: FakeDaemon,
+        *,
+        grace_minutes: int | None = None,
+        precheck: str | None = None,
+        verdict: PrecheckResult | None = None,
+    ) -> None:
+        verdict = verdict or PrecheckResult(True)
         self.now = T0
         self.store = ScheduleStore.open(tmp_path / "p.db")
         self.daemon = daemon
-        self.scheduler = Scheduler(daemon, self.store, clock=lambda: self.now)  # type: ignore[arg-type]
-        self.schedule = self.store.add("p1", "Triage the issues", "every 1h", now=T0)
+        self.prechecks: list[str] = []
+
+        async def fake_precheck(command: str, project: Any) -> PrecheckResult:
+            self.prechecks.append(command)
+            return verdict
+
+        self.scheduler = Scheduler(
+            daemon,  # type: ignore[arg-type]
+            self.store,
+            clock=lambda: self.now,
+            precheck=fake_precheck,
+        )
+        self.schedule = self.store.add(
+            "p1",
+            "Triage the issues",
+            "every 1h",
+            now=T0,
+            grace_minutes=grace_minutes,
+            precheck=precheck,
+        )
 
     def advance(self, **kw: float) -> None:
         self.now += timedelta(**kw)
@@ -181,3 +209,105 @@ def test_a_busy_manager_skips_the_check_in_and_journals_it(tmp_path: Path) -> No
     [event] = rig.daemon.events
     assert isinstance(event, ScheduleSkipped) and event.reason == "the manager is busy"
     assert rig.last() == "skipped: the manager is busy"
+
+
+def test_a_run_later_than_its_grace_is_skipped_and_journaled(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, FakeDaemon(), grace_minutes=30)
+    rig.advance(hours=1, minutes=45)  # the daemon was down over the slot
+    rig.tick()
+    assert rig.daemon.goals == []
+    [event] = rig.daemon.events
+    assert isinstance(event, ScheduleSkipped)
+    assert event.reason == "missed by 45 minutes, past the 30 minute grace"
+    assert rig.last() == "skipped: missed by 45 minutes, past the 30 minute grace"
+    # the next slot is an hour on from now: the missed one is not made up
+    assert rig.store.get(rig.schedule.id).next_due == rig.now + timedelta(hours=1)
+
+
+def test_a_run_inside_its_grace_still_starts(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, FakeDaemon(), grace_minutes=30)
+    rig.advance(hours=1, minutes=20)
+    rig.tick()
+    assert rig.daemon.goals == ["Triage the issues"]
+
+
+def test_without_a_grace_a_late_run_still_starts_once(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, FakeDaemon())
+    rig.advance(hours=1, minutes=45)
+    rig.tick()
+    assert rig.daemon.goals == ["Triage the issues"]
+
+
+def test_a_precheck_that_passes_lets_the_goal_start(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, FakeDaemon(), precheck="test -f ready")
+    rig.advance(hours=1)
+    rig.tick()
+    assert rig.prechecks == ["test -f ready"]
+    assert rig.daemon.goals == ["Triage the issues"] and rig.last() == "started"
+
+
+def test_a_precheck_that_says_no_skips_with_its_own_wording(tmp_path: Path) -> None:
+    rig = Rig(
+        tmp_path,
+        FakeDaemon(),
+        precheck="test -f ready",
+        verdict=PrecheckResult(False, "skipped by precheck: it exited 1"),
+    )
+    rig.advance(hours=1)
+    rig.tick()
+    assert rig.daemon.goals == []
+    [event] = rig.daemon.events
+    assert event == ScheduleSkipped(rig.schedule.id, "skipped by precheck: it exited 1")
+    assert rig.last() == "skipped by precheck: it exited 1"  # no "skipped: skipped by"
+    assert rig.store.get(rig.schedule.id).next_due == rig.now + timedelta(hours=1)
+
+
+def test_no_precheck_is_run_when_none_is_set_or_the_run_is_already_skipped(tmp_path: Path) -> None:
+    rig = Rig(tmp_path, FakeDaemon())
+    rig.advance(hours=1)
+    rig.tick()
+    assert rig.prechecks == []
+    late = Rig(tmp_path / "late", FakeDaemon(), grace_minutes=5, precheck="true")
+    late.advance(hours=3)
+    late.tick()
+    assert late.prechecks == []  # too late: not worth running a command for
+
+
+def test_the_check_runs_before_a_busy_builder_is_considered(tmp_path: Path) -> None:
+    rig = Rig(
+        tmp_path,
+        FakeDaemon(state="running", phase="running"),
+        precheck="x",
+        verdict=PrecheckResult(False, "skipped by precheck: it exited 1"),
+    )
+    rig.advance(hours=1)
+    rig.tick()
+    assert rig.last().startswith("skipped by precheck")
+
+
+def test_a_real_precheck_gates_each_tick_on_a_fake_clock(tmp_path: Path) -> None:
+    """No stub: the real precheck runs in a real folder, and the clock is moved by hand."""
+    root = tmp_path / "proj"
+    root.mkdir()
+    daemon = FakeDaemon()
+    daemon.projects = SimpleNamespace(  # type: ignore[assignment]
+        get=lambda _id: SimpleNamespace(
+            id="p1", root=str(root), mode="auto", allow=(), presets=None, worker_id=None, name="a"
+        )
+    )
+    store = ScheduleStore.open(tmp_path / "p.db")
+    now = [T0]
+    scheduler = Scheduler(daemon, store, clock=lambda: now[0])  # type: ignore[arg-type]
+    schedule = store.add("p1", "Triage", "weekdays 09:00", now=T0, precheck="test -f ready.flag")
+
+    now[0] = datetime(2026, 5, 1, 9, 0, tzinfo=UTC)  # Friday 09:00 UTC
+    asyncio.run(scheduler.tick())
+    assert daemon.goals == []  # the flag is not there: skipped
+    assert store.get(schedule.id).last_result == "skipped by precheck: it exited 1"
+    # the next weekday slot is Monday, not Saturday
+    assert store.get(schedule.id).next_due == datetime(2026, 5, 4, 9, 0, tzinfo=UTC)
+
+    (root / "ready.flag").write_text("x")
+    now[0] = datetime(2026, 5, 4, 9, 0, tzinfo=UTC)
+    asyncio.run(scheduler.tick())
+    assert daemon.goals == ["Triage"] and store.get(schedule.id).last_result == "started"

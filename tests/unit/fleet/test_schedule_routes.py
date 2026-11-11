@@ -71,3 +71,37 @@ def test_bad_input_and_unknown_things(client: TestClient) -> None:
 )
 def test_schedules_need_the_admin_tier(method: str, path: str) -> None:
     assert required_tier(method, path) is Tier.ADMIN
+
+
+def test_grace_and_precheck_round_trip_and_bad_ones_are_400(client: TestClient) -> None:
+    base = f"/api/projects/{client.project_id}/schedules"  # type: ignore[attr-defined]
+    made = client.post(
+        base,
+        json={
+            "goal": "g",
+            "recurrence": "weekdays 09:00",
+            "grace_minutes": 30,
+            "precheck": "git diff --quiet",
+        },
+    ).json()
+    assert made["grace_minutes"] == 30 and made["precheck"] == "git diff --quiet"
+    assert client.get(base).json()["schedules"][0]["recurrence"] == "weekdays 09:00"
+    for bad in (
+        {"grace_minutes": 0},
+        {"grace_minutes": "soon"},
+        {"grace_minutes": True},
+        {"precheck": 5},
+        {"precheck": "a\nb"},
+    ):
+        assert (
+            client.post(base, json={"goal": "g", "recurrence": "daily 09:00", **bad}).status_code
+            == 400
+        )
+
+
+def test_cron_and_weekly_are_accepted_and_nonsense_is_400(client: TestClient) -> None:
+    base = f"/api/projects/{client.project_id}/schedules"  # type: ignore[attr-defined]
+    for good in ("cron 0 9 * * 1-5", "weekly mon 09:30", "weekdays 06:00"):
+        assert client.post(base, json={"goal": "g", "recurrence": good}).status_code == 200
+    for bad in ("cron 0 9 * *", "weekly someday 09:00", "cron 0 0 31 2 *"):
+        assert client.post(base, json={"goal": "g", "recurrence": bad}).status_code == 400
