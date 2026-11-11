@@ -1,6 +1,6 @@
 <script lang="ts">
   import { keepIfSame } from "../same";
-  import { FleetApiError, refusal, type FleetClient, type ProjectSummary } from "../api";
+  import { FleetApiError, refusal, type FleetClient, type NeedsYouRequest, type ProjectSummary } from "../api";
   import { loadPins, rankProjects, savePins } from "../rank";
   import {
     filterProjects,
@@ -12,11 +12,13 @@
     NO_FILTER,
     saveCollapsed,
     saveGroupBy,
+    splitNeedsYou,
     stateCounts,
     tagCounts,
     type Filter,
     type GroupBy,
   } from "../grouping";
+  import NeedsYouGroup from "./NeedsYouGroup.svelte";
   import KillSwitch from "./KillSwitch.svelte";
   import ProjectCard from "./ProjectCard.svelte";
   import ProjectFilters from "./ProjectFilters.svelte";
@@ -33,7 +35,10 @@
   } = $props();
 
   let projects = $state<ProjectSummary[]>([]);
-  let waitingBy = $state<Record<string, number>>({});
+  let requestsBy = $state<Record<string, NeedsYouRequest[]>>({});
+  const waitingBy = $derived(
+    Object.fromEntries(Object.entries(requestsBy).map(([id, asks]) => [id, asks.length])),
+  );
   let pins = $state<Set<string>>(loadPins());
   // Ranked on every refresh from the same inputs, so the order only moves when a project's state does.
   const ranked = $derived(rankProjects(projects, waitingBy, pins));
@@ -42,13 +47,17 @@
   let groupBy = $state<GroupBy>(loadGroupBy());
   let collapsed = $state<Set<string>>(loadCollapsed());
   const visible = $derived(filterProjects(ranked, filter, waitingBy));
-  const groups = $derived(groupProjects(visible, groupBy, waitingBy));
+  // Waiting projects lead as their own group, unless the list is grouped by state (it has Waiting).
+  const split = $derived(
+    groupBy === "state" ? { needs: [], rest: visible } : splitNeedsYou(visible, waitingBy),
+  );
+  const groups = $derived(groupProjects(split.rest, groupBy, waitingBy));
   // A fleet of 100 is drawn a chunk at a time, so the first screen does not wait for the last card.
   const CHUNK = 20;
   let drawn = $state(CHUNK);
   const drawing = $derived(limitGroups(groups, drawn));
   $effect(() => {
-    if (drawn >= visible.length) return;
+    if (drawn >= split.rest.length) return;
     const timer = setTimeout(() => (drawn += CHUNK), 30);
     return () => clearTimeout(timer);
   });
@@ -90,7 +99,7 @@
     try {
       const result = await client.listProjects();
       projects = keepIfSame(projects, result.projects);
-      waitingBy = await waitingCounts();
+      requestsBy = await pendingByProject();
       unreachable = false;
       loaded = true;
     } catch {
@@ -98,16 +107,16 @@
     }
   }
 
-  /** How many requests each project has waiting; a failure here must not hide the projects. */
-  async function waitingCounts(): Promise<Record<string, number>> {
+  /** The requests each project has waiting; a failure here must not hide the projects. */
+  async function pendingByProject(): Promise<Record<string, NeedsYouRequest[]>> {
     try {
-      const counts: Record<string, number> = {};
+      const by: Record<string, NeedsYouRequest[]> = {};
       for (const request of (await client.listRequests()).requests) {
-        counts[request.project_id] = (counts[request.project_id] ?? 0) + 1;
+        (by[request.project_id] ??= []).push(request);
       }
-      return counts;
+      return by;
     } catch {
-      return waitingBy;
+      return requestsBy;
     }
   }
 
@@ -174,6 +183,10 @@
         saveGroupBy(next);
       }}
     />
+  {/if}
+
+  {#if split.needs.length > 0}
+    <NeedsYouGroup projects={split.needs} {requestsBy} onOpen={onOpenProject} />
   {/if}
 
   {#each drawing as group (group.key)}

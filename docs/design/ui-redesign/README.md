@@ -373,3 +373,12 @@ and this folder disagree after a slice lands, update this folder.
   (`--md-sys-color-error`) only on hover, press, focus and in its confirm step; the project page's "Stop everything here" is
   unchanged. A card shows its folder name (replacing the CUT-160 left-cut path) and only when it differs from the project name;
   the full path is the tooltip on the name and the line. The project page's path wrapping is not part of this change.
+
+- **Projects leads with a Needs you group (CUT-284, 2026-11-12).** From the CUT-228 teardown (herdr's Inbox). Every project whose
+  state is Waiting (a pending request, or a round held at the review gate) moves out of the card grid into one group at the top:
+  a heading with a count (tertiary-container pill) over a `surface-container` list of compact 48 px rows, each the project name,
+  the reason (its most urgent pending request's title, "(+N more)" when there are several, else the state line) and a chevron; a
+  row opens the project. Five rows show, "Show all N" reveals the rest. The group follows the filters, so a filter that hides
+  Waiting hides it; grouping by state, which has its own Waiting group, does not add it. Below 640 px the reason sits under the
+  name. The cards below are everything else, in the same CUT-189 order. Checked against 100 seeded projects at 1280 (light, dark)
+  and 390 px, no sideways scroll, first group visible about as fast as the first card before.

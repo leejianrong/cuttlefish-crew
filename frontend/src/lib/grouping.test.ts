@@ -11,6 +11,7 @@ import {
   NO_FILTER,
   parseTags,
   saveCollapsed,
+  splitNeedsYou,
   stateCounts,
   tagCounts,
   UNTAGGED,
@@ -137,5 +138,20 @@ describe("activeFilterCount", () => {
     expect(activeFilterCount(NO_FILTER, "none")).toBe(0);
     expect(activeFilterCount({ states: new Set(["waiting", "idle"]), tags: new Set(["rust"]) }, "none")).toBe(3);
     expect(activeFilterCount(NO_FILTER, "state")).toBe(1);
+  });
+});
+
+describe("splitNeedsYou", () => {
+  it("leads with the waiting projects and keeps the order of both lists", () => {
+    const { needs, rest } = splitNeedsYou(list, { c: 2, a: 1 }, NOW);
+    expect(ids(needs)).toEqual(["a", "c"]);
+    expect(ids(rest)).toEqual(["b", "d"]);
+  });
+  it("counts a project held at the review gate", () => {
+    const gate = { ...project("g", [], "blocked"), require_approval: true } as ProjectSummary;
+    expect(ids(splitNeedsYou([gate], {}, NOW).needs)).toEqual(["g"]);
+  });
+  it("is empty when nothing waits", () => {
+    expect(splitNeedsYou(list, {}, NOW).needs).toEqual([]);
   });
 });
