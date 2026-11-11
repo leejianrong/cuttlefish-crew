@@ -382,3 +382,13 @@ and this folder disagree after a slice lands, update this folder.
   Waiting hides it; grouping by state, which has its own Waiting group, does not add it. Below 640 px the reason sits under the
   name. The cards below are everything else, in the same CUT-189 order. Checked against 100 seeded projects at 1280 (light, dark)
   and 390 px, no sideways scroll, first group visible about as fast as the first card before.
+
+- **A bell, and browser notifications (CUT-290, 2026-11-12).** From the CUT-228 Orca teardown. A 44 px bell sits beside the account
+  menu in the top bar (`Shell`'s `topActions` snippet), with a tertiary count of what is new since the panel was last opened: a request
+  that began waiting, or a project that moved to Done (`lib/notify.ts`; the first poll is a baseline, so opening on a busy fleet is not
+  a burst). The panel (a `surface-container` popover, 320 px, closes on Escape or an outside press) lists them, links to Needs you and
+  carries the one switch: "Turn on desktop notices" (the permission prompt comes from that click), "Mute on this browser" (per browser,
+  in local storage). It always says what can reach you: blocked in the browser (in `--md-sys-color-error`), unsupported, or "only fire
+  while this dashboard is open in a tab". A notice is one line, "A project needs you" or "N projects finished", with no project name
+  or command (ADR-0043), and only fires when the tab is hidden. No push server (ADR-0037); Web Push is CUT-121. The unread count lives in
+  memory: a reload starts at zero.

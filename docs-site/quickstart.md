@@ -213,6 +213,13 @@ is stopped, and the card shows its last failing command. Nothing is waiting for 
 environment, then steer that role from the project page; the card ends when you do.
 `CUTTLEFISH_STUCK_THRESHOLD` changes the five, and `0` turns the check off.
 
+**The bell.** The bell in the top bar counts what is new since you last opened it: a request that started waiting,
+or a project that finished. Opening it lists them and links to Needs you. It can also send a desktop notification
+("A project needs you", "A project finished"), which names no project and no command. Turn that on from the bell (the
+browser asks then, not before); **Mute on this browser** turns it off again. These notices come from the open dashboard tab:
+with no dashboard tab open, or with notifications blocked for the site, nothing reaches you, and the bell says so. A tab you are
+looking at gets the bell only. Pushing to a closed browser is not built.
+
 ## 6. Keep an agent running in tmux
 
 The **Agent session** card on a project's Overview (also the MCP tools `get_agent_session`,

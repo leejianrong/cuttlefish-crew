@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { FleetApiError, FleetClient, type NeedsYouRequest } from "./lib/api";
   import AddProject from "./lib/components/AddProject.svelte";
   import ConnectScreen from "./lib/components/ConnectScreen.svelte";
@@ -10,10 +11,20 @@
   import Portfolio from "./lib/components/Portfolio.svelte";
   import ProjectDetail from "./lib/components/ProjectDetail.svelte";
   import SignInAgain from "./lib/components/SignInAgain.svelte";
+  import NotificationBell from "./lib/components/NotificationBell.svelte";
   import Shell from "./lib/components/Shell.svelte";
   import SpriteGallery from "./lib/components/SpriteGallery.svelte";
   import type { DeviceIdentity, PairingLink, RelayTransport } from "./lib/relay";
   import { NAV_ITEMS } from "./lib/nav";
+  import {
+    addEvents,
+    createTracker,
+    loadOn,
+    saveOn,
+    show,
+    unreadCount,
+    type NotifyEvent,
+  } from "./lib/notify";
   import { keepIfSame } from "./lib/same";
   import { HOME, parseHash, routeHash, sameRoute, type ProjectTab, type Route } from "./lib/route";
   import { forgetRelay, makeRelayTransport, startRelay } from "./lib/relayconnect";
@@ -108,6 +119,17 @@
   let waiting = $state<NeedsYouRequest[]>([]);
   let waitingFetchedAt = $state(Date.now());
   let waitingUnreachable = $state(false);
+  // CUT-290: what is new since the last poll, the bell's unread count and the per-browser mute.
+  const tracker = createTracker();
+  let events = $state<NotifyEvent[]>([]);
+  let readAt = $state(Date.now());
+  let noticesOn = $state(loadOn());
+  const unread = $derived(unreadCount(events, readAt));
+  function noticed(fresh: NotifyEvent[]) {
+    if (fresh.length === 0) return;
+    events = addEvents(events, fresh);
+    show(fresh, noticesOn);
+  }
   const storedTheme = loadTheme();
   applyTheme(storedTheme);
   let theme = $state<ThemePreference>(storedTheme);
@@ -134,7 +156,9 @@
   async function refreshWaiting() {
     if (!client) return;
     try {
-      waiting = keepIfSame(waiting, (await client.listRequests()).requests);
+      const requests = (await client.listRequests()).requests;
+      waiting = keepIfSame(waiting, requests);
+      noticed(tracker.requests(requests));
       waitingFetchedAt = Date.now();
       waitingUnreachable = false;
     } catch (error) {
@@ -152,6 +176,25 @@
     if (!client) return;
     refreshWaiting();
     const interval = setInterval(refreshWaiting, 2500);
+    return () => clearInterval(interval);
+  });
+
+  // Finished projects come from the project list, which only this slow beat reads here.
+  $effect(() => {
+    if (!client) return;
+    const c = client;
+    const check = async () => {
+      try {
+        const list = (await c.listProjects()).projects;
+        const by: Record<string, number> = {};
+        for (const r of untrack(() => waiting)) by[r.project_id] = (by[r.project_id] ?? 0) + 1;
+        noticed(tracker.projects(list, by));
+      } catch {
+        // The next beat tries again; the Projects screen says when the daemon is unreachable.
+      }
+    };
+    check();
+    const interval = setInterval(check, 10_000);
     return () => clearInterval(interval);
   });
 
@@ -223,6 +266,19 @@
     {theme}
     onThemeChange={(next) => (theme = next)}
   >
+    {#snippet topActions()}
+      <NotificationBell
+        {events}
+        {unread}
+        on={noticesOn}
+        onRead={() => (readAt = Date.now())}
+        onToggle={(next) => {
+          noticesOn = next;
+          saveOn(next);
+        }}
+        onOpenNeedsYou={() => navigate("needs-you")}
+      />
+    {/snippet}
     {#if showGallery}
       <SpriteGallery onBack={() => go(HOME)} />
     {:else if showRoles}
