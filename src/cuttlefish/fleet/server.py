@@ -66,7 +66,7 @@ from cuttlefish.delegate.presets import (
 )
 from cuttlefish.episodic.events import DelegateApprovalsSet
 from cuttlefish.episodic.store import EpisodicEvent
-from cuttlefish.fleet import hook_files
+from cuttlefish.fleet import hook_files, worktreeshare
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.autopilot import AutopilotError
 from cuttlefish.fleet.daemon import (
@@ -169,6 +169,10 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "backend": project.backend,
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
+        "worktree_share": {
+            "dirs": list(project.worktree_share_dirs),
+            "files": list(project.worktree_copy_files),
+        },
         "worker": _worker_json(daemon, project.worker_id),
         "worker_handover": project.worker_handover,
         "is_manager": project.id == daemon.manager_project,
@@ -1117,6 +1121,27 @@ def create_app(
             return _project_json(daemon, project_id)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/worktree-share")
+    async def update_worktree_share(project_id: str, request: Request) -> dict[str, Any]:
+        """Which ignored directories each new goal's worktree links to, and which files it copies
+        (CUT-296). Both empty by default; a path outside the project, a secret, or one git does not
+        ignore is refused or skipped. Applies to the next goal's worktree."""
+        body = await _json_body(request)
+        try:
+            project = daemon.projects.get(project_id)
+            dirs = worktreeshare.validate_dirs(
+                project.root, body.get("dirs", project.worktree_share_dirs)
+            )
+            files = worktreeshare.validate_files(
+                project.root, body.get("files", project.worktree_copy_files)
+            )
+            daemon.projects.update_worktree_share(project_id, dirs, files)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except worktreeshare.ShareError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.patch("/api/projects/{project_id}/decision-wait")
     async def update_decision_wait(project_id: str, request: Request) -> dict[str, Any]:

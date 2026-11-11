@@ -61,6 +61,7 @@ from cuttlefish.fleet import (
     WeakPasswordError,
     hook_files,
     run_daemon,
+    worktreeshare,
 )
 from cuttlefish.fleet.claude_hooks import session_scope
 from cuttlefish.fleet.daemon import FleetError
@@ -833,6 +834,38 @@ def _project_pull_request(store: ProjectStore, project_id: str, *, push: bool) -
     return EXIT_OK
 
 
+def _project_worktree_share(store: ProjectStore, args: argparse.Namespace) -> int:
+    """`projects worktree-share`: what each goal's worktree links and copies (CUT-296). With no
+    flag it prints the current setting; ``--link``/``--copy`` replace a list, ``--clear`` both."""
+    try:
+        project = store.get(args.project_id)
+        dirs, files = project.worktree_share_dirs, project.worktree_copy_files
+        if args.clear:
+            dirs, files = (), ()
+        if args.link is not None:
+            dirs = worktreeshare.validate_dirs(project.root, args.link)
+        if args.copy is not None:
+            files = worktreeshare.validate_files(project.root, args.copy)
+        if args.clear or args.link is not None or args.copy is not None:
+            project = store.update_worktree_share(project.id, dirs, files)
+    except ProjectNotFoundError:
+        print(f"cuttlefish: no project {args.project_id!r} registered", file=sys.stderr)
+        return EXIT_TASK_FAILED
+    except worktreeshare.ShareError as exc:
+        print(f"cuttlefish: {exc}", file=sys.stderr)
+        return EXIT_TASK_FAILED
+    print(
+        json.dumps(
+            {
+                "id": project.id,
+                "link": list(project.worktree_share_dirs),
+                "copy": list(project.worktree_copy_files),
+            }
+        )
+    )
+    return EXIT_OK
+
+
 def _project_remove_worktree(store: ProjectStore, project_id: str, *, delete_branch: bool) -> int:
     """`projects remove-worktree`: remove the last goal's worktree (CUT-250). Refuses uncommitted
     changes; keeps the branch unless `--delete-branch`."""
@@ -909,6 +942,8 @@ def _projects(args: argparse.Namespace) -> int:
             return EXIT_OK
         if args.projects_command == "pr":
             return _project_pull_request(store, args.project_id, push=args.push)
+        if args.projects_command == "worktree-share":
+            return _project_worktree_share(store, args)
         if args.projects_command == "remove-worktree":
             return _project_remove_worktree(
                 store, args.project_id, delete_branch=args.delete_branch
@@ -1749,6 +1784,28 @@ def build_parser() -> argparse.ArgumentParser:
     pr_parser.add_argument(
         "--push", action="store_true", help="Push the branch to origin first if it is not there"
     )
+
+    share_parser = projects_sub.add_parser(
+        "worktree-share",
+        help="Link ignored directories into, and copy ignored files into, each goal's worktree",
+    )
+    share_parser.add_argument("project_id")
+    share_parser.add_argument(
+        "--link",
+        nargs="*",
+        default=None,
+        metavar="DIR",
+        help="Directories to symlink from the checkout (replaces the list; none clears it), "
+        "e.g. node_modules. Shared, not copied: an install in the worktree changes the checkout's",
+    )
+    share_parser.add_argument(
+        "--copy",
+        nargs="*",
+        default=None,
+        metavar="FILE",
+        help="Files to copy from the checkout (replaces the list; none clears it)",
+    )
+    share_parser.add_argument("--clear", action="store_true", help="Share nothing (the default)")
 
     rw_parser = projects_sub.add_parser(
         "remove-worktree",

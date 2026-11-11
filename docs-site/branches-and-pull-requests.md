@@ -46,6 +46,38 @@ by `system`. A push to the default branch was already on the never-allowed list.
     A finished goal's worktree stays, with its work on it. cuttlefish never merges it and never removes one on its own.
     See [Remove a worktree](#remove-a-worktree).
 
+## Share dependencies and local files into a goal's worktree
+
+A goal's worktree starts clean: no `node_modules`, no ignored local config. By default **nothing is shared** and a project
+that needs them installs again. You can list, per project, two kinds of thing to bring across from your checkout:
+
+```bash
+uv run cuttlefish projects worktree-share <project-id> --link node_modules --copy config/local.json
+uv run cuttlefish projects worktree-share <project-id>            # show what is set
+uv run cuttlefish projects worktree-share <project-id> --clear    # back to sharing nothing
+```
+
+The same is `PATCH /api/projects/{id}/worktree-share` with `{"dirs": [...], "files": [...]}` (Admin tier). It applies to
+the next goal's worktree, and the response that starts a goal says what it got:
+`"shared": {"linked": [...], "copied": [...], "skipped": [{"path": ..., "why": ...}]}`. A path that cannot be shared is
+skipped with its reason and never stops the goal. The list is stored in cuttlefish's own registry, not in a file in your
+repository, so an agent working in the worktree cannot widen it.
+
+- **Directories are linked, not copied.** A symlink to your checkout's directory is instant and takes no disk, which is
+  the point for `node_modules` or a build cache. The cost is that it is *shared*: an install or a build run in the
+  worktree changes your checkout's copy too. Use it for dependencies, not for anything a goal edits.
+- **Files are copied, not linked.** An edit in the worktree never reaches the original, and a file cannot be written
+  through a link. Up to 5 MB each; a link or anything that is not a regular file is skipped.
+- **Only paths git already ignores.** Anything else could show up as a change and be committed by `git add -A`, so it is
+  skipped ("git does not ignore it"). A linked directory is also added to the repository's local `info/exclude`, because a
+  `node_modules/` rule in `.gitignore` does not match a symlink.
+- **Secrets are never shared.** `.env`, `.env.*`, `*.pem`, `*.key`, ssh keys, `.npmrc` and the other names the diff view
+  withholds are refused when you set the list and again when a worktree is made, and so are `.git`, `.cuttlefish` and
+  `.satay`. Project secrets stay in the [secrets store](quickstart.md); a goal's secrets reach an agent from there, not
+  from a copied file.
+- **Inside the project.** A path must be relative with no `..`, no pattern characters and, when it exists, resolve inside
+  the project folder. At most 20 paths of each kind. Nothing already in the worktree is overwritten.
+
 ## Remove a worktree
 
 When a goal is finished with, press **Remove worktree** under it on the project page, or run:

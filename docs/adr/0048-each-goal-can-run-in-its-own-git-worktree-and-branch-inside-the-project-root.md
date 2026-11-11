@@ -37,3 +37,25 @@ as a write outside it.
 - Worktrees accumulate until the person removes them: `cuttlefish projects remove-worktree` and the page's Remove
   worktree button (CUT-250) refuse uncommitted changes and keep the branch unless asked. Never automatic.
 - A builder already running is not moved: the setting applies when a goal starts a session.
+
+## Amendment: sharing into the worktree (CUT-296, 2026-11-12)
+
+A worktree starts clean, so `node_modules` and ignored local files are missing and `envprep` reinstalls. A project may
+now list, in its registry row (Admin tier, `PATCH .../worktree-share`, `cuttlefish projects worktree-share`), ignored
+**directories to link** and ignored **files to copy**. Decisions:
+
+- **The default is nothing.** Both lists start empty and a project that never sets them is unchanged.
+- **The setting lives in the registry, not in a repository file** (Orca's `orca.yaml` and `.worktreeinclude` are in the
+  repo). A file in the repository is writable by the agent the worktree is made for, which could widen it. Same reasoning
+  as keeping `allow` entries in the registry.
+- **Directories are symlinked, files are copied.** A copy of `node_modules` is slow and large, and a link is the point of
+  the feature; the cost, that an install in the worktree changes the checkout's directory, is stated in the docs and is
+  why it is opt-in. A file is copied so an edit never reaches the original and nothing is written through a link.
+- **Only paths git ignores**, so a shared path can never be a change `git add -A` commits; a linked directory is added to
+  the local `info/exclude` since `node_modules/` does not match a symlink.
+- **The secrets list is the diff view's one list** (`fleet.goaldiff.looks_secret`, plus `.git`, `.cuttlefish`, `.satay`,
+  `.ssh`, `.aws`, `.gnupg`): a secret is never copied or linked (ADR-0006). Checked when set and when applied.
+- **Inside the project root**, relative, no `..`, no patterns; a path that resolves outside by a symlink is refused. This
+  keeps the worktree's reach within the root the never-allowed list already means (ADR-0048 decision 2).
+- A path that cannot be shared is skipped and reported on the goal; it never blocks the goal. Nothing is overwritten.
+

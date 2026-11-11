@@ -122,6 +122,13 @@ uv run cuttlefish projects add \
 | `pr` | Open a pull request for the project's goal branch with `gh` and print its URL (`--push` pushes the branch to `origin` first). Needs `gh` installed and logged in; never merges ([ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)). |
 | `remove` | Deregister a project — never touches its files. |
 
+## `cuttlefish projects worktree-share`
+
+`cuttlefish projects worktree-share PROJECT_ID [--link DIR ...] [--copy FILE ...] [--clear]` shows, sets or clears the
+ignored directories each goal's worktree links to (`--link`) and the ignored files it copies (`--copy`). Each flag replaces
+its list. With no flag it prints the current setting. Nothing is shared by default; see
+[Share dependencies and local files](branches-and-pull-requests.md#share-dependencies-and-local-files-into-a-goals-worktree).
+
 ## `cuttlefish schedule`
 
 Ask a project's builder for a goal on a repeat; `cuttlefish serve` starts each one when it is due (see

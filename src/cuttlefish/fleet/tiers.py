@@ -119,6 +119,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("PATCH", "/api/projects/{project_id}/tags"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/terminal-command"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/worktree-per-goal"): Tier.ADMIN,
+    ("PATCH", "/api/projects/{project_id}/worktree-share"): Tier.ADMIN,  # links and copies files
     ("PATCH", "/api/projects/{project_id}/worker"): Tier.ADMIN,  # where its code and secrets go
     ("POST", "/api/projects/{project_id}/move"): Tier.ADMIN,  # stops its team, sends its code on
     ("POST", "/api/projects/{project_id}/goal/worktree/remove"): Tier.ADMIN,  # deletes a folder
