@@ -1,8 +1,8 @@
 # ADR-0057: A worker machine dials the controller, pairs once, and holds a lease, never the model key
 
-- Status: Proposed (CUT-204, epic CUT-E25; for Jian to accept)
+- Status: Accepted by Jian, 2026-11-12 (nothing built yet; CUT-E25 holds the build)
 - Date: 2026-11-07
-- Deciders: development agent for CUT-204, awaiting Jian
+- Deciders: Jian (accepted 2026-11-12), development agent for CUT-204
 
 ## Context
 
