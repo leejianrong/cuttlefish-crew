@@ -591,6 +591,8 @@ export interface GoalDiffResult {
   /** Uncommitted or untracked work is in this diff. */
   dirty?: boolean;
   files?: DiffFile[];
+  /** How many files differ in all; the only count a stat carries. */
+  files_changed?: number;
   additions?: number;
   deletions?: number;
   truncated?: boolean;
@@ -837,6 +839,11 @@ export class FleetClient {
   /** The last goal's branch diff, read from git now (CUT-289). */
   getGoalDiff(id: string): Promise<GoalDiffResult> {
     return this.request(`/api/projects/${id}/goal/diff`);
+  }
+
+  /** Only the counts of the goal's diff, with no patch: cheap to poll (CUT-286). */
+  getGoalStat(id: string): Promise<GoalDiffResult> {
+    return this.request(`/api/projects/${id}/goal/diff/stat`);
   }
 
   /** Remove the last goal's worktree (CUT-250). A refusal is `ok: false` with a plain reason. */

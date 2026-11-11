@@ -76,7 +76,16 @@ the goal it was given and takes you to the Terminal tab; it does not type a seco
 kopicode's interactive session cannot take a first message yet (the box says so); kopicode projects start work
 with the round workflow below. `GET`/`POST /api/projects/{id}/goal` is the same thing for a script (Approve tier).
 
-The project's **Overview** opens with the builder's goal and a progress ring, then **While you were away** (what happened
+The project's **Overview** starts with a one-line **status strip**: what is running, how the session last came up
+(started, reattached or relaunched, and when), Autopilot's phase, the tokens used and the time it has run, the goal's
+branch with its `+added −removed` counts (marked uncommitted when the worktree has changes not yet committed), and a link
+to its pull request. It shows nothing for a project that has never been given work. The counts come from
+`GET /api/projects/{id}/goal/diff/stat`, the diff's numbers without the patch, so it is cheap to poll (View tier; the
+same refusals as the [diff](branches-and-pull-requests.md#see-what-the-branch-changed)). Tokens and time need Autopilot or
+a team; a terminal-command project has neither, since cuttlefish reads nothing from that tool. Under the project's name
+the folder is one line, with the directory shortened before the folder name; press it to see the whole path.
+
+Below it, the Overview opens with the builder's goal and a progress ring, then **While you were away** (what happened
 since you last looked: commits, the last test run, context refreshes, files left for you, the builder's own recap, what
 waits on you; it is skipped if you were here in the last ten minutes) and a **timeline** of Autopilot's steps, Needs you
 requests, commits, test runs, context refreshes and the images, videos and designs the builder made. None of it is stored:
@@ -203,6 +212,13 @@ times in a row because a tool or package is missing (`No module named`, `command
 is stopped, and the card shows its last failing command. Nothing is waiting for an answer. Fix the
 environment, then steer that role from the project page; the card ends when you do.
 `CUTTLEFISH_STUCK_THRESHOLD` changes the five, and `0` turns the check off.
+
+**The bell.** The bell in the top bar counts what is new since you last opened it: a request that started waiting,
+or a project that finished. Opening it lists them and links to Needs you. It can also send a desktop notification
+("A project needs you", "A project finished"), which names no project and no command. Turn that on from the bell (the
+browser asks then, not before); **Mute on this browser** turns it off again. These notices come from the open dashboard tab:
+with no dashboard tab open, or with notifications blocked for the site, nothing reaches you, and the bell says so. A tab you are
+looking at gets the bell only. Pushing to a closed browser is not built.
 
 ## 6. Keep an agent running in tmux
 

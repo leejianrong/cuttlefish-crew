@@ -13,6 +13,7 @@
     onDisconnect,
     theme,
     onThemeChange,
+    topActions,
     children,
   }: {
     items: NavItem[];
@@ -21,6 +22,8 @@
     onDisconnect: () => void;
     theme: ThemePreference;
     onThemeChange: (next: ThemePreference) => void;
+    /** Beside the account menu in the top bar (the notification bell). */
+    topActions?: Snippet;
     children: Snippet;
   } = $props();
 
@@ -71,6 +74,7 @@
         <circle cx="26" cy="22" r="3.6" fill="var(--md-sys-color-attention-container)" />
       </svg>
       <p class="title title-large">{title}</p>
+      {@render topActions?.()}
       <AccountMenu
         {theme}
         onThemeChange={setTheme}

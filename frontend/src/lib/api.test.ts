@@ -127,6 +127,13 @@ describe("FleetClient.getGoalDiff (CUT-289)", () => {
     await expect(client.getGoalDiff("p1")).resolves.toEqual(answer);
     expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("http://x/api/projects/p1/goal/diff");
   });
+
+  it("reads the counts alone from the stat route (CUT-286)", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, files_changed: 2 }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await new FleetClient("http://x", "t").getGoalStat("p1");
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("http://x/api/projects/p1/goal/diff/stat");
+  });
 });
 
 describe("FleetClient.removeGoalWorktree (CUT-250)", () => {

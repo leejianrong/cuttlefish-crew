@@ -67,6 +67,8 @@ class GoalDiff:
     mode: str | None = None
     dirty: bool = False
     files: Sequence[Mapping[str, Any]] = ()
+    #: How many files differ in all (``files`` may hold fewer, or none for a stat).
+    files_changed: int = 0
     additions: int = 0
     deletions: int = 0
     #: Something was left out: more files than ``MAX_FILES`` or more patch than ``MAX_PATCH_BYTES``.
@@ -171,8 +173,9 @@ def _parse_block(lines: Sequence[str]) -> dict[str, Any]:
     return {"status": status, "binary": binary, "hunks": hunks, "truncated": truncated}
 
 
-def _untracked(folder: Path, budget: int) -> list[dict[str, Any]]:
-    """Files git does not track and does not ignore, shown as wholly added."""
+def _untracked(folder: Path, budget: int, *, lines: bool = True) -> list[dict[str, Any]]:
+    """Files git does not track and does not ignore, shown as wholly added (``lines=False``: only
+    the counts, for the stat)."""
     done = _run(["git", "ls-files", "--others", "--exclude-standard", "-z"], folder)
     out: list[dict[str, Any]] = []
     for rel in [p for p in done.stdout.split("\0") if p][:budget]:
@@ -196,11 +199,14 @@ def _untracked(folder: Path, budget: int) -> list[dict[str, Any]]:
                     rows.pop()
                 entry["additions"] = len(rows)
                 entry["truncated"] = len(data) > MAX_UNTRACKED_BYTES or len(rows) > MAX_FILE_LINES
-                lines = [
-                    {"type": "+", "text": row, "new": n}
-                    for n, row in enumerate(rows[:MAX_FILE_LINES], 1)
-                ]
-                entry["hunks"] = [{"header": "", "old_start": 0, "new_start": 1, "lines": lines}]
+                if lines:
+                    shown = [
+                        {"type": "+", "text": row, "new": n}
+                        for n, row in enumerate(rows[:MAX_FILE_LINES], 1)
+                    ]
+                    entry["hunks"] = [
+                        {"header": "", "old_start": 0, "new_start": 1, "lines": shown}
+                    ]
         out.append(entry)
     return out
 
@@ -220,8 +226,20 @@ def _patch(folder: Path, args: Sequence[str]) -> tuple[str, bool]:
     return data[:MAX_PATCH_BYTES].decode("utf-8", "replace"), cut
 
 
-def goal_diff(root: str, goal: Mapping[str, str] | None) -> GoalDiff:
-    """The diff of the goal's branch against the default branch it came from."""
+@dataclasses.dataclass(frozen=True)
+class _Target:
+    folder: Path
+    branch: str
+    base: str
+    tip: str
+    #: The worktree (or the checkout, on this branch) exists, so uncommitted work is part of it.
+    live: bool
+    #: ``git diff`` arguments: the merge-base, the branch when there is no worktree to read.
+    args: Sequence[str]
+
+
+def _target(root: str, goal: Mapping[str, str] | None) -> _Target | GoalDiff:
+    """Where a goal's branch is and what it is compared with, or the refusal that says why not."""
     if not goal:
         return _refuse("no_goal", "No goal has been given to this project's builder yet.")
     root_path = Path(root)
@@ -250,12 +268,47 @@ def goal_diff(root: str, goal: Mapping[str, str] | None) -> GoalDiff:
     if mb is None:
         return _refuse("no_base", f"{branch} shares no history with {base}.", branch)
     live = folder != root_path or _git(root_path, "rev-parse", "--abbrev-ref", "HEAD") == branch
-    args = ["--end-of-options", mb, *([] if live else [branch]), "--"]
-    stat = _run([*_DIFF, "-M", "--numstat", "-z", *args], folder)
-    if stat.returncode != 0:
-        return _refuse("git_failed", "git could not read the diff.", branch, base)
-    listed = _numstat(stat.stdout)
-    patch, cut = _patch(folder, args)
+    return _Target(
+        folder, branch, base, tip, live, ["--end-of-options", mb, *([] if live else [branch]), "--"]
+    )
+
+
+def _read_numstat(t: _Target) -> list[tuple[str | None, str, int, int, bool]] | GoalDiff:
+    done = _run([*_DIFF, "-M", "--numstat", "-z", *t.args], t.folder)
+    if done.returncode != 0:
+        return _refuse("git_failed", "git could not read the diff.", t.branch, t.base)
+    return _numstat(done.stdout)
+
+
+def goal_stat(root: str, goal: Mapping[str, str] | None) -> GoalDiff:
+    """Only the counts (files, added, removed, uncommitted or not), without reading the patch: cheap
+    enough to ask every few seconds, for a status line or a card (CUT-286)."""
+    t = _target(root, goal)
+    if isinstance(t, GoalDiff):
+        return t
+    listed = _read_numstat(t)
+    if isinstance(listed, GoalDiff):
+        return listed
+    fresh = _untracked(t.folder, MAX_FILES, lines=False) if t.live else []
+    return GoalDiff(
+        True, branch=t.branch, base=t.base, head=t.tip, mode="worktree" if t.live else "branch",
+        dirty=bool(fresh) or (t.live and bool(_git(t.folder, "status", "--porcelain", "-uno"))),
+        files_changed=len(listed) + len(fresh),
+        additions=sum(f[2] for f in listed) + sum(f["additions"] for f in fresh),
+        deletions=sum(f[3] for f in listed),
+    )  # fmt: skip
+
+
+def goal_diff(root: str, goal: Mapping[str, str] | None) -> GoalDiff:
+    """The diff of the goal's branch against the default branch it came from."""
+    t = _target(root, goal)
+    if isinstance(t, GoalDiff):
+        return t
+    listed = _read_numstat(t)
+    if isinstance(listed, GoalDiff):
+        return listed
+    folder, live = t.folder, t.live
+    patch, cut = _patch(folder, t.args)
     blocks = _blocks(patch)
     files: list[dict[str, Any]] = []
     for index, (old, path, add, dele, binary) in enumerate(listed[:MAX_FILES]):
@@ -273,7 +326,7 @@ def goal_diff(root: str, goal: Mapping[str, str] | None) -> GoalDiff:
         if looks_secret(entry["path"]) or entry["path"] in ignored:
             entry |= {"hunks": [], "withheld": "secret", "omitted": False}
             entry.pop("truncated", None)
-    dirty = False
+    dirty, fresh = False, []
     if live:
         fresh = _untracked(folder, max(0, MAX_FILES - len(files)))
         files += fresh
@@ -286,7 +339,8 @@ def goal_diff(root: str, goal: Mapping[str, str] | None) -> GoalDiff:
         else None
     )
     return GoalDiff(
-        True, branch=branch, base=base, head=tip, mode="worktree" if live else "branch",
-        dirty=dirty, files=files, additions=sum(f["additions"] for f in files),
-        deletions=sum(f["deletions"] for f in files), truncated=truncated, note=note,
+        True, branch=t.branch, base=t.base, head=t.tip, mode="worktree" if live else "branch",
+        dirty=dirty, files=files, files_changed=len(listed) + len(fresh),
+        additions=sum(f[2] for f in listed) + sum(f["additions"] for f in fresh),
+        deletions=sum(f[3] for f in listed), truncated=truncated, note=note,
     )  # fmt: skip

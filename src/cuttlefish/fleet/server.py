@@ -1518,6 +1518,15 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.get("/api/projects/{project_id}/goal/diff/stat")
+    async def get_goal_stat(project_id: str) -> dict[str, Any]:
+        """Only the counts of the goal's diff (files, added, removed, uncommitted), no patch: cheap
+        to poll (CUT-286). Same refusals as the diff."""
+        try:
+            return (await daemon.goal_stat(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.post("/api/projects/{project_id}/pull-request")
     async def open_pull_request(project_id: str, request: Request) -> dict[str, Any]:
         """Open a pull request for the goal's branch with the machine's own `gh` login (CUT-241,
