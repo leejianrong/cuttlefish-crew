@@ -204,7 +204,7 @@ async def test_a_stop_reaches_a_worker_that_took_the_team_and_a_dead_one_is_ende
         # Nothing secret or credential-shaped is in an order.
         assert set(body["orders"][0]) <= {
             "team_id", "project_id", "name", "secrets_scope", "backend", "roles",
-            "require_approval", "repo", "max_tokens", "max_cost_usd",
+            "require_approval", "repo", "max_tokens", "max_cost_usd", "dispatch",
         }  # fmt: skip
         await rig.post(f"/api/projects/{project['id']}/stop")
         assert (await _get(rig, project["id"]))["stopping"] is True
@@ -233,6 +233,7 @@ async def test_a_worker_can_report_only_its_own_teams_and_repeats_change_nothing
     event = {"seq": 1, "ts": "2026-11-12T10:00:00+00:00", "type": "TaskFailed",
              "data": {"error": "x", "role": "builder"}}  # fmt: skip
     try:
+        await link.request("POST", "/api/worker/work", {"wait": 1})  # takes the order
         for _ in range(2):  # a retry after a lost answer
             status, body = await link.request(
                 "POST", f"/api/worker/teams/{team_id}/events", {"events": [event]}
