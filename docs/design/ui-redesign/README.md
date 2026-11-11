@@ -392,3 +392,14 @@ and this folder disagree after a slice lands, update this folder.
   while this dashboard is open in a tab". A notice is one line, "A project needs you" or "N projects finished", with no project name
   or command (ADR-0043), and only fires when the tab is hidden. No push server (ADR-0037); Web Push is CUT-121. The unread count lives in
   memory: a reload starts at zero.
+
+- **A jump palette (CUT-294, 2026-11-12).** From the Orca teardown (Quick Open). Ctrl-K or Cmd-K, or the search button left of the bell
+  (the phone's way in, 44 px), opens a modal over a scrim: a 36 rem `surface-container-high` sheet with one text field and a list. It is a
+  combobox and listbox (`aria-activedescendant`, the input keeps focus so Tab cannot leave, Up/Down wrap, Enter goes, Esc or a press on
+  the scrim closes and returns focus to what opened it). Empty, it shows what needs you (up to five, with the request title), this
+  project's eight tabs when one is open, the six screens and the first eight projects. Typing matches every word anywhere in a name, tag
+  or request, best at the start; "billing team" reaches a project's Team tab (a project's tabs are only offered when the query names
+  the tab). At most 30 rows. It filters the project list the shell already reads every 10 s and the requests it already polls, so
+  typing asks the daemon for nothing. Below 640 px it sits at the top edge and drops the key hints. Checked at 1280 (light, dark) and
+  390 px against 100 seeded projects.
+
