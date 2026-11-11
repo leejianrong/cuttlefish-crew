@@ -61,6 +61,16 @@ worktree; nothing is forced. The branch stays unless you ask for
 `--delete-branch` (the page has a checkbox), and then only a merged branch goes: an unmerged one is kept and the
 answer says so. The page's route is `POST /api/projects/{id}/goal/worktree/remove` (Admin tier).
 
+## See the pull request's state
+
+Once a pull request is open, the status strip on the project's Overview says what it is doing: open, draft, merged or
+closed, whether its checks are passing, running or failing (and how many), and whether a review approved it or asked for
+changes. It reads this with your own `gh` login (`gh pr view --json`), the same one that opened it, and keeps the answer
+for 30 seconds, so a page left open does not hammer GitHub. A branch with no pull request, a machine without `gh` and a
+`gh` that is not logged in show only the link, never an error. Nothing is merged from here. The route is
+`GET /api/projects/{id}/goal/pull-request` (View tier: it only reads, and the PR's address is already shown at View). It
+returns each check's `name`, `state` (`pass`, `fail`, `pending` or `skipped`) and `url`, so a script can read them too.
+
 ## See what the branch changed
 
 The **Changes** card on the project page lists every file the goal's branch has changed against the project's default

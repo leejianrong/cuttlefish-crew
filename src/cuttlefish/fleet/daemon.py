@@ -81,6 +81,7 @@ from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
 from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff, goal_stat
 from cuttlefish.fleet.placement import Placement, RemoteTeam
+from cuttlefish.fleet.prstatus import PrStatus, read_pr_status
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.scheduler import Scheduler
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
@@ -158,6 +159,8 @@ _WAKE_MESSAGE = (
 _PASTE_SETTLE_S = 0.3
 #: How long Claude Code is given to clear its conversation before the next message (CUT-273).
 _CLEAR_SETTLE_S = 1.5
+#: How long a read of a pull request's state is reused (gh is a network call).
+_PR_CACHE_S = 30.0
 
 #: The longest goal given to a builder (CUT-171): it is one command-line argument.
 MAX_GOAL_CHARS = 8000
@@ -399,6 +402,8 @@ class FleetDaemon:
         self._running: dict[str, RunningTeam] = {}
         #: Teams running on worker machines (ADR-0057); `lookup` is set once workers exist.
         self.placement = Placement()
+        #: `project id -> (when, status)`: gh is a network call, so polling reads this.
+        self._pr_cache: dict[str, tuple[float, PrStatus]] = {}
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
         #: project id -> ((team id, journal position, role names), its view), so an idle project's
@@ -782,10 +787,26 @@ class FleetDaemon:
         goal = await self.goal(project_id)
         return await asyncio.to_thread(read, project.root, goal)
 
+    async def pr_status(self, project_id: str) -> PrStatus:
+        """The goal's pull request and its checks, read with `gh` and kept for 30 seconds (CUT-242).
+        A project on a worker has its checkout there, so it says so."""
+        project = self._projects.get(project_id)
+        if project.worker_id is not None:
+            return PrStatus(False, code="on_worker", reason=f"{project.name} runs on a worker.")
+        now = time.monotonic()
+        held = self._pr_cache.get(project_id)
+        if held is not None and now - held[0] < _PR_CACHE_S:
+            return held[1]
+        goal = await self.goal(project_id)
+        result = await asyncio.to_thread(read_pr_status, project.root, goal)
+        self._pr_cache[project_id] = (now, result)
+        return result
+
     async def open_pull_request(self, project_id: str, *, push: bool = False) -> PullRequest:
         """Open a pull request for the goal's branch with the machine's ``gh`` login (CUT-241,
         ADR-0049) and journal it. Refusals come back as a result with a reason, not an error."""
         project = self._projects.get(project_id)
+        self._pr_cache.pop(project_id, None)
         goal = await asyncio.to_thread(read_goal, project.root)
         overview = await self.overview(project_id, goal.get("at") if goal else None)
         summary = [line for line in overview["digest"] if "waiting for you" not in line]

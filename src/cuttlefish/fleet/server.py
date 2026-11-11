@@ -1538,6 +1538,15 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.get("/api/projects/{project_id}/goal/pull-request")
+    async def get_goal_pull_request(project_id: str) -> dict[str, Any]:
+        """The goal's pull request: state, review and each check's name and result, read with the
+        machine's `gh` (CUT-242). A quiet `ok: false` with a `code` when there is none."""
+        try:
+            return (await daemon.pr_status(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.post("/api/projects/{project_id}/pull-request")
     async def open_pull_request(project_id: str, request: Request) -> dict[str, Any]:
         """Open a pull request for the goal's branch with the machine's own `gh` login (CUT-241,

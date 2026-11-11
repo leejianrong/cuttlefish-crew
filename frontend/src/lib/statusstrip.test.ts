@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { AgentSession, Goal } from "./api";
+import type { AgentSession, Goal, PrStatusResult } from "./api";
 import type { AutopilotStatus } from "./autopilot";
-import { stripParts, type StripInput } from "./statusstrip";
+import { prNote, stripParts, type StripInput } from "./statusstrip";
 
 const session = (over: Partial<AgentSession> = {}): AgentSession => ({
   state: "running",
@@ -65,6 +65,34 @@ describe("status strip (CUT-286)", () => {
       stat: { ok: true, files_changed: 0 },
     });
     expect(texts(input)).toEqual(["Team running", "2k tokens", "cuttlefish/x", "Pull request"]);
+  });
+
+  it("adds gh's word on the pull request to its link, and only when gh could say", () => {
+    const pr: PrStatusResult = {
+      ok: true,
+      state: "open",
+      checks_state: "failing",
+      review: "changes_requested",
+      checks: [
+        { name: "tests", state: "fail", url: "" },
+        { name: "lint", state: "pass", url: "" },
+      ],
+    };
+    const part = stripParts(base({ pr })).at(-1)!;
+    expect(part.text).toBe("Pull request: open, 1 of 2 checks failing, changes requested");
+    expect(part.tone).toBe("attention");
+    expect(part.title).toBe("Failing: tests");
+    expect(stripParts(base({ pr: { ok: false, code: "no_pr", checks: [] } })).at(-1)!.text).toBe("Pull request");
+    expect(stripParts(base()).at(-1)!.text).toBe("Pull request");
+  });
+
+  it("words the other states", () => {
+    const ok = (over: Partial<PrStatusResult>): PrStatusResult => ({ ok: true, state: "open", checks: [], ...over });
+    expect(prNote(ok({ state: "merged" })).text).toBe("merged");
+    expect(prNote(ok({ state: "closed" })).text).toBe("closed");
+    expect(prNote(ok({ draft: true, checks_state: "pending" })).text).toBe("draft, checks running");
+    expect(prNote(ok({ checks_state: "passing", review: "approved" })).text).toBe("open, checks passing, approved");
+    expect(prNote(null).text).toBe("");
   });
 
   it("does not guess at a stat that was refused", () => {
