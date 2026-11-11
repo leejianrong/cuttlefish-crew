@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DiffFile } from "./api";
-import { diffSummary, lineNumber, noLinesNote, sourceNote, statusLabel } from "./diff";
+import { statText, diffSummary, lineNumber, noLinesNote, sourceNote, statusLabel } from "./diff";
 
 const file = (over: Partial<DiffFile> = {}): DiffFile => ({
   path: "a.txt",
@@ -39,5 +39,10 @@ describe("diff card text (CUT-289)", () => {
   it("numbers a row by the side that exists", () => {
     expect(lineNumber({ old: 3 })).toBe("3");
     expect(lineNumber({ old: 3, new: 5 })).toBe("5");
+  });
+
+  it("writes the counts alone", () => {
+    expect(statText({ additions: 12, deletions: 3 })).toBe("+12 \u22123");
+    expect(statText({})).toBe("+0 \u22120");
   });
 });

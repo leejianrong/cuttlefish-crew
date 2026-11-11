@@ -15,6 +15,11 @@ const STATUS_WORDS: Record<string, string> = {
   untracked: "new, not committed",
 };
 
+/** "+12 −3": the counts alone, for a status line or a card. */
+export function statText(stat: Pick<GoalDiffResult, "additions" | "deletions">): string {
+  return `+${stat.additions ?? 0} −${stat.deletions ?? 0}`;
+}
+
 /** The status word beside a file, or null for a plain edit. */
 export function statusLabel(file: Pick<DiffFile, "status">): string | null {
   return STATUS_WORDS[file.status] ?? null;
