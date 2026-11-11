@@ -622,6 +622,29 @@ export interface PrStatusResult {
   checks: PrCheck[];
 }
 
+/** One piece of review text on a pull request (CUT-293): other people's words, scrubbed and cut. */
+export interface PrCommentItem {
+  kind: "review" | "comment" | "inline";
+  author: string;
+  body: string;
+  /** For an inline comment: the file and line it is on. Empty otherwise. */
+  path: string;
+  line: string;
+  /** For a review: `approved`, `changes_requested`, `commented`... */
+  state: string;
+  url: string;
+}
+
+export interface PrCommentsResult {
+  ok: boolean;
+  code?: string;
+  reason?: string;
+  number?: number;
+  comments: PrCommentItem[];
+  /** Older comments left out to stay within the cap. */
+  omitted?: number;
+}
+
 /** The answer to "remove the worktree" (CUT-250). `branch_note` says why a branch was kept. */
 export interface WorktreeRemoval {
   ok: boolean;
@@ -872,6 +895,11 @@ export class FleetClient {
   /** The goal's pull request and its checks, read through the machine's gh (CUT-242). */
   getPrStatus(id: string): Promise<PrStatusResult> {
     return this.request(`/api/projects/${id}/goal/pull-request`);
+  }
+
+  /** The pull request's review text, read when asked (Approve tier, CUT-293). */
+  getPrComments(id: string): Promise<PrCommentsResult> {
+    return this.request(`/api/projects/${id}/goal/pull-request/comments`);
   }
 
   /** Remove the last goal's worktree (CUT-250). A refusal is `ok: false` with a plain reason. */
