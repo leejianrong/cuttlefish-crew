@@ -1,7 +1,7 @@
 // Unit: the add-project screen's pure helpers (folders.ts).
 
 import { describe, expect, it } from "vitest";
-import { breadcrumbs, folderName, parseAllow, parseLimit } from "./folders";
+import { breadcrumbs, cardFolder, folderName, parseAllow, parseLimit } from "./folders";
 
 describe("folderName", () => {
   it("is the last path segment", () => {
@@ -61,5 +61,12 @@ describe("parseLimit", () => {
     expect(parseLimit("0.5")).toBe(0.5);
     expect(parseLimit("abc")).toBe("invalid");
     expect(parseLimit("-1")).toBe("invalid");
+  });
+});
+
+describe("cardFolder", () => {
+  it("is the folder name, and nothing when it only repeats the project name", () => {
+    expect(cardFolder("shop", "/home/jian/work/shop-api/")).toBe("shop-api");
+    expect(cardFolder("shop-api", "/home/jian/work/shop-api")).toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ProjectSummary, RoleStatus } from "../api";
   import { agoIso } from "../artifacts";
+  import { cardFolder } from "../folders";
   import { parseTags } from "../grouping";
   import { whereItRuns } from "../placement";
   import { projectState, STATE_LABEL, type ProjectState } from "../projectstate";
@@ -66,14 +67,15 @@
   };
   const line = $derived(projectState(project, waiting, now * 1000));
   const where = $derived(whereItRuns(project));
+  const folder = $derived(cardFolder(project.name, project.root));
 </script>
 
 <article class="card filled project">
   <header>
-    <button class="title title-medium" onclick={onOpen}>{project.name}</button>
+    <button class="title title-medium" title={project.root} onclick={onOpen}>{project.name}</button>
     {#if pinned}<span class="pinned label-small">Pinned</span>{/if}
   </header>
-  <p class="root mono" title={project.root}><bdi>{project.root}</bdi></p>
+  {#if folder}<p class="root mono" title={project.root}>{folder}</p>{/if}
   {#if project.worker}
     <p class="where body-small" class:problem={where.problem}>Runs on {where.text}</p>
   {/if}
@@ -202,10 +204,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    /* A long folder path loses its start, not the project name at its end; <bdi> keeps the text
-     * itself left to right. */
-    direction: rtl;
-    text-align: left;
   }
 
   .roles {

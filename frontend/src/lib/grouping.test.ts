@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectSummary, RoleStatus } from "./api";
 import {
+  activeFilterCount,
   filterProjects,
   groupProjects,
   limitGroups,
@@ -128,5 +129,13 @@ describe("memory", () => {
 describe("parseTags", () => {
   it("splits on commas and drops blanks", () => {
     expect(parseTags(" client:acme, rust ,, ")).toEqual(["client:acme", "rust"]);
+  });
+});
+
+describe("activeFilterCount", () => {
+  it("counts picked chips and a grouping, and nothing for no filter", () => {
+    expect(activeFilterCount(NO_FILTER, "none")).toBe(0);
+    expect(activeFilterCount({ states: new Set(["waiting", "idle"]), tags: new Set(["rust"]) }, "none")).toBe(3);
+    expect(activeFilterCount(NO_FILTER, "state")).toBe(1);
   });
 });
