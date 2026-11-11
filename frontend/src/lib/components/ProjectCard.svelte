@@ -42,8 +42,8 @@
   function roleDetail(role: string): string {
     const info = project.role_info?.[role];
     if (!info) return "";
-    const age = info.last_event_at ? agoIso(info.last_event_at, now) : "";
-    return [info.backend, info.model, age].filter(Boolean).join(" · ");
+    const age = info.at ? agoIso(info.at, now) : "";
+    return [info.backend ?? project.backend, info.model, age].filter(Boolean).join(" · ");
   }
   let confirming = $state<"stop" | "remove" | null>(null);
   let editingTags = $state(false);

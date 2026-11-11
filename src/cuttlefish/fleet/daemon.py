@@ -2471,19 +2471,24 @@ class FleetDaemon:
         role_names = [r.name for r in project.roles]
         # A journal that has not grown since the last poll is not read again: the list asks for
         # every project every few seconds, and most of them are idle.
-        stamp = self._journal_stamp(project)
-        key = (project.last_team_id, stamp, tuple(role_names))
-        cached = self._journal_views.get(project_id)
-        if stamp is not None and cached is not None and cached[0] == key:
-            return cached[1]
-        events = self._last_team_events(project)
+        store = self._open_last_journal(project)
+        try:
+            stamp = None if store is None else store.last_seq(str(project.last_team_id))
+            key = (project.last_team_id, stamp, tuple(role_names))
+            cached = self._journal_views.get(project_id)
+            if stamp is not None and cached is not None and cached[0] == key:
+                return cached[1]
+            events = [] if store is None else list(store.read(str(project.last_team_id)))
+        finally:
+            if store is not None:
+                store.close()
         names = role_names or sorted(roles_in(events))
         payloads = [event.payload for event in events]
         last_by_role: dict[str, str] = {}
         for event in events:
             role = getattr(event.payload, "role", None)
             if isinstance(role, str):
-                last_by_role[role] = event.ts.isoformat()
+                last_by_role[role] = event.ts.isoformat(timespec="seconds")
         view = JournalView(
             status=role_statuses(events, names) if events else dict.fromkeys(role_names, "queued"),
             usage={name: cumulative_usage(payloads, role=name) for name in names},
@@ -2494,36 +2499,35 @@ class FleetDaemon:
             self._journal_views[project_id] = (key, view)
         return view
 
-    def _journal_stamp(self, project: Project) -> int | None:
-        """The newest event position of the project's last team, or `None` with no journal yet."""
+    def _open_last_journal(self, project: Project) -> EpisodicStore | None:
+        """The project's journal, or `None` before its last team has written one."""
         if project.last_team_id is None:
             return None
         path = Path(project.root) / ".cuttlefish" / "episodic.db"
-        if not path.exists():
-            return None
-        store = EpisodicStore.open(path)
-        try:
-            return store.last_seq(project.last_team_id)
-        finally:
-            store.close()
+        return EpisodicStore.open(path) if path.exists() else None
 
-    def role_info(self, project: Project, names: Iterable[str]) -> dict[str, dict[str, Any]]:
-        """For each role: the backend it runs on (its own, else the project's, else the default),
-        the model cuttlefish asks that backend for if any, and when it last did anything."""
+    def role_info(
+        self, project: Project, names: Iterable[str], view: JournalView
+    ) -> dict[str, dict[str, Any]]:
+        """For each role what its row shows, kept small because the list carries it for every
+        project: `backend` only when it is not the project's own, `model` only where cuttlefish
+        sets one, and `at`, when the role last did anything (to the second)."""
         try:
             default = resolve_agent_backend()
         except ConfigError:
             default = None
-        times = self.journal_view(project.id).role_last_event_at
         info: dict[str, dict[str, Any]] = {}
         for name in names:
             definition = project.role(name)
             backend = (definition.backend if definition else None) or project.backend or default
-            info[name] = {
-                "backend": backend,
-                "model": configured_model(backend) if backend else None,
-                "last_event_at": times.get(name),
-            }
+            entry: dict[str, Any] = {}
+            if backend and backend != project.backend:
+                entry["backend"] = backend
+            if backend and (model := configured_model(backend)):
+                entry["model"] = model
+            if stamp := view.role_last_event_at.get(name):
+                entry["at"] = stamp
+            info[name] = entry
         return info
 
     def events(self, project_id: str) -> list[EpisodicEvent]:

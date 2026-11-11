@@ -3,6 +3,7 @@ project's journal again on every poll."""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import pytest
 
 from cuttlefish.agents.registry import configured_model
 from cuttlefish.episodic.events import DelegationStarted, TaskSubmitted
-from cuttlefish.episodic.store import EpisodicStore
+from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.projects.store import ProjectStore, RoleDefinition
 
@@ -48,24 +49,22 @@ def test_each_role_has_its_own_last_event_time_and_backend(
     store.append(TEAM, DelegationStarted(task_text="t", root="/r", role="builder"), ts=_at(10))
     store.append(TEAM, TaskSubmitted(text="t", role="reviewer"), ts=_at(11))
     project = daemon.projects.get(project_id)
-    info = daemon.role_info(project, ["builder", "reviewer"])
+    info = daemon.role_info(project, ["builder", "reviewer"], daemon.journal_view(project_id))
     assert info["builder"] == {
         "backend": "codex",
         "model": "gpt-test",
-        "last_event_at": _at(10).isoformat(),
+        "at": "2026-11-12T10:00:00+00:00",
     }
-    # No backend of its own: the project's, and kopicode is asked for no model unless told to.
-    assert info["reviewer"] == {
-        "backend": "kopicode",
-        "model": None,
-        "last_event_at": _at(11).isoformat(),
-    }
+    # No backend of its own: the project's (so not repeated), and kopicode is asked for no model
+    # unless told to.
+    assert info["reviewer"] == {"at": "2026-11-12T11:00:00+00:00"}
 
 
 def test_a_role_that_has_done_nothing_has_no_time(tmp_path: Path) -> None:
     daemon, project_id, _store = _project(tmp_path)
-    info = daemon.role_info(daemon.projects.get(project_id), ["builder"])
-    assert info["builder"]["last_event_at"] is None
+    project = daemon.projects.get(project_id)
+    info = daemon.role_info(project, ["builder"], daemon.journal_view(project_id))
+    assert "at" not in info["builder"]
 
 
 def test_an_idle_journal_is_read_once_and_a_new_event_is_noticed(
@@ -74,13 +73,13 @@ def test_an_idle_journal_is_read_once_and_a_new_event_is_noticed(
     daemon, project_id, store = _project(tmp_path)
     store.append(TEAM, TaskSubmitted(text="t", role="builder"), ts=_at(9))
     reads: list[int] = []
-    real = daemon._last_team_events
+    real = EpisodicStore.read
 
-    def counting(project: object) -> list[object]:
+    def counting(self: EpisodicStore, task_id: str, *, after: int = 0) -> Iterator[EpisodicEvent]:
         reads.append(1)
-        return real(project)  # type: ignore[arg-type, return-value]
+        return real(self, task_id, after=after)
 
-    monkeypatch.setattr(daemon, "_last_team_events", counting)
+    monkeypatch.setattr(EpisodicStore, "read", counting)
     first = daemon.journal_view(project_id)
     for _ in range(5):
         assert daemon.journal_view(project_id) is first
