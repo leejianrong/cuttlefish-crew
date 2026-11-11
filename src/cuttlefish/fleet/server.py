@@ -655,7 +655,7 @@ def create_app(
     async def update_device(device_id: str, request: Request) -> dict[str, Any]:
         link = _relay()
         body = await _json_body(request)
-        tier = _tier_from(body, allowed=tuple(Tier))
+        tier = _tier_from(body, allowed=tuple(t for t in Tier if t is not Tier.WORKER))
         if tier is None:
             raise HTTPException(400, "'tier' is required")
         try:
@@ -673,6 +673,38 @@ def create_app(
             raise HTTPException(404, str(exc)) from exc
         _LOG.info("device %s (%s) revoked", device.id, device.name)
         return device.as_json()
+
+    @app.get("/api/workers")
+    async def list_workers() -> dict[str, Any]:
+        link = _relay()
+        return {"workers": [link.liveness.as_json(w) for w in link.workers.list()]}
+
+    @app.post("/api/workers/pairing")
+    async def start_worker_pairing() -> dict[str, Any]:
+        payload, expires_at = _relay().start_pairing("worker")
+        return {"payload": payload, "expires_at": expires_at}
+
+    @app.delete("/api/workers/{worker_id}")
+    async def remove_worker(worker_id: str) -> dict[str, Any]:
+        try:
+            worker = await _relay().remove_worker(worker_id)
+        except DeviceError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        _LOG.info("worker %s (%s) removed", worker.id, worker.name)
+        return worker.as_json()
+
+    @app.post("/api/worker/heartbeat")
+    async def worker_heartbeat(request: Request) -> dict[str, str]:
+        link = _relay()
+        worker = (
+            link.guard.device_for(request.headers)
+            if link.guard.is_relay(request.headers.get(TOKEN_HEADER))
+            else None
+        )
+        if worker is None or not worker.is_worker:
+            raise HTTPException(403, "only a paired worker machine sends a heartbeat")
+        link.liveness.beat(worker.id, await _json_body(request))
+        return {"status": "ok"}
 
     def _browser() -> FolderBrowser:
         if folders is None:

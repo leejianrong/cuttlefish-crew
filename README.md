@@ -69,6 +69,9 @@ Want the whole walk-through, with two practice repos and two crews side by side?
   secrets ([ADR-0050](docs/adr/0050-the-manager-credential-is-its-own-token-held-to-the-approve-tier-and-a-route-list.md)).
 - **Secrets and keys.** An encrypted per-project secrets store, and an optional credential broker so an agent never
   holds its model key.
+- **More than one machine.** `cuttlefish worker join` pairs a second computer with the daemon (you confirm a code on
+  the PC) and Devices shows it online or offline ([ADR-0057](docs/adr/0057-a-worker-machine-dials-the-controller-pairs-once-and-holds-a-lease-never-the-model-key.md)).
+  Running a project on it is the next slice.
 - **From a phone.** The dashboard is a web app you can pair through Tailscale https or a relay (checked in Chromium
   only).
 

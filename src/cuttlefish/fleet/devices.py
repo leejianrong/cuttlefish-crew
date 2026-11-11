@@ -7,6 +7,10 @@ after the owner has seen it and said yes. `PairingManager` holds at most one ope
 secret, five minutes, spent by the first valid first message) and the devices waiting in the
 waiting room for the owner's decision.
 
+A worker machine (ADR-0057) is kept the same way, in a store of its own (`workers.db`) at
+`Tier.WORKER`; a pairing opened for a worker carries that kind, so the one secret decides what the
+newcomer becomes, never anything it claims.
+
 `DeviceAuthority` is what the relay connector asks (it knows nothing about this module): which
 secret to use for a key, whether a key belongs to an active device, and where to put a new
 device."""
@@ -51,10 +55,15 @@ class Device:
     def active(self) -> bool:
         return self.revoked_at is None
 
+    @property
+    def is_worker(self) -> bool:
+        return self.tier is Tier.WORKER
+
     def as_json(self) -> dict[str, object]:
         return {
             "id": self.id,
             "name": self.name,
+            "kind": "worker" if self.is_worker else "device",
             "tier": self.tier.label,
             "created_at": self.created_at,
             "last_seen_at": self.last_seen_at,
@@ -150,6 +159,13 @@ class DeviceStore:
         ).fetchall()
         return [self._row(row) for row in rows]
 
+    def delete(self, device_id: str) -> Device:
+        """Forget a device altogether (a worker's registry row, ADR-0057)."""
+        device = self.get(device_id)
+        self._db.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+        self._db.commit()
+        return device
+
     def set_tier(self, device_id: str, tier: Tier) -> Device:
         self.get(device_id)
         self._db.execute("UPDATE devices SET tier = ? WHERE id = ?", (int(tier), device_id))
@@ -177,6 +193,8 @@ class DeviceStore:
 class OpenPairing:
     secret: bytes = field(repr=False)
     expires_at: float
+    #: `device` (a browser) or `worker` (a machine that runs agents).
+    kind: str = "device"
 
 
 @dataclass(slots=True)
@@ -188,6 +206,7 @@ class PendingDevice:
     public_key: bytes
     code: str
     requested_at: float
+    kind: str
     _future: asyncio.Future[PairingOutcome] = field(repr=False)
     _ttl: float = PENDING_TTL_SECONDS
 
@@ -204,6 +223,7 @@ class PendingDevice:
             "id": self.id,
             "name": self.name,
             "code": self.code,
+            "kind": self.kind,
             "requested_at": self.requested_at,
         }
 
@@ -213,11 +233,13 @@ class PairingManager:
         self,
         store: DeviceStore,
         *,
+        workers: DeviceStore | None = None,
         pairing_ttl: float = PAIRING_TTL_SECONDS,
         pending_ttl: float = PENDING_TTL_SECONDS,
         now: Callable[[], float] = time.time,
     ) -> None:
         self._store = store
+        self._workers = workers
         self._pairing_ttl = pairing_ttl
         self._pending_ttl = pending_ttl
         self._now = now
@@ -226,9 +248,9 @@ class PairingManager:
 
     # -- the open pairing -----------------------------------------------------------------
 
-    def open_pairing(self) -> OpenPairing:
+    def open_pairing(self, kind: str = "device") -> OpenPairing:
         """Start a pairing, replacing any earlier one: there is one secret at a time."""
-        self._open = OpenPairing(secrets.token_bytes(32), self._now() + self._pairing_ttl)
+        self._open = OpenPairing(secrets.token_bytes(32), self._now() + self._pairing_ttl, kind)
         return self._open
 
     def cancel(self) -> None:
@@ -245,9 +267,12 @@ class PairingManager:
         """A device with the pairing secret has sent its first message. This spends the pairing,
         whatever the owner decides, so a secret works once. `None` if there is no live pairing
         or the waiting room is full."""
-        if self.current() is None or len(self.pending()) >= MAX_PENDING:
+        opened = self.current()
+        if opened is None or len(self.pending()) >= MAX_PENDING:
             return None
-        if self._store.by_key(public_key) is not None:
+        if self._store.by_key(public_key) is not None or (
+            self._workers is not None and self._workers.by_key(public_key) is not None
+        ):
             return None
         self._open = None
         pending = PendingDevice(
@@ -256,6 +281,7 @@ class PairingManager:
             public_key=public_key,
             code=code,
             requested_at=self._now(),
+            kind=opened.kind,
             _future=asyncio.get_running_loop().create_future(),
             _ttl=self._pending_ttl,
         )
@@ -281,7 +307,13 @@ class PairingManager:
         """The owner said yes: store the device with a secret of its own and tell it."""
         pending = self._take(pending_id)
         secret = secrets.token_bytes(32)
-        device = self._store.create(pending.name, pending.public_key, secret, tier)
+        if pending.kind == "worker":
+            if self._workers is None:
+                raise DeviceError("this daemon keeps no workers")
+            tier = Tier.WORKER  # the owner has no choice of a worker's tier, and it has no say
+            device = self._workers.create(pending.name, pending.public_key, secret, tier)
+        else:
+            device = self._store.create(pending.name, pending.public_key, secret, tier)
         pending._future.set_result(PairingOutcome("paired", device.id, secret, tier.label))
         return device
 
@@ -293,12 +325,21 @@ class PairingManager:
 class DeviceAuthority:
     """What the relay connector asks, answered from the store and the pairing manager."""
 
-    def __init__(self, store: DeviceStore, pairing: PairingManager) -> None:
+    def __init__(
+        self, store: DeviceStore, pairing: PairingManager, workers: DeviceStore | None = None
+    ) -> None:
         self._store = store
+        self._workers = workers
         self._pairing = pairing
 
-    def secret_for(self, public_key: bytes) -> bytes | None:
+    def _known(self, public_key: bytes) -> tuple[Device, bytes] | None:
         known = self._store.by_key(public_key)
+        if known is None and self._workers is not None:
+            known = self._workers.by_key(public_key)
+        return known
+
+    def secret_for(self, public_key: bytes) -> bytes | None:
+        known = self._known(public_key)
         if known is not None:
             device, secret = known
             return secret if device.active else None
@@ -306,7 +347,7 @@ class DeviceAuthority:
         return open_pairing.secret if open_pairing is not None else None
 
     def device_for(self, public_key: bytes) -> str | None:
-        known = self._store.by_key(public_key)
+        known = self._known(public_key)
         return known[0].id if known is not None and known[0].active else None
 
     def begin_pairing(self, public_key: bytes, name: str, code: str) -> PairingRequest | None:

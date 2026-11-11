@@ -20,12 +20,27 @@ export interface DeviceInfo {
 
 export type DeviceTier = "view" | "approve" | "terminal" | "admin";
 
+/** A worker machine (ADR-0057): another computer that runs agents for this one. Never carries a key. */
+export interface WorkerInfo {
+  id: string;
+  name: string;
+  /** What the worker says about itself in its heartbeat; empty until the first one. */
+  host: string;
+  platform: string;
+  /** Whether it has sent a heartbeat lately. A machine that lost its network shows as offline. */
+  online: boolean;
+  created_at: number;
+  last_seen_at: number | null;
+}
+
 /** A device that proved the pairing secret and is waiting for the owner to confirm it. */
 export interface PendingDevice {
   id: string;
   name: string;
   /** The six digits it shows; they must match the ones on the phone. */
   code: string;
+  /** `worker` for a machine joining with `cuttlefish worker join`; anything else is a browser. */
+  kind?: "device" | "worker";
   requested_at: number;
 }
 
@@ -857,6 +872,19 @@ export class FleetClient {
 
   revokeDevice(deviceId: string): Promise<DeviceInfo> {
     return this.request(`/api/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
+  }
+
+  listWorkers(): Promise<{ workers: WorkerInfo[] }> {
+    return this.request("/api/workers");
+  }
+
+  /** Opens a pairing for a worker machine. `payload` is what `cuttlefish worker join` takes. */
+  startWorkerPairing(): Promise<{ payload: string; expires_at: number }> {
+    return this.request("/api/workers/pairing", { method: "POST", body: "{}" });
+  }
+
+  removeWorker(workerId: string): Promise<WorkerInfo> {
+    return this.request(`/api/workers/${encodeURIComponent(workerId)}`, { method: "DELETE" });
   }
 
   getEvents(id: string): Promise<{ events: EpisodicEventView[] }> {

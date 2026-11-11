@@ -15,6 +15,9 @@ from enum import IntEnum
 
 
 class Tier(IntEnum):
+    #: A worker machine (ADR-0057), below View: it reaches only the routes listed at this tier, and
+    #: no person's device may reach those. Never a choice for a device.
+    WORKER = 0
     VIEW = 1
     APPROVE = 2
     TERMINAL = 3
@@ -30,10 +33,10 @@ DEFAULT_TIER = Tier.APPROVE
 
 
 def parse_tier(name: str) -> Tier:
-    try:
-        return Tier[name.upper()]
-    except KeyError:
-        raise ValueError(f"unknown tier {name!r}; one of view, approve, terminal, admin") from None
+    tier = Tier.__members__.get(name.upper())
+    if tier is None or tier is Tier.WORKER:
+        raise ValueError(f"unknown tier {name!r}; one of view, approve, terminal, admin")
+    return tier
 
 
 #: Routes that need no credential at all, so no tier either.
@@ -45,6 +48,8 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/login"): PUBLIC,
     # A session's hook script, with a token of its own that opens only this route (ADR-0040).
     ("POST", "/api/hooks/claude-code/{project_id}"): PUBLIC,
+    # A worker machine's own routes (ADR-0057): the only ones it may reach.
+    ("POST", "/api/worker/heartbeat"): Tier.WORKER,
     # Read.
     ("GET", "/api/limits"): Tier.VIEW,
     ("GET", "/api/permissions"): Tier.VIEW,
@@ -80,6 +85,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/agent-session/start"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/agent-session/stop"): Tier.APPROVE,
     ("GET", "/api/devices"): Tier.APPROVE,
+    ("GET", "/api/workers"): Tier.APPROVE,
     ("DELETE", "/api/devices/{device_id}"): Tier.APPROVE,  # a lost phone is cut off from another
     # The agent's terminal.
     ("WS", "/api/projects/{project_id}/terminal"): Tier.TERMINAL,
@@ -114,6 +120,8 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("GET", "/api/secrets"): Tier.ADMIN,
     ("PUT", "/api/secrets/{name}"): Tier.ADMIN,
     ("DELETE", "/api/secrets/{name}"): Tier.ADMIN,
+    ("POST", "/api/workers/pairing"): Tier.ADMIN,
+    ("DELETE", "/api/workers/{worker_id}"): Tier.ADMIN,  # closes its channel, revokes its leases
     ("POST", "/api/devices/pairing"): Tier.ADMIN,
     ("DELETE", "/api/devices/pairing"): Tier.ADMIN,
     ("POST", "/api/devices/pending/{pending_id}/confirm"): Tier.ADMIN,
