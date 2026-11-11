@@ -46,10 +46,12 @@ class WorkerLiveness:
         self._beats: dict[str, Beat] = {}
 
     def beat(self, worker_id: str, info: dict[str, object] | None = None) -> None:
-        info = info or {}
-        self._beats[worker_id] = Beat(
-            self._now(), _clean(info.get("host")), _clean(info.get("platform"))
-        )
+        previous = self._beats.get(worker_id)
+        if info is None:  # a sign of life that says nothing new about the machine
+            host, kind = (previous.host, previous.platform) if previous else ("", "")
+        else:
+            host, kind = _clean(info.get("host")), _clean(info.get("platform"))
+        self._beats[worker_id] = Beat(self._now(), host, kind)
 
     def forget(self, worker_id: str) -> None:
         self._beats.pop(worker_id, None)
