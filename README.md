@@ -32,6 +32,7 @@ Agents spend your model credit, usually cents for a small task.
 2. **Give the builder a goal.** Open the project and type one in the box (for a Claude Code or Codex project; a kopicode project starts a team of roles instead, see the tutorial). The agent starts in its own tmux
    terminal with your goal as its first message. Switch on **Its own branch** and the goal runs in a new git
    worktree and branch, so your checkout is left alone ([ADR-0048](docs/adr/0048-each-goal-can-run-in-its-own-git-worktree-and-branch-inside-the-project-root.md)).
+   The **Changes** card shows the branch's diff, file by file, read from git when you open it.
    When it is done, **Open a pull request** runs `gh pr create` with your own `gh` login and never merges
    ([ADR-0049](docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)).
    A team with two or more kopicode roles in a git project works the same way: each role gets its own worktree, merged

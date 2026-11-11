@@ -19,6 +19,7 @@
   import WorkerPlacement from "./WorkerPlacement.svelte";
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
+  import GoalDiffCard from "./GoalDiffCard.svelte";
   import KillSwitch from "./KillSwitch.svelte";
   import ScheduleCard from "./ScheduleCard.svelte";
   import MissionControl from "./MissionControl.svelte";
@@ -358,6 +359,10 @@
           refreshKey={sessionChanges}
           {onTabChange}
         />
+      {/if}
+
+      {#if !project.is_manager}
+        <GoalDiffCard {client} {projectId} refreshKey={sessionChanges} />
       {/if}
 
       <AgentSessionCard {client} {projectId} onChange={() => sessionChanges++} />

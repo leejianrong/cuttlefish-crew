@@ -61,6 +61,26 @@ worktree; nothing is forced. The branch stays unless you ask for
 `--delete-branch` (the page has a checkbox), and then only a merged branch goes: an unmerged one is kept and the
 answer says so. The page's route is `POST /api/projects/{id}/goal/worktree/remove` (Admin tier).
 
+## See what the branch changed
+
+The **Changes** card on the project page lists every file the goal's branch has changed against the project's default
+branch, with its added and removed line counts; press a file to open its hunks. It reads from git each time you open
+the page or press **Refresh**, and keeps no copy. It shows the branch's commits and, while the worktree exists, the
+work not yet committed, including new files git does not track. Once the worktree is removed it shows the branch's
+commits alone.
+
+- **Secrets are not shown.** A file named like a secret (`.env`, `*.pem`, `*.key`, SSH keys, anything under
+  `.cuttlefish/`) or one your `.gitignore` names appears with its name and counts and no lines. Files git ignores never
+  appear. Nothing else is redacted: it is your own code, on your own dashboard.
+- **Big diffs are cut, and it says so.** A file shows its first 1,000 changed lines; past about 1.5 MB of patch, or 300
+  files, the rest are listed or counted without lines. Binary files show as binary.
+- **A goal with no branch** (it ran in your own checkout) has nothing to compare, and the card says to turn on **Its
+  own branch**. A project placed on a worker machine says its code is on that machine and the diff is not shown
+  here yet.
+
+The route is `GET /api/projects/{id}/goal/diff` (View tier: it only reads, and the journal at the same tier already
+shows what the agent wrote). A refusal is a `200` with `ok: false`, a `code` and a plain `reason`.
+
 ## Open a pull request
 
 When the goal is done, press **Open a pull request** under it on the project page, or run:
