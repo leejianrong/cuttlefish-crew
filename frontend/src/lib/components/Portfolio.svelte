@@ -151,7 +151,7 @@
   </header>
 
   {#if projects.length > 0}
-    <div class="kill-row"><KillSwitch {client} onDone={refresh} /></div>
+    <div class="kill-row"><KillSwitch {client} quiet onDone={refresh} /></div>
   {/if}
 
   {#if actionError}

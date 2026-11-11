@@ -366,3 +366,10 @@ and this folder disagree after a slice lands, update this folder.
   outline, the clashing files in mono, and "cuttlefish did not resolve it"). Nothing offers to resolve it. Read from
   `TeamBranchMade` and `RoleMergeReported` in the journal (`lib/teambranch.ts`) and re-read when a role's state changes;
   absent for a project with no team branch. The activity log words both events. Checked at 1280 and 390 px, no sideways scroll.
+
+- **Projects screen, quieter and shorter (CUT-282, 283, 285, 2026-11-12).** From the CUT-228 teardown. Below 600 px the state
+  chips, tag chips and Group by hide behind one outlined "Filter" button (a count of what is picked beside it; `aria-expanded`), so
+  the first project card is fully inside a 390x844 screen. "Stop all agents" is an outlined button in `on-surface-variant`, red
+  (`--md-sys-color-error`) only on hover, press, focus and in its confirm step; the project page's "Stop everything here" is
+  unchanged. A card shows its folder name (replacing the CUT-160 left-cut path) and only when it differs from the project name;
+  the full path is the tooltip on the name and the line. The project page's path wrapping is not part of this change.
