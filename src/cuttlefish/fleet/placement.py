@@ -15,6 +15,7 @@ it stopped (CUT-207).
 from __future__ import annotations
 
 import asyncio
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -29,6 +30,9 @@ class RemoteTeam:
     order: dict[str, Any] | None
     #: The order as first made, kept so it can be handed over again to resume.
     base_order: dict[str, Any] | None = None
+    #: The token of the hand-over the worker now has; its reports must carry it (CUT-300). `None`
+    #: for a team taken back after a restart whose worker has not reported yet.
+    dispatch: str | None = None
     stop_requested: bool = False
     stop_sent: bool = False
     #: The last journal position from the worker already appended here, so a repeated post of the
@@ -44,7 +48,8 @@ class Placement:
         self.lookup: Callable[[str], tuple[str, bool] | None] = lambda _id: None
 
     def assign(self, project_id: str, worker_id: str, order: dict[str, Any]) -> RemoteTeam:
-        team = RemoteTeam(order["team_id"], project_id, worker_id, order, order)
+        order = {**order, "dispatch": uuid.uuid4().hex}
+        team = RemoteTeam(order["team_id"], project_id, worker_id, order, order, order["dispatch"])
         self._teams[project_id] = team
         return team
 
@@ -53,7 +58,8 @@ class Placement:
     ) -> RemoteTeam:
         """A team that was out on a worker before a controller restart. Whether the worker still
         runs it is learned from its next poll, so it starts as an order to resume."""
-        team = RemoteTeam(order["team_id"], project_id, worker_id, {**order, "resume": True}, order)
+        resume = {**order, "resume": True, "dispatch": uuid.uuid4().hex}
+        team = RemoteTeam(order["team_id"], project_id, worker_id, resume, order)
         team.last_seq = last_seq
         self._teams[project_id] = team
         return team
@@ -79,7 +85,8 @@ class Placement:
             if team.team_id in running:
                 team.order = None
             elif team.order is None and team.base_order is not None:
-                team.order = {**team.base_order, "resume": True}
+                team.order = {**team.base_order, "resume": True, "dispatch": uuid.uuid4().hex}
+                team.dispatch = team.order["dispatch"]
                 team.stop_sent = False  # a stop the dead process never acted on goes out again
 
     async def claim(
@@ -99,6 +106,8 @@ class Placement:
             for team in self.teams_on(worker_id):
                 if team.order is not None:
                     orders.append(team.order)
+                    if team.order.get("dispatch"):
+                        team.dispatch = team.order["dispatch"]
                     team.order = None
                 if team.stop_requested and not team.stop_sent:
                     team.stop_sent = True

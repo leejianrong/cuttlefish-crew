@@ -758,11 +758,16 @@ def create_app(
     @app.post("/api/worker/teams/{team_id}/events")
     async def worker_team_events(team_id: str, request: Request) -> dict[str, Any]:
         worker = _calling_worker(request)
-        events = (await _json_body(request)).get("events")
+        body = await _json_body(request)
+        events = body.get("events")
         if not isinstance(events, list) or not all(isinstance(e, dict) for e in events):
             raise HTTPException(400, "'events' must be a list of events")
         try:
-            return {"last_seq": await daemon.worker_events(worker.id, team_id, events)}
+            return {
+                "last_seq": await daemon.worker_events(
+                    worker.id, team_id, events, body.get("dispatch")
+                )
+            }
         except FleetError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
@@ -781,7 +786,12 @@ def create_app(
             raise HTTPException(400, "'checkout' must be an object")
         try:
             await daemon.worker_finished(
-                worker.id, team_id, status, str(error)[:500] if error else None, checkout
+                worker.id,
+                team_id,
+                status,
+                str(error)[:500] if error else None,
+                checkout,
+                body.get("dispatch"),
             )
         except FleetError as exc:
             raise HTTPException(404, str(exc)) from exc
