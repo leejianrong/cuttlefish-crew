@@ -603,6 +603,29 @@ export interface GoalDiffResult {
   note?: string;
 }
 
+/** One check of a pull request (CUT-242). */
+export interface PrCheck {
+  name: string;
+  state: "pass" | "fail" | "pending" | "skipped";
+  url: string;
+}
+
+/** The goal's pull request as `gh` reports it (CUT-242). `ok: false` is quiet: `no_pr`, `no_goal`,
+ * `gh_missing`, `not_logged_in`, `gh_failed`, `on_worker`. */
+export interface PrStatusResult {
+  ok: boolean;
+  code?: string;
+  reason?: string;
+  number?: number;
+  url?: string;
+  title?: string;
+  state?: "open" | "merged" | "closed";
+  draft?: boolean;
+  review?: "approved" | "changes_requested" | "review_required";
+  checks_state?: "passing" | "failing" | "pending" | "none";
+  checks: PrCheck[];
+}
+
 /** The answer to "remove the worktree" (CUT-250). `branch_note` says why a branch was kept. */
 export interface WorktreeRemoval {
   ok: boolean;
@@ -848,6 +871,11 @@ export class FleetClient {
   /** Only the counts of the goal's diff, with no patch: cheap to poll (CUT-286). */
   getGoalStat(id: string): Promise<GoalDiffResult> {
     return this.request(`/api/projects/${id}/goal/diff/stat`);
+  }
+
+  /** The goal's pull request and its checks, read through the machine's gh (CUT-242). */
+  getPrStatus(id: string): Promise<PrStatusResult> {
+    return this.request(`/api/projects/${id}/goal/pull-request`);
   }
 
   /** Remove the last goal's worktree (CUT-250). A refusal is `ok: false` with a plain reason. */

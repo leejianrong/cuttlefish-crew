@@ -79,7 +79,8 @@ with the round workflow below. `GET`/`POST /api/projects/{id}/goal` is the same 
 The project's **Overview** starts with a one-line **status strip**: what is running, how the session last came up
 (started, reattached or relaunched, and when), Autopilot's phase, the tokens used and the time it has run, the goal's
 branch with its `+added −removed` counts (marked uncommitted when the worktree has changes not yet committed), and a link
-to its pull request. It shows nothing for a project that has never been given work. The counts come from
+to its pull request, followed by what `gh` says about it: open, draft, merged or closed, how many checks are failing
+(hover for their names), and whether changes were requested. It shows nothing for a project that has never been given work. The counts come from
 `GET /api/projects/{id}/goal/diff/stat`, the diff's numbers without the patch, so it is cheap to poll (View tier; the
 same refusals as the [diff](branches-and-pull-requests.md#see-what-the-branch-changed)). Tokens and time need Autopilot or
 a team; a terminal-command project has neither, since cuttlefish reads nothing from that tool. Under the project's name
