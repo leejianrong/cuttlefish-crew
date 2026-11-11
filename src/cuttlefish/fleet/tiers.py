@@ -62,6 +62,9 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("GET", "/api/projects/{project_id}"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/agent-session"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/goal"): Tier.VIEW,
+    # The goal's changed code, bounded, with secret-looking and ignored files left out. View, not
+    # more: it only reads, and the journal (also View) already carries what the agent wrote and ran.
+    ("GET", "/api/projects/{project_id}/goal/diff"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/overview"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/digest"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}/autopilot"): Tier.VIEW,

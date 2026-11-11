@@ -118,6 +118,17 @@ describe("FleetClient.openPullRequest (CUT-241)", () => {
   });
 });
 
+describe("FleetClient.getGoalDiff (CUT-289)", () => {
+  it("reads the diff and returns a refusal as an answer", async () => {
+    const answer = { ok: false, code: "on_worker", reason: "It runs on a worker." };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify(answer), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FleetClient("http://x", "t");
+    await expect(client.getGoalDiff("p1")).resolves.toEqual(answer);
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("http://x/api/projects/p1/goal/diff");
+  });
+});
+
 describe("FleetClient.removeGoalWorktree (CUT-250)", () => {
   it("posts whether to delete the branch and returns a refusal as an answer", async () => {
     const answer = { ok: false, code: "uncommitted", reason: "The worktree has uncommitted changes." };

@@ -535,6 +535,58 @@ export interface PullRequestResult {
   warning?: string;
 }
 
+/** One line of a hunk (CUT-289): `old` is its number on the base side (not for an added line) and
+ * `new` its number in the branch (not for a removed one). */
+export interface DiffLine {
+  type: " " | "+" | "-";
+  text: string;
+  old?: number;
+  new?: number;
+}
+
+export interface DiffHunk {
+  header: string;
+  old_start: number;
+  new_start: number;
+  lines: DiffLine[];
+}
+
+export interface DiffFile {
+  path: string;
+  old_path?: string;
+  status: "added" | "deleted" | "modified" | "renamed" | "untracked";
+  additions: number;
+  deletions: number;
+  binary: boolean;
+  hunks: DiffHunk[];
+  /** Cut at the per-file line cap. */
+  truncated?: boolean;
+  /** Counted but its lines were not read, because the whole diff is over the size cap. */
+  omitted?: boolean;
+  /** Its lines are left out on purpose: the file looks like a secret or is git-ignored. */
+  withheld?: "secret";
+}
+
+/** A goal branch's diff (CUT-289). A refusal is `ok: false` with a `code` (`no_goal`,
+ * `default_branch`, `no_branch`, `no_base`, `on_worker`, `git_failed`) and a plain `reason`. */
+export interface GoalDiffResult {
+  ok: boolean;
+  code?: string;
+  reason?: string;
+  branch?: string;
+  base?: string;
+  /** The branch tip the diff was read at. */
+  head?: string;
+  mode?: "worktree" | "branch";
+  /** Uncommitted or untracked work is in this diff. */
+  dirty?: boolean;
+  files?: DiffFile[];
+  additions?: number;
+  deletions?: number;
+  truncated?: boolean;
+  note?: string;
+}
+
 /** The answer to "remove the worktree" (CUT-250). `branch_note` says why a branch was kept. */
 export interface WorktreeRemoval {
   ok: boolean;
@@ -770,6 +822,11 @@ export class FleetClient {
       method: "POST",
       body: JSON.stringify({ push }),
     });
+  }
+
+  /** The last goal's branch diff, read from git now (CUT-289). */
+  getGoalDiff(id: string): Promise<GoalDiffResult> {
+    return this.request(`/api/projects/${id}/goal/diff`);
   }
 
   /** Remove the last goal's worktree (CUT-250). A refusal is `ok: false` with a plain reason. */

@@ -75,6 +75,7 @@ from cuttlefish.fleet import gitexclude, manager_agent
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
+from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff
 from cuttlefish.fleet.placement import Placement, RemoteTeam
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.scheduler import Scheduler
@@ -742,6 +743,22 @@ class FleetDaemon:
                 builder_running=running,
             )
         )
+
+    async def goal_diff(self, project_id: str) -> GoalDiff:
+        """The last goal's branch diff, read from git now (CUT-289). A project placed on a worker
+        has its checkout there, so it says so rather than failing."""
+        project = self._projects.get(project_id)
+        if project.worker_id is not None:
+            state = self.worker_state(project.worker_id)
+            where = state[0] if state else "a worker machine"
+            return GoalDiff(
+                False,
+                code="on_worker",
+                reason=f"{project.name} runs on {where}; its code is there, not on this machine, "
+                "so its diff is not shown here yet.",
+            )
+        goal = await self.goal(project_id)
+        return await asyncio.to_thread(goal_diff, project.root, goal)
 
     async def open_pull_request(self, project_id: str, *, push: bool = False) -> PullRequest:
         """Open a pull request for the goal's branch with the machine's ``gh`` login (CUT-241,
