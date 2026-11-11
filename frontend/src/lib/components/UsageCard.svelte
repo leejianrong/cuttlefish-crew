@@ -22,6 +22,20 @@
     };
   });
 
+  let checking = $state(false);
+  let checkError = $state<string | null>(null);
+  async function checkCodex() {
+    checking = true;
+    checkError = null;
+    try {
+      view = await client.refreshUsage("codex");
+    } catch (failure) {
+      checkError = failure instanceof Error ? failure.message : "That did not work.";
+    } finally {
+      checking = false;
+    }
+  }
+
   // This PC first, then each worker that has reported anything.
   const places = $derived<{ name: string; usage: Record<string, BackendUsage> }[]>([
     ...(view ? [{ name: "this PC", usage: view.local }] : []),
@@ -37,6 +51,7 @@
       What each tool says about its own limits, read from what it already reports. A tool that says
       nothing is listed as not reported. You are warned at {view.warn_at_percent}%.
     </p>
+    {#if checkError}<p class="flag" role="status">{checkError}</p>{/if}
     {#each warnings as line (line)}
       <p class="flag" role="status">{line}</p>
     {/each}
@@ -48,6 +63,11 @@
             <span class="backend-name">{backend}</span>
             {#if !entry.reported}
               <span class="muted">{entry.note}</span>
+              {#if backend === "codex" && place.name === "this PC"}
+                <button class="check" disabled={checking} onclick={checkCodex}>
+                  {checking ? "Checking…" : "Check now"}
+                </button>
+              {/if}
             {:else}
               <div class="windows">
                 {#each entry.windows as window (window.name)}
@@ -157,6 +177,16 @@
     display: block;
     height: 100%;
     background: var(--md-sys-color-primary);
+  }
+
+  .check {
+    min-height: 2rem;
+    padding: 0.15rem 0.8rem;
+    border: 1px solid var(--md-sys-color-outline);
+    border-radius: var(--md-sys-shape-corner-full);
+    background: transparent;
+    color: var(--md-sys-color-primary);
+    cursor: pointer;
   }
 
   .window.warn .fill {

@@ -189,3 +189,21 @@ def test_only_the_fields_the_daemon_needs_are_sent_and_a_big_input_is_clipped(
         "tool_use_id",
     }
     assert len(sent["tool_input"]["content"]) <= 4001 and sent["tool_input"]["file_path"] == "/x"
+
+
+def test_a_failed_turns_error_is_passed_on_and_nothing_else_of_it(home: Path, stub: Stub) -> None:
+    run(
+        home,
+        {
+            "hook_event_name": "StopFailure",
+            "error": "rate_limit",
+            "error_details": "resets at 2026-11-12T13:00:00Z",
+            "last_assistant_message": "the assistant's whole reply",
+        },
+    )
+    sent = stub.seen[0]["body"]
+    assert sent == {
+        "hook_event_name": "StopFailure",
+        "error": "rate_limit",
+        "error_details": "resets at 2026-11-12T13:00:00Z",
+    }

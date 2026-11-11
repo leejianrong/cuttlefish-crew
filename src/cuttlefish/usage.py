@@ -167,6 +167,22 @@ class UsageBoard:
     def report_codex(self, params: Mapping[str, Any]) -> None:
         self.report("codex", codex_windows(params))
 
+    def blocked_until(self, backend: str, now: float) -> float | None:
+        """When the backend says it can be used again, if it says it is out: the latest reset among
+        its windows that are rejected or at 100%. `None` when no window is out, or it has said
+        nothing (never a guess)."""
+        seen = self._seen.get(backend)
+        if seen is None:
+            return None
+        out = [
+            w.resets_at
+            for w in seen[1].values()
+            if w.resets_at is not None
+            and w.resets_at > now
+            and (w.status == "rejected" or (w.used_percent is not None and w.used_percent >= 100))
+        ]
+        return float(max(out)) if out else None
+
     def reset(self) -> None:
         self._seen.clear()
 

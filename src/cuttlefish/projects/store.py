@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS projects (
     worker_id TEXT,
     worker_team_open INTEGER NOT NULL DEFAULT 0,
     worker_handover TEXT,
-    worktree_share_json TEXT
+    worktree_share_json TEXT,
+    continue_after_reset INTEGER NOT NULL DEFAULT 1
 )
 """
 
@@ -163,6 +164,12 @@ _ADD_WORKER_HANDOVER_COLUMN = "ALTER TABLE projects ADD COLUMN worker_handover T
 #: CUT-296: `{"dirs": [...], "files": [...]}`, what a goal's worktree links and copies from the
 #: checkout. `NULL` is nothing, so a row is unchanged.
 _ADD_WORKTREE_SHARE_COLUMN = "ALTER TABLE projects ADD COLUMN worktree_share_json TEXT"
+
+#: `continue_after_reset` was added for CUT-299: whether Autopilot sends its "continue" to a builder
+#: that stopped on a usage limit, once the window resets. On unless a person turns it off.
+_ADD_CONTINUE_AFTER_RESET_COLUMN = (
+    "ALTER TABLE projects ADD COLUMN continue_after_reset INTEGER NOT NULL DEFAULT 1"
+)
 
 MAX_TAGS = 10
 MAX_TAG_LENGTH = 24
@@ -279,6 +286,8 @@ class Project:
     worker_team_open: bool = False
     #: Unpushed or unknown work left on a worker, to show before the code moves (CUT-207).
     worker_handover: str | None = None
+    #: Autopilot continues the builder when a usage limit resets (CUT-299); a project can opt out.
+    continue_after_reset: bool = True
     #: Ignored directories to link into, and files to copy into, each goal's worktree (CUT-296,
     #: ADR-0048). Both empty by default: nothing is shared until a person says so.
     worktree_share_dirs: tuple[str, ...] = ()
@@ -435,6 +444,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         worker_id=row["worker_id"],
         worker_team_open=bool(row["worker_team_open"]),
         worker_handover=row["worker_handover"],
+        continue_after_reset=bool(row["continue_after_reset"]),
         worktree_share_dirs=_share_part(row["worktree_share_json"], "dirs"),
         worktree_copy_files=_share_part(row["worktree_share_json"], "files"),
     )
@@ -484,6 +494,8 @@ class ProjectStore:
             self._conn.execute(_ADD_WORKER_TEAM_OPEN_COLUMN)
         if "worker_handover" not in columns:
             self._conn.execute(_ADD_WORKER_HANDOVER_COLUMN)
+        if "continue_after_reset" not in columns:
+            self._conn.execute(_ADD_CONTINUE_AFTER_RESET_COLUMN)
         if "worktree_share_json" not in columns:
             self._conn.execute(_ADD_WORKTREE_SHARE_COLUMN)
         self._conn.commit()
@@ -693,6 +705,15 @@ class ProjectStore:
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute(
             "UPDATE projects SET worktree_per_goal = ? WHERE id = ?", (int(on), project_id)
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_continue_after_reset(self, project_id: str, on: bool) -> Project:
+        """Whether Autopilot continues this project's builder after a usage limit resets."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET continue_after_reset = ? WHERE id = ?", (int(on), project_id)
         )
         self._conn.commit()
         return self.get(project_id)

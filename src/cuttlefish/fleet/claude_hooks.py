@@ -170,6 +170,13 @@ class ClaudeHooks:
             self._terminal_dialog.discard(project.id)
             self._activity[project.id] = ("idle", time.monotonic())
             self._daemon.autopilot.on_stop(project)
+        elif event == "StopFailure":
+            # The turn ended on an API error, not on the agent's own say: a usage limit is a reason
+            # Autopilot may wait for (CUT-299). Nothing here answers anything.
+            self._activity[project.id] = ("idle", time.monotonic())
+            await self._daemon.autopilot.on_stop_failure(
+                project, _str(payload.get("error")), _str(payload.get("error_details"))
+            )
         tool = str(payload.get("tool_name") or "")
         raw = payload.get("tool_input")
         tool_input: Mapping[str, Any] = raw if isinstance(raw, dict) else {}

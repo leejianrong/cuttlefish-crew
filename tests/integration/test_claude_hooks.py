@@ -577,3 +577,16 @@ async def test_auto_refuses_a_commit_on_the_default_branch_and_journals_it(rig: 
     _vcs(rig.root, "switch", "-q", "main")
     rig.set_mode("standard")
     assert await rig.hook("PreToolUse", tool_input=commit, **here) == {}
+
+
+async def test_a_failed_turns_error_reaches_autopilot_and_nothing_is_answered(rig: Rig) -> None:
+    seen: list[tuple[str | None, str | None]] = []
+
+    async def record(project: Any, error: str | None, details: str | None) -> None:
+        seen.append((error, details))
+
+    rig.daemon.autopilot.on_stop_failure = record  # type: ignore[method-assign]
+    answer = await rig.hook("StopFailure", error="rate_limit", error_details="retry-after: 60")
+    assert answer == {} and seen == [("rate_limit", "retry-after: 60")]
+    assert rig.daemon._claude_hooks.activity(rig.project_id)[0] == "idle"
+    assert await rig.cards() == []  # a hook that decides nothing raises no card

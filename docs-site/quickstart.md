@@ -129,6 +129,19 @@ state survives a daemon restart (it is in the journal), but a builder that went 
 its next stop or for **Nudge now**. `GET /api/projects/{id}/autopilot` and `POST .../autopilot/{approve|pause|resume|stop|nudge}`
 are the same for a script; the goal route takes `"autopilot": true` or `{"hours": 8, "tokens": 2000000, "nudges": 100}`.
 
+**A usage limit.** If a Claude Code builder stops because its plan's usage limit was hit, Autopilot does not nudge it into
+the wall. It shows **Waiting for the usage limit** with the time it will continue (`Will continue at 2026-11-12 11:01 UTC`,
+a minute after the reset, in the rail, the goal card and the timeline), sends the one usual "continue" then, and tries again
+after another limit up to five times in a row before it gives up and says so. It happens only for an Autopilot you approved,
+only when the stop was the usage limit (Claude Code's `StopFailure` hook, error `rate_limit`), and never past Autopilot's own
+time, token and nudge limits. **Pause**, **Stop Autopilot**, **Carry on now** and the kill switch end the wait, and a message
+you send the builder ends it too. If the stop does not say when the limit resets and the usage card has not seen it either,
+nothing is guessed: the rail says the reset time is not known and the builder waits for you. The switch **Continue after a
+usage limit resets** on the goal card is per project and on by default, because Autopilot is already your yes to unattended
+continuing and the wait is bounded and visible; turn it off and a limited builder just stays stopped
+(`PATCH /api/projects/{id}/continue-after-reset`, Admin). Only Claude Code reports the stop; Codex and kopicode sessions have no
+such hook. A session started before this version needs a restart to pick the new hook up. The wait survives a daemon restart.
+
 **Stop everything.** A **Stop all agents** button at the top of the Projects page, and **Stop everything here** on each
 project page, end every running builder at once and ask a running team to stop. Each is two taps (the second is **Stop now**),
 and both work from a paired phone, because they need only the Approve tier, the same as Stop. A builder's tmux session is

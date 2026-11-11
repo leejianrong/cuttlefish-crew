@@ -205,3 +205,22 @@ def test_a_repository_that_names_a_helper_in_its_config_does_not_get_it_run(tmp_
         )
     read_commits(str(tmp_path), {"PATH": os.environ["PATH"], "HOME": str(tmp_path)})
     assert not marker.exists()
+
+
+def test_a_wait_for_a_usage_limit_is_told_with_its_time_and_is_not_an_ending() -> None:
+    events = journal_events(
+        [
+            _Journal(at(9), state("running", "The plan was approved.")),
+            _Journal(
+                at(10),
+                state("limit_wait", "Usage limit reached. Will continue at 2026-11-12 11:01 UTC."),
+            ),
+            _Journal(at(11), state("running", "The limit has reset.")),
+        ]
+    )
+    assert [e.text for e in events] == [
+        "You approved the plan. Autopilot started.",
+        "Usage limit reached. Will continue at 2026-11-12 11:01 UTC.",
+        "The limit has reset.",
+    ]
+    assert not any(e.text.startswith("Autopilot ended") for e in events)

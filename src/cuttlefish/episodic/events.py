@@ -499,9 +499,10 @@ class AutopilotUpdated:
 
     A snapshot, not a delta, so the last one is the state and a daemon that restarts picks it up
     by reading that one back; there is no second store of it (ADR-0004). ``phase`` is one of
-    ``planning``, ``awaiting_approval``, ``running``, ``paused``, ``done``, ``stopped``, ``limit``
-    and ``stuck``; ``reason`` says why it last moved, in words a person reads. ``goal`` is redacted
-    by the store at write time like any journaled text."""
+    ``planning``, ``awaiting_approval``, ``running``, ``paused``, ``done``, ``stopped``, ``limit``,
+    ``stuck`` and ``limit_wait`` (the agent hit a provider usage limit and Autopilot will send it
+    its "continue" at ``resume_at``, CUT-299); ``reason`` says why it last moved, in words a person
+    reads. ``goal`` is redacted by the store at write time like any journaled text."""
 
     EVENT_TYPE: ClassVar[str] = "AutopilotUpdated"
 
@@ -520,6 +521,10 @@ class AutopilotUpdated:
     limit_hours: float = 24.0
     limit_tokens: int = 5_000_000
     limit_nudges: int = 200
+    #: In ``limit_wait``: when the usage window is due to reset, as an ISO 8601 UTC time.
+    resume_at: str | None = None
+    #: How many times in a row the agent has stopped on a usage limit and been waited for.
+    limit_waits: int = 0
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

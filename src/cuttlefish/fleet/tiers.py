@@ -98,6 +98,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/agent-session/stop"): Tier.APPROVE,
     ("GET", "/api/devices"): Tier.APPROVE,
     ("GET", "/api/workers"): Tier.APPROVE,
+    ("POST", "/api/usage/refresh"): Tier.APPROVE,  # starts a short-lived codex app-server
     ("GET", "/api/usage"): Tier.VIEW,  # each backend's limit windows on this machine, no secrets
     ("DELETE", "/api/devices/{device_id}"): Tier.APPROVE,  # a lost phone is cut off from another
     # The agent's terminal.
@@ -119,6 +120,10 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("PATCH", "/api/projects/{project_id}/presets"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/tags"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/terminal-command"): Tier.ADMIN,
+    (
+        "PATCH",
+        "/api/projects/{project_id}/continue-after-reset",
+    ): Tier.ADMIN,  # who may unattended-resume
     ("PATCH", "/api/projects/{project_id}/worktree-per-goal"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/worktree-share"): Tier.ADMIN,  # links and copies files
     ("PATCH", "/api/projects/{project_id}/worker"): Tier.ADMIN,  # where its code and secrets go

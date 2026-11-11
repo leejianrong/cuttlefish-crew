@@ -568,3 +568,34 @@ async def test_a_rate_limit_update_is_merged_into_the_usage_board(fake: Fake) ->
     assert by_name["secondary"]["used_percent"] == 85.0 and by_name["secondary"]["warn"] is True
     assert shown["warn"] is True
     BOARD.reset()
+
+
+async def test_the_limits_can_be_read_on_demand_without_starting_a_turn(
+    fake: Fake, tmp_path: Path
+) -> None:
+    from cuttlefish.delegate.codex_app_server import read_rate_limits
+    from cuttlefish.usage import BOARD
+
+    BOARD.reset()
+    fake.script(
+        {
+            "rate_limits_read": {
+                "primary": {"usedPercent": 88, "windowDurationMins": 300, "resetsAt": 9}
+            }
+        }
+    )
+    result = await read_rate_limits(str(fake.binary))
+    BOARD.report_codex(result)
+    shown = BOARD.as_json()["codex"]
+    assert shown["windows"][0]["used_percent"] == 88.0 and shown["warn"] is True
+    sent = [json.loads(line).get("method") for line in fake.log.read_text().splitlines()]
+    assert "turn/start" not in sent and "thread/start" not in sent  # no turn, so no model call
+    BOARD.reset()
+
+
+async def test_reading_the_limits_fails_plainly_when_codex_is_missing(tmp_path: Path) -> None:
+    from cuttlefish.agents.outcome import DelegationError
+    from cuttlefish.delegate.codex_app_server import read_rate_limits
+
+    with pytest.raises(DelegationError, match="not found"):
+        await read_rate_limits(str(tmp_path / "no-such-codex"))
