@@ -2296,6 +2296,14 @@ class FleetDaemon:
         with logsetup.bind(project=project_id, team=running.team_id):
             logger.info("stop requested (%d codex turn(s) interrupted)", interrupted)
 
+    def steer_reaches_a_team(self, project_id: str) -> bool:
+        """Whether a steer goes to a team's role (here or on a worker) and not into the builder's
+        session, which is typed access (CUT-303)."""
+        return (
+            self.running(project_id) is not None
+            or self.placement.team_of_project(project_id) is not None
+        )
+
     async def steer(self, project_id: str, role: str | None, text: str) -> None:
         """See `stop`'s own docstring -- `asyncio.to_thread` for the identical
         same-loop-deadlock reason."""

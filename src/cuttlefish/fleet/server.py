@@ -83,7 +83,7 @@ from cuttlefish.fleet.digest import DEFAULT_EVENTS
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings, TierRefusal
 from cuttlefish.fleet.serve_token import load_or_create_token
-from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, manager_may, parse_tier
+from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, manager_may, parse_tier, steer_tier_refusal
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
     ACCESS_LEVELS,
@@ -1668,6 +1668,11 @@ def create_app(
         try:
             if request.state.caller[0] == "manager":
                 daemon.check_manager_may_touch(project_id)
+            refusal = steer_tier_refusal(
+                request.state.caller, team_running=daemon.steer_reaches_a_team(project_id)
+            )
+            if refusal:
+                raise HTTPException(403, refusal)
             await daemon.steer(project_id, role, text)
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
