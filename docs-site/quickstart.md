@@ -220,6 +220,9 @@ browser asks then, not before); **Mute on this browser** turns it off again. The
 with no dashboard tab open, or with notifications blocked for the site, nothing reaches you, and the bell says so. A tab you are
 looking at gets the bell only. Pushing to a closed browser is not built.
 
+**Jump to anything.** Press Ctrl-K (Cmd-K on a Mac), or the search button beside the bell, and type: a project, a tab
+("billing team"), a screen, or a project that needs you. Arrow keys move, Enter goes, Esc closes.
+
 ## 6. Keep an agent running in tmux
 
 The **Agent session** card on a project's Overview (also the MCP tools `get_agent_session`,

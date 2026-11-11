@@ -11,6 +11,8 @@
   import Portfolio from "./lib/components/Portfolio.svelte";
   import ProjectDetail from "./lib/components/ProjectDetail.svelte";
   import SignInAgain from "./lib/components/SignInAgain.svelte";
+  import Palette from "./lib/components/Palette.svelte";
+  import Icon from "./lib/components/Icon.svelte";
   import NotificationBell from "./lib/components/NotificationBell.svelte";
   import Shell from "./lib/components/Shell.svelte";
   import SpriteGallery from "./lib/components/SpriteGallery.svelte";
@@ -25,6 +27,7 @@
     unreadCount,
     type NotifyEvent,
   } from "./lib/notify";
+  import { isOpenKey, type PaletteProject } from "./lib/palette";
   import { keepIfSame } from "./lib/same";
   import { HOME, parseHash, routeHash, sameRoute, type ProjectTab, type Route } from "./lib/route";
   import { forgetRelay, makeRelayTransport, startRelay } from "./lib/relayconnect";
@@ -124,6 +127,19 @@
   let events = $state<NotifyEvent[]>([]);
   let readAt = $state(Date.now());
   let noticesOn = $state(loadOn());
+  // CUT-294: the palette filters the list the finished-project beat already reads, so typing asks nothing.
+  let paletteProjects = $state<PaletteProject[]>([]);
+  let paletteOpen = $state(false);
+  $effect(() => {
+    if (!client) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (!isOpenKey(event)) return;
+      event.preventDefault();
+      paletteOpen = !paletteOpen;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   const unread = $derived(unreadCount(events, readAt));
   function noticed(fresh: NotifyEvent[]) {
     if (fresh.length === 0) return;
@@ -186,6 +202,10 @@
     const check = async () => {
       try {
         const list = (await c.listProjects()).projects;
+        paletteProjects = keepIfSame(
+          paletteProjects,
+          list.map((p) => ({ id: p.id, name: p.name, tags: p.tags })),
+        );
         const by: Record<string, number> = {};
         for (const r of untrack(() => waiting)) by[r.project_id] = (by[r.project_id] ?? 0) + 1;
         noticed(tracker.projects(list, by));
@@ -267,6 +287,15 @@
     onThemeChange={(next) => (theme = next)}
   >
     {#snippet topActions()}
+      <button
+        class="jump"
+        aria-label="Jump to"
+        aria-keyshortcuts="Control+K Meta+K"
+        title="Jump to (Ctrl-K)"
+        onclick={() => (paletteOpen = true)}
+      >
+        <Icon name="search" size={22} />
+      </button>
       <NotificationBell
         {events}
         {unread}
@@ -322,6 +351,15 @@
       />
     {/if}
   </Shell>
+  {#if paletteOpen}
+    <Palette
+      projects={paletteProjects}
+      requests={waiting}
+      current={route}
+      onGo={go}
+      onClose={() => (paletteOpen = false)}
+    />
+  {/if}
   {#if signedOut}
     <SignInAgain
       {client}
@@ -337,6 +375,27 @@
 {/if}
 
 <style>
+  .jump {
+    all: unset;
+    box-sizing: border-box;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: var(--md-sys-color-on-surface-variant);
+  }
+
+  .jump:hover {
+    background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+  }
+
+  .jump:focus-visible {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 2px;
+  }
+
   .booting {
     min-height: 100vh;
     display: grid;
