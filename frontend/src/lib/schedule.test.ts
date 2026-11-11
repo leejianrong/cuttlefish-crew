@@ -1,7 +1,16 @@
 // Unit: the schedule form's rules (schedule.ts).
 
 import { describe, expect, it } from "vitest";
-import { buildRecurrence, canAdd, describeRecurrence, nextLine, resultLine } from "./schedule";
+import {
+  buildRecurrence,
+  canAdd,
+  describeRecurrence,
+  graceMinutes,
+  graceLine,
+  nextLine,
+  precheckLine,
+  resultLine,
+} from "./schedule";
 
 describe("buildRecurrence", () => {
   it("writes the text the daemon reads", () => {
@@ -60,5 +69,52 @@ describe("resultLine", () => {
     expect(
       resultLine({ last_run: run, last_result: "skipped: the builder is still on its previous goal" }),
     ).toBe("Not started at 2026-05-01 08:00 UTC: the builder is still on its previous goal.");
+  });
+});
+
+describe("weekday, weekly and cron recurrences", () => {
+  const extra = { day: "mon", cron: "" };
+  it("writes the text the daemon reads", () => {
+    expect(buildRecurrence("weekdays", 0, "09:00", extra)).toBe("weekdays 09:00");
+    expect(buildRecurrence("weekly", 0, "09:30", { ...extra, day: "fri" })).toBe("weekly fri 09:30");
+    expect(buildRecurrence("cron", 0, "", { ...extra, cron: " 0  9 * * 1-5 " })).toBe("cron 0 9 * * 1-5");
+    expect(buildRecurrence("cron", 0, "", { ...extra, cron: "*/15 * * * *" })).toBe("cron */15 * * * *");
+  });
+  it("refuses what the daemon would", () => {
+    expect(buildRecurrence("weekdays", 0, "24:00", extra)).toBeNull();
+    expect(buildRecurrence("weekly", 0, "09:00", { ...extra, day: "someday" })).toBeNull();
+    expect(buildRecurrence("cron", 0, "", { ...extra, cron: "0 9 * *" })).toBeNull();
+    expect(buildRecurrence("cron", 0, "", { ...extra, cron: "0 9 * * mon" })).toBeNull();
+    expect(buildRecurrence("cron", 0, "", { ...extra, cron: "" })).toBeNull();
+  });
+  it("reads naturally and always says UTC", () => {
+    expect(describeRecurrence("weekdays 09:00")).toBe("Weekdays at 09:00 UTC");
+    expect(describeRecurrence("weekly mon 09:30")).toBe("Every Monday at 09:30 UTC");
+    expect(describeRecurrence("cron 0 9 * * 1-5")).toBe("Cron 0 9 * * 1-5, UTC");
+  });
+});
+
+describe("grace and precheck", () => {
+  it("reads the grace field: blank is none, a whole number of minutes, else invalid", () => {
+    expect(graceMinutes("")).toEqual({ ok: true, value: null });
+    expect(graceMinutes(" 45 ")).toEqual({ ok: true, value: 45 });
+    expect(graceMinutes("0").ok).toBe(false);
+    expect(graceMinutes("1.5").ok).toBe(false);
+    expect(graceMinutes("10081").ok).toBe(false);
+  });
+  it("describes them on the row", () => {
+    expect(graceLine({ grace_minutes: 30 })).toBe("Skipped if it is reached more than 30 minutes late.");
+    expect(graceLine({ grace_minutes: null })).toBeNull();
+    expect(precheckLine({ precheck: "git diff --quiet" })).toBe("Runs only if git diff --quiet exits 0.");
+    expect(precheckLine({ precheck: null })).toBeNull();
+  });
+  it("words a precheck skip as the precheck's", () => {
+    const run = "2026-05-01T08:00:00+00:00";
+    expect(resultLine({ last_run: run, last_result: "skipped by precheck: it exited 1" })).toBe(
+      "Skipped by the precheck at 2026-05-01 08:00 UTC: it exited 1.",
+    );
+    expect(resultLine({ last_run: run, last_result: "skipped: missed by 45 minutes, past the 30 minute grace" })).toBe(
+      "Not started at 2026-05-01 08:00 UTC: missed by 45 minutes, past the 30 minute grace.",
+    );
   });
 });

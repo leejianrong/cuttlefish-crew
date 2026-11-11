@@ -31,7 +31,7 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from cuttlefish import present
 from cuttlefish.artifacts import AGENT_NOTE
@@ -140,12 +140,21 @@ def read_goal(root: str) -> dict[str, str] | None:
 
 
 def write_goal(
-    root: str, text: str, backend: str, *, branch: str | None = None, worktree: str | None = None
-) -> dict[str, str]:
-    """Record the goal. ``branch`` and ``worktree`` (ADR-0048) say where it is being worked on."""
-    goal = {"text": text, "at": _now(), "backend": backend}
+    root: str,
+    text: str,
+    backend: str,
+    *,
+    branch: str | None = None,
+    worktree: str | None = None,
+    shared: dict[str, object] | None = None,
+) -> dict[str, Any]:
+    """Record the goal. ``branch`` and ``worktree`` (ADR-0048) say where it is being worked on;
+    ``shared`` is what the worktree got from the checkout (CUT-296), when the project lists any."""
+    goal: dict[str, Any] = {"text": text, "at": _now(), "backend": backend}
     if branch and worktree:
         goal.update(branch=branch, worktree=worktree)
+        if shared:
+            goal["shared"] = shared
     path = _goal_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     scratch = path.with_suffix(".tmp")

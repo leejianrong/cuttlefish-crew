@@ -66,7 +66,7 @@ from cuttlefish.delegate.presets import (
 )
 from cuttlefish.episodic.events import DelegateApprovalsSet
 from cuttlefish.episodic.store import EpisodicEvent
-from cuttlefish.fleet import hook_files
+from cuttlefish.fleet import hook_files, worktreeshare
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.autopilot import AutopilotError
 from cuttlefish.fleet.daemon import (
@@ -170,6 +170,10 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "backend": project.backend,
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
+        "worktree_share": {
+            "dirs": list(project.worktree_share_dirs),
+            "files": list(project.worktree_copy_files),
+        },
         "worker": _worker_json(daemon, project.worker_id),
         "worker_handover": project.worker_handover,
         "is_manager": project.id == daemon.manager_project,
@@ -1126,6 +1130,27 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.patch("/api/projects/{project_id}/worktree-share")
+    async def update_worktree_share(project_id: str, request: Request) -> dict[str, Any]:
+        """Which ignored directories each new goal's worktree links to, and which files it copies
+        (CUT-296). Both empty by default; a path outside the project, a secret, or one git does not
+        ignore is refused or skipped. Applies to the next goal's worktree."""
+        body = await _json_body(request)
+        try:
+            project = daemon.projects.get(project_id)
+            dirs = worktreeshare.validate_dirs(
+                project.root, body.get("dirs", project.worktree_share_dirs)
+            )
+            files = worktreeshare.validate_files(
+                project.root, body.get("files", project.worktree_copy_files)
+            )
+            daemon.projects.update_worktree_share(project_id, dirs, files)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except worktreeshare.ShareError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.patch("/api/projects/{project_id}/decision-wait")
     async def update_decision_wait(project_id: str, request: Request) -> dict[str, Any]:
         """How many minutes a builder's decision waits before its recommended option is taken
@@ -1183,9 +1208,25 @@ def create_app(
             raise HTTPException(400, "'goal' and 'recurrence' are required text")
         if len(goal.strip()) > MAX_GOAL_CHARS:
             raise HTTPException(400, f"A goal is at most {MAX_GOAL_CHARS} characters.")
+        grace, precheck = body.get("grace_minutes"), body.get("precheck")
+        if grace is not None and (isinstance(grace, bool) or not isinstance(grace, int)):
+            raise HTTPException(400, "'grace_minutes' must be a whole number of minutes")
+        if precheck is not None and not isinstance(precheck, str):
+            raise HTTPException(400, "'precheck' must be text")
         try:
             daemon.projects.get(project_id)
-            return _schedules().add(project_id, goal, recurrence, now=datetime.now(UTC)).to_json()
+            return (
+                _schedules()
+                .add(
+                    project_id,
+                    goal,
+                    recurrence,
+                    now=datetime.now(UTC),
+                    grace_minutes=grace,
+                    precheck=precheck,
+                )
+                .to_json()
+            )
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:  # RecurrenceError, or an empty goal
@@ -1552,6 +1593,16 @@ def create_app(
         machine's `gh` (CUT-242). A quiet `ok: false` with a `code` when there is none."""
         try:
             return (await daemon.pr_status(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/goal/pull-request/comments")
+    async def get_goal_pr_comments(project_id: str) -> dict[str, Any]:
+        """The pull request's review text (reviews, comments, inline comments), scrubbed and
+        bounded, for the page to offer to send to the builder (CUT-293). Approve tier: it is other
+        people's free text, and sending it on is the only use."""
+        try:
+            return (await daemon.pr_comments(project_id)).to_json()
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 

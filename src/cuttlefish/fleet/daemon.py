@@ -75,13 +75,13 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
-from cuttlefish.fleet import gitexclude, manager_agent
+from cuttlefish.fleet import gitexclude, manager_agent, worktreeshare
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
 from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff, goal_stat
 from cuttlefish.fleet.placement import Placement, RemoteTeam
-from cuttlefish.fleet.prstatus import PrStatus, read_pr_status
+from cuttlefish.fleet.prstatus import PrComments, PrStatus, read_pr_comments, read_pr_status
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.scheduler import Scheduler
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
@@ -802,6 +802,17 @@ class FleetDaemon:
         self._pr_cache[project_id] = (now, result)
         return result
 
+    async def pr_comments(self, project_id: str) -> PrComments:
+        """The goal's pull request's review text, scrubbed like the journal (CUT-293). Not cached:
+        a person pressed a button for it. A project on a worker says so."""
+        project = self._projects.get(project_id)
+        if project.worker_id is not None:
+            return PrComments(False, code="on_worker", reason=f"{project.name} runs on a worker.")
+        goal = await self.goal(project_id)
+        return await asyncio.to_thread(
+            read_pr_comments, project.root, goal, lambda text: Redactor().scrub(text)[0]
+        )
+
     async def open_pull_request(self, project_id: str, *, push: bool = False) -> PullRequest:
         """Open a pull request for the goal's branch with the machine's ``gh`` login (CUT-241,
         ADR-0049) and journal it. Refusals come back as a result with a reason, not an error."""
@@ -872,8 +883,11 @@ class FleetDaemon:
             )
         chosen = resolve_agent_backend(backend or project.backend)
         made: tuple[str, str] | None = None
+        shared: dict[str, object] | None = None
         if project.worktree_per_goal or project.mode == "auto":  # Auto is unattended (CUT-183)
             made = await self._goal_worktree(project, goal)
+            if made and (project.worktree_share_dirs or project.worktree_copy_files):
+                shared = await self._share_into(project, made[1])
         try:
             info = await self.start_agent_session(
                 project_id,
@@ -894,11 +908,27 @@ class FleetDaemon:
                 chosen,
                 branch=made[0] if made else None,
                 worktree=made[1] if made else None,
+                shared=shared,
             )
         )
         if autopilot is not None:
             await self.autopilot.begin(project, goal, chosen, autopilot)
         return record, info
+
+    async def _share_into(self, project: Project, path: str) -> dict[str, object]:
+        """Link and copy what the project lists into a new goal worktree (CUT-296). A path that
+        cannot be shared is skipped and reported; it never stops the goal."""
+        try:
+            report = await asyncio.to_thread(
+                worktreeshare.apply,
+                project.root,
+                path,
+                project.worktree_share_dirs,
+                project.worktree_copy_files,
+            )
+        except worktreeshare.ShareError as exc:
+            return {"linked": [], "copied": [], "skipped": [{"path": "*", "why": str(exc)}]}
+        return report.to_json()
 
     async def _goal_worktree(self, project: Project, goal: str) -> tuple[str, str] | None:
         """A fresh worktree and branch for ``goal`` (ADR-0048), or ``None`` when the builder is

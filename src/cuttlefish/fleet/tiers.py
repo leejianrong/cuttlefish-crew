@@ -85,6 +85,8 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/approve"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/requests/{request_id}/answer"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/steer"): Tier.APPROVE,
+    # Review text from the forge: other people's free text, and sending it on is its only use.
+    ("GET", "/api/projects/{project_id}/goal/pull-request/comments"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/decisions"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/start"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/stop"): Tier.APPROVE,
@@ -118,6 +120,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("PATCH", "/api/projects/{project_id}/tags"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/terminal-command"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/worktree-per-goal"): Tier.ADMIN,
+    ("PATCH", "/api/projects/{project_id}/worktree-share"): Tier.ADMIN,  # links and copies files
     ("PATCH", "/api/projects/{project_id}/worker"): Tier.ADMIN,  # where its code and secrets go
     ("POST", "/api/projects/{project_id}/move"): Tier.ADMIN,  # stops its team, sends its code on
     ("POST", "/api/projects/{project_id}/goal/worktree/remove"): Tier.ADMIN,  # deletes a folder

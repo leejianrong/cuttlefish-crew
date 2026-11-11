@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS projects (
     decision_wait_minutes INTEGER,
     worker_id TEXT,
     worker_team_open INTEGER NOT NULL DEFAULT 0,
-    worker_handover TEXT
+    worker_handover TEXT,
+    worktree_share_json TEXT
 )
 """
 
@@ -158,6 +159,10 @@ _ADD_WORKER_TEAM_OPEN_COLUMN = (
     "ALTER TABLE projects ADD COLUMN worker_team_open INTEGER NOT NULL DEFAULT 0"
 )
 _ADD_WORKER_HANDOVER_COLUMN = "ALTER TABLE projects ADD COLUMN worker_handover TEXT"
+
+#: CUT-296: `{"dirs": [...], "files": [...]}`, what a goal's worktree links and copies from the
+#: checkout. `NULL` is nothing, so a row is unchanged.
+_ADD_WORKTREE_SHARE_COLUMN = "ALTER TABLE projects ADD COLUMN worktree_share_json TEXT"
 
 MAX_TAGS = 10
 MAX_TAG_LENGTH = 24
@@ -274,6 +279,10 @@ class Project:
     worker_team_open: bool = False
     #: Unpushed or unknown work left on a worker, to show before the code moves (CUT-207).
     worker_handover: str | None = None
+    #: Ignored directories to link into, and files to copy into, each goal's worktree (CUT-296,
+    #: ADR-0048). Both empty by default: nothing is shared until a person says so.
+    worktree_share_dirs: tuple[str, ...] = ()
+    worktree_copy_files: tuple[str, ...] = ()
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -349,6 +358,15 @@ def _decode_presets(raw: str | None) -> tuple[str, ...] | None:
     return None if raw is None else tuple(json.loads(raw))
 
 
+def _share_part(raw: str | None, key: str) -> tuple[str, ...]:
+    """One list of the worktree-share setting, or nothing for a missing or damaged value."""
+    try:
+        value = json.loads(raw)[key] if raw else []
+    except (ValueError, KeyError, TypeError):
+        return ()
+    return tuple(v for v in value if isinstance(v, str)) if isinstance(value, list) else ()
+
+
 def _encode_allow(allow: tuple[tuple[str, ...], ...]) -> str:
     return json.dumps([list(command) for command in allow])
 
@@ -417,6 +435,8 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         worker_id=row["worker_id"],
         worker_team_open=bool(row["worker_team_open"]),
         worker_handover=row["worker_handover"],
+        worktree_share_dirs=_share_part(row["worktree_share_json"], "dirs"),
+        worktree_copy_files=_share_part(row["worktree_share_json"], "files"),
     )
 
 
@@ -464,6 +484,8 @@ class ProjectStore:
             self._conn.execute(_ADD_WORKER_TEAM_OPEN_COLUMN)
         if "worker_handover" not in columns:
             self._conn.execute(_ADD_WORKER_HANDOVER_COLUMN)
+        if "worktree_share_json" not in columns:
+            self._conn.execute(_ADD_WORKTREE_SHARE_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -671,6 +693,19 @@ class ProjectStore:
         self.get(project_id)  # raises ProjectNotFoundError if unknown
         self._conn.execute(
             "UPDATE projects SET worktree_per_goal = ? WHERE id = ?", (int(on), project_id)
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def update_worktree_share(
+        self, project_id: str, dirs: Sequence[str], files: Sequence[str]
+    ) -> Project:
+        """Replace what each goal's worktree links and copies. The caller has already validated the
+        paths (``fleet.worktreeshare``); an empty pair clears the setting."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        value = json.dumps({"dirs": list(dirs), "files": list(files)}) if dirs or files else None
+        self._conn.execute(
+            "UPDATE projects SET worktree_share_json = ? WHERE id = ?", (value, project_id)
         )
         self._conn.commit()
         return self.get(project_id)
