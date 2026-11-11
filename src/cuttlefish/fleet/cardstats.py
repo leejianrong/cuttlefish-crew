@@ -8,10 +8,10 @@ also gets its state and checks, read with ``gh`` far less often (five minutes, a
 or closed). The list only ever calls :meth:`CardStats.get`, a dictionary lookup, and :meth:`touch`,
 which starts a sweep when one is due and never waits for it. The first list after a start has no
 stats; the next poll does. Each entry is small and left out when there is nothing to show: the keys
-are single letters because this rides on every card of a 100-project list that has a byte budget
-(``test_project_list_budget.py``): ``f`` files, ``a`` added, ``d`` removed, ``u`` uncommitted work
-(``1``), ``p`` pull request (``o`` open, ``m`` merged, ``c`` closed), ``c`` checks (``f`` failing,
-``p`` passing, ``r`` running).
+is a short positional list because this rides on every card of a 100-project list that has a byte
+budget (``test_project_list_budget.py``): ``[files, added, removed, uncommitted (0 or 1), pull
+request, checks]``, the pull request ``"o"`` open, ``"m"`` merged or ``"c"`` closed, its checks
+``"f"`` failing, ``"p"`` passing or ``"r"`` running, and trailing items left off when empty.
 """
 
 from __future__ import annotations
@@ -45,7 +45,7 @@ class CardStats:
         self._projects = projects
         #: The goal with its ``pr_url`` (a journal read), only asked for a project with a branch.
         self._goal_of = goal_of
-        self._entries: dict[str, dict[str, Any]] = {}
+        self._entries: dict[str, list[Any]] = {}
         #: `project id -> (when, state, checks)` of the last gh read.
         self._prs: dict[str, tuple[float, str, str]] = {}
         self._last = -SWEEP_EVERY_S
@@ -53,7 +53,7 @@ class CardStats:
         self._busy = False
         self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="card-stats")
 
-    def get(self, project_id: str) -> dict[str, Any] | None:
+    def get(self, project_id: str) -> list[Any] | None:
         return self._entries.get(project_id)
 
     def touch(self) -> None:
@@ -91,7 +91,7 @@ class CardStats:
         finally:
             self._busy = False
 
-    def _one(self, project: Project) -> dict[str, Any] | None:
+    def _one(self, project: Project) -> list[Any] | None:
         if project.worker_id is not None:
             return None
         goal = read_goal(project.root)
@@ -100,19 +100,19 @@ class CardStats:
         stat = goal_stat(project.root, goal)
         if not stat.ok:
             return None
-        entry: dict[str, Any] = {}
-        if stat.files_changed:
-            entry |= {"f": stat.files_changed, "a": stat.additions, "d": stat.deletions}
-            if stat.dirty:
-                entry["u"] = 1
+        pr = checks = ""
         full = self._goal_of(project)
         if full and full.get("pr_url"):
-            state, checks = self._pr(project, full)
-            if state in _PR:
-                entry["p"] = _PR[state]
-                if checks in _CHECKS:
-                    entry["c"] = _CHECKS[checks]
-        return entry or None
+            state, state_checks = self._pr(project, full)
+            pr, checks = _PR.get(state, ""), _CHECKS.get(state_checks, "")
+        if not stat.files_changed and not pr:
+            return None
+        entry: list[Any] = [
+            stat.files_changed, stat.additions, stat.deletions, int(bool(stat.dirty)), pr, checks
+        ]  # fmt: skip
+        while entry[-1] in ("", 0) and len(entry) > 3:
+            entry.pop()
+        return entry
 
     def _pr(self, project: Project, goal: dict[str, str]) -> tuple[str, str]:
         now = time.monotonic()

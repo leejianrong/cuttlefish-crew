@@ -63,7 +63,7 @@ def test_a_sweep_reads_each_goal_branchs_counts_and_skips_the_rest(tmp_path: Pat
         lambda _p: None,
     )
     stats._sweep()
-    assert stats.get("a") == {"f": 1, "a": 3, "d": 0}
+    assert stats.get("a") == [1, 3, 0]
     assert stats.get("b") is None and stats.get("c") is None
 
 
@@ -85,7 +85,7 @@ def test_pull_request_state_comes_only_for_a_goal_with_a_pr_and_is_read_rarely(
         lambda: [_project(root, "a")], lambda _p: {"text": "g", "pr_url": "https://x/1"}
     )
     stats._sweep()
-    assert stats.get("a") == {"f": 1, "a": 3, "d": 0, "p": "o", "c": "f"}
+    assert stats.get("a") == [1, 3, 0, 0, "o", "f"]
     stats._sweep()
     assert calls == ["gh"]  # a second sweep within the PR window does not ask gh again
 
@@ -102,7 +102,7 @@ def test_a_flaky_gh_keeps_what_was_known(tmp_path: Path, monkeypatch: pytest.Mon
     stats._sweep()
     stats._prs["a"] = (-10_000.0, "open", "passing")  # as if the window had passed
     stats._sweep()
-    assert stats.get("a") == {"f": 1, "a": 3, "d": 0, "p": "o", "c": "p"}
+    assert stats.get("a") == [1, 3, 0, 0, "o", "p"]
 
 
 @pytest.fixture
@@ -138,5 +138,5 @@ def test_the_list_never_waits_for_git_and_gets_the_stat_once_the_sweep_has_run(
         if "gs" in listed:
             break
         threading.Event().wait(0.1)
-    assert listed["gs"] == {"f": 1, "a": 3, "d": 0}
+    assert listed["gs"] == [1, 3, 0]
     assert listed["id"] == pid

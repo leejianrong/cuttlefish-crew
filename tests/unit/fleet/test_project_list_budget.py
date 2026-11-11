@@ -82,16 +82,9 @@ def test_a_goal_stat_on_every_card_still_fits_the_budget(
     stays inside the same budget, and the list is answered from the cache alone."""
     client, store = fleet
     daemon: FleetDaemon = client.daemon  # type: ignore[attr-defined]
-    full = {
-        "files": 123,
-        "added": 4567,
-        "removed": 890,
-        "dirty": True,
-        "pr": "open",
-        "checks": "failing",
-    }
+    full = [123, 4567, 890, 1, "o", "f"]
     daemon._card_stats._last = float("inf")  # no sweep runs: the cache is exactly what is put in it
-    daemon._card_stats._entries = {p.id: dict(full) for p in store.list()}
+    daemon._card_stats._entries = {p.id: list(full) for p in store.list()}
     response = client.get("/api/projects")
     assert all(p["gs"] == full for p in response.json()["projects"])
     assert len(response.content) <= MAX_LIST_BYTES

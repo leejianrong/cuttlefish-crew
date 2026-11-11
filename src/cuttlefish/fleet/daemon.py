@@ -744,7 +744,7 @@ class FleetDaemon:
             goal = {k: v for k, v in goal.items() if k != "worktree"}  # removed since (CUT-250)
         return {**goal, "pr_url": opened[-1]} if opened else goal
 
-    def card_stat(self, project_id: str) -> dict[str, Any] | None:
+    def card_stat(self, project_id: str) -> list[Any] | None:
         """What a project card shows of its goal's branch: counts and pull request state, from a
         background sweep, never from git or gh in the caller (CUT-287)."""
         self._card_stats.touch()
