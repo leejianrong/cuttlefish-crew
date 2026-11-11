@@ -17,8 +17,10 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from cuttlefish.fleet.devices import Device
+from cuttlefish.usage import BACKENDS, Window
 
 #: A worker beats this often (`cuttlefish.worker.run`)...
 HEARTBEAT_EVERY_SECONDS = 15.0
@@ -44,6 +46,8 @@ class Beat:
     host: str
     platform: str
     health: dict[str, float] | None = None
+    #: What each backend on the machine reported about its limits, checked (CUT-292).
+    usage: dict[str, dict[str, Any]] | None = None
 
 
 def _clean(raw: object) -> str:
@@ -64,6 +68,60 @@ def _clean_health(raw: object) -> dict[str, float] | None:
         ):
             found[name] = value
     return found or None
+
+
+_MAX_WINDOWS = 6
+_REPORTING = frozenset(name for name, reports in BACKENDS if reports)
+
+
+def _clean_usage(raw: object) -> dict[str, dict[str, Any]] | None:
+    """`backend -> {at, windows}` from a heartbeat's `usage`: named backends only, a few windows
+    each, numbers bounded, names printable and short. The warning is worked out here, from the
+    numbers, never taken from the worker."""
+    if not isinstance(raw, dict):
+        return None
+    found: dict[str, dict[str, Any]] = {}
+    for backend in _REPORTING:
+        entry = raw.get(backend)
+        listed = entry.get("windows") if isinstance(entry, dict) else None
+        if not isinstance(listed, list):
+            continue
+        windows: list[dict[str, Any]] = []
+        for item in listed[:_MAX_WINDOWS]:
+            if not isinstance(item, dict):
+                continue
+            percent = item.get("used_percent")
+            resets, minutes = item.get("resets_at"), item.get("minutes")
+            status = item.get("status")
+            window = Window(
+                _clean(item.get("name"))[:24] or "window",
+                _within(percent, 1000),
+                _whole(resets, 1e11),
+                _whole(minutes, 1e7),
+                status if status in ("allowed", "allowed_warning", "rejected") else None,
+            )
+            windows.append(window.as_json())
+        at = entry.get("at") if isinstance(entry, dict) else None
+        if windows:
+            found[backend] = {
+                "reported": True,
+                "at": _within(at, 1e11),
+                "windows": windows,
+                "warn": any(w["warn"] for w in windows),
+            }
+    return found or None
+
+
+def _within(value: object, limit: float) -> float | None:
+    """`value` as a number if it is one and is not negative or absurd, else `None`."""
+    if isinstance(value, int | float) and not isinstance(value, bool) and 0 <= value < limit:
+        return float(value)
+    return None
+
+
+def _whole(value: object, limit: float) -> int | None:
+    number = _within(value, limit)
+    return None if number is None else int(number)
 
 
 def flags(health: dict[str, float] | None) -> list[str]:
@@ -97,10 +155,12 @@ class WorkerLiveness:
             host, kind, health = (
                 (previous.host, previous.platform, previous.health) if previous else ("", "", None)
             )
+            usage = previous.usage if previous else None
         else:
             host, kind = _clean(info.get("host")), _clean(info.get("platform"))
             health = _clean_health(info.get("health"))
-        self._beats[worker_id] = Beat(self._now(), host, kind, health)
+            usage = _clean_usage(info.get("usage"))
+        self._beats[worker_id] = Beat(self._now(), host, kind, health, usage)
 
     def forget(self, worker_id: str) -> None:
         self._beats.pop(worker_id, None)
@@ -119,4 +179,5 @@ class WorkerLiveness:
             "platform": beat.platform if beat else "",
             "health": health,
             "flags": flags(health),
+            "usage": beat.usage if beat and self.online(worker.id) else None,
         }

@@ -552,3 +552,19 @@ async def test_a_round_that_finished_or_was_stopped_is_not_asked(fake: Fake) -> 
     done = await fake.run(fake.script({"handoff": DOCUMENT}))
     assert done.kind == "completed" and done.handoff is None
     assert len(fake.sent("turn/start")) == 1
+
+
+async def test_a_rate_limit_update_is_merged_into_the_usage_board(fake: Fake) -> None:
+    from cuttlefish.usage import BOARD
+
+    BOARD.reset()
+    first = {"primary": {"usedPercent": 40, "windowDurationMins": 300, "resetsAt": 1_800_000_000}}
+    second = {"secondary": {"usedPercent": 85, "windowDurationMins": 10080}, "primary": None}
+    backend = fake.script({"steps": [{"rate_limits": first}, {"rate_limits": second}]})
+    await fake.run(backend)
+    shown = BOARD.as_json()["codex"]
+    by_name = {w["name"]: w for w in shown["windows"]}
+    assert by_name["primary"]["used_percent"] == 40.0  # a null in a sparse update keeps it
+    assert by_name["secondary"]["used_percent"] == 85.0 and by_name["secondary"]["warn"] is True
+    assert shown["warn"] is True
+    BOARD.reset()

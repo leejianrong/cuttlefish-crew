@@ -9,6 +9,10 @@ Rules, in the order they are checked:
 
 - The manager's own project (CUT-257) is not given a goal: the schedule's text is typed into its
   session as a check-in, unless the session is busy, at a dialog or not Claude Code (skipped).
+- A run later than the schedule's grace (minutes past its slot, set when it was added) is
+  skipped, not made up: a goal for "this morning" is not wanted at night.
+- A schedule's precheck (`fleet/precheck.py`) runs next, under the project's command rules, and
+  anything but a clean exit 0 skips the run with a "skipped by precheck" reason.
 - A builder that is still on its previous goal (a session running whose Autopilot has not ended,
   or one with no Autopilot at all) is never interrupted: the run is skipped and journaled.
 - A builder whose last goal has ended (done, stopped, limit, stuck) is stopped and gets the new
@@ -21,13 +25,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from cuttlefish.autopilot import ENDED, Limits
 from cuttlefish.episodic.events import ScheduleRan, ScheduleSkipped
-from cuttlefish.projects.schedules import Schedule, ScheduleStore
+from cuttlefish.fleet.precheck import PrecheckResult, run_precheck
+from cuttlefish.projects.schedules import Schedule, ScheduleStore, late_by_minutes
 from cuttlefish.projects.store import Project, ProjectNotFoundError
 
 if TYPE_CHECKING:
@@ -51,11 +56,13 @@ class Scheduler:
         *,
         interval_s: float = INTERVAL_S,
         clock: Callable[[], datetime] = _utc_now,
+        precheck: Callable[[str, Any], Awaitable[PrecheckResult]] = run_precheck,
     ) -> None:
         self._daemon = daemon
         self._store = store
         self._interval_s = interval_s
         self._clock = clock
+        self._precheck = precheck
         self._task: asyncio.Task[None] | None = None
 
     def start(self) -> None:
@@ -89,10 +96,25 @@ class Scheduler:
             project = self._daemon.projects.get(schedule.project_id)
         except ProjectNotFoundError:
             return "skipped: the project is no longer registered"
-        reason = await self._try_start(schedule, project)
+        reason = await self._skip_reason(schedule, project) or await self._try_start(
+            schedule, project
+        )
         payload: Any = ScheduleSkipped(schedule.id, reason) if reason else ScheduleRan(schedule.id)
         self._daemon.append_session_event(project, payload)
-        return f"skipped: {reason}" if reason else "started"
+        if not reason:
+            return "started"
+        # A precheck's reason already says "skipped by precheck": do not say skipped twice.
+        return reason if reason.startswith("skipped by precheck") else f"skipped: {reason}"
+
+    async def _skip_reason(self, schedule: Schedule, project: Project) -> str | None:
+        """Why a due run is not worth starting: too late for its grace, or its precheck said no."""
+        if (late := late_by_minutes(schedule, self._clock())) is not None:
+            return f"missed by {late} minutes, past the {schedule.grace_minutes} minute grace"
+        if schedule.precheck:
+            verdict = await self._precheck(schedule.precheck, project)
+            if not verdict.run:
+                return verdict.reason
+        return None
 
     async def _try_start(self, schedule: Schedule, project: Project) -> str | None:
         """``None`` once the goal has started, else why it was not."""

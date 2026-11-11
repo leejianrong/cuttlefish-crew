@@ -66,7 +66,7 @@ from cuttlefish.delegate.presets import (
 )
 from cuttlefish.episodic.events import DelegateApprovalsSet
 from cuttlefish.episodic.store import EpisodicEvent
-from cuttlefish.fleet import hook_files
+from cuttlefish.fleet import hook_files, worktreeshare
 from cuttlefish.fleet.auth import SecurityCheck, SessionAuth
 from cuttlefish.fleet.autopilot import AutopilotError
 from cuttlefish.fleet.daemon import (
@@ -116,6 +116,7 @@ from cuttlefish.roles import (
     is_default_prompt,
     template_roles,
 )
+from cuttlefish.usage import BOARD, WARN_AT_PERCENT
 
 #: Distinct from satay's own `x-satay-token` (ADR-0046) -- a fleet-daemon request
 #: and a per-task steering request must never be confused for one another.
@@ -169,6 +170,10 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "backend": project.backend,
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
+        "worktree_share": {
+            "dirs": list(project.worktree_share_dirs),
+            "files": list(project.worktree_copy_files),
+        },
         "worker": _worker_json(daemon, project.worker_id),
         "worker_handover": project.worker_handover,
         "is_manager": project.id == daemon.manager_project,
@@ -709,6 +714,13 @@ def create_app(
         _LOG.info("device %s (%s) revoked", device.id, device.name)
         return device.as_json()
 
+    @app.get("/api/usage")
+    async def get_usage() -> dict[str, Any]:
+        """What each agent backend has said about its usage limits on this machine, and when they
+        reset (CUT-292). A backend that has said nothing reads `reported: false`; a worker's own
+        is in `/api/workers`."""
+        return {"local": BOARD.as_json(), "warn_at_percent": WARN_AT_PERCENT}
+
     @app.get("/api/workers")
     async def list_workers() -> dict[str, Any]:
         link = _relay()
@@ -1129,6 +1141,27 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.patch("/api/projects/{project_id}/worktree-share")
+    async def update_worktree_share(project_id: str, request: Request) -> dict[str, Any]:
+        """Which ignored directories each new goal's worktree links to, and which files it copies
+        (CUT-296). Both empty by default; a path outside the project, a secret, or one git does not
+        ignore is refused or skipped. Applies to the next goal's worktree."""
+        body = await _json_body(request)
+        try:
+            project = daemon.projects.get(project_id)
+            dirs = worktreeshare.validate_dirs(
+                project.root, body.get("dirs", project.worktree_share_dirs)
+            )
+            files = worktreeshare.validate_files(
+                project.root, body.get("files", project.worktree_copy_files)
+            )
+            daemon.projects.update_worktree_share(project_id, dirs, files)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except worktreeshare.ShareError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.patch("/api/projects/{project_id}/decision-wait")
     async def update_decision_wait(project_id: str, request: Request) -> dict[str, Any]:
         """How many minutes a builder's decision waits before its recommended option is taken
@@ -1186,9 +1219,25 @@ def create_app(
             raise HTTPException(400, "'goal' and 'recurrence' are required text")
         if len(goal.strip()) > MAX_GOAL_CHARS:
             raise HTTPException(400, f"A goal is at most {MAX_GOAL_CHARS} characters.")
+        grace, precheck = body.get("grace_minutes"), body.get("precheck")
+        if grace is not None and (isinstance(grace, bool) or not isinstance(grace, int)):
+            raise HTTPException(400, "'grace_minutes' must be a whole number of minutes")
+        if precheck is not None and not isinstance(precheck, str):
+            raise HTTPException(400, "'precheck' must be text")
         try:
             daemon.projects.get(project_id)
-            return _schedules().add(project_id, goal, recurrence, now=datetime.now(UTC)).to_json()
+            return (
+                _schedules()
+                .add(
+                    project_id,
+                    goal,
+                    recurrence,
+                    now=datetime.now(UTC),
+                    grace_minutes=grace,
+                    precheck=precheck,
+                )
+                .to_json()
+            )
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:  # RecurrenceError, or an empty goal

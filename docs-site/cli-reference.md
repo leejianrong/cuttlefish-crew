@@ -122,6 +122,13 @@ uv run cuttlefish projects add \
 | `pr` | Open a pull request for the project's goal branch with `gh` and print its URL (`--push` pushes the branch to `origin` first). Needs `gh` installed and logged in; never merges ([ADR-0049](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0049-a-goal-branch-opens-a-github-pull-request-through-the-machines-own-gh-and-never-merges.md)). |
 | `remove` | Deregister a project — never touches its files. |
 
+## `cuttlefish projects worktree-share`
+
+`cuttlefish projects worktree-share PROJECT_ID [--link DIR ...] [--copy FILE ...] [--clear]` shows, sets or clears the
+ignored directories each goal's worktree links to (`--link`) and the ignored files it copies (`--copy`). Each flag replaces
+its list. With no flag it prints the current setting. Nothing is shared by default; see
+[Share dependencies and local files](branches-and-pull-requests.md#share-dependencies-and-local-files-into-a-goals-worktree).
+
 ## `cuttlefish schedule`
 
 Ask a project's builder for a goal on a repeat; `cuttlefish serve` starts each one when it is due (see
@@ -130,7 +137,7 @@ at its next pass, so nothing needs restarting.
 
 | Subcommand | What it does |
 |---|---|
-| `add PROJECT_ID --goal TEXT --recurrence R` | Add a schedule. `R` is `every <N>m`, `every <N>h` or `daily HH:MM`, always UTC. |
+| `add PROJECT_ID --goal TEXT --recurrence R [--grace MINUTES] [--precheck COMMAND]` | Add a schedule. `R` is `every <N>m`, `every <N>h`, `daily HH:MM`, `weekdays HH:MM`, `weekly <mon..sun> HH:MM` or `cron <5 fields>`, always UTC (see [Scheduled goals](schedules.md)). `--grace` skips a run reached later than that many minutes past its slot. `--precheck` runs a command first and skips the run unless it exits 0. |
 | `list [--project ID]` | List schedules, soonest first, with `next_due`, `last_run` and `last_result`. |
 | `remove ID` | Delete a schedule. |
 | `enable ID` / `disable ID` | Turn one on (counting from now) or off. |
@@ -320,6 +327,24 @@ the controller sends none), project secrets (none are sent), steering, review ga
 chat on a worker, and installing dependencies first. A project with no `origin` has no way to reach another worker: its
 code would have to be pushed somewhere first.
 
+## Agent usage and limits
+
+**Devices** has an **Agent usage** card: for this PC, and for each online worker, what each coding tool says about its own
+usage limits and when they reset, with a red warning at 80% (or when the tool itself says it is near or at its limit).
+It is read-only and reads only what a tool already reports over its existing headless surface; cuttlefish adds no number
+of its own, so a tool that says nothing reads **not reported**, never a zero.
+
+| Backend | What it reports | Shown as |
+|---|---|---|
+| Claude Code | `rate_limit_event` in its stream-json output: a status (allowed, allowed_warning, rejected), a reset time, and a utilization per window (five hours, seven days). Utilization is read as a fraction of one (a larger value as a percent), which its documentation does not pin down. | one row per window |
+| Codex | `account/rateLimits/updated` over `app-server`: `primary` and `secondary` windows with `usedPercent`, `windowDurationMins` and `resetsAt`. Updates are sparse; a window an update leaves out keeps its last value. | one row per window |
+| kopicode | No usage window. It only reports a failed round when its provider answers 429. | "Does not report usage." |
+
+A tool reports only while it is running, so a backend that has not run since the daemon started shows "Not reported yet"
+until its next round. A worker adds the same figures to its heartbeat (`usage`, keyed by backend; the controller keeps
+only named backends, a few windows each and bounded numbers, and works the warning out itself). `GET /api/usage` (View)
+returns this PC's; a worker's is in `GET /api/workers`. Switching accounts and entering a cookie are not built, on purpose.
+
 ## `cuttlefish doctor`
 
 Checks what is set up and what is quietly wrong, and exits non-zero only for a problem that
@@ -423,6 +448,7 @@ no model call for it: the model is the backend's own.
 | `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` | unset | Names (comma-separated, `*` ends a prefix) to pass to agents on top of the allowlist (see What an agent's environment is). |
 | `CUTTLEFISH_CREDENTIAL_BROKER` | unset | `1` makes `cuttlefish serve` keep each agent's model API key itself and lease the agent a short-lived token for a loopback proxy instead, so a command the agent runs finds no real key. Claude Code (a key from the environment or Secrets) and Codex (only an `OPENAI_API_KEY` set in Secrets, because Codex ignores one in the environment under a ChatGPT login); a login file is not a key and is not brokered. A sandbox run is unchanged. |
 | `CUTTLEFISH_KEEP_WINDOWS_PATH` | unset | `1` keeps WSL's `/mnt/...` entries on an agent's `PATH`; they are dropped by default. |
+| `CUTTLEFISH_PRECHECK_TIMEOUT` | `30` | Seconds a schedule's precheck command may run before it is killed and the run is skipped. |
 | `CUTTLEFISH_PREPARE_TIMEOUT` | `900` | Seconds one dependency-install step may run before it is killed (see Installing dependencies). |
 | `CUTTLEFISH_LOG_LEVEL` | `INFO` | Log level for `cuttlefish serve`: the terminal and `~/.cuttlefish/logs/cuttlefish.log` (rotating, 5 MB x 5). `DEBUG` adds every tool call and permission decision; an unrecognised value falls back to `INFO` and says so. |
 | `CUTTLEFISH_STUCK_THRESHOLD` | `5` | How many shell commands in a row may fail on the project's environment (`No module named`, `command not found`, `ENOENT`, `Cannot find module`, ...) before cuttlefish stops a kopicode agent instead of letting it run to `max_turns`. `0` turns it off. Claude Code and Codex are not watched. |

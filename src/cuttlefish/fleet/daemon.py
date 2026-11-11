@@ -75,7 +75,7 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
-from cuttlefish.fleet import gitexclude, manager_agent
+from cuttlefish.fleet import gitexclude, manager_agent, worktreeshare
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.cardstats import CardStats
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
@@ -893,8 +893,11 @@ class FleetDaemon:
             )
         chosen = resolve_agent_backend(backend or project.backend)
         made: tuple[str, str] | None = None
+        shared: dict[str, object] | None = None
         if project.worktree_per_goal or project.mode == "auto":  # Auto is unattended (CUT-183)
             made = await self._goal_worktree(project, goal)
+            if made and (project.worktree_share_dirs or project.worktree_copy_files):
+                shared = await self._share_into(project, made[1])
         try:
             info = await self.start_agent_session(
                 project_id,
@@ -915,11 +918,27 @@ class FleetDaemon:
                 chosen,
                 branch=made[0] if made else None,
                 worktree=made[1] if made else None,
+                shared=shared,
             )
         )
         if autopilot is not None:
             await self.autopilot.begin(project, goal, chosen, autopilot)
         return record, info
+
+    async def _share_into(self, project: Project, path: str) -> dict[str, object]:
+        """Link and copy what the project lists into a new goal worktree (CUT-296). A path that
+        cannot be shared is skipped and reported; it never stops the goal."""
+        try:
+            report = await asyncio.to_thread(
+                worktreeshare.apply,
+                project.root,
+                path,
+                project.worktree_share_dirs,
+                project.worktree_copy_files,
+            )
+        except worktreeshare.ShareError as exc:
+            return {"linked": [], "copied": [], "skipped": [{"path": "*", "why": str(exc)}]}
+        return report.to_json()
 
     async def _goal_worktree(self, project: Project, goal: str) -> tuple[str, str] | None:
         """A fresh worktree and branch for ``goal`` (ADR-0048), or ``None`` when the builder is

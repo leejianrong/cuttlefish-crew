@@ -186,3 +186,24 @@ def test_add_refuses_a_root_another_project_already_uses(
     exit_code = cli.main(["projects", "add", "--name", "two", "--root", root])
     assert exit_code == cli.EXIT_CONFIG_ERROR
     assert "already used by project 'one'" in capsys.readouterr().err
+
+
+def test_worktree_share_shows_sets_refuses_and_clears(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli.main(["projects", "add", "--name", "demo", "--root", str(tmp_path / "demo")])
+    pid = json.loads(capsys.readouterr().out)["id"]
+    assert cli.main(["projects", "worktree-share", pid]) == cli.EXIT_OK
+    assert json.loads(capsys.readouterr().out) == {"id": pid, "link": [], "copy": []}  # the default
+
+    args = ["projects", "worktree-share", pid, "--link", "node_modules", "--copy", "local.json"]
+    assert cli.main(args) == cli.EXIT_OK
+    assert json.loads(capsys.readouterr().out)["link"] == ["node_modules"]
+
+    assert cli.main(["projects", "worktree-share", pid, "--copy", ".env"]) != cli.EXIT_OK
+    assert "secret" in capsys.readouterr().err
+    assert cli.main(["projects", "worktree-share", pid, "--link", "../up"]) != cli.EXIT_OK
+    capsys.readouterr()
+
+    assert cli.main(["projects", "worktree-share", pid, "--clear"]) == cli.EXIT_OK
+    assert json.loads(capsys.readouterr().out) == {"id": pid, "link": [], "copy": []}
