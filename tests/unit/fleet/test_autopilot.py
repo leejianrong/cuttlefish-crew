@@ -33,6 +33,7 @@ class _Project:
     name: str
     root: str
     decision_wait_minutes: int | None = None
+    continue_after_reset: bool = True
 
 
 class _Daemon:
@@ -46,6 +47,8 @@ class _Daemon:
         self.transcript: Path | None = None
         self.decisions: list[dict[str, Any]] = []
         self.requests = SimpleNamespace(pending=self._pending)
+        self.projects = SimpleNamespace(get=lambda _id: self.project)
+        self.project: Any = None
 
     def _pending(self, project_id: str) -> list[Any]:
         return [
@@ -80,6 +83,7 @@ class Rig:
         self.tmp = tmp_path
         self.daemon = _Daemon(tmp_path)
         self.project = _Project("p1", "alpha", str(tmp_path))
+        self.daemon.project = self.project
         self.autopilot = Autopilot(self.daemon, settle_s=0.02)  # type: ignore[arg-type]
 
     def plan(self, *lines: str) -> None:

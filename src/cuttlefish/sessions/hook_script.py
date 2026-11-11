@@ -61,6 +61,8 @@ def main(argv: list[str]) -> int:
                 "tool_name",
                 "tool_input",
                 "tool_use_id",
+                "error",
+                "error_details",
             )
             if key in payload
         }

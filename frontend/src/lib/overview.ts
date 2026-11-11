@@ -99,7 +99,9 @@ export function nowLine(autopilot: AutopilotStatus): string {
   if (autopilot.phase === "planning") return "The builder is writing its plan.";
   const next = plan?.steps.find((step) => !step.done);
   if (autopilot.phase === "done") return "Every step of the plan is done.";
-  if (autopilot.phase === "stuck" || autopilot.phase === "limit") return autopilot.reason ?? "";
+  if (autopilot.phase === "stuck" || autopilot.phase === "limit" || autopilot.phase === "limit_wait") {
+    return autopilot.reason ?? "";
+  }
   if (autopilot.phase === "paused") return next ? `Paused. Next: ${next.text}.` : "Paused.";
   if (next) return `Now: ${next.text}. It will only stop for you if it is blocked.`;
   return plan && plan.total > 0 ? "No steps left." : "";

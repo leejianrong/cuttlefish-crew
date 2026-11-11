@@ -17,7 +17,7 @@ from typing import Any
 HOOK_SCRIPT = Path(__file__).with_name("hook_script.py")
 
 #: Events that only inform the daemon: they return at once, so a short limit is enough.
-_QUICK_EVENTS = ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop")
+_QUICK_EVENTS = ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "StopFailure")
 _QUICK_TIMEOUT_S = 10
 #: How much longer than the daemon's request window the script waits, and then the settings limit.
 _SOCKET_MARGIN_S = 5

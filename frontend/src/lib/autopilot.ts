@@ -10,7 +10,9 @@ export type AutopilotPhase =
   | "done"
   | "stopped"
   | "limit"
-  | "stuck";
+  | "stuck"
+  /** CUT-299: the builder hit a usage limit; Autopilot continues it at `resume_at`. */
+  | "limit_wait";
 
 export interface PlanStep {
   text: string;
@@ -23,6 +25,10 @@ export interface AutopilotStatus {
   backend?: string;
   reason?: string;
   approved_at?: string | null;
+  /** In `limit_wait`: when Autopilot will continue (ISO 8601, UTC). */
+  resume_at?: string | null;
+  /** Whether this project continues after a usage limit resets (it can opt out). */
+  continue_after_reset?: boolean;
   elapsed_s?: number | null;
   nudges?: number;
   nudges_since_progress?: number;
@@ -57,6 +63,8 @@ export function phaseLabel(phase: AutopilotPhase): string {
       return "Limit reached";
     case "stuck":
       return "Stuck";
+    case "limit_wait":
+      return "Waiting for the usage limit";
     default:
       return "Off";
   }
@@ -81,6 +89,7 @@ export function controlsFor(phase: AutopilotPhase): Control[] {
     case "paused":
     case "stuck":
     case "limit":
+    case "limit_wait":
       return ["resume", "stop"];
     default:
       return [];
@@ -94,7 +103,7 @@ export function controlLabel(control: Control, phase: AutopilotPhase): string {
     case "pause":
       return "Pause";
     case "resume":
-      return phase === "paused" ? "Resume" : "Carry on";
+      return phase === "paused" ? "Resume" : phase === "limit_wait" ? "Carry on now" : "Carry on";
     case "stop":
       return "Stop Autopilot";
     default:

@@ -13,10 +13,20 @@ mid-step, and Pause and Stop are always available to a person.
 from __future__ import annotations
 
 import dataclasses
+import re
+from datetime import datetime
 from typing import Literal
 
 Phase = Literal[
-    "planning", "awaiting_approval", "running", "paused", "done", "stopped", "limit", "stuck"
+    "planning",
+    "awaiting_approval",
+    "running",
+    "paused",
+    "done",
+    "stopped",
+    "limit",
+    "stuck",
+    "limit_wait",
 ]
 
 #: Phases in which nothing more will happen without a person.
@@ -27,6 +37,43 @@ DEFAULT_TOKENS = 5_000_000
 DEFAULT_NUDGES = 200
 #: Nudges in a row after which no new step was ticked: the agent is going round in circles.
 STUCK_AFTER = 3
+
+#: After a usage limit, how long past the reset the "continue" is sent, so it lands inside the new
+#: window and not on its edge.
+RESET_GRACE_S = 60.0
+#: Times in a row an agent may stop on a usage limit and be waited for before Autopilot gives up
+#: (Orca stops after five failures).
+MAX_LIMIT_WAITS = 5
+#: A reset further off than this is not believed: it is a misread, not a window.
+MAX_WAIT_S = 8 * 86400
+
+_EPOCH = re.compile(
+    r"(?:resetsAt|resets_at|anthropic-ratelimit-unified-reset)\W{1,4}(\d{9,11})", re.IGNORECASE
+)
+_RETRY_AFTER = re.compile(r"retry-after\W{1,4}(\d{1,7})\b", re.IGNORECASE)
+_ISO = re.compile(r"\b(\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?(?:\.\d+)?(?:Z|[+-]\d\d:?\d\d))")
+
+
+def reset_from_failure(text: str | None, now: float) -> float | None:
+    """When a usage window resets, as epoch seconds, if the words of a failed turn say so; `None`
+    when they do not, which is the answer, never a guess. Reads only a reset epoch (as Claude
+    Code's own rate-limit fields name it), a `retry-after` in seconds, or an ISO 8601 time, and
+    only one that is ahead of `now` and within `MAX_WAIT_S`."""
+    if not text:
+        return None
+    found: list[float] = []
+    for match in _EPOCH.finditer(text):
+        found.append(float(match.group(1)))
+    for match in _RETRY_AFTER.finditer(text):
+        found.append(now + float(match.group(1)))
+    for match in _ISO.finditer(text):
+        try:
+            found.append(datetime.fromisoformat(match.group(1).replace("Z", "+00:00")).timestamp())
+        except ValueError:
+            continue
+    ahead = [t for t in found if now < t <= now + MAX_WAIT_S]
+    return max(ahead) if ahead else None
+
 
 NUDGE_TEXT = (
     "Continue with the next unticked step in .cuttlefish/artifacts/plan.md. "

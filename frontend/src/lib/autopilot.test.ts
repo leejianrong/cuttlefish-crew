@@ -83,3 +83,13 @@ describe("plan progress", () => {
     expect(currentStep({ phase: "off", plan: null, plan_path: "" })).toBeNull();
   });
 });
+
+describe("waiting for a usage limit (CUT-299)", () => {
+  it("is its own phase with a way to carry on now, and does not demand a person", () => {
+    expect(phaseLabel("limit_wait")).toBe("Waiting for the usage limit");
+    expect(needsPerson("limit_wait")).toBe(false);
+    expect(controlsFor("limit_wait")).toEqual(["resume", "stop"]);
+    expect(controlLabel("resume", "limit_wait")).toBe("Carry on now");
+    expect(controlLabel("resume", "limit")).toBe("Carry on");
+  });
+});

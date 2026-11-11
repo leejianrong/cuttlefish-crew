@@ -106,5 +106,8 @@ describe("nowLine", () => {
     expect(nowLine(status("paused", [true, false]))).toBe("Paused. Next: step 1.");
     expect(nowLine(status("done", [true]))).toBe("Every step of the plan is done.");
     expect(nowLine(status("stuck", [false], "Went round in circles."))).toBe("Went round in circles.");
+    expect(nowLine(status("limit_wait", [false], "Usage limit reached. Will continue at 2026-11-12 11:01 UTC."))).toBe(
+      "Usage limit reached. Will continue at 2026-11-12 11:01 UTC.",
+    );
   });
 });

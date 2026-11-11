@@ -363,6 +363,7 @@
           projectBackend={project.backend}
           terminalCommand={project.terminal_command}
           worktreePerGoal={project.worktree_per_goal}
+          continueAfterReset={project.continue_after_reset}
           refreshKey={sessionChanges}
           {onTabChange}
         />

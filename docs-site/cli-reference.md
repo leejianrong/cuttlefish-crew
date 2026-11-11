@@ -341,7 +341,8 @@ of its own, so a tool that says nothing reads **not reported**, never a zero.
 | kopicode | No usage window. It only reports a failed round when its provider answers 429. | "Does not report usage." |
 
 A tool reports only while it is running, so a backend that has not run since the daemon started shows "Not reported yet"
-until its next round. A worker adds the same figures to its heartbeat (`usage`, keyed by backend; the controller keeps
+until its next round. For Codex the card has a **Check now** button that asks `app-server` for `account/rateLimits/read` without
+starting a turn (`POST /api/usage/refresh`, Approve): no model call, a short-lived process. A worker adds the same figures to its heartbeat (`usage`, keyed by backend; the controller keeps
 only named backends, a few windows each and bounded numbers, and works the warning out itself). `GET /api/usage` (View)
 returns this PC's; a worker's is in `GET /api/workers`. Switching accounts and entering a cookie are not built, on purpose.
 

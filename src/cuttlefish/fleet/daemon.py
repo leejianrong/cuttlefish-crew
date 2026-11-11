@@ -39,6 +39,7 @@ from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
 from cuttlefish import artifacts, environment, envprep, logsetup, runtime, timeline
+from cuttlefish.agents.outcome import DelegationError
 from cuttlefish.agents.registry import configured_model
 from cuttlefish.artifacts import Artifact
 from cuttlefish.autopilot import Limits
@@ -53,8 +54,10 @@ from cuttlefish.config import (
     manager_daily_budget,
     prepare_run,
     resolve_agent_backend,
+    resolve_codex_binary,
 )
 from cuttlefish.delegate import codex_live
+from cuttlefish.delegate.codex_app_server import read_rate_limits
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import (
     DelegationStarted,
@@ -145,6 +148,7 @@ from cuttlefish.steering import (
     send_steering_message,
 )
 from cuttlefish.team import RoleInput, TeamInput, run_team
+from cuttlefish.usage import BOARD
 
 logger = logging.getLogger(__name__)
 
@@ -628,6 +632,19 @@ class FleetDaemon:
             pending=[p.record for p in self.requests.pending(project.id)],
             last_n=last_n,
         )
+
+    async def refresh_usage(self, backend: str) -> None:
+        """Read one backend's usage windows now, for the usage card: only Codex has a call for it
+        (`account/rateLimits/read`); Claude Code reports inside a session, kopicode not at all."""
+        if backend != "codex":
+            raise FleetError(
+                f"{backend} has no way to be asked for its usage; it reports it itself"
+            )
+        try:
+            result = await read_rate_limits(resolve_codex_binary())
+        except DelegationError as exc:
+            raise FleetError(str(exc)) from exc
+        BOARD.report_codex(result)
 
     async def autopilot_status(self, project_id: str) -> dict[str, Any]:
         return await self.autopilot.status(self._projects.get(project_id))
@@ -2273,6 +2290,7 @@ class FleetDaemon:
         self.sweep_abandoned(keep_blocked={team_id for _, team_id in resumable})
         self.restore_decisions()
         await self.adopt_remote_teams()
+        await self.autopilot.rearm(self._projects.list())
         attempts: list[ResumeAttempt] = []
         for project, team_id in resumable:
             role_inputs = _persisted_roles_to_inputs(project.last_team_roles)

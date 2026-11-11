@@ -176,6 +176,8 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         },
         "worker": _worker_json(daemon, project.worker_id),
         "worker_handover": project.worker_handover,
+        # Only when off: it is on for nearly every project and the list carries every one.
+        **({} if project.continue_after_reset else {"continue_after_reset": False}),
         "is_manager": project.id == daemon.manager_project,
         "decision_wait_minutes": project.decision_wait_minutes,
         **(
@@ -703,6 +705,19 @@ def create_app(
         _LOG.info("device %s (%s) revoked", device.id, device.name)
         return device.as_json()
 
+    @app.post("/api/usage/refresh")
+    async def refresh_usage(request: Request) -> dict[str, Any]:
+        """Read Codex's usage windows now (`account/rateLimits/read`: no model call), for the usage
+        card's button. A backend that cannot be asked says so."""
+        backend = (await _json_body(request)).get("backend")
+        if not isinstance(backend, str):
+            raise HTTPException(400, "'backend' must be a backend name")
+        try:
+            await daemon.refresh_usage(backend)
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"local": BOARD.as_json(), "warn_at_percent": WARN_AT_PERCENT}
+
     @app.get("/api/usage")
     async def get_usage() -> dict[str, Any]:
         """What each agent backend has said about its usage limits on this machine, and when they
@@ -1115,6 +1130,20 @@ def create_app(
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @app.patch("/api/projects/{project_id}/continue-after-reset")
+    async def update_continue_after_reset(project_id: str, request: Request) -> dict[str, Any]:
+        """Whether Autopilot continues this project's builder once a usage limit resets (CUT-299).
+        On unless turned off; it applies to a wait in progress too."""
+        body = await _json_body(request)
+        value = body.get("continue_after_reset")
+        if not isinstance(value, bool):
+            raise HTTPException(400, "'continue_after_reset' must be true or false")
+        try:
+            daemon.projects.update_continue_after_reset(project_id, value)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     @app.patch("/api/projects/{project_id}/worktree-per-goal")
     async def update_worktree_per_goal(project_id: str, request: Request) -> dict[str, Any]:

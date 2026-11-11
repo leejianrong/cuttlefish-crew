@@ -475,6 +475,43 @@ _DECLINES: dict[str, Mapping[str, Any]] = {
 }
 
 
+async def read_rate_limits(binary: str, *, timeout: float = 20.0) -> Mapping[str, Any]:
+    """Ask Codex for its account's usage windows without starting a turn: `account/rateLimits/read`
+    on a short-lived `app-server`, the same call the app's own limit display makes. No model call
+    and nothing is written; the process is gone when this returns. The result is what
+    :meth:`cuttlefish.usage.UsageBoard.report_codex` reads. Raises :class:`DelegationError` when
+    the binary is missing, the server dies, or it does not answer in `timeout` seconds."""
+    cwd = str(Path.home())
+    try:
+        process = await asyncio.create_subprocess_exec(
+            binary,
+            "app-server",
+            cwd=cwd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=merge_env(None),
+        )
+    except FileNotFoundError as exc:
+        raise DelegationError(f"Codex binary {binary!r} not found") from exc
+
+    def nothing(_kind: str, _detail: str) -> ConsentDecision:
+        return ConsentDecision("deny", "no turn is running")
+
+    connection = _Connection(process, _Round(cwd), nothing, edits=False)
+    try:
+        async with asyncio.timeout(timeout):
+            await connection.request(
+                "initialize", {"clientInfo": {"name": "cuttlefish-crew", "version": "0"}}
+            )
+            connection.notify("initialized")
+            return await connection.request("account/rateLimits/read", {})
+    except TimeoutError as exc:
+        raise DelegationError("Codex did not answer account/rateLimits/read in time") from exc
+    finally:
+        await connection.close()
+
+
 async def run_codex_app_server(
     *,
     binary: str,

@@ -96,16 +96,27 @@ def journal_events(events: Iterable[Any]) -> list[Event]:
     return found
 
 
+#: Reasons of a `running` update that say something happened to the run, not that it started.
+_RUNNING_NOTES = (
+    "Resumed",
+    "The limit has reset",
+    "The builder hit a usage limit",
+    "The builder is working again",
+)
+
+
 def _autopilot_text(state: AutopilotUpdated) -> str:
     phase = state.phase
     if phase == "planning":
         return "You gave the builder a goal. It is planning."
     if phase == "awaiting_approval":
         return "The plan is ready and waiting for you."
+    if phase == "limit_wait":
+        return _clip(state.reason)  # "Usage limit reached. Will continue at ... UTC."
     if phase == "running":
         return (
             state.reason
-            if state.reason.startswith("Resumed")
+            if state.reason.startswith(_RUNNING_NOTES)
             else "You approved the plan. Autopilot started."
         )
     if phase == "paused":

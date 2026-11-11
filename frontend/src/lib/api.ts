@@ -267,6 +267,8 @@ export interface ProjectSummary {
   /** CUT-298: per role in `status`. `backend` is present only when it differs from the project's
    * own, `model` only where cuttlefish sets one, `at` is when the role last did anything. */
   role_info?: Record<string, { backend?: string; model?: string; at?: string }>;
+  /** CUT-299: false when this project opted out of continuing after a usage limit; absent means on. */
+  continue_after_reset?: boolean;
   /** CUT-207: work the project's last worker may still hold that is not pushed; null when none. */
   worker_handover?: string | null;
   /** CUT-191: free-form labels the project list is grouped and filtered by. */
@@ -987,6 +989,22 @@ export class FleetClient {
   stopAgentSession(id: string): Promise<AgentSession> {
     return this.request(`/api/projects/${id}/agent-session/stop`, {
       method: "POST",
+    });
+  }
+
+  /** CUT-299: whether Autopilot continues this project's builder after a usage limit resets. */
+  setContinueAfterReset(id: string, on: boolean): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/continue-after-reset`, {
+      method: "PATCH",
+      body: JSON.stringify({ continue_after_reset: on }),
+    });
+  }
+
+  /** CUT-299: read Codex's limits now (`account/rateLimits/read`, no model call). */
+  refreshUsage(backend: string): Promise<UsageView> {
+    return this.request("/api/usage/refresh", {
+      method: "POST",
+      body: JSON.stringify({ backend }),
     });
   }
 

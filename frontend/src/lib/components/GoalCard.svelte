@@ -24,6 +24,7 @@
     projectBackend,
     terminalCommand = null,
     worktreePerGoal = false,
+    continueAfterReset = true,
     refreshKey = 0,
     onTabChange,
   }: {
@@ -32,6 +33,7 @@
     projectBackend: string | null | undefined;
     terminalCommand?: string | null;
     worktreePerGoal?: boolean;
+    continueAfterReset?: boolean;
     refreshKey?: number;
     onTabChange: (tab: ProjectTab) => void;
   } = $props();
@@ -50,6 +52,9 @@
   // Seeded from the project; the switch below saves it.
   // svelte-ignore state_referenced_locally
   let worktreeOn = $state(worktreePerGoal);
+  // Seeded from the project; the switch below saves it.
+  // svelte-ignore state_referenced_locally
+  let continueOn = $state(continueAfterReset);
   let busy = $state(false);
   let prBusy = $state(false);
   let prResult = $state<PullRequestResult | null>(null);
@@ -140,6 +145,16 @@
       rmResult = { ok: false, reason: e instanceof Error ? e.message : "That didn't work." };
     } finally {
       rmBusy = false;
+    }
+  }
+
+  async function setContinue() {
+    const wanted = continueOn;
+    try {
+      await client.setContinueAfterReset(projectId, wanted);
+    } catch (e) {
+      continueOn = !wanted;
+      error = e instanceof Error ? e.message : "That didn't work.";
     }
   }
 
@@ -271,6 +286,17 @@
           </label>
         </div>
       {/if}
+      <label class="switch-row">
+        <input type="checkbox" role="switch" bind:checked={continueOn} onchange={setContinue} />
+        <span class="switch-text">
+          <span class="title-small">Continue after a usage limit resets</span>
+          <span class="body-small muted">
+            If the builder stops because its plan's usage limit was hit, Autopilot waits for the
+            reset and sends it one "continue", within the limits above. Pause, Stop and the kill
+            switch cancel the wait. Needs Claude Code, whose hook reports the stop.
+          </span>
+        </span>
+      </label>
     </div>
     <label class="switch-row">
       <input type="checkbox" role="switch" bind:checked={worktreeOn} onchange={setWorktree} />

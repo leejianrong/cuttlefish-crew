@@ -69,6 +69,12 @@ read_until(lambda m: m.get("method") == "initialized")
 if scenario.get("crash"):
     sys.stderr.write("fake codex: boom\n")
     sys.exit(3)
+if "rate_limits_read" in scenario:  # `account/rateLimits/read` with no turn
+    answer(
+        read_until(lambda m: m.get("method") == "account/rateLimits/read"),
+        {"rateLimits": scenario["rate_limits_read"]},
+    )
+    sys.exit(0)
 opened = read_until(lambda m: m.get("method") in ("thread/start", "thread/resume"))
 if opened["method"] == "thread/resume" and scenario.get("resume_fails"):
     send({"id": opened["id"], "error": {"code": -32600, "message": "no rollout found"}})
