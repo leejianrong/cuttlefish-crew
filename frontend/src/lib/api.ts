@@ -4,6 +4,7 @@
 
 import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay";
 import type { AutopilotOptions, AutopilotStatus, Control } from "./autopilot";
+import type { CardStat } from "./cardstat";
 import type { ChatResponse } from "./chat";
 import type { OverviewData } from "./overview";
 import type { BackendUsage, UsageView } from "./usage";
@@ -269,6 +270,9 @@ export interface ProjectSummary {
   role_info?: Record<string, { backend?: string; model?: string; at?: string }>;
   /** CUT-299: false when this project opted out of continuing after a usage limit; absent means on. */
   continue_after_reset?: boolean;
+  /** CUT-287: the goal branch's diff counts and PR state, from the daemon's cached sweep (see
+   * `lib/cardstat.ts`). Absent for a project with no goal branch, or before the first sweep. */
+  gs?: CardStat;
   /** CUT-207: work the project's last worker may still hold that is not pushed; null when none. */
   worker_handover?: string | null;
   /** CUT-191: free-form labels the project list is grouped and filtered by. */

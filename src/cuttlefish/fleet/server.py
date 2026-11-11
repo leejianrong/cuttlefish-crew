@@ -191,7 +191,15 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "mode": project.mode,
         "env_prepare": project.env_prepare,
         "limits": dict(project.limits),
-        "presets": list(project.presets if project.presets is not None else DEFAULT_PRESETS),
+        # The list leaves out the default presets (7 KB over 100 projects, and the list never reads
+        # them); a project that chose its own still has them, and its own route has them always.
+        **(
+            {}
+            if summary and project.presets is None
+            else {
+                "presets": list(project.presets if project.presets is not None else DEFAULT_PRESETS)
+            }
+        ),
         "roles": [
             {
                 "name": r.name,
@@ -213,6 +221,9 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "status": journal.status,
         "role_info": daemon.role_info(project, journal.status, journal),
         "last_event_at": journal.last_event_at,
+        # The goal branch's counts and PR state, from a background sweep (CUT-287); left out when
+        # there is nothing to show, to keep the list small.
+        **({"gs": stat} if summary and (stat := daemon.card_stat(project.id)) else {}),
         "budget": {"max_tokens": project.max_tokens, "max_cost_usd": project.max_cost_usd},
         "usage": {
             name: {"tokens": totals.tokens, "cost_usd": totals.cost_usd}
