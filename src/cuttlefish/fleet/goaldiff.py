@@ -178,7 +178,11 @@ def _untracked(folder: Path, budget: int, *, lines: bool = True) -> list[dict[st
     the counts, for the stat)."""
     done = _run(["git", "ls-files", "--others", "--exclude-standard", "-z"], folder)
     out: list[dict[str, Any]] = []
-    for rel in [p for p in done.stdout.split("\0") if p][:budget]:
+    # cuttlefish's own folders are its state, not the project's work (git lists them if unexcluded).
+    names = [
+        p for p in done.stdout.split("\0") if p and not p.startswith((".cuttlefish/", ".satay/"))
+    ]
+    for rel in names[:budget]:
         target = folder / rel
         entry: dict[str, Any] = {
             "path": rel, "status": "untracked", "additions": 0, "deletions": 0,
