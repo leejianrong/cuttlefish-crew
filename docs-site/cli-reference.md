@@ -275,9 +275,22 @@ and closes its connection at once; the worker notices, deletes `~/.cuttlefish/wo
 
 A worker keeps its own keypair and a secret the daemon made for it at the confirm in `~/.cuttlefish/worker.json` (mode
 0600), and nothing else. It sits **below View**: it can send a heartbeat and nothing else, no projects, no secrets, no
-settings, no device list. It holds no project yet and never gets the model key. Placing a project on a worker is the next
-step, and a worker will then be trusted with that project's code and secrets while it runs a task. Workers are kept in
-`~/.cuttlefish/workers.db` beside `devices.db`.
+settings, no device list. It holds no project yet and never gets the model key. Workers are kept in `~/.cuttlefish/workers.db` beside `devices.db`.
+
+### Running a project on a worker
+
+On a project's page, **Runs on** lists the paired workers (Admin to change it; stop a running team first). From then on
+**Start team** hands the team to that machine: the worker clones the project's `origin` (credentials stripped; an empty
+repository when there is none) into `~/.cuttlefish/worker-work/<project>`, runs the same team workflow there, and streams
+each journal event back, so the page, the activity log and the status read as for a local team. Nothing runs in the
+controller's folder. The project card and page name the machine, and an offline worker says so and refuses a start with the
+machine named. **Stop** reaches the worker; if the worker is gone it ends the team on the controller. Removing a worker
+ends what ran on it and moves its projects back to this PC.
+
+Not built yet, on purpose: the leased model key (the agent on a worker uses the credentials that machine already has;
+the controller sends none), project secrets (none are sent), steering, review gates, Needs you requests and the builder
+chat on a worker, installing dependencies first, and picking a team back up after the controller or worker restarts
+(a controller restart makes the worker drop its team).
 
 ## `cuttlefish doctor`
 

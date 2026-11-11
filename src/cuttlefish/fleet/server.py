@@ -77,7 +77,7 @@ from cuttlefish.fleet.daemon import (
     SecretsUnavailableError,
     UnknownRoleError,
 )
-from cuttlefish.fleet.devices import DeviceError
+from cuttlefish.fleet.devices import Device, DeviceError
 from cuttlefish.fleet.digest import DEFAULT_EVENTS
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings, TierRefusal
@@ -142,6 +142,18 @@ _HOOK_BODY_LIMIT = 256 * 1024
 _LOG = logging.getLogger(__name__)
 
 
+def _worker_json(daemon: FleetDaemon, worker_id: str | None) -> dict[str, Any] | None:
+    """Where a project runs when it is not here: the machine's name and whether it is reachable."""
+    if worker_id is None:
+        return None
+    state = daemon.worker_state(worker_id)
+    return {
+        "id": worker_id,
+        "name": state[0] if state else None,
+        "online": bool(state and state[1]),
+    }
+
+
 def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False) -> dict[str, Any]:
     """A project as the dashboard and MCP see it. With `summary` (the list) a role's persona text
     is left out: it is over half the payload, and the list never shows it (CUT-192); a project's
@@ -156,6 +168,7 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "backend": project.backend,
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
+        "worker": _worker_json(daemon, project.worker_id),
         "is_manager": project.id == daemon.manager_project,
         "decision_wait_minutes": project.decision_wait_minutes,
         **(
@@ -578,6 +591,14 @@ def create_app(
             raise HTTPException(404, "this daemon was not started with --relay")
         return relay
 
+    if relay is not None:
+
+        def _worker_lookup(worker_id: str) -> tuple[str, bool] | None:
+            found = relay.workers.find(worker_id)
+            return None if found is None else (found.name, relay.liveness.online(found.id))
+
+        daemon.placement.lookup = _worker_lookup
+
     @app.get("/api/relay")
     async def relay_info(request: Request) -> dict[str, Any]:
         if relay is None:
@@ -690,11 +711,14 @@ def create_app(
             worker = await _relay().remove_worker(worker_id)
         except DeviceError as exc:
             raise HTTPException(404, str(exc)) from exc
-        _LOG.info("worker %s (%s) removed", worker.id, worker.name)
+        unplaced = await daemon.worker_removed(worker_id)
+        _LOG.info(
+            "worker %s (%s) removed; %d project(s) unplaced", worker.id, worker.name, len(unplaced)
+        )
         return worker.as_json()
 
-    @app.post("/api/worker/heartbeat")
-    async def worker_heartbeat(request: Request) -> dict[str, str]:
+    def _calling_worker(request: Request) -> Device:
+        """The paired worker machine making this request through the relay, or a 403."""
         link = _relay()
         worker = (
             link.guard.device_for(request.headers)
@@ -702,9 +726,72 @@ def create_app(
             else None
         )
         if worker is None or not worker.is_worker:
-            raise HTTPException(403, "only a paired worker machine sends a heartbeat")
-        link.liveness.beat(worker.id, await _json_body(request))
+            raise HTTPException(403, "only a paired worker machine may do this")
+        return worker
+
+    @app.post("/api/worker/heartbeat")
+    async def worker_heartbeat(request: Request) -> dict[str, str]:
+        worker = _calling_worker(request)
+        _relay().liveness.beat(worker.id, await _json_body(request))
         return {"status": "ok"}
+
+    @app.post("/api/worker/work")
+    async def worker_work(request: Request) -> dict[str, Any]:
+        """What the worker should start or stop now; waits a few seconds for something."""
+        worker = _calling_worker(request)
+        body = await _json_body(request)
+        wait = body.get("wait", 0)
+        if not isinstance(wait, int | float):
+            raise HTTPException(400, "'wait' must be a number of seconds")
+        _relay().liveness.beat(worker.id)  # asking for work is a sign of life too
+        return await daemon.worker_claim(worker.id, float(wait))
+
+    @app.post("/api/worker/teams/{team_id}/events")
+    async def worker_team_events(team_id: str, request: Request) -> dict[str, Any]:
+        worker = _calling_worker(request)
+        events = (await _json_body(request)).get("events")
+        if not isinstance(events, list) or not all(isinstance(e, dict) for e in events):
+            raise HTTPException(400, "'events' must be a list of events")
+        try:
+            return {"last_seq": await daemon.worker_events(worker.id, team_id, events)}
+        except FleetError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/worker/teams/{team_id}/finish")
+    async def worker_team_finish(team_id: str, request: Request) -> dict[str, str]:
+        worker = _calling_worker(request)
+        body = await _json_body(request)
+        status = body.get("status")
+        if status not in ("completed", "failed", "stopped"):
+            raise HTTPException(400, "'status' must be completed, failed or stopped")
+        error = body.get("error")
+        try:
+            await daemon.worker_finished(
+                worker.id, team_id, status, str(error)[:500] if error else None
+            )
+        except FleetError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"status": "ok"}
+
+    @app.patch("/api/projects/{project_id}/worker")
+    async def place_project(project_id: str, request: Request) -> dict[str, Any]:
+        """Run this project's teams on a worker machine, or (null) on this one. Applies to the next
+        team: one that is running stays where it is, so stop it first."""
+        body = await _json_body(request)
+        worker_id = body.get("worker_id")
+        if worker_id is not None and not isinstance(worker_id, str):
+            raise HTTPException(400, "'worker_id' must be a worker's id, or null")
+        if worker_id is not None and daemon.worker_state(worker_id) is None:
+            raise HTTPException(400, "there is no such worker; pair one under Devices")
+        try:
+            if daemon.is_running(project_id):
+                raise HTTPException(409, "this project has a running team; stop it first")
+            daemon.projects.update_worker(project_id, worker_id)
+            return _project_json(daemon, project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     def _browser() -> FolderBrowser:
         if folders is None:

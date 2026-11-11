@@ -234,12 +234,12 @@ class EpisodicStore:
             task_id=task_id, seq=seq, schema_version=SCHEMA_VERSION, ts=ts, payload=recorded
         )
 
-    def read(self, task_id: str) -> Iterator[EpisodicEvent]:
-        """Yield every event for `task_id`, in seq order."""
+    def read(self, task_id: str, *, after: int = 0) -> Iterator[EpisodicEvent]:
+        """Yield every event for `task_id` past position `after`, in seq order."""
         cursor = self._conn.execute(
             "SELECT seq, schema_version, event_type, ts, payload_json "
-            "FROM episodic_events WHERE task_id = ? ORDER BY seq ASC",
-            (task_id,),
+            "FROM episodic_events WHERE task_id = ? AND seq > ? ORDER BY seq ASC",
+            (task_id, after),
         )
         for seq, schema_version, event_type, ts, payload_json in cursor:
             yield EpisodicEvent(

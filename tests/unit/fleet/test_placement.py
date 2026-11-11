@@ -1,0 +1,102 @@
+"""Unit: placing a project on a worker (CUT-206, ADR-0057)."""
+
+from __future__ import annotations
+
+import asyncio
+import sqlite3
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from cuttlefish.fleet.daemon import _remote_url
+from cuttlefish.fleet.placement import Placement
+from cuttlefish.fleet.tiers import Tier, required_tier
+from cuttlefish.projects.store import ProjectNotFoundError, ProjectStore
+
+
+def test_a_project_is_placed_on_a_worker_and_goes_back_when_it_is_removed(tmp_path: Path) -> None:
+    store = ProjectStore.open(tmp_path / "p.db")
+    a = store.register(name="a", root=str(tmp_path))
+    b = store.register(name="b", root=str(tmp_path))
+    c = store.register(name="c", root=str(tmp_path))
+    assert a.worker_id is None  # runs here until a person places it
+    store.update_worker(a.id, "w1")
+    store.update_worker(b.id, "w1")
+    store.update_worker(c.id, "w2")
+    assert sorted(store.unplace_worker("w1")) == sorted([a.id, b.id])
+    assert [store.get(p.id).worker_id for p in (a, b, c)] == [None, None, "w2"]
+    assert store.update_worker(c.id, None).worker_id is None
+    with pytest.raises(ProjectNotFoundError):
+        store.update_worker("nope", "w1")
+
+
+def test_a_store_made_before_placement_gains_the_column(tmp_path: Path) -> None:
+    path = tmp_path / "old.db"
+    ProjectStore.open(path).register(name="a", root=str(tmp_path))
+    db = sqlite3.connect(path)
+    db.execute("ALTER TABLE projects DROP COLUMN worker_id")
+    db.commit()
+    db.close()
+    assert [p.worker_id for p in ProjectStore.open(path).list()] == [None]
+
+
+async def test_an_order_and_a_stop_are_each_handed_over_once() -> None:
+    placement = Placement()
+    placement.assign("p1", "w1", {"team_id": "t1"})
+    placement.assign("p2", "w2", {"team_id": "t2"})
+    assert await placement.claim("w1", 0) == {"orders": [{"team_id": "t1"}], "stop": []}
+    assert await placement.claim("w1", 0) == {"orders": [], "stop": []}  # not again
+    team = placement.team("t1")
+    assert team is not None
+    team.stop_requested = True
+    assert await placement.claim("w1", 0) == {"orders": [], "stop": ["t1"]}
+    assert await placement.claim("w1", 0) == {"orders": [], "stop": []}
+    assert (await placement.claim("w3", 0))["orders"] == []  # another worker gets nothing of w2's
+    assert placement.end("t1") is team and placement.team_of_project("p1") is None
+
+
+async def test_a_worker_waiting_for_work_gets_it_as_soon_as_it_exists() -> None:
+    placement = Placement()
+    waiting = asyncio.create_task(placement.claim("w1", 5))
+    await asyncio.sleep(0.05)
+    placement.assign("p1", "w1", {"team_id": "t1"})
+    assert (await asyncio.wait_for(waiting, 2))["orders"] == [{"team_id": "t1"}]
+
+
+def _git(*args: str, cwd: Path) -> None:
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+
+
+@pytest.mark.parametrize(
+    ("origin", "sent"),
+    [
+        ("https://github.com/o/r.git", "https://github.com/o/r.git"),
+        ("https://user:s3cret@github.com/o/r.git", "https://github.com/o/r.git"),
+        ("https://x-access-token:abc@host:8443/o/r.git", "https://host:8443/o/r.git"),
+        ("git@github.com:o/r.git", "git@github.com:o/r.git"),
+    ],
+)
+def test_a_remote_is_sent_to_a_worker_without_a_credential_in_it(
+    tmp_path: Path, origin: str, sent: str
+) -> None:
+    _git("init", "-q", cwd=tmp_path)
+    _git("remote", "add", "origin", origin, cwd=tmp_path)
+    assert _remote_url(str(tmp_path)) == sent
+
+
+def test_a_folder_with_no_remote_sends_none(tmp_path: Path) -> None:
+    assert _remote_url(str(tmp_path)) is None
+    _git("init", "-q", cwd=tmp_path)
+    assert _remote_url(str(tmp_path)) is None
+
+
+def test_the_worker_routes_need_the_worker_tier_and_placing_needs_admin() -> None:
+    for path in (
+        "/api/worker/work",
+        "/api/worker/teams/t/events",
+        "/api/worker/teams/t/finish",
+        "/api/worker/heartbeat",
+    ):
+        assert required_tier("POST", path) is Tier.WORKER
+    assert required_tier("PATCH", "/api/projects/p/worker") is Tier.ADMIN

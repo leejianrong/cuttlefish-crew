@@ -2,6 +2,7 @@
   import type { ProjectSummary, RoleStatus } from "../api";
   import { agoIso } from "../artifacts";
   import { parseTags } from "../grouping";
+  import { whereItRuns } from "../placement";
   import { projectState, STATE_LABEL, type ProjectState } from "../projectstate";
   import RoleSprite from "./RoleSprite.svelte";
   import StatusChip from "./StatusChip.svelte";
@@ -64,6 +65,7 @@
     idle: "queued",
   };
   const line = $derived(projectState(project, waiting, now * 1000));
+  const where = $derived(whereItRuns(project));
 </script>
 
 <article class="card filled project">
@@ -72,6 +74,9 @@
     {#if pinned}<span class="pinned label-small">Pinned</span>{/if}
   </header>
   <p class="root mono" title={project.root}><bdi>{project.root}</bdi></p>
+  {#if project.worker}
+    <p class="where body-small" class:problem={where.problem}>Runs on {where.text}</p>
+  {/if}
 
   <p class="state body-small" data-state={line.state}>
     <span class="chip-slot"><StatusChip status="queued" tone={TONE[line.state]} label={STATE_LABEL[line.state]} /></span>
@@ -237,6 +242,15 @@
     gap: 0.6rem;
     margin: 0;
     min-width: 0;
+  }
+
+  .where {
+    margin: 0;
+    color: var(--text-muted);
+  }
+
+  .where.problem {
+    color: var(--md-sys-color-error);
   }
 
   .tags {
