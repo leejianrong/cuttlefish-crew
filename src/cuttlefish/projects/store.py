@@ -19,6 +19,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from cuttlefish.environment import DEFAULT_PREPARE_MODE
 from cuttlefish.permissions import DEFAULT_MODE
@@ -60,7 +61,9 @@ CREATE TABLE IF NOT EXISTS projects (
     delegate_approvals INTEGER,
     tags_json TEXT,
     decision_wait_minutes INTEGER,
-    worker_id TEXT
+    worker_id TEXT,
+    worker_team_open INTEGER NOT NULL DEFAULT 0,
+    worker_handover TEXT
 )
 """
 
@@ -147,6 +150,14 @@ _ADD_DECISION_WAIT_COLUMN = "ALTER TABLE projects ADD COLUMN decision_wait_minut
 #: `worker_id` was added for CUT-206/ADR-0057: the worker machine the project's teams run on.
 #: `NULL` is this machine, so a row is unchanged.
 _ADD_WORKER_COLUMN = "ALTER TABLE projects ADD COLUMN worker_id TEXT"
+
+#: CUT-207: `worker_team_open` is set while the project's last team is out on a worker, so a
+#: controller restart can pick it back up; `worker_handover` is what a person must know before the
+#: project's code goes to another machine (work the last worker may still hold unpushed).
+_ADD_WORKER_TEAM_OPEN_COLUMN = (
+    "ALTER TABLE projects ADD COLUMN worker_team_open INTEGER NOT NULL DEFAULT 0"
+)
+_ADD_WORKER_HANDOVER_COLUMN = "ALTER TABLE projects ADD COLUMN worker_handover TEXT"
 
 MAX_TAGS = 10
 MAX_TAG_LENGTH = 24
@@ -259,6 +270,10 @@ class Project:
     decision_wait_minutes: int | None = None
     #: The worker machine this project's teams run on (ADR-0057); `None` runs here.
     worker_id: str | None = None
+    #: The last team is out on `worker_id` and has not ended (CUT-207).
+    worker_team_open: bool = False
+    #: Unpushed or unknown work left on a worker, to show before the code moves (CUT-207).
+    worker_handover: str | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -400,6 +415,8 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         tags=tuple(json.loads(row["tags_json"])) if row["tags_json"] else (),
         decision_wait_minutes=row["decision_wait_minutes"],
         worker_id=row["worker_id"],
+        worker_team_open=bool(row["worker_team_open"]),
+        worker_handover=row["worker_handover"],
     )
 
 
@@ -443,6 +460,10 @@ class ProjectStore:
             self._conn.execute(_ADD_DECISION_WAIT_COLUMN)
         if "worker_id" not in columns:
             self._conn.execute(_ADD_WORKER_COLUMN)
+        if "worker_team_open" not in columns:
+            self._conn.execute(_ADD_WORKER_TEAM_OPEN_COLUMN)
+        if "worker_handover" not in columns:
+            self._conn.execute(_ADD_WORKER_HANDOVER_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -609,6 +630,27 @@ class ProjectStore:
         self._conn.commit()
         return self.get(project_id)
 
+    def set_worker_team(
+        self,
+        project_id: str,
+        *,
+        is_open: bool | None = None,
+        handover: str | Literal["keep"] | None = "keep",
+    ) -> None:
+        """Record that the project's last team is out on its worker (`is_open`) or over, and what
+        its worker may still hold that is not pushed (`handover`; `None` clears it). What is left
+        out is not changed."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        if is_open is not None:
+            self._conn.execute(
+                "UPDATE projects SET worker_team_open = ? WHERE id = ?", (int(is_open), project_id)
+            )
+        if handover != "keep":
+            self._conn.execute(
+                "UPDATE projects SET worker_handover = ? WHERE id = ?", (handover, project_id)
+            )
+        self._conn.commit()
+
     def unplace_worker(self, worker_id: str) -> Sequence[str]:
         """A worker was removed: every project placed on it runs here again. Returns their ids."""
         ids = [
@@ -617,7 +659,10 @@ class ProjectStore:
                 "SELECT id FROM projects WHERE worker_id = ?", (worker_id,)
             )
         ]
-        self._conn.execute("UPDATE projects SET worker_id = NULL WHERE worker_id = ?", (worker_id,))
+        self._conn.execute(
+            "UPDATE projects SET worker_id = NULL, worker_team_open = 0 WHERE worker_id = ?",
+            (worker_id,),
+        )
         self._conn.commit()
         return [str(i) for i in ids]
 

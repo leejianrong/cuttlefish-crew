@@ -3,9 +3,13 @@
 The controller still decides *what* runs and records everything it reads back; the worker only does
 the running. A team placed on a worker is an order waiting for that worker's next poll, then a team
 the worker reports on: its journal events stream in and are appended to the one journal here (never
-a second copy), and it says when it is done. All of this is in memory: a controller that restarts
-forgets what it handed out, the worker's next report for such a team is refused, and the worker
-stops it. (Picking a team back up after a restart is CUT-207.)
+a second copy), and it says when it is done.
+
+This table is in memory, and is rebuilt from the project store after a controller restart
+(`FleetDaemon.adopt_remote_teams`). Each poll says which teams the worker is running; one the
+controller placed there that it is not running (the worker restarted, or an order was lost with a
+dropped link) is handed over again, marked `resume`, so the worker picks its own satay run up where
+it stopped (CUT-207).
 """
 
 from __future__ import annotations
@@ -23,6 +27,8 @@ class RemoteTeam:
     worker_id: str
     #: What the worker is to run, until it has taken it.
     order: dict[str, Any] | None
+    #: The order as first made, kept so it can be handed over again to resume.
+    base_order: dict[str, Any] | None = None
     stop_requested: bool = False
     stop_sent: bool = False
     #: The last journal position from the worker already appended here, so a repeated post of the
@@ -38,7 +44,17 @@ class Placement:
         self.lookup: Callable[[str], tuple[str, bool] | None] = lambda _id: None
 
     def assign(self, project_id: str, worker_id: str, order: dict[str, Any]) -> RemoteTeam:
-        team = RemoteTeam(order["team_id"], project_id, worker_id, order)
+        team = RemoteTeam(order["team_id"], project_id, worker_id, order, order)
+        self._teams[project_id] = team
+        return team
+
+    def adopt(
+        self, project_id: str, worker_id: str, order: dict[str, Any], last_seq: int
+    ) -> RemoteTeam:
+        """A team that was out on a worker before a controller restart. Whether the worker still
+        runs it is learned from its next poll, so it starts as an order to resume."""
+        team = RemoteTeam(order["team_id"], project_id, worker_id, {**order, "resume": True}, order)
+        team.last_seq = last_seq
         self._teams[project_id] = team
         return team
 
@@ -57,10 +73,24 @@ class Placement:
             del self._teams[team.project_id]
         return team
 
-    async def claim(self, worker_id: str, wait: float) -> dict[str, Any]:
+    def reconcile(self, worker_id: str, running: set[str]) -> None:
+        """Compare what the worker says it runs with what was placed on it."""
+        for team in self.teams_on(worker_id):
+            if team.team_id in running:
+                team.order = None
+            elif team.order is None and team.base_order is not None:
+                team.order = {**team.base_order, "resume": True}
+                team.stop_sent = False  # a stop the dead process never acted on goes out again
+
+    async def claim(
+        self, worker_id: str, wait: float, running: set[str] | None = None
+    ) -> dict[str, Any]:
         """What this worker should do now: orders to start and teams to stop, each handed over once.
         Waits up to `wait` seconds for something, so a start reaches an idle worker quickly without
-        it polling hard."""
+        it polling hard. `running` is the teams the worker says it has going; without it nothing
+        is handed over again."""
+        if running is not None:
+            self.reconcile(worker_id, running)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + wait
         while True:

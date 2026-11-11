@@ -457,3 +457,10 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   worktree branch for every backend, but only the Claude Code `PreToolUse` hook refuses a commit or switch onto the default
   branch (`never_allowed.default_branch_reason`). `git -C <other folder>`, a script and an alias are not seen; Codex and
   kopicode sessions are held only by the branch they start on.
+- **A moved project restarts its round, and a project with no remote cannot move its code** (CUT-207, ADR-0057). Moving
+  stops the team, places the project and starts the persisted roles as a new team: the old worker's satay run lives in its
+  own store, so the round in flight starts over on the new machine, from the project's `origin`. A project with no `origin`
+  has nothing for the new machine to clone. The unpushed warning is the old worker's last report (or "never reported");
+  a stop that takes the round's whole length (a kopicode round can run for minutes) makes the move wait up to two minutes
+  and then leave the project where it was. A restarted controller recovers the worker's position from how many events its
+  journal holds, which holds only while the controller appends nothing to a live remote team but what the worker sent.

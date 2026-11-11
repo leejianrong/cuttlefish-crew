@@ -76,6 +76,7 @@ from cuttlefish.fleet.daemon import (
     RoleStart,
     SecretsUnavailableError,
     UnknownRoleError,
+    UnpushedWorkError,
 )
 from cuttlefish.fleet.devices import Device, DeviceError
 from cuttlefish.fleet.digest import DEFAULT_EVENTS
@@ -169,6 +170,7 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "terminal_command": project.terminal_command,
         "worktree_per_goal": project.worktree_per_goal,
         "worker": _worker_json(daemon, project.worker_id),
+        "worker_handover": project.worker_handover,
         "is_manager": project.id == daemon.manager_project,
         "decision_wait_minutes": project.decision_wait_minutes,
         **(
@@ -711,7 +713,7 @@ def create_app(
             worker = await _relay().remove_worker(worker_id)
         except DeviceError as exc:
             raise HTTPException(404, str(exc)) from exc
-        unplaced = await daemon.worker_removed(worker_id)
+        unplaced = await daemon.worker_removed(worker_id, worker.name)
         _LOG.info(
             "worker %s (%s) removed; %d project(s) unplaced", worker.id, worker.name, len(unplaced)
         )
@@ -744,7 +746,14 @@ def create_app(
         if not isinstance(wait, int | float):
             raise HTTPException(400, "'wait' must be a number of seconds")
         _relay().liveness.beat(worker.id)  # asking for work is a sign of life too
-        return await daemon.worker_claim(worker.id, float(wait))
+        running = body.get("running")
+        if running is not None and not (
+            isinstance(running, list) and all(isinstance(t, str) for t in running)
+        ):
+            raise HTTPException(400, "'running' must be a list of team ids")
+        return await daemon.worker_claim(
+            worker.id, float(wait), None if running is None else set(running)
+        )
 
     @app.post("/api/worker/teams/{team_id}/events")
     async def worker_team_events(team_id: str, request: Request) -> dict[str, Any]:
@@ -767,29 +776,61 @@ def create_app(
         if status not in ("completed", "failed", "stopped"):
             raise HTTPException(400, "'status' must be completed, failed or stopped")
         error = body.get("error")
+        checkout = body.get("checkout")
+        if checkout is not None and not isinstance(checkout, dict):
+            raise HTTPException(400, "'checkout' must be an object")
         try:
             await daemon.worker_finished(
-                worker.id, team_id, status, str(error)[:500] if error else None
+                worker.id, team_id, status, str(error)[:500] if error else None, checkout
             )
         except FleetError as exc:
             raise HTTPException(404, str(exc)) from exc
         return {"status": "ok"}
 
-    @app.patch("/api/projects/{project_id}/worker")
-    async def place_project(project_id: str, request: Request) -> dict[str, Any]:
-        """Run this project's teams on a worker machine, or (null) on this one. Applies to the next
-        team: one that is running stays where it is, so stop it first."""
-        body = await _json_body(request)
+    def _worker_target(body: dict[str, Any]) -> tuple[str | None, bool]:
         worker_id = body.get("worker_id")
         if worker_id is not None and not isinstance(worker_id, str):
             raise HTTPException(400, "'worker_id' must be a worker's id, or null")
         if worker_id is not None and daemon.worker_state(worker_id) is None:
             raise HTTPException(400, "there is no such worker; pair one under Devices")
+        return worker_id, body.get("acknowledge_unpushed") is True
+
+    def _unpushed(exc: UnpushedWorkError) -> JSONResponse:
+        # A person must say they know before the code moves; the message names what is left.
+        return JSONResponse({"detail": str(exc), "unpushed": True}, status_code=409)
+
+    @app.patch("/api/projects/{project_id}/worker")
+    async def place_project(project_id: str, request: Request) -> Response:
+        """Run this project's teams on a worker machine, or (null) on this one. Applies to the next
+        team: one that is running stays where it is, so stop it first, or move it."""
+        worker_id, acknowledge = _worker_target(await _json_body(request))
         try:
-            if daemon.is_running(project_id):
-                raise HTTPException(409, "this project has a running team; stop it first")
-            daemon.projects.update_worker(project_id, worker_id)
-            return _project_json(daemon, project_id)
+            await daemon.place(project_id, worker_id, acknowledge=acknowledge)
+            return JSONResponse(_project_json(daemon, project_id))
+        except UnpushedWorkError as exc:
+            return _unpushed(exc)
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/move")
+    async def move_project(project_id: str, request: Request) -> Response:
+        """Move this project to another worker (or null: back to this machine), stopping its
+        team and starting it again there. Refused with `unpushed` while the old machine may hold
+        work that is not pushed, until `acknowledge_unpushed` is true; `restart` starts the team
+        again even if it had already stopped (the refused first try of this move stopped it)."""
+        body = await _json_body(request)
+        worker_id, acknowledge = _worker_target(body)
+        try:
+            _moved, team_id = await daemon.move(
+                project_id, worker_id, acknowledge=acknowledge, restart=body.get("restart") is True
+            )
+            return JSONResponse({**_project_json(daemon, project_id), "team_id": team_id})
+        except UnpushedWorkError as exc:
+            return _unpushed(exc)
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 

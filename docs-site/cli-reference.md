@@ -279,18 +279,37 @@ settings, no device list. It holds no project yet and never gets the model key. 
 
 ### Running a project on a worker
 
-On a project's page, **Runs on** lists the paired workers (Admin to change it; stop a running team first). From then on
+On a project's page, **Runs on** lists the paired workers (Admin to change it; a running team is carried over, see below). From then on
 **Start team** hands the team to that machine: the worker clones the project's `origin` (credentials stripped; an empty
 repository when there is none) into `~/.cuttlefish/worker-work/<project>`, runs the same team workflow there, and streams
 each journal event back, so the page, the activity log and the status read as for a local team. Nothing runs in the
 controller's folder. The project card and page name the machine, and an offline worker says so and refuses a start with the
 machine named. **Stop** reaches the worker; if the worker is gone it ends the team on the controller. Removing a worker
-ends what ran on it and moves its projects back to this PC.
+ends what ran on it and moves its projects back to this PC, and each one gets a card under Needs you saying so.
+
+### Restarts and moving a project
+
+A team on a worker survives a restart of either side. After a **controller restart** the worker keeps running the team and
+catches the controller up when it reconnects; the controller rebuilds what it knew from its own project store (the journal
+is the controller's, so nothing is lost) and takes the team back. After a **worker restart** (a crash, a reboot, `kill -9`)
+the controller notices on the worker's next poll that the team is not running there and hands it over again; the worker
+resumes the run from its own satay store, so a finished round is not re-run and the one in flight starts over, as after a
+daemon restart. Only the fleet daemon and a `cuttlefish worker run` resume this way; a one-shot `cuttlefish run` does not.
+A worker that has lost its local state says so and the team is recorded as failed, rather than starting over silently.
+
+Choosing another machine in **Runs on** while a team runs **moves** the project (Admin): the team is stopped (it ends when
+its round does), the project is placed on the new worker, and the same roles start there as a new team. The journal stays
+on the controller; the code goes by the project's remote, so the new machine clones `origin`. The old machine's own
+satay run cannot follow, which is why the round in progress starts over. If the old machine may hold work that is not
+pushed (changed files, or commits no remote has), the move is refused with what it holds until you press **Move anyway**:
+push it first if you want it. A worker that went away with a team on it counts the same way, since nothing reported its
+state. A refused move leaves the team running; the one check that can only happen after the stop (the worker's last word
+about its checkout) leaves the project where it was.
 
 Not built yet, on purpose: the leased model key (the agent on a worker uses the credentials that machine already has;
 the controller sends none), project secrets (none are sent), steering, review gates, Needs you requests and the builder
-chat on a worker, installing dependencies first, and picking a team back up after the controller or worker restarts
-(a controller restart makes the worker drop its team).
+chat on a worker, and installing dependencies first. A project with no `origin` has no way to reach another worker: its
+code would have to be pushed somewhere first.
 
 ## `cuttlefish doctor`
 

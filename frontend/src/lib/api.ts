@@ -251,6 +251,8 @@ export interface ProjectSummary {
   /** CUT-206: the worker machine this project's teams run on; absent or null runs on this PC.
    * `name` is null when the worker was removed. */
   worker?: { id: string; name: string | null; online: boolean } | null;
+  /** CUT-207: work the project's last worker may still hold that is not pushed; null when none. */
+  worker_handover?: string | null;
   /** CUT-191: free-form labels the project list is grouped and filtered by. */
   tags?: string[];
   /** ADR-0052: this is the manager agent's project, not a builder's. */
@@ -364,6 +366,8 @@ export class FleetApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** CUT-207: a move was refused because the old machine may hold work that is not pushed. */
+    public unpushed = false,
   ) {
     super(message);
     this.name = "FleetApiError";
@@ -590,6 +594,7 @@ export class FleetClient {
       throw new FleetApiError(
         response.status,
         body.detail ?? response.statusText,
+        body.unpushed === true,
       );
     }
     if (response.status === 204) {
@@ -721,10 +726,25 @@ export class FleetClient {
 
   /** CUT-206: run this project's teams on a worker machine, or (null) on this PC. The next team
    * picks it up; a refusal says why (a team is running, no such worker). */
-  placeProject(id: string, workerId: string | null): Promise<ProjectSummary> {
+  placeProject(id: string, workerId: string | null, acknowledgeUnpushed = false): Promise<ProjectSummary> {
     return this.request(`/api/projects/${id}/worker`, {
       method: "PATCH",
-      body: JSON.stringify({ worker_id: workerId }),
+      body: JSON.stringify({ worker_id: workerId, acknowledge_unpushed: acknowledgeUnpushed }),
+    });
+  }
+
+  /** CUT-207: move the project to another worker (or null: this PC). A running team is stopped
+   * and started again there. Refused with `FleetApiError.unpushed` until the person has read what
+   * the old machine may still hold and says go on. */
+  moveProject(
+    id: string,
+    workerId: string | null,
+    acknowledgeUnpushed = false,
+    restart = false,
+  ): Promise<ProjectSummary & { team_id: string | null }> {
+    return this.request(`/api/projects/${id}/move`, {
+      method: "POST",
+      body: JSON.stringify({ worker_id: workerId, acknowledge_unpushed: acknowledgeUnpushed, restart }),
     });
   }
 

@@ -219,6 +219,37 @@ def _install_failure_text(ecosystem: str, result: envprep.StepResult, path: str 
     )
 
 
+class UnpushedWorkError(FleetError):
+    """The worker the project is on may hold work that is not pushed; say so before moving it."""
+
+
+_KEEP_HERE = "Keep it on this machine"
+_PLACE_ELSEWHERE = "I will place it on another worker"
+
+
+def _never_reported(worker: str) -> str:
+    return (
+        f"{worker} never reported this team ending, so changes it made there that were not "
+        "pushed to the remote may still be on that machine."
+    )
+
+
+def _handover_text(worker: str, checkout: dict[str, Any] | None) -> str | None:
+    """What to warn about before a project leaves `worker`, from the state it reported when its
+    team ended: `None` when it said everything is pushed."""
+    if not isinstance(checkout, dict):
+        return None
+    dirty, unpushed = checkout.get("dirty"), checkout.get("unpushed")
+    parts = []
+    if isinstance(dirty, int) and dirty > 0:
+        parts.append(f"{dirty} changed file{'s' if dirty != 1 else ''} not committed")
+    if isinstance(unpushed, int) and unpushed > 0:
+        parts.append(f"{unpushed} commit{'s' if unpushed != 1 else ''} not pushed")
+    if not parts:
+        return None
+    return f"{worker} holds {' and '.join(parts)}. Push them there first, or the move leaves them."
+
+
 class RoleStart(TypedDict):
     """One role to start a team with: a name and its own fresh task text.
 
@@ -1491,10 +1522,14 @@ class FleetDaemon:
     async def _start_remote(
         self, project: Project, roles: list[RoleStart], require_approval: bool
     ) -> str:
-        """Hand a team to the worker the project is placed on. The worker takes it on its next
-        poll, runs it in its own checkout, and streams its journal events back to this journal."""
+        return await self._hand_to_worker(
+            project, _build_role_inputs(project, roles), require_approval
+        )
+
+    def _worker_ready(self, project: Project) -> str:
+        """The name of the worker the project is placed on, or a `FleetError` saying why a team
+        cannot go there now."""
         state = self.worker_state(project.worker_id)
-        assert project.worker_id is not None
         if state is None:
             raise FleetError(
                 f"{project.name} is placed on a worker that is no longer paired. "
@@ -1506,9 +1541,12 @@ class FleetDaemon:
                 f"{project.name} runs on {name}, which is offline. Start "
                 f"`cuttlefish worker run` there, or move the project back to this machine."
             )
-        await asyncio.to_thread(gitexclude.ensure_excluded, project.root)
-        team_id = uuid.uuid4().hex
-        role_inputs = _build_role_inputs(project, roles)
+        return name
+
+    async def _order(
+        self, project: Project, team_id: str, role_inputs: list[RoleInput], require_approval: bool
+    ) -> dict[str, Any]:
+        """What a worker is told to run: names and settings only, never a secret or a key."""
         order: dict[str, Any] = {
             "team_id": team_id,
             "project_id": project.id,
@@ -1523,6 +1561,18 @@ class FleetDaemon:
             order["max_tokens"] = project.max_tokens
         if project.max_cost_usd is not None:
             order["max_cost_usd"] = project.max_cost_usd
+        return order
+
+    async def _hand_to_worker(
+        self, project: Project, role_inputs: list[RoleInput], require_approval: bool
+    ) -> str:
+        """Hand a team to the worker the project is placed on. The worker takes it on its next
+        poll, runs it in its own checkout, and streams its journal events back to this journal."""
+        assert project.worker_id is not None
+        name = self._worker_ready(project)
+        await asyncio.to_thread(gitexclude.ensure_excluded, project.root)
+        team_id = uuid.uuid4().hex
+        order = await self._order(project, team_id, role_inputs, require_approval)
         self.placement.assign(project.id, project.worker_id, order)
         self._projects.record_team_started(
             project.id,
@@ -1530,9 +1580,50 @@ class FleetDaemon:
             _to_persisted_roles(role_inputs),
             require_approval=require_approval,
         )
+        self._projects.set_worker_team(project.id, is_open=True)
         with logsetup.bind(project=project.id, team=team_id):
             logger.info("project %r: team handed to worker %s", project.name, name)
         return team_id
+
+    async def adopt_remote_teams(self) -> int:
+        """After a controller restart, take back the teams that were out on workers. The journal
+        here is the controller's own and has everything the workers sent; what a worker still
+        holds is its running process and its satay store, and the worker's next poll says which
+        it still runs, so a team that is not running there is handed over again to resume. Called
+        once at startup (`resume_pending`). Returns how many were taken back."""
+        count = 0
+        for project in self._projects.list():
+            team_id = project.last_team_id
+            if (
+                project.worker_id is None
+                or not project.worker_team_open
+                or team_id is None
+                or not project.last_team_roles
+                or self.placement.team_of_project(project.id) is not None
+            ):
+                continue
+            order = await self._order(
+                project,
+                team_id,
+                _persisted_roles_to_inputs(project.last_team_roles),
+                project.last_team_require_approval,
+            )
+            seen = await asyncio.to_thread(self._journal_count, project, team_id)
+            self.placement.adopt(project.id, project.worker_id, order, seen)
+            count += 1
+        return count
+
+    def _journal_count(self, project: Project, team_id: str) -> int:
+        """How many of the team's events this journal holds: the worker's own position, since for
+        a team out on a worker the controller appends nothing but what the worker sent."""
+        path = self._journal_path(project)
+        if not path.exists():
+            return 0
+        store = EpisodicStore.open(path)
+        try:
+            return sum(1 for _ in store.read(team_id))
+        finally:
+            store.close()
 
     def _journal_path(self, project: Project) -> Path:
         return Path(project.root) / ".cuttlefish" / "episodic.db"
@@ -1553,8 +1644,10 @@ class FleetDaemon:
             raise FleetError(f"this controller has no team {team_id!r} on you")
         return team
 
-    async def worker_claim(self, worker_id: str, wait: float) -> dict[str, Any]:
-        return await self.placement.claim(worker_id, min(max(wait, 0.0), 20.0))
+    async def worker_claim(
+        self, worker_id: str, wait: float, running: set[str] | None = None
+    ) -> dict[str, Any]:
+        return await self.placement.claim(worker_id, min(max(wait, 0.0), 20.0), running)
 
     async def worker_events(
         self, worker_id: str, team_id: str, events: list[dict[str, Any]]
@@ -1581,7 +1674,12 @@ class FleetDaemon:
         return team.last_seq
 
     async def worker_finished(
-        self, worker_id: str, team_id: str, status: str, error: str | None
+        self,
+        worker_id: str,
+        team_id: str,
+        status: str,
+        error: str | None,
+        checkout: dict[str, Any] | None = None,
     ) -> None:
         """The worker says its team is over: the journal says how, and the project is free."""
         team = self._team_of_worker(worker_id, team_id)
@@ -1595,15 +1693,38 @@ class FleetDaemon:
         if tail:
             await asyncio.to_thread(self._append_to_journal, project, team_id, tail)
         self.placement.end(team_id)
+        name = (self.worker_state(worker_id) or ("the worker",))[0]
+        self._projects.set_worker_team(
+            project.id, is_open=False, handover=_handover_text(name, checkout)
+        )
         with logsetup.bind(project=project.id, team=team_id):
             logger.info("worker team ended (%s)", status)
 
-    async def worker_removed(self, worker_id: str) -> Sequence[str]:
+    async def worker_removed(self, worker_id: str, name: str = "a worker") -> Sequence[str]:
         """A worker was removed: what ran on it ends here, and its projects run on this machine
-        again (they are not on any worker until a person places them). Returns their ids."""
+        again (they are not on any worker until a person places them). Each shows a Needs you
+        card saying so, and carries a warning about what the machine may still hold. Returns
+        their ids."""
         for team in self.placement.teams_on(worker_id):
             await self._end_here(team)
-        return self._projects.unplace_worker(worker_id)
+        placed = [p for p in self._projects.list() if p.worker_id == worker_id]
+        unplaced = self._projects.unplace_worker(worker_id)
+        for project in placed:
+            if project.last_team_id is not None:
+                self._projects.set_worker_team(
+                    project.id,
+                    handover=f"{name} was removed, so work it did not push to the remote is "
+                    "not reachable from here.",
+                )
+            self.raise_decision(
+                project.id,
+                f"{project.name} was on {name}, which was removed. It now runs on this machine. "
+                "Keep it here, or place it on another worker?",
+                [_KEEP_HERE, _PLACE_ELSEWHERE],
+                _KEEP_HERE,
+                role="system",
+            )
+        return unplaced
 
     async def _end_here(self, team: RemoteTeam) -> None:
         """End a team that nothing will report on any more, in the journal and here."""
@@ -1614,6 +1735,8 @@ class FleetDaemon:
         ]
         await asyncio.to_thread(self._append_to_journal, project, team.team_id, stopped)
         self.placement.end(team.team_id)
+        name = (self.worker_state(team.worker_id) or ("the worker",))[0]
+        self._projects.set_worker_team(project.id, is_open=False, handover=_never_reported(name))
 
     async def _stop_remote(self, team: RemoteTeam) -> None:
         state = self.worker_state(team.worker_id)
@@ -1622,6 +1745,97 @@ class FleetDaemon:
             await self._end_here(team)
             return
         team.stop_requested = True
+
+    def _check_handover(self, project: Project, acknowledge: bool) -> None:
+        if project.worker_handover and not acknowledge:
+            raise UnpushedWorkError(project.worker_handover)
+
+    async def place(
+        self, project_id: str, worker_id: str | None, *, acknowledge: bool = False
+    ) -> Project:
+        """Run the project's next teams on a worker (or, `None`, here). Not while a team runs."""
+        project = self._projects.get(project_id)
+        if self.is_running(project_id):
+            raise FleetError("this project has a running team; stop it first, or move it")
+        if worker_id == project.worker_id:
+            return project
+        self._check_handover(project, acknowledge)
+        placed = self._projects.update_worker(project_id, worker_id)
+        self._projects.set_worker_team(project_id, is_open=False, handover=None)
+        return placed
+
+    async def move(
+        self,
+        project_id: str,
+        worker_id: str | None,
+        *,
+        acknowledge: bool = False,
+        restart: bool = False,
+        stop_wait: float = 120.0,
+    ) -> tuple[Project, str | None]:
+        """Move the project to another worker (or, `None`, back here), carrying on a team that was
+        running (or, with `restart`, one that a refused first try of this move stopped). Returns
+        the project and the new team's id (`None` if nothing was carried on).
+
+        What moves is the project's place and its next team, not a live agent: the journal is the
+        controller's and stays; the code goes by the remote (the new machine clones `origin`), so
+        work the old one did not push is warned about first and never silently dropped; and the
+        new team starts the persisted roles again, a new round on the new machine, because the
+        old worker's satay run lives in its own store and cannot follow. Everything that can be
+        refused is checked before the running team is stopped, so a refused move leaves it
+        running."""
+        project = self._projects.get(project_id)
+        if worker_id == project.worker_id:
+            raise FleetError("the project is already there")
+        if worker_id is not None:
+            state = self.worker_state(worker_id)
+            if state is None:
+                raise FleetError("there is no such worker; pair one under Devices")
+            if not state[1]:
+                raise FleetError(f"{state[0]} is offline, so the project cannot move there now")
+        self._check_handover(project, acknowledge)
+        roles, approval = project.last_team_roles, project.last_team_require_approval
+        was_running = self.is_running(project_id)
+        remote = self.placement.team_of_project(project_id)
+        if remote is not None and not acknowledge:
+            state = self.worker_state(remote.worker_id)
+            if state is None or not state[1]:
+                # Nothing there will report its checkout, so say so now, while it still runs.
+                raise UnpushedWorkError(_never_reported(state[0] if state else "its worker"))
+        if was_running:
+            await self.stop(project_id)
+            deadline = asyncio.get_running_loop().time() + stop_wait
+            while self.is_running(project_id):
+                if asyncio.get_running_loop().time() > deadline:
+                    raise FleetError(
+                        "the team was told to stop but is still ending; the project has not "
+                        "moved. Move it again once it has stopped"
+                    )
+                await asyncio.sleep(0.2)
+            # The worker's last word about its checkout arrives with the stop.
+            try:
+                self._check_handover(self._projects.get(project_id), acknowledge)
+            except UnpushedWorkError as exc:
+                raise UnpushedWorkError(
+                    f"{exc} The team has stopped; the project stays where it is until you "
+                    "move it again."
+                ) from exc
+        self._projects.update_worker(project_id, worker_id)
+        self._projects.set_worker_team(project_id, is_open=False, handover=None)
+        moved = self._projects.get(project_id)
+        team_id: str | None = None
+        if (was_running or restart) and roles:
+            inputs = _persisted_roles_to_inputs(roles)
+            if moved.worker_id is not None:
+                team_id = await self._hand_to_worker(moved, inputs, approval)
+            else:
+                team_id = uuid.uuid4().hex
+                await asyncio.to_thread(gitexclude.ensure_excluded, moved.root)
+                await self._launch_team(moved, team_id, inputs, require_approval=approval)
+                self._projects.record_team_started(
+                    project_id, team_id, roles, require_approval=approval
+                )
+        return moved, team_id
 
     async def start(
         self,
@@ -1955,6 +2169,7 @@ class FleetDaemon:
                 resumable.append((project, team_id))
         self.sweep_abandoned(keep_blocked={team_id for _, team_id in resumable})
         self.restore_decisions()
+        await self.adopt_remote_teams()
         attempts: list[ResumeAttempt] = []
         for project, team_id in resumable:
             role_inputs = _persisted_roles_to_inputs(project.last_team_roles)
