@@ -221,3 +221,24 @@ describe("FleetClient over a transport", () => {
     expect(fetchSpy).toHaveBeenCalledWith("http://127.0.0.1:8420/api/projects", expect.anything());
   });
 });
+
+describe("FleetClient.listWorkersIfRelay", () => {
+  it("does not ask for workers when the daemon has no relay (it would answer 404)", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ enabled: false }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FleetClient("http://127.0.0.1:8420", "t");
+    await expect(client.listWorkersIfRelay()).resolves.toEqual({ workers: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists them when the relay is on", async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      new Response(JSON.stringify(url.endsWith("/api/relay") ? { enabled: true } : { workers: [{ id: "w" }] }), {
+        status: 200,
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new FleetClient("http://127.0.0.1:8420", "t");
+    await expect(client.listWorkersIfRelay()).resolves.toEqual({ workers: [{ id: "w" }] });
+  });
+});

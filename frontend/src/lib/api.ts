@@ -923,23 +923,28 @@ export class FleetClient {
     return this.request("/api/relay");
   }
 
-  private tierRead: { at: number; tier: Promise<DeviceTier | null> } | null = null;
+  private relayRead: { at: number; info: Promise<RelayInfo | null> } | null = null;
+
+  /** `getRelay`, kept for 30 s so a screen of cards asks once; `null` when the daemon cannot say. */
+  private relayInfo(): Promise<RelayInfo | null> {
+    const now = Date.now();
+    if (this.relayRead === null || now - this.relayRead.at > 30_000) {
+      this.relayRead = { at: now, info: this.getRelay().then((r) => r, () => null) };
+    }
+    return this.relayRead.info;
+  }
 
   /** The tier of the device using this client (ADR-0039), or `null` for the PC's own dashboard and
-   * when the daemon cannot say. Kept for 30 s so a screen of cards asks once; the daemon still
-   * decides every request, this only lets the page stop offering what would be refused. */
-  myTier(): Promise<DeviceTier | null> {
-    const now = Date.now();
-    if (this.tierRead === null || now - this.tierRead.at > 30_000) {
-      this.tierRead = {
-        at: now,
-        tier: this.getRelay().then(
-          (relay) => relay.you?.tier ?? null,
-          () => null,
-        ),
-      };
-    }
-    return this.tierRead.tier;
+   * when the daemon cannot say. The daemon still decides every request, this only lets the page
+   * stop offering what would be refused. */
+  async myTier(): Promise<DeviceTier | null> {
+    return (await this.relayInfo())?.you?.tier ?? null;
+  }
+
+  /** The paired workers, or none without asking when the daemon was not started with `--relay`:
+   * `/api/workers` answers 404 then, which every project page would log as an error. */
+  async listWorkersIfRelay(): Promise<{ workers: WorkerInfo[] }> {
+    return (await this.relayInfo())?.enabled ? this.listWorkers() : { workers: [] };
   }
 
   listDevices(): Promise<DevicesState> {
