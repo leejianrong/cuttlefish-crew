@@ -71,12 +71,24 @@ commits alone.
 
 - **Secrets are not shown.** A file named like a secret (`.env`, `*.pem`, `*.key`, SSH keys, anything under
   `.cuttlefish/`) or one your `.gitignore` names appears with its name and counts and no lines. Files git ignores never
-  appear. Nothing else is redacted: it is your own code, on your own dashboard.
+  appear, and neither do cuttlefish's own `.cuttlefish/` and `.satay/` folders. Nothing else is redacted: it is your own code, on your own dashboard.
 - **Big diffs are cut, and it says so.** A file shows its first 1,000 changed lines; past about 1.5 MB of patch, or 300
   files, the rest are listed or counted without lines. Binary files show as binary.
 - **A goal with no branch** (it ran in your own checkout) has nothing to compare, and the card says to turn on **Its
   own branch**. A project placed on a worker machine says its code is on that machine and the diff is not shown
   here yet.
+
+**Send a note on a line.** Press the line number of an added or removed line to write a note about it, and send it to
+the builder. The message names the file, the side and the line, quotes the line itself, and says which branch and commit
+(and whether there were uncommitted changes) the line was seen in, so the agent can still find it if the numbers have
+moved. If the branch has changed since the diff was read, the page says so and asks before sending. Files whose lines
+are not shown (withheld, too large, binary) have no line numbers to press.
+
+Where the note goes depends on the project. A project with a running team sends it to the role you pick, as a
+[steer](quickstart.md) (Approve tier). A builder session gets it as chat, which only a running Claude Code builder
+takes (Terminal tier, the same as typing in its terminal); for any other builder the box says so and offers **Copy**, so
+you can paste it in the Terminal tab. A note is never sent while the builder is waiting on a permission, because the
+dialog would read it as the answer.
 
 The route is `GET /api/projects/{id}/goal/diff` (View tier: it only reads, and the journal at the same tier already
 shows what the agent wrote). A refusal is a `200` with `ok: false`, a `code` and a plain `reason`.
