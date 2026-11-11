@@ -166,7 +166,9 @@ async def _beat(link: WorkerLink, beat_every: float, announce: Callable[[], None
 async def _pull(link: WorkerLink, executor: Executor) -> None:
     """Ask for work and do what is handed over: teams to start, teams to stop."""
     while True:
-        status, body = await link.request("POST", "/api/worker/work", {"wait": WORK_WAIT_SECONDS})
+        status, body = await link.request(
+            "POST", "/api/worker/work", {"wait": WORK_WAIT_SECONDS, "running": executor.running()}
+        )
         if status != 200:
             raise LinkError(f"the controller answered {status}")
         for order in body.get("orders", []):
