@@ -150,3 +150,12 @@ export function queueOrder(requests: readonly NeedsYouRequest[]): NeedsYouReques
     .sort((a, b) => band(a.request) - band(b.request) || a.index - b.index)
     .map(({ request }) => request);
 }
+
+/** Why a project sits in the lead "Needs you" group (CUT-284): its most urgent pending request's
+ * title (and how many more), or `fallback`, the state line, for a review gate with no request. */
+export function needsReason(requests: readonly NeedsYouRequest[], fallback: string): string {
+  const [first] = queueOrder(requests);
+  if (!first) return fallback;
+  const more = requests.length - 1;
+  return more > 0 ? `${first.title} (+${more} more)` : first.title;
+}
