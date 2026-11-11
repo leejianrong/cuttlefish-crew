@@ -24,8 +24,7 @@ Phase 2 (screenshots, UX and marketing teardown) has a first pass on landing pag
 4. **herdr is polished and has a one-line pitch.** "Tmux for coding agents": a native desktop app (macOS, Linux, Windows; just
    released), a separate terminal UI, and `herdr-core`, a local server that keeps agents running when the app closes. Per-repo
    spaces, per-task tabs, agent state (working / blocked / done) rolled up to the sidebar, SSH machines in one sidebar, an
-   agent-to-agent CLI (`hc run`, `hc send`), mods that the agent itself edits, Apache-2.0. Its docs show no phone app, web UI
-   or permission-approval flow. What to learn from it is the clarity and polish, not a feature list.
+   agent-to-agent CLI (`hc run`, `hc send`), mods that the agent itself edits, Apache-2.0. Its docs show no web UI or permission-approval flow (a phone app does exist: see `herdr.md`). What to learn from it is the clarity and polish, not a feature list.
 5. **Free competitors die or stay free.** Vibe Kanban's company shut down on 10 April 2026 (mostly free users); the project
    continues community-maintained. Willingness to pay sits with the cloud agents.
 
@@ -35,7 +34,7 @@ Backends = how many coding agents the product can drive.
 
 | Product | What it is | Backends | Phone | Remote / multi-machine | Price (as found) |
 |---|---|---|---|---|---|
-| **herdr** | Open-source native app + `herdr-core` server; spaces per repo, tabs per task | Any terminal agent; status integrations for Claude Code, Codex, Copilot CLI, Cursor Agent, Gemini CLI, OpenCode and more | None in docs | SSH machines in one sidebar | Free |
+| **herdr** | Open-source native app + `herdr-core` server; spaces per repo, tabs per task | Any terminal agent; status integrations for Claude Code, Codex, Copilot CLI, Cursor Agent, Gemini CLI, OpenCode and more | iOS, iPad, Android over SSH, no account (`herdr.md`) | SSH machines in one sidebar | Free |
 | **Devin** (Cognition) | Cloud engineer with shell, IDE, browser; from web, Slack, Teams, Linear/Jira, CLI | 1 (its own) | iOS beta waitlist; no Android app found | Cloud VMs | Sources conflict: one page showed Free / $20 / $200 / Teams $80 + $40 per seat; others cite ACUs at about $2.25. Verify on devin.ai |
 | **Claude Code Remote Control / Agent View** | Phone, web or desktop window onto local sessions; dashboard of background sessions | 1 (Claude Code) | Yes, Claude app, QR | Local machine, outbound HTTPS only | In Pro, Max, Team, Enterprise |
 | **Claude Code cloud sessions** | Tasks in Anthropic's cloud, PR per task | 1 | iOS app | Cloud | Same limits as the CLI |
@@ -144,7 +143,10 @@ herdr, Paseo, Conductor, Happy, Omnara, Devin and ours. **The phone screenshots 
 5. "Not a spreadsheet of terminal tabs" is memorable but the page never says what the product is in plain words until after
    the fold.
 
-## 9. Phase 2, remaining work (planned, not done)
+## 9. Phase 2, remaining work
+
+**Update 2026-11-12:** desk teardowns of herdr, Paseo and Claude Squad and a side-by-side with our screens are in `herdr.md`, `paseo.md`, `claude-squad.md` and `ux-teardown-comparison.md`. Still not done: running any of them.
+
 
 Goal: see their products and pages, then decide what to change in ours. Priorities from the owner: user flows, backend count,
 UI/UX, landing page, marketing.
