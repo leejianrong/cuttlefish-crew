@@ -18,6 +18,8 @@ reference), headless Claude Code, headless Codex. Python, `uv`, `ruff`,
 - **Never read or open `.cuttlefish/devices.db`, `.cuttlefish/relay-key`, `.cuttlefish/hook-token` or `.cuttlefish/manager-token`.** They hold each
   paired device's secret, the daemon's relay key, the token a Claude Code session's hook script uses, and the manager's credential. Use `GET
   /api/devices`, which shows neither.
+- **Never read or open `~/.cuttlefish/worker.json`** (a worker's keypair and secret) or `.cuttlefish/workers.db` (the
+  controller's registry of them); use `GET /api/workers`.
 - **Never read or open `.cuttlefish/secrets.db`.** It's encrypted at rest,
   but still holds every project's real secrets; use `cuttlefish secrets
   get/list` instead. Never log or print `CUTTLEFISH_SECRETS_KEY` itself —

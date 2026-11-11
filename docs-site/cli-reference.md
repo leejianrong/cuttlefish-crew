@@ -257,6 +257,28 @@ security review. There is no
 WebAuthn step-up for Terminal and Admin (it needs https), so those tiers stay on until you turn them off. Devices are
 kept in `~/.cuttlefish/devices.db`, and the daemon's own key in `~/.cuttlefish/relay-key`, both mode 0600.
 
+## `cuttlefish worker join CODE [--name NAME]` and `cuttlefish worker run`
+
+Make a second computer a **worker** for this daemon ([ADR-0057](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/adr/0057-a-worker-machine-dials-the-controller-pairs-once-and-holds-a-lease-never-the-model-key.md)).
+The worker dials out, so a laptop behind NAT or a VM with no public port works: it needs the daemon's relay
+(`cuttlefish serve --relay ...`) and nothing inbound.
+
+1. On the PC, open Devices, then **Add a worker machine**, then **Make a join command**. It works once, for five minutes.
+2. On the other machine, with cuttlefish installed, paste it: `cuttlefish worker join '<code>'`. It prints a six-digit
+   code, the same one Devices shows under **Waiting for you**.
+3. **Confirm on the PC only if the codes match.** Until you do the machine is served nothing.
+
+`join` then stays connected and sends a heartbeat every 15 seconds; Devices lists the machine under **Worker machines** as
+online, and as offline once it has been silent for 45 seconds (the network dropped, or the process stopped). After a restart
+of the machine, `cuttlefish worker run` reconnects it without a new code. **Remove** on the PC deletes the worker's record
+and closes its connection at once; the worker notices, deletes `~/.cuttlefish/worker.json` and stops.
+
+A worker keeps its own keypair and a secret the daemon made for it at the confirm in `~/.cuttlefish/worker.json` (mode
+0600), and nothing else. It sits **below View**: it can send a heartbeat and nothing else, no projects, no secrets, no
+settings, no device list. It holds no project yet and never gets the model key. Placing a project on a worker is the next
+step, and a worker will then be trusted with that project's code and secrets while it runs a task. Workers are kept in
+`~/.cuttlefish/workers.db` beside `devices.db`.
+
 ## `cuttlefish doctor`
 
 Checks what is set up and what is quietly wrong, and exits non-zero only for a problem that

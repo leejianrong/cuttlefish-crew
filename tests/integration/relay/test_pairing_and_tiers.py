@@ -437,6 +437,7 @@ async def test_a_device_list_never_contains_a_key_or_a_secret(rig: Rig) -> None:
     assert set(json.loads(text)["devices"][0]) == {
         "id",
         "name",
+        "kind",
         "tier",
         "created_at",
         "last_seen_at",
@@ -445,4 +446,9 @@ async def test_a_device_list_never_contains_a_key_or_a_secret(rig: Rig) -> None:
 
 
 async def test_the_tier_names_are_the_ones_the_adr_lists() -> None:
-    assert [t.label for t in Tier] == ["view", "approve", "terminal", "admin"]
+    assert [t.label for t in Tier if t is not Tier.WORKER] == [
+        "view",
+        "approve",
+        "terminal",
+        "admin",
+    ]  # a worker sits below View and is no device tier (ADR-0057)

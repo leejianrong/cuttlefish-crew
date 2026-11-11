@@ -22,6 +22,7 @@ from starlette.types import ASGIApp
 from cuttlefish.fleet.auth import SecurityCheck
 from cuttlefish.fleet.devices import Device, DeviceAuthority, DeviceStore, PairingManager
 from cuttlefish.fleet.tiers import Tier, required_tier
+from cuttlefish.fleet.workers import WorkerLiveness
 from cuttlefish.relay.connector import (
     RelayConnector,
     load_or_create_daemon_key,
@@ -57,32 +58,42 @@ class RelayGuard:
     """Holds a request that came through the relay to its device's tier. The daemon decides this,
     never the relay and never the browser."""
 
-    def __init__(self, relay_token: str, store: DeviceStore) -> None:
+    def __init__(
+        self, relay_token: str, store: DeviceStore, workers: DeviceStore | None = None
+    ) -> None:
         self._relay_token = relay_token.encode()
         self._store = store
+        self._workers = workers
         self._touched: dict[str, float] = {}
 
     def is_relay(self, token: str | None) -> bool:
         return bool(token) and secrets.compare_digest((token or "").encode(), self._relay_token)
 
+    def _find(self, device_id: str) -> Device | None:
+        found = self._store.find(device_id)
+        return found or (self._workers.find(device_id) if self._workers is not None else None)
+
     def device_for(self, headers: Mapping[str, str]) -> Device | None:
-        return (
-            self._store.find(headers.get(DEVICE_HEADER, "")) if headers.get(DEVICE_HEADER) else None
-        )
+        return self._find(headers[DEVICE_HEADER]) if headers.get(DEVICE_HEADER) else None
 
     def authorize(self, *, device_id: str | None, method: str, path: str) -> Device:
         """The device, if it may make this request. Raises `AuthError`: 401 for a device that is
         unknown or revoked, 403 for one whose tier is too low."""
-        device = self._store.find(device_id or "")
+        device = self._find(device_id or "")
         if device is None or not device.active:
             raise satay.control.AuthError(401, "this device is not paired, or was revoked")
         needed = required_tier(method, path)
+        # The worker tier is its own lane: a worker reaches only the routes listed for it (its
+        # tier is below every other, so the order alone keeps it out of the rest), and a person's
+        # device never reaches those (ADR-0057).
+        if needed is Tier.WORKER and not device.is_worker:
+            raise TierRefusal(403, "that route is for a worker machine")
         if needed is not None and device.tier < needed:
             raise TierRefusal(403, _too_low(device.tier, needed))
         now = time.monotonic()
         if now - self._touched.get(device.id, -_TOUCH_EVERY_SECONDS) >= _TOUCH_EVERY_SECONDS:
             self._touched[device.id] = now
-            self._store.touch(device.id)
+            (self._workers if device.is_worker and self._workers else self._store).touch(device.id)
         return device
 
 
@@ -99,6 +110,8 @@ class RelaySettings:
     key_path: Path
     #: Where paired devices are kept; next to the key when not given.
     devices_path: Path | None = None
+    #: Where paired worker machines are kept (ADR-0057); likewise.
+    workers_path: Path | None = None
     #: The address a browser dials, when it differs from the daemon's own (`url`): behind
     #: `tailscale serve` the daemon reaches the relay on loopback `ws://` and a phone must use
     #: `wss://<machine>.<tailnet>.ts.net:<port>` (ADR-0041).
@@ -120,15 +133,24 @@ class RelaySettings:
 class RelayLink:
     """What `run_daemon` and `create_app` need once a relay is configured."""
 
-    def __init__(self, settings: RelaySettings, store: DeviceStore | None = None) -> None:
+    def __init__(
+        self,
+        settings: RelaySettings,
+        store: DeviceStore | None = None,
+        workers: DeviceStore | None = None,
+    ) -> None:
         self.settings = settings
         self.internal_token = secrets.token_urlsafe(32)
         self.store = store or DeviceStore.open(
             settings.devices_path or settings.key_path.parent / "devices.db"
         )
-        self.pairing = PairingManager(self.store)
-        self.authority = DeviceAuthority(self.store, self.pairing)
-        self.guard = RelayGuard(self.internal_token, self.store)
+        self.workers = workers or DeviceStore.open(
+            settings.workers_path or settings.key_path.parent / "workers.db"
+        )
+        self.liveness = WorkerLiveness()
+        self.pairing = PairingManager(self.store, workers=self.workers)
+        self.authority = DeviceAuthority(self.store, self.pairing, self.workers)
+        self.guard = RelayGuard(self.internal_token, self.store, self.workers)
         self._daemon_key = load_or_create_daemon_key(settings.key_path)
         self._connector: RelayConnector | None = None
 
@@ -155,9 +177,10 @@ class RelayLink:
         )
         return self._connector
 
-    def start_pairing(self) -> tuple[str, float]:
-        """Open a pairing (replacing any earlier one). The payload goes in a URL fragment."""
-        opened = self.pairing.open_pairing()
+    def start_pairing(self, kind: str = "device") -> tuple[str, float]:
+        """Open a pairing (replacing any earlier one). The payload goes in a URL fragment (or, for
+        a worker, on `cuttlefish worker join`'s command line)."""
+        opened = self.pairing.open_pairing(kind)
         return pairing_payload(
             self.settings.browser_url, self._daemon_key, opened.secret, self.settings.room
         ), opened.expires_at
@@ -169,5 +192,15 @@ class RelayLink:
             await self._connector.revoke_device(device_id)
         return device
 
+    async def remove_worker(self, worker_id: str) -> Device:
+        """Remove a worker (ADR-0057): its registry row goes, its live channel is closed at once
+        and the next handshake fails. (Its leases are revoked here once a worker holds any.)"""
+        worker = self.workers.delete(worker_id)
+        self.liveness.forget(worker_id)
+        if self._connector is not None:
+            await self._connector.revoke_device(worker_id)
+        return worker
+
     def close(self) -> None:
         self.store.close()
+        self.workers.close()

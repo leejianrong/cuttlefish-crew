@@ -7,6 +7,7 @@
     type DevicesState,
     type FleetClient,
     type RelayInfo,
+    type WorkerInfo,
   } from "../api";
   import { formatCode, pairingAddressProblem } from "../relay";
 
@@ -32,6 +33,10 @@
   let working = $state(false);
   let now = $state(Date.now() / 1000);
   let link = $state<string | null>(null);
+  let workers = $state<WorkerInfo[]>([]);
+  // The join command for a worker machine; like `link`, only good while its pairing is open.
+  let joinCommand = $state<string | null>(null);
+  let removingWorker = $state<string | null>(null);
   let removing = $state<string | null>(null);
 
   function savedAddress(): string {
@@ -68,7 +73,10 @@
     try {
       relay = await client.getRelay();
       if (!addressTouched && relay.page_url && address !== relay.page_url) address = relay.page_url;
-      if (relay.enabled) roster = await client.listDevices();
+      if (relay.enabled) {
+        roster = await client.listDevices();
+        workers = (await client.listWorkers()).workers;
+      }
       failed = false;
     } catch {
       failed = true;
@@ -87,7 +95,10 @@
 
   // The link is only good while its pairing is: when the daemon says there is none, drop it.
   $effect(() => {
-    if (roster && !roster.pairing) link = null;
+    if (roster && !roster.pairing) {
+      link = null;
+      joinCommand = null;
+    }
   });
 
   async function act(work: () => Promise<unknown>, done?: string) {
@@ -113,20 +124,32 @@
         /* a convenience only */
       }
       link = `${address.replace(/\/+$/, "")}/#pair=${made.payload}`;
+      joinCommand = null; // one pairing is open at a time; this one replaced the other
     });
   }
 
-  async function copy() {
-    if (!link) return;
+  function startWorkerPairing() {
+    return act(async () => {
+      const made = await client.startWorkerPairing();
+      // Single quotes keep the shell from reading the code; it holds no quote itself.
+      joinCommand = `cuttlefish worker join '${made.payload}'`;
+      link = null;
+    });
+  }
+
+  async function copy(text: string | null = link) {
+    if (!text) return;
     try {
-      await navigator.clipboard.writeText(link);
-      notice = "Link copied.";
+      await navigator.clipboard.writeText(text);
+      notice = "Copied.";
     } catch {
       notice = "Could not copy. Select the link and copy it by hand.";
     }
   }
 
   const tierNote = (tier: DeviceTier) => TIERS.find((t) => t.id === tier)?.note ?? "";
+  const seenWorker = (w: WorkerInfo) =>
+    w.online ? "Online now" : w.last_seen_at ? `Offline, last heard ${ago(w.last_seen_at)}` : "Offline, not heard from yet";
   const seen = (d: DeviceInfo) => (d.last_seen_at ? ago(d.last_seen_at) : "not used yet");
 
   function ago(epoch: number): string {
@@ -142,8 +165,8 @@
   <header>
     <h1 class="headline-small">Devices</h1>
     <p class="body-medium muted">
-      Phones and other browsers paired with this PC through the relay. Each has its own key and
-      secret, and the daemon holds each to what you allow.
+      Phones and other browsers paired with this PC through the relay, and other computers that
+      work for it. Each has its own key and secret, and the daemon holds each to what you allow.
     </p>
   </header>
 
@@ -212,12 +235,48 @@
                 confirm below and the codes match.
               </p>
               <div class="row">
-                <button class="btn btn-tonal" onclick={copy}>Copy link</button>
+                <button class="btn btn-tonal" onclick={() => copy()}>Copy link</button>
                 <button class="btn btn-text" disabled={working} onclick={() => act(() => client.cancelPairing())}>
                   Cancel
                 </button>
               </div>
             </div>
+          </div>
+        {/if}
+      </section>
+    {/if}
+
+    {#if canAdmin}
+      <section class="card">
+        <h2 class="title-medium">Add a worker machine</h2>
+        {#if !joinCommand}
+          <p class="muted">
+            Another computer that runs agents for this one. Make a command, paste it into a terminal
+            on that machine (it needs cuttlefish installed), then confirm it here.
+          </p>
+          <p class="warn">
+            A worker is trusted with the code and secrets of the projects placed on it while it runs
+            a task. It never holds your model key: it is lent a short-lived lease instead.
+          </p>
+          <div class="row">
+            <button class="btn btn-filled" disabled={working} onclick={startWorkerPairing}>
+              Make a join command
+            </button>
+          </div>
+        {:else}
+          <p>
+            Run this on the other machine. It works once and expires in
+            <strong>{Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, "0")}</strong>.
+          </p>
+          <p class="link mono">{joinCommand}</p>
+          <p class="warn">
+            Nothing is let in until you confirm below and the codes match.
+          </p>
+          <div class="row">
+            <button class="btn btn-tonal" onclick={() => copy(joinCommand)}>Copy command</button>
+            <button class="btn btn-text" disabled={working} onclick={() => act(() => client.cancelPairing())}>
+              Cancel
+            </button>
           </div>
         {/if}
       </section>
@@ -229,9 +288,12 @@
         {#each roster.pending as pending (pending.id)}
           <div class="pending">
             <div class="grow">
-              <p class="name">{pending.name}</p>
+              <p class="name">
+                {pending.name}
+                {#if pending.kind === "worker"}<span class="tag">worker machine</span>{/if}
+              </p>
               <p class="muted">
-                Confirm only if the phone shows the same code:
+                Confirm only if {pending.kind === "worker" ? "the machine" : "the phone"} shows the same code:
               </p>
               <p class="code mono" aria-label="Code {pending.code.split('').join(' ')}">
                 {formatCode(pending.code)}
@@ -251,6 +313,37 @@
         {/each}
       </section>
     {/if}
+
+    <section class="card">
+      <h2 class="title-medium">Worker machines</h2>
+      {#if workers.length === 0}
+        <p class="muted">None yet. Projects run on this PC.</p>
+      {/if}
+      {#each workers as worker (worker.id)}
+        <div class="device">
+          <div class="grow">
+            <p class="name">
+              {worker.name}
+              <span class="tag" class:online={worker.online}>{worker.online ? "Online" : "Offline"}</span>
+            </p>
+            <p class="muted">{[seenWorker(worker), worker.host, worker.platform].filter(Boolean).join(" · ")}</p>
+          </div>
+          {#if canAdmin}
+            {#if removingWorker === worker.id}
+              <div class="row">
+                <span class="warn">Cut {worker.name} off at once?</span>
+                <button class="btn btn-danger" disabled={working} onclick={() => { removingWorker = null; void act(() => client.removeWorker(worker.id), `${worker.name} was removed.`); }}>
+                  Remove
+                </button>
+                <button class="btn btn-text" onclick={() => (removingWorker = null)}>Keep</button>
+              </div>
+            {:else}
+              <button class="btn btn-danger-text" onclick={() => (removingWorker = worker.id)}>Remove</button>
+            {/if}
+          {/if}
+        </div>
+      {/each}
+    </section>
 
     <section class="card">
       <h2 class="title-medium">Paired devices</h2>
@@ -424,6 +517,11 @@
     border-radius: 8px;
     background: var(--md-sys-color-secondary-container);
     color: var(--md-sys-color-on-secondary-container);
+  }
+
+  .tag.online {
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
   }
 
   .tier {

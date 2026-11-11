@@ -54,6 +54,8 @@ def test_no_tier_is_listed_for_a_route_that_does_not_exist(tmp_path: Path) -> No
         ("PATCH", "/api/projects/abc/mode", Tier.ADMIN),
         ("DELETE", "/api/devices/pairing", Tier.ADMIN),  # the literal beats the placeholder
         ("DELETE", "/api/devices/0123", Tier.APPROVE),
+        ("POST", "/api/worker/heartbeat", Tier.WORKER),
+        ("DELETE", "/api/workers/0123", Tier.ADMIN),
         ("PATCH", "/api/devices/0123", Tier.ADMIN),
         ("PUT", "/api/projects/p/secrets/K", Tier.ADMIN),
         ("GET", "/api/not-a-route", Tier.ADMIN),  # an unlisted API route fails closed
@@ -73,7 +75,9 @@ def test_the_dashboards_own_files_and_the_public_routes_need_no_tier() -> None:
 
 
 def test_tiers_are_ordered_and_parse_by_name() -> None:
-    assert Tier.VIEW < Tier.APPROVE < Tier.TERMINAL < Tier.ADMIN
+    assert Tier.WORKER < Tier.VIEW < Tier.APPROVE < Tier.TERMINAL < Tier.ADMIN
     assert parse_tier("Approve") is Tier.APPROVE
     with pytest.raises(ValueError):
         parse_tier("root")
+    with pytest.raises(ValueError):
+        parse_tier("worker")  # a device is never a worker

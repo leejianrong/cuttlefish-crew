@@ -1781,6 +1781,21 @@ def build_parser() -> argparse.ArgumentParser:
     )
     remove_parser.add_argument("project_id")
 
+    worker_parser = subparsers.add_parser(
+        "worker",
+        help="Run this machine as a worker for another machine's daemon (ADR-0057)",
+    )
+    worker_sub = worker_parser.add_subparsers(dest="worker_command", required=True)
+    worker_join = worker_sub.add_parser(
+        "join",
+        help="Pair with a controller (the owner confirms on the PC), then stay connected",
+    )
+    worker_join.add_argument(
+        "code", help="The join code from Workers on the controller's dashboard (works once)"
+    )
+    worker_join.add_argument("--name", help="What the dashboard calls this machine (default: host)")
+    worker_sub.add_parser("run", help="Reconnect a machine that has already joined")
+
     serve_parser = subparsers.add_parser(
         "serve", help="Start the fleet daemon: launches and owns every registered project's team"
     )
@@ -2038,6 +2053,51 @@ def _run_serve(args: argparse.Namespace) -> int:
         return EXIT_OK
 
 
+def _worker(args: argparse.Namespace) -> int:
+    """`cuttlefish worker join|run` (ADR-0057). A worker holds only its own keys: no project, no
+    secret and no model key until the controller places work on it."""
+    from cuttlefish.worker import run as worker_run
+    from cuttlefish.worker.link import JoinLinkError
+
+    path = worker_run.identity_path()
+
+    async def _go() -> int:
+        if args.worker_command == "join":
+            if path.exists():
+                print(
+                    f"cuttlefish worker: this machine already joined a controller ({path}). "
+                    "Remove it on the PC, or delete that file, to join another.",
+                    file=sys.stderr,
+                )
+                return EXIT_CONFIG_ERROR
+            try:
+                identity = await worker_run.join(
+                    args.code, name=args.name or worker_run.default_name(), path=path
+                )
+            except (JoinLinkError, worker_run.JoinError) as exc:
+                print(f"cuttlefish worker: {exc}", file=sys.stderr)
+                return EXIT_CONFIG_ERROR
+            print(f"Joined as {identity.name}. Leave this running; Ctrl-C stops it.", flush=True)
+        else:
+            loaded = worker_run.Identity.load(path)
+            if loaded is None:
+                print(
+                    "cuttlefish worker: this machine has not joined a controller. "
+                    "Run `cuttlefish worker join <code>` first.",
+                    file=sys.stderr,
+                )
+                return EXIT_CONFIG_ERROR
+            identity = loaded
+        await worker_run.run(identity, path=path)
+        return EXIT_OK
+
+    try:
+        return asyncio.run(_go())
+    except KeyboardInterrupt:
+        print("\ncuttlefish worker: stopped", flush=True)
+        return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -2062,6 +2122,8 @@ def main(argv: list[str] | None = None) -> int:
         return _doctor(args)
     if args.command == "serve":
         return _run_serve(args)
+    if args.command == "worker":
+        return _worker(args)
     if args.command == "relay":
         return _relay(args)
     if args.command == "relay-admin":
