@@ -10,7 +10,14 @@
     client,
     projectId = null,
     onDone,
-  }: { client: FleetClient; projectId?: string | null; onDone?: () => void } = $props();
+    quiet = false,
+  }: {
+    client: FleetClient;
+    projectId?: string | null;
+    onDone?: () => void;
+    /** An outlined button, red only on hover and in the confirm step (CUT-283). */
+    quiet?: boolean;
+  } = $props();
 
   let confirming = $state(false);
   let busy = $state(false);
@@ -56,7 +63,7 @@
     </div>
   {:else}
     <button
-      class="btn btn-danger"
+      class={["btn", quiet ? "btn-outlined quiet" : "btn-danger"]}
       onclick={() => {
         result = null;
         confirming = true;
@@ -79,6 +86,18 @@
 
   .btn {
     min-height: 44px;
+  }
+
+  .quiet {
+    color: var(--md-sys-color-on-surface-variant);
+    border-color: var(--md-sys-color-outline-variant);
+  }
+
+  .quiet:hover,
+  .quiet:active,
+  .quiet:focus-visible {
+    color: var(--md-sys-color-error);
+    border-color: var(--md-sys-color-error);
   }
 
   .confirm {

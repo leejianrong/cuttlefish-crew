@@ -27,6 +27,11 @@ export function isFiltering(filter: Filter): boolean {
   return filter.states.size > 0 || filter.tags.size > 0;
 }
 
+/** What the phone's Filter button counts: each chip picked, plus a grouping other than "Nothing". */
+export function activeFilterCount(filter: Filter, groupBy: GroupBy): number {
+  return filter.states.size + filter.tags.size + (groupBy === "none" ? 0 : 1);
+}
+
 export function filterProjects(
   projects: readonly ProjectSummary[],
   filter: Filter,

@@ -11,6 +11,12 @@ export function folderName(path: string): string {
   return segments.length > 0 ? segments[segments.length - 1] : path;
 }
 
+/** The folder line of a project card: its folder name, or nothing when that only repeats the project's name. */
+export function cardFolder(name: string, root: string): string | null {
+  const folder = folderName(root);
+  return folder === name ? null : folder;
+}
+
 /**
  * Breadcrumbs from the browse root down to `path`. The root's own crumb is labelled "~" when
  * it is the user's home (so `/home/jian` reads as "~"), else by its folder name.

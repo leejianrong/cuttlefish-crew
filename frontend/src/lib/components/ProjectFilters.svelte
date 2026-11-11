@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Filter, GroupBy } from "../grouping";
-  import { isFiltering, NO_FILTER } from "../grouping";
+  import { activeFilterCount, isFiltering, NO_FILTER } from "../grouping";
+  import Icon from "./Icon.svelte";
   import { STATE_LABEL, type ProjectState } from "../projectstate";
 
   let {
@@ -21,6 +22,10 @@
 
   const STATES: ProjectState[] = ["waiting", "stuck", "working", "done", "idle"];
 
+  // Below 600 px the chips and Group by hide behind one button, so the first card shows (CUT-282).
+  let open = $state(false);
+  const active = $derived(activeFilterCount(filter, groupBy));
+
   function toggle<T>(set: ReadonlySet<T>, value: T): Set<T> {
     const next = new Set(set);
     if (!next.delete(value)) next.add(value);
@@ -28,7 +33,17 @@
   }
 </script>
 
-<div class="filters" role="group" aria-label="Filter and group projects">
+<button
+  class="btn btn-outlined toggle"
+  aria-expanded={open}
+  aria-controls="project-filters"
+  onclick={() => (open = !open)}
+>
+  <Icon name="tune" size={18} />Filter{#if active > 0}<span class="count">{active}</span>{/if}
+  <Icon name={open ? "chevron-down" : "chevron-right"} size={18} />
+</button>
+
+<div id="project-filters" class="filters" class:open role="group" aria-label="Filter and group projects">
   <div class="row scroll" role="group" aria-label="State">
     {#each STATES as state (state)}
       <button
@@ -128,6 +143,21 @@
     background: transparent;
     color: var(--text);
     padding: 0 0.5rem;
+  }
+
+  .toggle {
+    display: none;
+  }
+
+  @media (max-width: 600px) {
+    .toggle {
+      display: inline-flex;
+      margin-bottom: 0.75rem;
+    }
+
+    .filters:not(.open) {
+      display: none;
+    }
   }
 
   @media (max-width: 640px) {
