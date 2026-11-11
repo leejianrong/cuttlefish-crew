@@ -3,7 +3,14 @@
   // tokens and time, the goal's branch with its diff stat, and the pull request. It reads the same
   // endpoints the cards below it do (session, Autopilot, goal) plus the diff's counts alone, never
   // the patch, and keeps nothing. Silent for a project that has never been given work.
-  import type { AgentSession, FleetClient, Goal, GoalDiffResult, ProjectSummary } from "../api";
+  import type {
+    AgentSession,
+    FleetClient,
+    Goal,
+    GoalDiffResult,
+    PrStatusResult,
+    ProjectSummary,
+  } from "../api";
   import type { AutopilotStatus } from "../autopilot";
   import { stripParts } from "../statusstrip";
 
@@ -19,13 +26,14 @@
   let autopilot = $state<AutopilotStatus | null>(null);
   let goal = $state<Goal | null>(null);
   let stat = $state<GoalDiffResult | null>(null);
+  let pr = $state<PrStatusResult | null>(null);
   let shownFor = "";
 
   $effect(() => {
     const id = projectId;
     void refreshKey;
     if (shownFor !== id) {
-      session = autopilot = goal = stat = null;
+      session = autopilot = goal = stat = pr = null;
       shownFor = id;
     }
     const read = async () => {
@@ -36,7 +44,11 @@
       ]);
       // A branch is worth a stat; no branch, or a worker's, is not asked about.
       const next = g?.branch && !project.worker ? await client.getGoalStat(id).catch(() => null) : null;
+      // gh is a network call (the daemon keeps its answer 30 s): only asked once a PR exists.
+      const nextPr =
+        g?.pr_url && !project.worker ? await client.getPrStatus(id).catch(() => null) : null;
       if (id !== projectId) return;
+      pr = nextPr;
       session = s;
       autopilot = a;
       goal = g;
@@ -55,6 +67,7 @@
       autopilot,
       goal,
       stat,
+      pr,
     }),
   );
 </script>
@@ -65,7 +78,7 @@
       {#each parts as part (part.key)}
         <li class="label-large {part.tone}" class:mono={part.mono} data-part={part.key}>
           {#if part.href}
-            <a href={part.href} target="_blank" rel="noopener noreferrer">{part.text}</a>
+            <a href={part.href} target="_blank" rel="noopener noreferrer" title={part.title}>{part.text}</a>
           {:else}
             {part.text}
           {/if}
@@ -116,5 +129,10 @@
 
   a {
     color: var(--md-sys-color-primary);
+  }
+
+  /* A pull request that needs you (a failing check, changes asked for) reads like any other warning. */
+  .attention a {
+    color: var(--md-sys-color-error);
   }
 </style>
