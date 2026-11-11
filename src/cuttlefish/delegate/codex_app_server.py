@@ -57,6 +57,7 @@ from cuttlefish.delegate.consent import ConsentDecision
 from cuttlefish.delegate.handoff import HANDOFF_PROMPT, HANDOFF_TIMEOUT, handoff_is_usable
 from cuttlefish.delegate.kopicode_serve import Decider
 from cuttlefish.delegate.subprocess_env import merge_env
+from cuttlefish.usage import BOARD
 
 _LOG = logging.getLogger(__name__)
 
@@ -360,6 +361,8 @@ class _Connection:
                 self._round.item_completed(item)
         elif method == "thread/tokenUsage/updated":
             self._round.usage(params)
+        elif method == "account/rateLimits/updated":
+            BOARD.report_codex(params)
         elif method == "turn/completed":
             turn = params.get("turn")
             turn = turn if isinstance(turn, Mapping) else {}

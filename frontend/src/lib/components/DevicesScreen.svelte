@@ -11,6 +11,7 @@
   } from "../api";
   import { formatCode, pairingAddressProblem } from "../relay";
   import { agentsText, diskText, loadText, warnings } from "../workerhealth";
+  import UsageCard from "./UsageCard.svelte";
 
   let { client }: { client: FleetClient } = $props();
 
@@ -170,6 +171,8 @@
       work for it. Each has its own key and secret, and the daemon holds each to what you allow.
     </p>
   </header>
+
+  <UsageCard {client} {workers} />
 
   {#if failed && !relay}
     <p class="status" role="status">Lost connection to the daemon. Retrying…</p>

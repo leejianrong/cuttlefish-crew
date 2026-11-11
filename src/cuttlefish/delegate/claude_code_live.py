@@ -55,6 +55,7 @@ from cuttlefish.delegate.codex_app_server import inside
 from cuttlefish.delegate.handoff import HANDOFF_PROMPT, HANDOFF_TIMEOUT, handoff_is_usable
 from cuttlefish.delegate.kopicode_serve import Decider
 from cuttlefish.delegate.subprocess_env import merge_env
+from cuttlefish.usage import BOARD
 
 _LOG = logging.getLogger(__name__)
 
@@ -194,7 +195,10 @@ class _Connection:
             self._handlers.add(task)
             task.add_done_callback(self._handlers.discard)
             return
-        if kind in ("control_response", "control_cancel_request", "rate_limit_event"):
+        if kind == "rate_limit_event":
+            BOARD.report_claude(message)  # what the account's limits are, for the usage view
+            return
+        if kind in ("control_response", "control_cancel_request"):
             return
         self._session.events.append(message)
         if kind == "result" and not self.done.done():

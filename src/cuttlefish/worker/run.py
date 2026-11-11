@@ -24,6 +24,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from cuttlefish.relay.protocol import format_code, generate_static, static_from_bytes
+from cuttlefish.usage import BOARD
 from cuttlefish.worker.execute import Executor
 from cuttlefish.worker.link import Controller, LinkError, WorkerLink, parse_join_code, unb64
 
@@ -171,6 +172,7 @@ def _about(disk_path: Path, agents: int) -> dict[str, object]:
         "host": socket.gethostname(),
         "platform": f"{platform.system()} {platform.machine()}",
         "health": health(disk_path, agents),
+        "usage": BOARD.heartbeat(),
     }
 
 

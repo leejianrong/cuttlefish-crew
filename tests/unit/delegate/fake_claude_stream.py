@@ -8,6 +8,7 @@ after the first user message is read:
   ``{"tool": "<name>"}``       the same for another tool (``WebFetch``)
   ``{"ask": [{"question": "q", "options": ["a", "b"]}]}``  an ``AskUserQuestion`` request
   ``{"api_call": true}``       POST ``$ANTHROPIC_BASE_URL/v1/messages`` with ``$ANTHROPIC_API_KEY``
+  ``{"rate_limit": {...}}``    a ``rate_limit_event`` whose ``rate_limit_info`` is that object
   ``{"hang": true}``           waits for an ``interrupt`` request, acknowledges it, ends the turn
 ``crash``: exit with a message on stderr after reading the first message.
 ``handoff``: another user message (the handoff ask) is answered with this as the result text
@@ -150,6 +151,8 @@ for step in scenario.get("steps", []):
         except urllib.error.HTTPError as exc:
             status = exc.code
         log.write(json.dumps({"api_status": status}) + "\n")
+    elif "rate_limit" in step:
+        send({"type": "rate_limit_event", "rate_limit_info": step["rate_limit"], "uuid": "u"})
     elif step.get("hang"):
         tool_use("Bash", {"command": "sleep 100"})
         send(
