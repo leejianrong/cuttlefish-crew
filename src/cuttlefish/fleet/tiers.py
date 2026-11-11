@@ -190,6 +190,23 @@ MANAGER_ROUTES: frozenset[tuple[str, str]] = frozenset(
 )
 
 
+def steer_tier_refusal(caller: tuple[str, str], *, team_running: bool) -> str | None:
+    """Why a steer must be refused for this caller, or ``None``. Steering a running team's role is
+    Approve, as the route says. With no team running a steer is typed into the builder's session,
+    which is what the Terminal tier is for (CUT-303), so a device below it is refused. The owner
+    (the daemon's own token) and the manager credential are not devices: the manager's message to
+    a builder is its designed way to nudge a stalled one (ADR-0046), and it has no terminal."""
+    by, tier = caller
+    if team_running or by != "person" or tier == "owner":
+        return None
+    if parse_tier(tier) >= Tier.TERMINAL:
+        return None
+    return (
+        f"This device is paired as {tier} and typing to the builder needs Terminal: with no team "
+        "running, a steer is typed into its session. Change it under Devices on the PC."
+    )
+
+
 def manager_may(method: str, path: str) -> bool:
     """Whether the manager credential may make this request."""
     route = _route(method, path)

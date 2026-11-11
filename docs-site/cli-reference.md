@@ -235,8 +235,8 @@ secret and uses the relay whenever its page is opened.
 
 ### What a device may do
 
-A new device is **Approve**: it can read, answer Needs you, steer, start and stop, and remove a device. **View** is read
-only. **Terminal** adds the agent's terminal and **Admin** adds settings, secrets, folders, projects and devices. You
+A new device is **Approve**: it can read, answer Needs you, steer a running team's role, start and stop, and remove a device. **View** is read
+only. **Terminal** adds the agent's terminal and typing to the builder (a steer with no team running is typed into its session, so it needs Terminal too) and **Admin** adds settings, secrets, folders, projects and devices. You
 raise a device to Terminal or Admin under Devices, and the daemon enforces each tier on every route. The PC's own session
 is not limited. **Remove** on a device signs it out at once, and its next connection is refused; a paired device can remove
 another one, so a lost phone can be cut off from a second.

@@ -275,10 +275,18 @@ async def test_an_approve_device_reads_and_answers_but_cannot_change_settings(ri
         assert (await _status(browser, "GET", f"/api/projects/{pid}/events"))[0] == 200
         # Approve-level routes get through the tier check (the app then says what it thinks).
         assert (await _status(browser, "POST", f"/api/projects/{pid}/stop"))[0] != 403
+        # With no team running a steer types into the builder's session, which is Terminal-tier
+        # access: refused here, and allowed once the device is raised (CUT-303).
+        steer = await _status(
+            browser, "POST", f"/api/projects/{pid}/steer", b'{"role":"a","text":"x"}'
+        )
+        assert steer[0] == 403 and "Terminal" in steer[1]
+        await rig.owner.patch(f"/api/devices/{device.id}", headers=OWNER, json={"tier": "terminal"})
         steer = await _status(
             browser, "POST", f"/api/projects/{pid}/steer", b'{"role":"a","text":"x"}'
         )
         assert steer[0] != 403
+        await rig.owner.patch(f"/api/devices/{device.id}", headers=OWNER, json={"tier": "approve"})
         # Everything above Approve is refused by the daemon, with a sentence a person can act on.
         for method, path in [
             ("PATCH", f"/api/projects/{pid}/mode"),
