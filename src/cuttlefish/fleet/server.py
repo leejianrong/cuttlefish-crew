@@ -116,6 +116,7 @@ from cuttlefish.roles import (
     is_default_prompt,
     template_roles,
 )
+from cuttlefish.usage import BOARD, WARN_AT_PERCENT
 
 #: Distinct from satay's own `x-satay-token` (ADR-0046) -- a fleet-daemon request
 #: and a per-task steering request must never be confused for one another.
@@ -701,6 +702,13 @@ def create_app(
             raise HTTPException(404, str(exc)) from exc
         _LOG.info("device %s (%s) revoked", device.id, device.name)
         return device.as_json()
+
+    @app.get("/api/usage")
+    async def get_usage() -> dict[str, Any]:
+        """What each agent backend has said about its usage limits on this machine, and when they
+        reset (CUT-292). A backend that has said nothing reads `reported: false`; a worker's own
+        is in `/api/workers`."""
+        return {"local": BOARD.as_json(), "warn_at_percent": WARN_AT_PERCENT}
 
     @app.get("/api/workers")
     async def list_workers() -> dict[str, Any]:

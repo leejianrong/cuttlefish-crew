@@ -151,3 +151,36 @@ def test_an_offline_worker_shows_no_health(stores: tuple[DeviceStore, DeviceStor
     liveness.beat(worker.id, {"health": {"load1": 1, "cpus": 2}})
     now[0] = 100
     assert liveness.as_json(worker)["health"] is None and liveness.as_json(worker)["flags"] == []
+
+
+def test_a_workers_usage_is_checked_and_its_warning_is_worked_out_here(
+    stores: tuple[DeviceStore, DeviceStore],
+) -> None:
+    _devices, workers = stores
+    liveness = WorkerLiveness(now=lambda: 0.0)
+    worker = workers.create("laptop", KEY, b"s" * 32, Tier.WORKER)
+    window = {"name": "five_hour", "used_percent": 91, "resets_at": 1_800_000_000, "minutes": 300}
+    liveness.beat(
+        worker.id,
+        {
+            "usage": {
+                "codex": {
+                    "at": 5,
+                    "windows": [{**window, "warn": False}, "junk", {"name": "x" * 99}],
+                },
+                "kopicode": {"windows": [window]},  # reports nothing, so cannot be claiming to
+                "claude-code": {"windows": "no"},
+                "evil": {"windows": [window]},
+            }
+        },
+    )
+    usage = liveness.as_json(worker)["usage"]
+    assert list(usage) == ["codex"]
+    codex = usage["codex"]
+    assert codex["warn"] is True and codex["at"] == 5.0  # the worker's own "warn" is not read
+    assert [w["name"] for w in codex["windows"]] == ["five_hour", "x" * 24]
+    assert codex["windows"][1]["used_percent"] is None
+    liveness.beat(worker.id)  # a bare sign of life keeps it
+    assert liveness.as_json(worker)["usage"] is not None
+    liveness.beat(worker.id, {"usage": "nonsense"})
+    assert liveness.as_json(worker)["usage"] is None

@@ -327,6 +327,24 @@ the controller sends none), project secrets (none are sent), steering, review ga
 chat on a worker, and installing dependencies first. A project with no `origin` has no way to reach another worker: its
 code would have to be pushed somewhere first.
 
+## Agent usage and limits
+
+**Devices** has an **Agent usage** card: for this PC, and for each online worker, what each coding tool says about its own
+usage limits and when they reset, with a red warning at 80% (or when the tool itself says it is near or at its limit).
+It is read-only and reads only what a tool already reports over its existing headless surface; cuttlefish adds no number
+of its own, so a tool that says nothing reads **not reported**, never a zero.
+
+| Backend | What it reports | Shown as |
+|---|---|---|
+| Claude Code | `rate_limit_event` in its stream-json output: a status (allowed, allowed_warning, rejected), a reset time, and a utilization per window (five hours, seven days). Utilization is read as a fraction of one (a larger value as a percent), which its documentation does not pin down. | one row per window |
+| Codex | `account/rateLimits/updated` over `app-server`: `primary` and `secondary` windows with `usedPercent`, `windowDurationMins` and `resetsAt`. Updates are sparse; a window an update leaves out keeps its last value. | one row per window |
+| kopicode | No usage window. It only reports a failed round when its provider answers 429. | "Does not report usage." |
+
+A tool reports only while it is running, so a backend that has not run since the daemon started shows "Not reported yet"
+until its next round. A worker adds the same figures to its heartbeat (`usage`, keyed by backend; the controller keeps
+only named backends, a few windows each and bounded numbers, and works the warning out itself). `GET /api/usage` (View)
+returns this PC's; a worker's is in `GET /api/workers`. Switching accounts and entering a cookie are not built, on purpose.
+
 ## `cuttlefish doctor`
 
 Checks what is set up and what is quietly wrong, and exits non-zero only for a problem that

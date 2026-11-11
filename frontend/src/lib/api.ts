@@ -6,6 +6,7 @@ import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay
 import type { AutopilotOptions, AutopilotStatus, Control } from "./autopilot";
 import type { ChatResponse } from "./chat";
 import type { OverviewData } from "./overview";
+import type { BackendUsage, UsageView } from "./usage";
 import { terminalPath } from "./terminal";
 
 /** A device paired through the relay (ADR-0039). Never carries a key or a secret. */
@@ -39,6 +40,8 @@ export interface WorkerInfo {
   } | null;
   /** `disk` (nearly full) and `load` (busy). A warning only: nothing is blocked. */
   flags?: string[];
+  /** CUT-292: what the machine's backends reported about their limits; null while offline. */
+  usage?: Record<string, BackendUsage> | null;
   created_at: number;
   last_seen_at: number | null;
 }
@@ -985,6 +988,11 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/agent-session/stop`, {
       method: "POST",
     });
+  }
+
+  /** CUT-292: what each agent backend on this machine has said about its limits. */
+  getUsage(): Promise<UsageView> {
+    return this.request("/api/usage");
   }
 
   getRelay(): Promise<RelayInfo> {

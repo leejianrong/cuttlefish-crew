@@ -98,6 +98,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/agent-session/stop"): Tier.APPROVE,
     ("GET", "/api/devices"): Tier.APPROVE,
     ("GET", "/api/workers"): Tier.APPROVE,
+    ("GET", "/api/usage"): Tier.VIEW,  # each backend's limit windows on this machine, no secrets
     ("DELETE", "/api/devices/{device_id}"): Tier.APPROVE,  # a lost phone is cut off from another
     # The agent's terminal.
     ("WS", "/api/projects/{project_id}/terminal"): Tier.TERMINAL,

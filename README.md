@@ -89,6 +89,8 @@ Want the whole walk-through, with two practice repos and two crews side by side?
   Place a project on it and Start team runs there, streaming its journal back (no model key or project secret is sent yet).
   The team resumes after a restart of either side, and a project can move to another worker, warning first about work
   the old machine has not pushed.
+- **Usage limits.** Devices shows each tool's own usage windows and reset times, on this PC and on each worker, with a warning
+  at 80% (Claude Code and Codex report them; kopicode does not).
 - **From a phone.** The dashboard is a web app you can pair through Tailscale https or a relay (checked in Chromium
   only), with no native app.
 

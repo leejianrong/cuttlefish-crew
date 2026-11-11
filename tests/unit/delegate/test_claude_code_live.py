@@ -411,3 +411,25 @@ async def test_a_finished_round_is_not_asked_for_a_handoff(fake: Fake) -> None:
     )
     assert outcome.kind == "completed" and outcome.handoff is None
     assert len([m for m in fake.lines() if m.get("type") == "user" and "message" in m]) == 1
+
+
+async def test_a_rate_limit_event_is_read_into_the_usage_board_and_not_into_the_journal(
+    fake: Fake,
+) -> None:
+    from cuttlefish.usage import BOARD
+
+    BOARD.reset()
+    info = {
+        "status": "allowed_warning",
+        "rateLimitType": "five_hour",
+        "resetsAt": 1_800_000_000,
+        "utilization": 0.82,
+    }
+    backend = fake.script({"steps": [{"rate_limit": info}]})
+    outcome = await fake.run(backend)
+    assert outcome.kind == "completed"
+    shown = BOARD.as_json()["claude-code"]
+    assert shown["reported"] is True and shown["warn"] is True
+    assert shown["windows"][0]["used_percent"] == 82.0
+    assert shown["windows"][0]["resets_at"] == 1_800_000_000
+    BOARD.reset()

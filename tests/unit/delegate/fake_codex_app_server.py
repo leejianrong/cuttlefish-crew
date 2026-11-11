@@ -139,6 +139,10 @@ for step in scenario.get("steps", []):
         ask(step["request"], step.get("params", {}))
     elif step.get("steer"):
         answer(read_until(lambda m: m.get("method") == "turn/steer"), {"turnId": "tu1"})
+    elif "rate_limits" in step:
+        send(
+            {"method": "account/rateLimits/updated", "params": {"rateLimits": step["rate_limits"]}}
+        )
     elif "usage" in step:
         usage = step["usage"]
         usage_sent = True
