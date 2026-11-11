@@ -527,8 +527,12 @@ export interface Schedule {
   enabled: boolean;
   next_due: string;
   last_run: string | null;
-  /** `started`, or `skipped: <why>`. */
+  /** `started`, `skipped: <why>` or `skipped by precheck: <why>`. */
   last_result: string | null;
+  /** CUT-297: a run reached later than this many minutes past its slot is skipped; null runs late. */
+  grace_minutes?: number | null;
+  /** CUT-297: a command that must exit 0 for a run to go ahead; null has no check. */
+  precheck?: string | null;
 }
 
 /** The answer to "open a pull request" (CUT-241). A refusal is `ok: false` with a plain reason;
@@ -858,10 +862,15 @@ export class FleetClient {
     return (await this.request<{ schedules: Schedule[] }>(`/api/projects/${id}/schedules`)).schedules;
   }
 
-  addSchedule(id: string, goal: string, recurrence: string): Promise<Schedule> {
+  addSchedule(
+    id: string,
+    goal: string,
+    recurrence: string,
+    options: { grace_minutes?: number | null; precheck?: string | null } = {},
+  ): Promise<Schedule> {
     return this.request(`/api/projects/${id}/schedules`, {
       method: "POST",
-      body: JSON.stringify({ goal, recurrence }),
+      body: JSON.stringify({ goal, recurrence, ...options }),
     });
   }
 

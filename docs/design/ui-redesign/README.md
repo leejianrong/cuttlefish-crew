@@ -403,3 +403,11 @@ and this folder disagree after a slice lands, update this folder.
   typing asks the daemon for nothing. Below 640 px it sits at the top edge and drops the key hints. Checked at 1280 (light, dark) and
   390 px against 100 seeded projects.
 
+- **Schedules: presets, cron, grace and a precheck (CUT-297, 2026-11-12).** The Scheduled goals card's Repeat select gains Weekdays at,
+  Weekly on (a day select beside the time) and Cron (one field for the five fields, with a one-line legend). Two optional fields
+  follow, "Skip if late by more than (minutes)" and "Only run if this command succeeds", and two plain sentences say that every time
+  is UTC, not the browser's or the machine's zone, and what the precheck is held to (the project's command rules, never asked,
+  no secrets, 30 s). A row adds, in `body-small` muted lines, "Skipped if it is reached more than N minutes late." and "Runs only if
+  `cmd` exits 0." (monospace); the last result reads "Skipped by the precheck at <time> UTC: it exited 1." or "Not started at <time>
+  UTC: missed by 95 minutes, past the 60 minute grace." Checked at 1280 (light, dark) and 390 px.
+

@@ -1174,9 +1174,25 @@ def create_app(
             raise HTTPException(400, "'goal' and 'recurrence' are required text")
         if len(goal.strip()) > MAX_GOAL_CHARS:
             raise HTTPException(400, f"A goal is at most {MAX_GOAL_CHARS} characters.")
+        grace, precheck = body.get("grace_minutes"), body.get("precheck")
+        if grace is not None and (isinstance(grace, bool) or not isinstance(grace, int)):
+            raise HTTPException(400, "'grace_minutes' must be a whole number of minutes")
+        if precheck is not None and not isinstance(precheck, str):
+            raise HTTPException(400, "'precheck' must be text")
         try:
             daemon.projects.get(project_id)
-            return _schedules().add(project_id, goal, recurrence, now=datetime.now(UTC)).to_json()
+            return (
+                _schedules()
+                .add(
+                    project_id,
+                    goal,
+                    recurrence,
+                    now=datetime.now(UTC),
+                    grace_minutes=grace,
+                    precheck=precheck,
+                )
+                .to_json()
+            )
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:  # RecurrenceError, or an empty goal
