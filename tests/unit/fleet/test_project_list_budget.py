@@ -24,8 +24,9 @@ seed_fleet = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(seed_fleet)
 
 #: What a 100-project list weighed before the personas were left out: 216 KB. Over a phone's
-#: 1.6 Mbps link every 100 KB is half a second before the first card.
-MAX_LIST_BYTES = 110_000
+#: 1.6 Mbps link every 100 KB is half a second before the first card. Raised from 110 KB for the
+#: per-role backend, model and age (CUT-298): about 50 bytes a role.
+MAX_LIST_BYTES = 125_000
 
 
 @pytest.fixture
