@@ -85,6 +85,7 @@ def test_a_worker_is_online_until_it_has_been_silent_too_long(
     assert "secret" not in shown and "public_key" not in shown
     liveness.beat(worker.id)
     assert liveness.online(worker.id)
+    assert liveness.as_json(worker)["host"] == "box[31m"  # a bare sign of life keeps what it said
     liveness.forget(worker.id)
     assert not liveness.online(worker.id)
 
