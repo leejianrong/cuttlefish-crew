@@ -261,6 +261,12 @@ export interface ProjectSummary {
   /** CUT-206: the worker machine this project's teams run on; absent or null runs on this PC.
    * `name` is null when the worker was removed. */
   worker?: { id: string; name: string | null; online: boolean } | null;
+  /** CUT-298: per role in `status`, the backend it runs on, the model cuttlefish asks it for (null
+   * when the tool uses its own default) and when it last did anything. */
+  role_info?: Record<
+    string,
+    { backend: string | null; model: string | null; last_event_at: string | null }
+  >;
   /** CUT-207: work the project's last worker may still hold that is not pushed; null when none. */
   worker_handover?: string | null;
   /** CUT-191: free-form labels the project list is grouped and filtered by. */

@@ -25,7 +25,7 @@ import os
 import subprocess
 import time
 import uuid
-from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -39,6 +39,7 @@ from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
 from cuttlefish import artifacts, environment, envprep, logsetup, runtime, timeline
+from cuttlefish.agents.registry import configured_model
 from cuttlefish.artifacts import Artifact
 from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
@@ -181,6 +182,8 @@ class JournalView:
     status: dict[str, RoleStatus]
     usage: dict[str, UsageTotals]
     last_event_at: str | None
+    #: `role -> when its last event was journaled` (ISO 8601); a role with none is absent (CUT-298).
+    role_last_event_at: dict[str, str]
 
 
 class FleetError(Exception):
@@ -398,6 +401,11 @@ class FleetDaemon:
         self.placement = Placement()
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
+        #: project id -> ((team id, journal position, role names), its view), so an idle project's
+        #: journal is not read again on every poll.
+        self._journal_views: dict[
+            str, tuple[tuple[str | None, int | None, tuple[str, ...]], JournalView]
+        ] = {}
         #: `(team id, role) -> the round a decision was last sent for`: one decision per round.
         self._decided: dict[tuple[str, str], int] = {}
         #: team id -> its cancel flag, while cuttlefish is installing its dependencies (V5-E3):
@@ -2461,14 +2469,62 @@ class FleetDaemon:
         reads each made a 100-project list three times slower (CUT-192)."""
         project = self._projects.get(project_id)
         role_names = [r.name for r in project.roles]
+        # A journal that has not grown since the last poll is not read again: the list asks for
+        # every project every few seconds, and most of them are idle.
+        stamp = self._journal_stamp(project)
+        key = (project.last_team_id, stamp, tuple(role_names))
+        cached = self._journal_views.get(project_id)
+        if stamp is not None and cached is not None and cached[0] == key:
+            return cached[1]
         events = self._last_team_events(project)
         names = role_names or sorted(roles_in(events))
         payloads = [event.payload for event in events]
-        return JournalView(
+        last_by_role: dict[str, str] = {}
+        for event in events:
+            role = getattr(event.payload, "role", None)
+            if isinstance(role, str):
+                last_by_role[role] = event.ts.isoformat()
+        view = JournalView(
             status=role_statuses(events, names) if events else dict.fromkeys(role_names, "queued"),
             usage={name: cumulative_usage(payloads, role=name) for name in names},
             last_event_at=events[-1].ts.isoformat() if events else None,
+            role_last_event_at=last_by_role,
         )
+        if stamp is not None:
+            self._journal_views[project_id] = (key, view)
+        return view
+
+    def _journal_stamp(self, project: Project) -> int | None:
+        """The newest event position of the project's last team, or `None` with no journal yet."""
+        if project.last_team_id is None:
+            return None
+        path = Path(project.root) / ".cuttlefish" / "episodic.db"
+        if not path.exists():
+            return None
+        store = EpisodicStore.open(path)
+        try:
+            return store.last_seq(project.last_team_id)
+        finally:
+            store.close()
+
+    def role_info(self, project: Project, names: Iterable[str]) -> dict[str, dict[str, Any]]:
+        """For each role: the backend it runs on (its own, else the project's, else the default),
+        the model cuttlefish asks that backend for if any, and when it last did anything."""
+        try:
+            default = resolve_agent_backend()
+        except ConfigError:
+            default = None
+        times = self.journal_view(project.id).role_last_event_at
+        info: dict[str, dict[str, Any]] = {}
+        for name in names:
+            definition = project.role(name)
+            backend = (definition.backend if definition else None) or project.backend or default
+            info[name] = {
+                "backend": backend,
+                "model": configured_model(backend) if backend else None,
+                "last_event_at": times.get(name),
+            }
+        return info
 
     def events(self, project_id: str) -> list[EpisodicEvent]:
         """`project_id`'s last team's full episodic record, in order -- the same

@@ -37,6 +37,14 @@
   // The pose alone says nothing to a screen reader, or to someone who cannot tell the colours apart.
   const statusWord = (status: RoleStatus): string =>
     status === "queued" && !project.running && hasRun ? "not run" : status;
+  // "kopicode · llama3 · 4 min ago": the backend, the model only where cuttlefish sets one (the
+  // tools' own defaults are not ours to name), and how long ago the role last did anything.
+  function roleDetail(role: string): string {
+    const info = project.role_info?.[role];
+    if (!info) return "";
+    const age = info.last_event_at ? agoIso(info.last_event_at, now) : "";
+    return [info.backend, info.model, age].filter(Boolean).join(" · ");
+  }
   let confirming = $state<"stop" | "remove" | null>(null);
   let editingTags = $state(false);
   let tagText = $state("");
@@ -107,6 +115,7 @@
           <RoleSprite {status} size={2.5} label={statusWord(status)} />
           <span class="role-name">{role}</span>
           <span class="role-status">{statusWord(status)}</span>
+          {#if roleDetail(role)}<span class="role-detail">{roleDetail(role)}</span>{/if}
         </div>
       {/each}
     </div>
@@ -232,6 +241,14 @@
   .role-status {
     font-size: 0.7rem;
     color: var(--text-faint);
+  }
+
+  .role-detail {
+    max-width: 11rem;
+    font-size: 0.65rem;
+    color: var(--text-faint);
+    text-align: center;
+    overflow-wrap: anywhere;
   }
 
   .state {

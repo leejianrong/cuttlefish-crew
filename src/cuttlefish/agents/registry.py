@@ -48,6 +48,26 @@ def resolve_backend(
     )
 
 
+def configured_model(backend: str) -> str | None:
+    """The model cuttlefish itself asks `backend` for, or `None` when it asks for none and the
+    tool uses its own default (cuttlefish cannot read that). Only what an operator set in the
+    environment: kopicode's ``CUTTLEFISH_KOPICODE_MODEL`` (with a provider URL) and Codex's
+    ``CUTTLEFISH_CODEX_MODEL``. Claude Code is not given one."""
+    import os
+
+    if backend == "kopicode":
+        from cuttlefish.agents.kopicode import PROVIDER_MODEL_ENV, PROVIDER_URL_ENV
+
+        if os.environ.get(PROVIDER_URL_ENV, "").strip():
+            return os.environ.get(PROVIDER_MODEL_ENV, "").strip() or None
+        return None
+    if backend == "codex":
+        from cuttlefish.delegate.codex import codex_model_settings
+
+        return codex_model_settings()[0]
+    return None
+
+
 def credential_names() -> frozenset[str]:
     """Every variable a backend runs on (``AgentBackend.CREDENTIAL_ENV_VARS``): the agent
     credentials, as opposed to a project's own secrets."""
