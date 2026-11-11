@@ -458,3 +458,13 @@ def test_terminal_command_round_trips_and_an_older_db_is_migrated(tmp_path: Path
     old = ProjectStore.open(tmp_path / "old.db")
     assert old.get("x").terminal_command is None
     old.close()
+
+
+def test_the_worktree_share_setting_defaults_to_nothing_and_round_trips(tmp_path: Path) -> None:
+    store = ProjectStore.open(tmp_path / "p.db")
+    project = store.register(name="a", root=str(tmp_path))
+    assert project.worktree_share_dirs == () and project.worktree_copy_files == ()
+    saved = store.update_worktree_share(project.id, ["node_modules"], ["local.json"])
+    assert saved.worktree_share_dirs == ("node_modules",)
+    assert store.get(project.id).worktree_copy_files == ("local.json",)
+    assert store.update_worktree_share(project.id, [], []).worktree_share_dirs == ()

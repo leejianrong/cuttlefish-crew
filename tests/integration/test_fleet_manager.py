@@ -95,6 +95,7 @@ async def rig(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[
         ("PATCH", "/api/projects/{p}/allow"),
         ("PATCH", "/api/projects/{p}/terminal-command"),
         ("PATCH", "/api/projects/{p}/worktree-per-goal"),
+        ("PATCH", "/api/projects/{p}/worktree-share"),
         ("PATCH", "/api/projects/{p}/delegate-approvals"),
         ("GET", "/api/projects/{p}/secrets"),
         ("PUT", "/api/secrets/KEY"),

@@ -640,6 +640,57 @@ def test_a_goal_runs_in_its_own_worktree_only_when_the_project_opts_in(rig: Rig)
     assert _out(rig.root, "status", "--porcelain") == ""  # not an untracked folder
 
 
+def test_a_goal_worktree_gets_only_what_the_project_lists(rig: Rig) -> None:
+    """CUT-296: nothing is shared by default; listed ignored paths are linked and copied, a secret
+    or a path outside the project is refused when it is set, and the goal says what it got."""
+    _repo(rig.root)
+    (rig.root / ".gitignore").write_text("node_modules/\n.env\nlocal.json\n")
+    _out(rig.root, "add", ".gitignore")
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "ignore"],
+        cwd=rig.root,
+        check=True,
+        capture_output=True,
+    )
+    (rig.root / "node_modules").mkdir()
+    (rig.root / "node_modules" / "dep.js").write_text("1")
+    (rig.root / "local.json").write_text("{}")
+    (rig.root / ".env").write_text("KEY=real")
+    (rig.bin / "claude").write_text(f"#!/bin/sh\npwd >> {rig.log}\nexec sleep 300\n")
+    project = rig.store.register(name="alpha", root=str(rig.root))
+    client = _client(rig.daemon())
+    path = f"/api/projects/{project.id}"
+    client.patch(f"{path}/worktree-per-goal", json={"worktree_per_goal": True})
+
+    first = client.post(f"{path}/goal", json={"text": "One", "backend": "claude-code"}).json()
+    assert "shared" not in first["goal"]  # nothing listed: nothing shared
+    assert not (Path(first["goal"]["worktree"]) / "node_modules").exists()
+    client.post(f"{path}/agent-session/stop")
+
+    for bad in (
+        {"files": [".env"]},
+        {"dirs": ["../x"]},
+        {"dirs": ["/etc"]},
+        {"dirs": "node_modules"},
+    ):
+        assert client.patch(f"{path}/worktree-share", json=bad).status_code == 400
+    ok = client.patch(
+        f"{path}/worktree-share", json={"dirs": ["node_modules"], "files": ["local.json"]}
+    )
+    assert ok.json()["worktree_share"] == {"dirs": ["node_modules"], "files": ["local.json"]}
+
+    second = client.post(f"{path}/goal", json={"text": "Two", "backend": "claude-code"}).json()
+    tree = Path(second["goal"]["worktree"])
+    assert second["goal"]["shared"] == {
+        "linked": ["node_modules"],
+        "copied": ["local.json"],
+        "skipped": [],
+    }
+    assert (tree / "node_modules").is_symlink() and (tree / "local.json").read_text() == "{}"
+    assert not (tree / ".env").exists()
+    assert _out(tree, "status", "--porcelain") == ""
+
+
 def test_a_worktree_goal_in_a_folder_that_is_not_a_repository_is_refused(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root))
     client = _client(rig.daemon())

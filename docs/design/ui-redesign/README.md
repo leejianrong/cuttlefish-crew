@@ -403,3 +403,6 @@ and this folder disagree after a slice lands, update this folder.
   typing asks the daemon for nothing. Below 640 px it sits at the top edge and drops the key hints. Checked at 1280 (light, dark) and
   390 px against 100 seeded projects.
 
+- **Worktree sharing has no screen yet (CUT-296, 2026-11-12).** The setting is the API and `cuttlefish projects worktree-share`; a card
+  beside the goal card's "Its own branch" switch is a follow-up. `GET /api/projects` already carries `worktree_share`.
+
