@@ -303,6 +303,8 @@ the controller notices on the worker's next poll that the team is not running th
 resumes the run from its own satay store, so a finished round is not re-run and the one in flight starts over, as after a
 daemon restart. Only the fleet daemon and a `cuttlefish worker run` resume this way; a one-shot `cuttlefish run` does not.
 A worker that has lost its local state says so and the team is recorded as failed, rather than starting over silently.
+Each hand-over of a team carries a token the worker echoes on every report, so a report from a replaced process (the
+same machine started twice, a retry that arrives late) is refused instead of adding to, or ending, the team now running.
 
 Choosing another machine in **Runs on** while a team runs **moves** the project (Admin): the team is stopped (it ends when
 its round does), the project is placed on the new worker, and the same roles start there as a new team. The journal stays

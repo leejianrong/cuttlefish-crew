@@ -182,7 +182,12 @@ class Executor:
             with contextlib.suppress(RefusedError):
                 await self._post(
                     f"/api/worker/teams/{team_id}/finish",
-                    {"status": status, "error": error, "checkout": state},
+                    {
+                        "status": status,
+                        "error": error,
+                        "checkout": state,
+                        "dispatch": order.get("dispatch"),
+                    },
                 )
         finally:
             self._reporting.discard(team_id)
@@ -236,7 +241,9 @@ class Executor:
                 self._stops[team_id] = request_stop
                 if team_id in self._stopping:
                     request_stop()
-                streamer = asyncio.create_task(self._stream(prepared.episodic_store, team_id))
+                streamer = asyncio.create_task(
+                    self._stream(prepared.episodic_store, team_id, order.get("dispatch"))
+                )
                 handle = satay.start(run_team, workflow_input, run_id=team_id, store=app.store)
                 try:
                     await handle.result()
@@ -248,7 +255,7 @@ class Executor:
                         raise
             streamer.cancel()
             await asyncio.gather(streamer, return_exceptions=True)
-            await self._flush(prepared.episodic_store, team_id, 0)
+            await self._flush(prepared.episodic_store, team_id, 0, order.get("dispatch"))
             if team_id in self._stopping:
                 return "stopped", ""
             return (
@@ -267,13 +274,13 @@ class Executor:
                 cancel_run, base_url=app.base_url, token=app.token, run_id=team_id
             )
 
-    async def _stream(self, store: EpisodicStore, team_id: str) -> None:
+    async def _stream(self, store: EpisodicStore, team_id: str, dispatch: object) -> None:
         sent = 0
         while True:
-            sent = await self._flush(store, team_id, sent)
+            sent = await self._flush(store, team_id, sent, dispatch)
             await asyncio.sleep(STREAM_EVERY_SECONDS)
 
-    async def _flush(self, store: EpisodicStore, team_id: str, sent: int) -> int:
+    async def _flush(self, store: EpisodicStore, team_id: str, sent: int, dispatch: object) -> int:
         """Send every event past `sent`; returns the position reached. A request that fails is
         tried again, so nothing is dropped and the controller ignores a repeat."""
         while True:
@@ -282,6 +289,7 @@ class Executor:
             if not events:
                 return sent
             body = {
+                "dispatch": dispatch,
                 "events": [
                     {
                         "seq": e.seq,
@@ -289,7 +297,7 @@ class Executor:
                         **dict(zip(("type", "data"), encode_payload(e.payload), strict=True)),
                     }
                     for e in events
-                ]
+                ],
             }
             await self._post(f"/api/worker/teams/{team_id}/events", body)
             sent = events[-1].seq

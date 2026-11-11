@@ -43,6 +43,7 @@ from cuttlefish.artifacts import Artifact
 from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
 from cuttlefish.budget import UsageTotals, cumulative_usage
+from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.config import (
     ConfigError,
     PreparedRun,
@@ -55,12 +56,14 @@ from cuttlefish.config import (
 from cuttlefish.delegate import codex_live
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import (
+    DelegationStarted,
     EnvironmentPrepared,
     EnvironmentPrepareStarted,
     EventPayload,
     KillSwitchPressed,
     PullRequestOpened,
     RequestResolved,
+    RoundContinued,
     SteeringMessage,
     SteeringQueued,
     StopRequested,
@@ -395,6 +398,8 @@ class FleetDaemon:
         self.placement = Placement()
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
+        #: `(team id, role) -> the round a decision was last sent for`: one decision per round.
+        self._decided: dict[tuple[str, str], int] = {}
         #: team id -> its cancel flag, while cuttlefish is installing its dependencies (V5-E3):
         #: such a team has no satay run yet, so a stop cannot go through satay's control API.
         self._preparing: dict[str, asyncio.Event] = {}
@@ -1664,10 +1669,18 @@ class FleetDaemon:
         finally:
             store.close()
 
-    def _team_of_worker(self, worker_id: str, team_id: str) -> RemoteTeam:
+    def _team_of_worker(self, worker_id: str, team_id: str, dispatch: object = None) -> RemoteTeam:
+        """The team a worker reports on. Each hand-over of a team carries a `dispatch` token the
+        worker must echo: a report from an earlier hand-over (a process that was replaced, a
+        late retry) is refused, so it cannot add to or end the team now running (CUT-300). A team
+        taken back after a controller restart binds to the first token reported."""
         team = self.placement.team(team_id)
         if team is None or team.worker_id != worker_id:
             raise FleetError(f"this controller has no team {team_id!r} on you")
+        if team.dispatch is None and isinstance(dispatch, str) and dispatch:
+            team.dispatch = dispatch
+        if dispatch != team.dispatch:
+            raise FleetError(f"{team_id!r} was handed to you again since; this report is stale")
         return team
 
     async def worker_claim(
@@ -1676,11 +1689,15 @@ class FleetDaemon:
         return await self.placement.claim(worker_id, min(max(wait, 0.0), 20.0), running)
 
     async def worker_events(
-        self, worker_id: str, team_id: str, events: list[dict[str, Any]]
+        self,
+        worker_id: str,
+        team_id: str,
+        events: list[dict[str, Any]],
+        dispatch: object = None,
     ) -> int:
         """Append the events a worker reports for its team to this journal. Redaction happens here,
         at write time, as for any event. Returns the position the controller has reached."""
-        team = self._team_of_worker(worker_id, team_id)
+        team = self._team_of_worker(worker_id, team_id, dispatch)
         project = self._projects.get(team.project_id)
         fresh: list[tuple[EventPayload, datetime | None]] = []
         last = team.last_seq
@@ -1706,9 +1723,10 @@ class FleetDaemon:
         status: str,
         error: str | None,
         checkout: dict[str, Any] | None = None,
+        dispatch: object = None,
     ) -> None:
         """The worker says its team is over: the journal says how, and the project is free."""
-        team = self._team_of_worker(worker_id, team_id)
+        team = self._team_of_worker(worker_id, team_id, dispatch)
         project = self._projects.get(team.project_id)
         tail: list[tuple[EventPayload, datetime | None]] = []
         if status == "stopped":
@@ -2360,6 +2378,10 @@ class FleetDaemon:
         running = self.running(project_id)
         if running is None:
             raise FleetError(f"project {project_id!r} has no running team to decide on")
+        project = self._projects.get(project_id)
+        dispatch = await asyncio.to_thread(self._awaiting_decision, project, running.team_id, role)
+        if self._decided.get((running.team_id, role)) == dispatch:
+            raise FleetError(f"{role} has already been decided for this round")
         try:
             await asyncio.to_thread(
                 send_approval_decision,
@@ -2372,7 +2394,36 @@ class FleetDaemon:
             )
         except SteeringDeliveryError as exc:
             raise FleetError(str(exc)) from exc
+        self._decided[(running.team_id, role)] = dispatch
         self.requests.supersede(running.team_id, role)
+
+    def _awaiting_decision(self, project: Project, team_id: str, role: str) -> int:
+        """The round (dispatch) `role` is held after, or a `FleetError` when it is not held for a
+        decision at all.
+
+        A decision is a message into the team's inbox, matched to a waiting role by team and role
+        only. Sent when nothing waits (a double click, a retry, a late answer), it would sit there
+        and be taken by a later round's gate, deciding a round nobody looked at. So it is accepted
+        only while the role's last round has ended under a review gate or a budget stop, and once
+        per round: the round is the count of rounds the role has started (CUT-300, Orca's
+        dispatch id rule)."""
+        events = self._last_team_events(project)
+        if project.last_team_id != team_id or not events:
+            raise FleetError(f"{role} is not waiting for a decision")
+        payloads = [event.payload for event in events]
+        blocked = role_statuses(events, [role])[role] == "blocked"
+        gated = project.last_team_require_approval or budget_exceeded(
+            cumulative_usage(payloads, role=role),
+            max_tokens=project.max_tokens,
+            max_cost_usd=project.max_cost_usd,
+        )
+        if not (blocked and gated):
+            raise FleetError(f"{role} is not waiting for a decision")
+        return sum(
+            1
+            for payload in payloads
+            if isinstance(payload, DelegationStarted | RoundContinued) and payload.role == role
+        )
 
     def _last_team_events(self, project: Project) -> list[EpisodicEvent]:
         """Every event of `project.last_team_id`, or `[]` if there isn't one yet or

@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -13,6 +14,11 @@ from cuttlefish.fleet.daemon import _remote_url
 from cuttlefish.fleet.placement import Placement
 from cuttlefish.fleet.tiers import Tier, required_tier
 from cuttlefish.projects.store import ProjectNotFoundError, ProjectStore
+
+
+def _bare(orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Orders without their per-hand-over token, which is random."""
+    return [{k: v for k, v in order.items() if k != "dispatch"} for order in orders]
 
 
 def test_a_project_is_placed_on_a_worker_and_goes_back_when_it_is_removed(tmp_path: Path) -> None:
@@ -45,7 +51,8 @@ async def test_an_order_and_a_stop_are_each_handed_over_once() -> None:
     placement = Placement()
     placement.assign("p1", "w1", {"team_id": "t1"})
     placement.assign("p2", "w2", {"team_id": "t2"})
-    assert await placement.claim("w1", 0) == {"orders": [{"team_id": "t1"}], "stop": []}
+    first = await placement.claim("w1", 0)
+    assert _bare(first["orders"]) == [{"team_id": "t1"}] and first["stop"] == []
     assert await placement.claim("w1", 0) == {"orders": [], "stop": []}  # not again
     team = placement.team("t1")
     assert team is not None
@@ -61,7 +68,7 @@ async def test_a_worker_waiting_for_work_gets_it_as_soon_as_it_exists() -> None:
     waiting = asyncio.create_task(placement.claim("w1", 5))
     await asyncio.sleep(0.05)
     placement.assign("p1", "w1", {"team_id": "t1"})
-    assert (await asyncio.wait_for(waiting, 2))["orders"] == [{"team_id": "t1"}]
+    assert _bare((await asyncio.wait_for(waiting, 2))["orders"]) == [{"team_id": "t1"}]
 
 
 def _git(*args: str, cwd: Path) -> None:
@@ -123,10 +130,10 @@ def test_a_store_made_before_moving_gains_its_columns_and_keeps_them(tmp_path: P
 async def test_a_team_the_worker_does_not_run_is_handed_over_again_marked_resume() -> None:
     placement = Placement()
     team = placement.assign("p1", "w1", {"team_id": "t1"})
-    assert (await placement.claim("w1", 0, set()))["orders"] == [{"team_id": "t1"}]
+    assert _bare((await placement.claim("w1", 0, set()))["orders"]) == [{"team_id": "t1"}]
     assert (await placement.claim("w1", 0, {"t1"}))["orders"] == []
     again = await placement.claim("w1", 0, set())
-    assert again["orders"] == [{"team_id": "t1", "resume": True}]
+    assert _bare(again["orders"]) == [{"team_id": "t1", "resume": True}]
     team.stop_requested = True
     assert (await placement.claim("w1", 0, {"t1"}))["stop"] == ["t1"]
     assert (await placement.claim("w1", 0, set()))["stop"] == ["t1"]  # lost with the process
@@ -138,4 +145,16 @@ async def test_an_adopted_team_waits_to_be_told_whether_the_worker_still_runs_it
     assert team.last_seq == 7
     assert (await placement.claim("w1", 0, {"t1"}))["orders"] == []  # it never stopped
     placement.adopt("p2", "w1", {"team_id": "t2"}, last_seq=0)
-    assert (await placement.claim("w1", 0, {"t1"}))["orders"] == [{"team_id": "t2", "resume": True}]
+    adopted = (await placement.claim("w1", 0, {"t1"}))["orders"]
+    assert _bare(adopted) == [{"team_id": "t2", "resume": True}]
+
+
+async def test_every_hand_over_of_a_team_carries_a_new_token_the_team_then_holds() -> None:
+    placement = Placement()
+    team = placement.assign("p1", "w1", {"team_id": "t1"})
+    first = (await placement.claim("w1", 0, set()))["orders"][0]["dispatch"]
+    assert team.dispatch == first
+    again = (await placement.claim("w1", 0, set()))["orders"][0]["dispatch"]
+    assert again != first and team.dispatch == again
+    adopted = placement.adopt("p2", "w1", {"team_id": "t2"}, last_seq=3)
+    assert adopted.dispatch is None  # unknown until the worker reports, or is handed the team again
