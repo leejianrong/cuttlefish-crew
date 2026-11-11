@@ -204,6 +204,7 @@ def _project_json(daemon: FleetDaemon, project_id: str, *, summary: bool = False
         "running": daemon.is_running(project.id),
         "stopping": daemon.is_stopping(project.id),
         "status": journal.status,
+        "role_info": daemon.role_info(project, journal.status, journal),
         "last_event_at": journal.last_event_at,
         "budget": {"max_tokens": project.max_tokens, "max_cost_usd": project.max_cost_usd},
         "usage": {

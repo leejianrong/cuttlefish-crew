@@ -25,7 +25,7 @@ import os
 import subprocess
 import time
 import uuid
-from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -39,6 +39,7 @@ from satay.journal.events import TERMINAL_STATUSES
 from satay.journal.store import SQLiteStore
 
 from cuttlefish import artifacts, environment, envprep, logsetup, runtime, timeline
+from cuttlefish.agents.registry import configured_model
 from cuttlefish.artifacts import Artifact
 from cuttlefish.autopilot import Limits
 from cuttlefish.broker import Broker, broker_requested
@@ -184,6 +185,8 @@ class JournalView:
     status: dict[str, RoleStatus]
     usage: dict[str, UsageTotals]
     last_event_at: str | None
+    #: `role -> when its last event was journaled` (ISO 8601); a role with none is absent (CUT-298).
+    role_last_event_at: dict[str, str]
 
 
 class FleetError(Exception):
@@ -403,6 +406,11 @@ class FleetDaemon:
         self._pr_cache: dict[str, tuple[float, PrStatus]] = {}
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
+        #: project id -> ((team id, journal position, role names), its view), so an idle project's
+        #: journal is not read again on every poll.
+        self._journal_views: dict[
+            str, tuple[tuple[str | None, int | None, tuple[str, ...]], JournalView]
+        ] = {}
         #: `(team id, role) -> the round a decision was last sent for`: one decision per round.
         self._decided: dict[tuple[str, str], int] = {}
         #: team id -> its cancel flag, while cuttlefish is installing its dependencies (V5-E3):
@@ -2493,14 +2501,66 @@ class FleetDaemon:
         reads each made a 100-project list three times slower (CUT-192)."""
         project = self._projects.get(project_id)
         role_names = [r.name for r in project.roles]
-        events = self._last_team_events(project)
+        # A journal that has not grown since the last poll is not read again: the list asks for
+        # every project every few seconds, and most of them are idle.
+        store = self._open_last_journal(project)
+        try:
+            stamp = None if store is None else store.last_seq(str(project.last_team_id))
+            key = (project.last_team_id, stamp, tuple(role_names))
+            cached = self._journal_views.get(project_id)
+            if stamp is not None and cached is not None and cached[0] == key:
+                return cached[1]
+            events = [] if store is None else list(store.read(str(project.last_team_id)))
+        finally:
+            if store is not None:
+                store.close()
         names = role_names or sorted(roles_in(events))
         payloads = [event.payload for event in events]
-        return JournalView(
+        last_by_role: dict[str, str] = {}
+        for event in events:
+            role = getattr(event.payload, "role", None)
+            if isinstance(role, str):
+                last_by_role[role] = event.ts.isoformat(timespec="seconds")
+        view = JournalView(
             status=role_statuses(events, names) if events else dict.fromkeys(role_names, "queued"),
             usage={name: cumulative_usage(payloads, role=name) for name in names},
             last_event_at=events[-1].ts.isoformat() if events else None,
+            role_last_event_at=last_by_role,
         )
+        if stamp is not None:
+            self._journal_views[project_id] = (key, view)
+        return view
+
+    def _open_last_journal(self, project: Project) -> EpisodicStore | None:
+        """The project's journal, or `None` before its last team has written one."""
+        if project.last_team_id is None:
+            return None
+        path = Path(project.root) / ".cuttlefish" / "episodic.db"
+        return EpisodicStore.open(path) if path.exists() else None
+
+    def role_info(
+        self, project: Project, names: Iterable[str], view: JournalView
+    ) -> dict[str, dict[str, Any]]:
+        """For each role what its row shows, kept small because the list carries it for every
+        project: `backend` only when it is not the project's own, `model` only where cuttlefish
+        sets one, and `at`, when the role last did anything (to the second)."""
+        try:
+            default = resolve_agent_backend()
+        except ConfigError:
+            default = None
+        info: dict[str, dict[str, Any]] = {}
+        for name in names:
+            definition = project.role(name)
+            backend = (definition.backend if definition else None) or project.backend or default
+            entry: dict[str, Any] = {}
+            if backend and backend != project.backend:
+                entry["backend"] = backend
+            if backend and (model := configured_model(backend)):
+                entry["model"] = model
+            if stamp := view.role_last_event_at.get(name):
+                entry["at"] = stamp
+            info[name] = entry
+        return info
 
     def events(self, project_id: str) -> list[EpisodicEvent]:
         """`project_id`'s last team's full episodic record, in order -- the same

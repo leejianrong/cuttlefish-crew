@@ -234,6 +234,14 @@ class EpisodicStore:
             task_id=task_id, seq=seq, schema_version=SCHEMA_VERSION, ts=ts, payload=recorded
         )
 
+    def last_seq(self, task_id: str) -> int:
+        """The position of `task_id`'s newest event, 0 when it has none: a cheap way to tell
+        whether a journal has changed since it was last read."""
+        row = self._conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) FROM episodic_events WHERE task_id = ?", (task_id,)
+        ).fetchone()
+        return int(row[0])
+
     def read(self, task_id: str, *, after: int = 0) -> Iterator[EpisodicEvent]:
         """Yield every event for `task_id` past position `after`, in seq order."""
         cursor = self._conn.execute(
