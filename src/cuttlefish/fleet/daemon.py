@@ -77,6 +77,7 @@ from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
 from cuttlefish.fleet import gitexclude, manager_agent
 from cuttlefish.fleet.autopilot import Autopilot
+from cuttlefish.fleet.cardstats import CardStats
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
 from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff, goal_stat
@@ -404,6 +405,7 @@ class FleetDaemon:
         self.placement = Placement()
         #: `project id -> (when, status)`: gh is a network call, so polling reads this.
         self._pr_cache: dict[str, tuple[float, PrStatus]] = {}
+        self._card_stats = CardStats(self._projects.list, self._goal_of)
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
         #: project id -> ((team id, journal position, role names), its view), so an idle project's
@@ -726,19 +728,27 @@ class FleetDaemon:
     async def goal(self, project_id: str) -> dict[str, str] | None:
         """The goal last given to the project's builder, or ``None`` (CUT-171). ``pr_url`` is the
         pull request opened for it since, read back from the journal (CUT-241)."""
-        project = self._projects.get(project_id)
-        goal = await asyncio.to_thread(read_goal, project.root)
+        return await asyncio.to_thread(self._goal_of, self._projects.get(project_id))
+
+    def _goal_of(self, project: Project) -> dict[str, str] | None:
+        """`goal`, blocking (it reads the goal file and the session journal)."""
+        goal = read_goal(project.root)
         if goal is None:
             return None
-        events = await asyncio.to_thread(self.session_events, project)
         opened = [
             e.payload.url
-            for e in events
+            for e in self.session_events(project)
             if isinstance(e.payload, PullRequestOpened) and timeline.iso(e.ts) >= goal.get("at", "")
         ]
         if goal.get("worktree") and not Path(goal["worktree"]).is_dir():
             goal = {k: v for k, v in goal.items() if k != "worktree"}  # removed since (CUT-250)
         return {**goal, "pr_url": opened[-1]} if opened else goal
+
+    def card_stat(self, project_id: str) -> dict[str, Any] | None:
+        """What a project card shows of its goal's branch: counts and pull request state, from a
+        background sweep, never from git or gh in the caller (CUT-287)."""
+        self._card_stats.touch()
+        return self._card_stats.get(project_id)
 
     async def remove_goal_worktree(
         self, project_id: str, *, delete_branch: bool = False
@@ -1068,6 +1078,7 @@ class FleetDaemon:
         """Release what the daemon holds open: the schedule loop, the broker and every lease."""
         for timer in list(self._decision_timers.values()):
             timer.cancel()
+        self._card_stats.close()
         if self.scheduler is not None:
             await self.scheduler.close()
         if self._broker is not None:

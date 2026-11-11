@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ProjectSummary, RoleStatus } from "../api";
   import { agoIso } from "../artifacts";
+  import { cardStatLine } from "../cardstat";
   import { cardFolder } from "../folders";
   import { parseTags } from "../grouping";
   import { whereItRuns } from "../placement";
@@ -76,6 +77,8 @@
   const line = $derived(projectState(project, waiting, now * 1000));
   const where = $derived(whereItRuns(project));
   const folder = $derived(cardFolder(project.name, project.root));
+  // Counts and PR state of the goal's own line of work, from the daemon's cache (CUT-287).
+  const stat = $derived(cardStatLine(project.gs));
 </script>
 
 <article class="card filled project">
@@ -86,6 +89,10 @@
   {#if folder}<p class="root mono" title={project.root}>{folder}</p>{/if}
   {#if project.worker}
     <p class="where body-small" class:problem={where.problem}>Runs on {where.text}</p>
+  {/if}
+
+  {#if stat}
+    <p class="stat body-small mono" class:attention={stat.attention} data-testid="card-stat">{stat.text}</p>
   {/if}
 
   <p class="state body-small" data-state={line.state}>
@@ -204,6 +211,16 @@
     border-radius: 999px;
     background: var(--md-sys-color-secondary-container);
     color: var(--md-sys-color-on-secondary-container);
+  }
+
+  .stat {
+    margin: 0;
+    color: var(--md-sys-color-on-surface-variant);
+    overflow-wrap: anywhere;
+  }
+
+  .stat.attention {
+    color: var(--md-sys-color-error);
   }
 
   .root {

@@ -4,6 +4,7 @@
 
 import { sameOriginTransport, type ApiTransport, type SocketLike } from "./relay";
 import type { AutopilotOptions, AutopilotStatus, Control } from "./autopilot";
+import type { CardStat } from "./cardstat";
 import type { ChatResponse } from "./chat";
 import type { OverviewData } from "./overview";
 import { terminalPath } from "./terminal";
@@ -264,6 +265,9 @@ export interface ProjectSummary {
   /** CUT-298: per role in `status`. `backend` is present only when it differs from the project's
    * own, `model` only where cuttlefish sets one, `at` is when the role last did anything. */
   role_info?: Record<string, { backend?: string; model?: string; at?: string }>;
+  /** CUT-287: the goal branch's diff counts and PR state, from the daemon's cached sweep (see
+   * `lib/cardstat.ts`). Absent for a project with no goal branch, or before the first sweep. */
+  gs?: CardStat;
   /** CUT-207: work the project's last worker may still hold that is not pushed; null when none. */
   worker_handover?: string | null;
   /** CUT-191: free-form labels the project list is grouped and filtered by. */

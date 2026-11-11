@@ -329,6 +329,14 @@ Projects is ordered by that state: waiting first, then stuck, then working, then
 most recently active first. **Pin to top** on a card keeps it above the rest whatever its state; pins live in this
 browser only. The order only moves when a project's state does.
 
+A project whose last goal has its own branch shows one more line on its card: how many files the branch changes with
+`+added −removed` (marked uncommitted while the worktree has changes not yet committed), and its pull request, open,
+merged or closed, with whether its checks are failing, passing or running. A failing check is coloured as a warning.
+The daemon keeps these in a cache that one background worker refreshes about once a minute (the pull request, which
+needs `gh`, every five minutes), so a poll of the project list never runs git or `gh`: after a start the figures appear
+on the second poll, and a project with no goal branch, or placed on a worker, shows nothing. The list leaves out the
+default command presets of each project to make room (they are on the project's own page).
+
 Under each role on a card is one line: the backend it runs on, the model, and how long ago it last did anything
 ("kopicode · llama3 · 4 min ago"). The model shows only where cuttlefish sets one itself (`CUTTLEFISH_KOPICODE_MODEL`
 with a provider URL, `CUTTLEFISH_CODEX_MODEL`); a tool running on its own default, which is every Claude Code role, shows
