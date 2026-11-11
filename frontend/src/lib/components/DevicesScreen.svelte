@@ -10,6 +10,7 @@
     type WorkerInfo,
   } from "../api";
   import { formatCode, pairingAddressProblem } from "../relay";
+  import { agentsText, diskText, loadText, warnings } from "../workerhealth";
 
   let { client }: { client: FleetClient } = $props();
 
@@ -327,6 +328,14 @@
               <span class="tag" class:online={worker.online}>{worker.online ? "Online" : "Offline"}</span>
             </p>
             <p class="muted">{[seenWorker(worker), worker.host, worker.platform].filter(Boolean).join(" · ")}</p>
+            {#if worker.online && worker.health}
+              <p class="muted health">
+                {[agentsText(worker.health), loadText(worker.health), diskText(worker.health)].filter(Boolean).join(" · ")}
+              </p>
+            {/if}
+            {#if warnings(worker).length > 0}
+              <p class="flag" role="status">{warnings(worker).join(". ")}. Projects can still be placed here.</p>
+            {/if}
           </div>
           {#if canAdmin}
             {#if removingWorker === worker.id}
@@ -434,6 +443,12 @@
     border-radius: var(--md-sys-shape-corner-small);
     background: var(--md-sys-color-secondary-container);
     color: var(--md-sys-color-on-secondary-container);
+  }
+
+  .flag {
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+    color: var(--md-sys-color-error);
   }
 
   .warn {

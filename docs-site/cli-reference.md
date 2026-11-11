@@ -270,7 +270,14 @@ The worker dials out, so a laptop behind NAT or a VM with no public port works: 
 
 `join` then stays connected and sends a heartbeat every 15 seconds; Devices lists the machine under **Worker machines** as
 online, and as offline once it has been silent for 45 seconds (the network dropped, or the process stopped). After a restart
-of the machine, `cuttlefish worker run` reconnects it without a new code. **Remove** on the PC deletes the worker's record
+of the machine, `cuttlefish worker run` reconnects it without a new code.
+
+Each heartbeat also carries the machine's load, cpu count, free and total disk where its work is kept, and how many teams
+it runs. Devices shows them under an online worker and refreshes with the page (every few seconds), and the **Runs on**
+list tags a strained machine. A disk with under 2 GB or a tenth free, or a one-minute load above one and a half times the
+cpu count, is flagged in red. The flag only warns: a project can still be placed on that machine and a team started. An
+offline worker shows no numbers, since they would be stale. The controller keeps only a fixed set of numbers from a
+heartbeat, so a worker cannot put text of its own on the page. **Remove** on the PC deletes the worker's record
 and closes its connection at once; the worker notices, deletes `~/.cuttlefish/worker.json` and stops.
 
 A worker keeps its own keypair and a secret the daemon made for it at the confirm in `~/.cuttlefish/worker.json` (mode

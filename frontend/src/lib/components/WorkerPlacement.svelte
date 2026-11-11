@@ -1,6 +1,7 @@
 <script lang="ts">
   import { FleetApiError, type FleetClient, type ProjectSummary, type WorkerInfo } from "../api";
   import { whereItRuns } from "../placement";
+  import { pickerNote } from "../workerhealth";
 
   let {
     client,
@@ -67,7 +68,7 @@
           <option value={placed.id}>A worker that is no longer paired</option>
         {/if}
         {#each workers as worker (worker.id)}
-          <option value={worker.id}>{worker.name}{worker.online ? "" : " (offline)"}</option>
+          <option value={worker.id}>{worker.name}{pickerNote(worker)}</option>
         {/each}
       </select>
     </label>

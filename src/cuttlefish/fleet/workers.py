@@ -4,6 +4,12 @@ A worker is paired and kept like a device (`devices.py`, in `workers.db`). Wheth
 not stored: it is whether it sent a heartbeat lately, so a machine that lost its network, or was
 shut, shows as offline after `OFFLINE_AFTER_SECONDS` with nothing to clean up, and a controller that
 restarts starts with every worker offline until each one calls back in.
+
+A heartbeat also carries what the machine says about itself: `host`, `platform` and `health` (load,
+cpus, disk, agents running; CUT-208). `health` is a closed set of numbers the controller checks and
+keeps, so a worker cannot put free text on the dashboard. Other things a heartbeat may grow (the
+per-backend usage CUT-292 wants) are sibling keys read the same way: named, typed, bounded.
+Low capacity is flagged for a person to see and never stops a placement or a start.
 """
 
 from __future__ import annotations
@@ -22,16 +28,56 @@ OFFLINE_AFTER_SECONDS = 45.0
 _MAX_FIELD = 80
 
 
+#: Flagged when the disk has less than this free, or less than this fraction of it.
+DISK_LOW_BYTES = 2 * 1024**3
+DISK_LOW_FRACTION = 0.10
+#: Flagged when the one-minute load is above this many times the cpu count.
+LOAD_HIGH_PER_CPU = 1.5
+#: The numbers a heartbeat's `health` may hold, each bounded; anything else is dropped.
+_HEALTH_FIELDS = ("load1", "cpus", "disk_free", "disk_total", "agents")
+_MAX_NUMBER = 1e15
+
+
 @dataclass(frozen=True, slots=True)
 class Beat:
     at: float
     host: str
     platform: str
+    health: dict[str, float] | None = None
 
 
 def _clean(raw: object) -> str:
     text = raw if isinstance(raw, str) else ""
     return "".join(ch for ch in text if ch.isprintable()).strip()[:_MAX_FIELD]
+
+
+def _clean_health(raw: object) -> dict[str, float] | None:
+    if not isinstance(raw, dict):
+        return None
+    found: dict[str, float] = {}
+    for name in _HEALTH_FIELDS:
+        value = raw.get(name)
+        if (
+            isinstance(value, int | float)
+            and not isinstance(value, bool)
+            and 0 <= value < _MAX_NUMBER
+        ):
+            found[name] = value
+    return found or None
+
+
+def flags(health: dict[str, float] | None) -> list[str]:
+    """What a person should know about a machine's capacity: `disk` (nearly full), `load` (busy)."""
+    found: list[str] = []
+    if health is None:
+        return found
+    free, total = health.get("disk_free"), health.get("disk_total")
+    if free is not None and (free < DISK_LOW_BYTES or (total and free < total * DISK_LOW_FRACTION)):
+        found.append("disk")
+    load, cpus = health.get("load1"), health.get("cpus")
+    if load is not None and cpus and load > cpus * LOAD_HIGH_PER_CPU:
+        found.append("load")
+    return found
 
 
 class WorkerLiveness:
@@ -48,10 +94,13 @@ class WorkerLiveness:
     def beat(self, worker_id: str, info: dict[str, object] | None = None) -> None:
         previous = self._beats.get(worker_id)
         if info is None:  # a sign of life that says nothing new about the machine
-            host, kind = (previous.host, previous.platform) if previous else ("", "")
+            host, kind, health = (
+                (previous.host, previous.platform, previous.health) if previous else ("", "", None)
+            )
         else:
             host, kind = _clean(info.get("host")), _clean(info.get("platform"))
-        self._beats[worker_id] = Beat(self._now(), host, kind)
+            health = _clean_health(info.get("health"))
+        self._beats[worker_id] = Beat(self._now(), host, kind, health)
 
     def forget(self, worker_id: str) -> None:
         self._beats.pop(worker_id, None)
@@ -62,9 +111,12 @@ class WorkerLiveness:
 
     def as_json(self, worker: Device) -> dict[str, object]:
         beat = self._beats.get(worker.id)
+        health = beat.health if beat and self.online(worker.id) else None
         return {
             **worker.as_json(),
             "online": self.online(worker.id),
             "host": beat.host if beat else "",
             "platform": beat.platform if beat else "",
+            "health": health,
+            "flags": flags(health),
         }
