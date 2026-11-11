@@ -3,9 +3,9 @@
   // git on demand by the daemon, never stored. Reading changes nothing. The one thing it can do is
   // send a note on a changed line to the builder (CUT-291): the line number opens a box, and the
   // note goes as a message that quotes the line.
-  import { FleetApiError, type FleetClient, type GoalDiffResult, type ProjectSummary } from "../api";
-  import { annotationMessage, canAnnotate, diffMoved, lineRef, tooLong, type LineRef } from "../annotate";
-  import { composerState, type Composer } from "../chat";
+  import type { FleetClient, GoalDiffResult, ProjectSummary } from "../api";
+  import { annotationMessage, canAnnotate, diffMoved, lineRef, type LineRef } from "../annotate";
+  import SendToBuilder from "./SendToBuilder.svelte";
   import { diffSummary, lineNumber, noLinesNote, sourceNote, statusLabel } from "../diff";
 
   let {
@@ -30,7 +30,6 @@
       if (id === projectId) {
         diff = next;
         failed = false;
-        moved = false;
       }
     } catch {
       failed = true;
@@ -49,81 +48,21 @@
     void load();
   });
 
-  // One note at a time. Where it goes: a running team's role (steer), else the builder's session
-  // (chat), which only some builders take; when it cannot go, the box says why and offers a copy.
+  // One note at a time; the box that sends it is the shared SendToBuilder.
   let note = $state<{ ref: LineRef; key: string } | null>(null);
-  let draft = $state("");
-  let role = $state("");
-  let composer = $state<Composer | null>(null);
-  let sending = $state(false);
-  let moved = $state(false);
   let sentNote = $state<string | null>(null);
-  let sendError = $state<string | null>(null);
-  const team = $derived(project.running);
 
-  async function openNote(key: string, ref: LineRef) {
+  function openNote(key: string, ref: LineRef) {
     note = { ref, key };
-    draft = "";
-    moved = false;
-    sentNote = sendError = null;
-    role = project.roles[0]?.name ?? "";
-    if (!team) {
-      composer = null;
-      composer = composerState(await client.getChat(projectId, null).catch(() => null));
-    }
+    sentNote = null;
   }
 
-  const canSend = $derived(team ? role !== "" : composer?.enabled === true);
-
-  function message(): string {
-    return annotationMessage(note!.ref, draft, diff!);
-  }
-
-  async function send(force = false) {
-    if (!note || !diff || sending || draft.trim() === "") return;
-    const long = tooLong(message());
-    if (long) {
-      sendError = long;
-      return;
-    }
-    sending = true;
-    sendError = null;
-    try {
-      if (!force) {
-        const now = await client.getGoalStat(projectId).catch(() => null);
-        if (now?.ok && diffMoved(diff, now)) {
-          moved = true;
-          return;
-        }
-      }
-      if (team) {
-        await client.steerProject(projectId, role, message());
-        sentNote = `Sent to ${role}. A running team reads it at its next round; a live Codex role reads it at once.`;
-      } else {
-        const result = await client.sendChat(projectId, message());
-        sentNote = result.sent === "queued" ? "Queued. The builder reads it at its next step." : "Sent to the builder.";
-      }
-      note = null;
-      moved = false;
-    } catch (e) {
-      sendError =
-        e instanceof FleetApiError && e.status === 403
-          ? "This device is not allowed to message the builder. Raise it under Devices on the PC."
-          : e instanceof Error
-            ? e.message
-            : "That didn't work.";
-    } finally {
-      sending = false;
-    }
-  }
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(message());
-      sentNote = "Copied. Paste it into the Terminal tab.";
-    } catch {
-      sendError = "Could not copy from this page.";
-    }
+  /** The line numbers are the diff as read: say so if the branch has moved since. */
+  async function movedSince(): Promise<string | null> {
+    const now = await client.getGoalStat(projectId).catch(() => null);
+    return diff && now?.ok && diffMoved(diff, now)
+      ? "The branch changed since this diff was read, so the line may have moved. The note quotes the line. Refresh to see the new diff, or send it anyway."
+      : null;
   }
 
   function toggle(path: string) {
@@ -217,53 +156,25 @@
                 {/if}
               </div>
               {#if note && note.ref.path === file.path}
-                <form
-                  class="note-form"
-                  data-testid="diff-note"
-                  onsubmit={(event) => {
-                    event.preventDefault();
-                    void send();
-                  }}
-                >
+                <div class="note-form" data-testid="diff-note">
                   <p class="label-medium">
                     Note on {note.ref.side === "old" ? "removed" : "added"} line {note.ref.line}:
                     <code class="quote">{note.ref.quote}</code>
                   </p>
-                  <textarea bind:value={draft} rows="3" aria-label="Your note" placeholder="What should change here?"></textarea>
-                  {#if team}
-                    <label class="body-small">
-                      Send to role
-                      <select bind:value={role}>
-                        {#each project.roles as r (r.name)}<option value={r.name}>{r.name}</option>{/each}
-                      </select>
-                    </label>
-                  {:else if composer}
-                    <p class="body-small muted" role="status">{composer.hint}</p>
-                  {:else}
-                    <p class="body-small muted" role="status">
-                      The chat can only type to a Claude Code builder that is running, so this note cannot be sent
-                      from here. Copy it and paste it into the Terminal tab.
-                    </p>
-                  {/if}
-                  {#if moved}
-                    <p class="body-small note" role="alert">
-                      The branch changed since this diff was read, so the line may have moved. The note quotes the
-                      line. Refresh to see the new diff, or send it anyway.
-                    </p>
-                  {/if}
-                  {#if sendError}<p class="body-small note" role="alert">{sendError}</p>{/if}
-                  <div class="note-actions">
-                    {#if moved}
-                      <button type="button" class="btn btn-filled" disabled={sending} onclick={() => send(true)}>Send anyway</button>
-                    {:else}
-                      <button type="submit" class="btn btn-filled" disabled={sending || !canSend || draft.trim() === ""}>
-                        {sending ? "Sending…" : team ? "Send to the role" : "Send to the builder"}
-                      </button>
-                    {/if}
-                    <button type="button" class="btn btn-tonal" onclick={copy} disabled={draft.trim() === ""}>Copy</button>
-                    <button type="button" class="btn btn-text" onclick={() => (note = null)}>Cancel</button>
-                  </div>
-                </form>
+                  <SendToBuilder
+                    {client}
+                    {projectId}
+                    {project}
+                    placeholder="What should change here?"
+                    compose={(text) => annotationMessage(note!.ref, text, diff!)}
+                    check={movedSince}
+                    onSent={(said) => {
+                      sentNote = said;
+                      note = null;
+                    }}
+                    onCancel={() => (note = null)}
+                  />
+                </div>
               {/if}
             {/if}
           </li>
@@ -477,22 +388,6 @@
     margin-top: 0.25rem;
     overflow-wrap: anywhere;
     font-weight: 400;
-  }
-
-  .note-form textarea {
-    min-height: 4.5rem;
-    padding: 0.5rem;
-    border: 1px solid var(--md-sys-color-outline);
-    border-radius: var(--md-sys-shape-corner-small, 8px);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-  }
-
-  .note-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
   }
 
   .added .num,

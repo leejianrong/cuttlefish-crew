@@ -530,8 +530,12 @@ export interface Schedule {
   enabled: boolean;
   next_due: string;
   last_run: string | null;
-  /** `started`, or `skipped: <why>`. */
+  /** `started`, `skipped: <why>` or `skipped by precheck: <why>`. */
   last_result: string | null;
+  /** CUT-297: a run reached later than this many minutes past its slot is skipped; null runs late. */
+  grace_minutes?: number | null;
+  /** CUT-297: a command that must exit 0 for a run to go ahead; null has no check. */
+  precheck?: string | null;
 }
 
 /** The answer to "open a pull request" (CUT-241). A refusal is `ok: false` with a plain reason;
@@ -623,6 +627,29 @@ export interface PrStatusResult {
   review?: "approved" | "changes_requested" | "review_required";
   checks_state?: "passing" | "failing" | "pending" | "none";
   checks: PrCheck[];
+}
+
+/** One piece of review text on a pull request (CUT-293): other people's words, scrubbed and cut. */
+export interface PrCommentItem {
+  kind: "review" | "comment" | "inline";
+  author: string;
+  body: string;
+  /** For an inline comment: the file and line it is on. Empty otherwise. */
+  path: string;
+  line: string;
+  /** For a review: `approved`, `changes_requested`, `commented`... */
+  state: string;
+  url: string;
+}
+
+export interface PrCommentsResult {
+  ok: boolean;
+  code?: string;
+  reason?: string;
+  number?: number;
+  comments: PrCommentItem[];
+  /** Older comments left out to stay within the cap. */
+  omitted?: number;
 }
 
 /** The answer to "remove the worktree" (CUT-250). `branch_note` says why a branch was kept. */
@@ -877,6 +904,11 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/goal/pull-request`);
   }
 
+  /** The pull request's review text, read when asked (Approve tier, CUT-293). */
+  getPrComments(id: string): Promise<PrCommentsResult> {
+    return this.request(`/api/projects/${id}/goal/pull-request/comments`);
+  }
+
   /** Remove the last goal's worktree (CUT-250). A refusal is `ok: false` with a plain reason. */
   removeGoalWorktree(id: string, deleteBranch = false): Promise<WorktreeRemoval> {
     return this.request(`/api/projects/${id}/goal/worktree/remove`, {
@@ -889,10 +921,15 @@ export class FleetClient {
     return (await this.request<{ schedules: Schedule[] }>(`/api/projects/${id}/schedules`)).schedules;
   }
 
-  addSchedule(id: string, goal: string, recurrence: string): Promise<Schedule> {
+  addSchedule(
+    id: string,
+    goal: string,
+    recurrence: string,
+    options: { grace_minutes?: number | null; precheck?: string | null } = {},
+  ): Promise<Schedule> {
     return this.request(`/api/projects/${id}/schedules`, {
       method: "POST",
-      body: JSON.stringify({ goal, recurrence }),
+      body: JSON.stringify({ goal, recurrence, ...options }),
     });
   }
 

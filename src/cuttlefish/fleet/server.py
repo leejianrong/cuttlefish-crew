@@ -1200,9 +1200,25 @@ def create_app(
             raise HTTPException(400, "'goal' and 'recurrence' are required text")
         if len(goal.strip()) > MAX_GOAL_CHARS:
             raise HTTPException(400, f"A goal is at most {MAX_GOAL_CHARS} characters.")
+        grace, precheck = body.get("grace_minutes"), body.get("precheck")
+        if grace is not None and (isinstance(grace, bool) or not isinstance(grace, int)):
+            raise HTTPException(400, "'grace_minutes' must be a whole number of minutes")
+        if precheck is not None and not isinstance(precheck, str):
+            raise HTTPException(400, "'precheck' must be text")
         try:
             daemon.projects.get(project_id)
-            return _schedules().add(project_id, goal, recurrence, now=datetime.now(UTC)).to_json()
+            return (
+                _schedules()
+                .add(
+                    project_id,
+                    goal,
+                    recurrence,
+                    now=datetime.now(UTC),
+                    grace_minutes=grace,
+                    precheck=precheck,
+                )
+                .to_json()
+            )
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
         except ValueError as exc:  # RecurrenceError, or an empty goal
@@ -1569,6 +1585,16 @@ def create_app(
         machine's `gh` (CUT-242). A quiet `ok: false` with a `code` when there is none."""
         try:
             return (await daemon.pr_status(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/goal/pull-request/comments")
+    async def get_goal_pr_comments(project_id: str) -> dict[str, Any]:
+        """The pull request's review text (reviews, comments, inline comments), scrubbed and
+        bounded, for the page to offer to send to the builder (CUT-293). Approve tier: it is other
+        people's free text, and sending it on is the only use."""
+        try:
+            return (await daemon.pr_comments(project_id)).to_json()
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 

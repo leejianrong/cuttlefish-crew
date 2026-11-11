@@ -137,7 +137,7 @@ at its next pass, so nothing needs restarting.
 
 | Subcommand | What it does |
 |---|---|
-| `add PROJECT_ID --goal TEXT --recurrence R` | Add a schedule. `R` is `every <N>m`, `every <N>h` or `daily HH:MM`, always UTC. |
+| `add PROJECT_ID --goal TEXT --recurrence R [--grace MINUTES] [--precheck COMMAND]` | Add a schedule. `R` is `every <N>m`, `every <N>h`, `daily HH:MM`, `weekdays HH:MM`, `weekly <mon..sun> HH:MM` or `cron <5 fields>`, always UTC (see [Scheduled goals](schedules.md)). `--grace` skips a run reached later than that many minutes past its slot. `--precheck` runs a command first and skips the run unless it exits 0. |
 | `list [--project ID]` | List schedules, soonest first, with `next_due`, `last_run` and `last_result`. |
 | `remove ID` | Delete a schedule. |
 | `enable ID` / `disable ID` | Turn one on (counting from now) or off. |
@@ -430,6 +430,7 @@ no model call for it: the model is the backend's own.
 | `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` | unset | Names (comma-separated, `*` ends a prefix) to pass to agents on top of the allowlist (see What an agent's environment is). |
 | `CUTTLEFISH_CREDENTIAL_BROKER` | unset | `1` makes `cuttlefish serve` keep each agent's model API key itself and lease the agent a short-lived token for a loopback proxy instead, so a command the agent runs finds no real key. Claude Code (a key from the environment or Secrets) and Codex (only an `OPENAI_API_KEY` set in Secrets, because Codex ignores one in the environment under a ChatGPT login); a login file is not a key and is not brokered. A sandbox run is unchanged. |
 | `CUTTLEFISH_KEEP_WINDOWS_PATH` | unset | `1` keeps WSL's `/mnt/...` entries on an agent's `PATH`; they are dropped by default. |
+| `CUTTLEFISH_PRECHECK_TIMEOUT` | `30` | Seconds a schedule's precheck command may run before it is killed and the run is skipped. |
 | `CUTTLEFISH_PREPARE_TIMEOUT` | `900` | Seconds one dependency-install step may run before it is killed (see Installing dependencies). |
 | `CUTTLEFISH_LOG_LEVEL` | `INFO` | Log level for `cuttlefish serve`: the terminal and `~/.cuttlefish/logs/cuttlefish.log` (rotating, 5 MB x 5). `DEBUG` adds every tool call and permission decision; an unrecognised value falls back to `INFO` and says so. |
 | `CUTTLEFISH_STUCK_THRESHOLD` | `5` | How many shell commands in a row may fail on the project's environment (`No module named`, `command not found`, `ENOENT`, `Cannot find module`, ...) before cuttlefish stops a kopicode agent instead of letting it run to `max_turns`. `0` turns it off. Claude Code and Codex are not watched. |
