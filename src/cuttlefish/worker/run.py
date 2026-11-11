@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import json
 import os
 import platform
+import shutil
 import socket
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -150,13 +152,39 @@ async def join(
         await link.close()
 
 
-def _about() -> dict[str, str]:
-    return {"host": socket.gethostname(), "platform": f"{platform.system()} {platform.machine()}"}
+def health(disk_path: Path, agents: int) -> dict[str, float]:
+    """What this machine tells the controller about its capacity: one-minute load, cpus, free and
+    total disk where the work is kept, and how many teams it runs."""
+    found: dict[str, float] = {"agents": agents}
+    if cpus := os.cpu_count():
+        found["cpus"] = cpus
+    with contextlib.suppress(OSError, AttributeError):
+        found["load1"] = round(os.getloadavg()[0], 2)
+    with contextlib.suppress(OSError):
+        usage = shutil.disk_usage(disk_path if disk_path.exists() else disk_path.parent)
+        found["disk_free"], found["disk_total"] = usage.free, usage.total
+    return found
 
 
-async def _beat(link: WorkerLink, beat_every: float, announce: Callable[[], None]) -> None:
+def _about(disk_path: Path, agents: int) -> dict[str, object]:
+    return {
+        "host": socket.gethostname(),
+        "platform": f"{platform.system()} {platform.machine()}",
+        "health": health(disk_path, agents),
+    }
+
+
+async def _beat(
+    link: WorkerLink,
+    beat_every: float,
+    announce: Callable[[], None],
+    executor: Executor,
+    disk: Path,
+) -> None:
     while True:
-        status, _ = await link.request("POST", "/api/worker/heartbeat", _about())
+        status, _ = await link.request(
+            "POST", "/api/worker/heartbeat", _about(disk, len(executor.running()))
+        )
         if status != 200:
             raise LinkError(f"the controller answered {status}")
         announce()
@@ -214,7 +242,7 @@ async def run(
                 continue
             executor.link = link
             work = [
-                asyncio.create_task(_beat(link, beat_every, announce)),
+                asyncio.create_task(_beat(link, beat_every, announce, executor, path.parent)),
                 asyncio.create_task(_pull(link, executor)),
                 asyncio.create_task(link.closed.wait()),
             ]

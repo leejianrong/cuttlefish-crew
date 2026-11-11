@@ -112,3 +112,42 @@ def test_a_worker_keeps_its_keys_in_one_private_file(tmp_path: Path) -> None:
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     assert Identity.load(path) == identity
     assert Identity.load(tmp_path / "missing.json") is None
+
+
+GIB = 1024**3
+
+
+def test_a_heartbeats_health_is_checked_kept_and_flagged_only_when_low(
+    stores: tuple[DeviceStore, DeviceStore],
+) -> None:
+    _devices, workers = stores
+    liveness = WorkerLiveness(now=lambda: 0.0)
+    worker = workers.create("laptop", KEY, b"s" * 32, Tier.WORKER)
+    roomy = {"load1": 0.5, "cpus": 4, "disk_free": 100 * GIB, "disk_total": 500 * GIB, "agents": 1}
+    liveness.beat(worker.id, {"health": {**roomy, "note": "free text", "agents": True}})
+    shown = liveness.as_json(worker)
+    assert shown["health"] == {
+        k: v for k, v in roomy.items() if k != "agents"
+    }  # a bool is no count
+    assert shown["flags"] == []
+    liveness.beat(worker.id)  # a bare sign of life keeps the last health
+    assert liveness.as_json(worker)["health"] is not None
+    liveness.beat(worker.id, {"health": {**roomy, "disk_free": 1 * GIB}})
+    assert liveness.as_json(worker)["flags"] == ["disk"]
+    liveness.beat(worker.id, {"health": {**roomy, "disk_free": 40 * GIB, "disk_total": 500 * GIB}})
+    assert liveness.as_json(worker)["flags"] == ["disk"]  # under a tenth of the disk
+    liveness.beat(worker.id, {"health": {**roomy, "load1": 9.0}})
+    assert liveness.as_json(worker)["flags"] == ["load"]
+    for junk in ("x", [1], {"load1": -1, "cpus": "4", "disk_free": float("inf")}):
+        liveness.beat(worker.id, {"health": junk})
+        assert liveness.as_json(worker)["health"] is None
+
+
+def test_an_offline_worker_shows_no_health(stores: tuple[DeviceStore, DeviceStore]) -> None:
+    _devices, workers = stores
+    now = [0.0]
+    liveness = WorkerLiveness(offline_after=45, now=lambda: now[0])
+    worker = workers.create("laptop", KEY, b"s" * 32, Tier.WORKER)
+    liveness.beat(worker.id, {"health": {"load1": 1, "cpus": 2}})
+    now[0] = 100
+    assert liveness.as_json(worker)["health"] is None and liveness.as_json(worker)["flags"] == []

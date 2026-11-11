@@ -29,6 +29,16 @@ export interface WorkerInfo {
   platform: string;
   /** Whether it has sent a heartbeat lately. A machine that lost its network shows as offline. */
   online: boolean;
+  /** CUT-208: what the machine reported in its last heartbeat; null while offline or silent about it. */
+  health?: {
+    load1?: number;
+    cpus?: number;
+    disk_free?: number;
+    disk_total?: number;
+    agents?: number;
+  } | null;
+  /** `disk` (nearly full) and `load` (busy). A warning only: nothing is blocked. */
+  flags?: string[];
   created_at: number;
   last_seen_at: number | null;
 }

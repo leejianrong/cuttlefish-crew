@@ -89,6 +89,9 @@ async def test_a_worker_joins_after_the_owner_confirms_and_shows_online(
         [worker] = await _workers(rig)
         assert worker["name"] == "laptop" and worker["id"] == identity.worker_id
         assert worker["host"]  # what it said about itself
+        health = worker["health"]  # and how loaded it is, from the same heartbeat
+        assert health["agents"] == 0 and health["disk_total"] > 0 and health["cpus"] >= 1
+        assert isinstance(worker["flags"], list)
     finally:
         runner.cancel()
         await asyncio.gather(runner, return_exceptions=True)
