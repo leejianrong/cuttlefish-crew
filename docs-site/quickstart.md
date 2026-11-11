@@ -309,6 +309,9 @@ Projects is ordered by that state: waiting first, then stuck, then working, then
 most recently active first. **Pin to top** on a card keeps it above the rest whatever its state; pins live in this
 browser only. The order only moves when a project's state does.
 
+Projects that are waiting for you sit in a **Needs you** group at the top instead of among the cards: one row each,
+with the title of the request it is waiting on (or that a review is wanted). Five show; **Show all** reveals the rest.
+
 With more than a handful of projects, use the bar above the cards. **Tags** on a card takes free-form labels separated
 by commas (`client:acme, rust`; up to 10 per project, 24 characters each) and saves them on the daemon, so every
 browser sees them. The state chips show only projects in those states (any of them); the tag chips show only projects

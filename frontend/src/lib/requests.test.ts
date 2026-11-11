@@ -8,6 +8,7 @@ import {
   formatRemaining,
   isStartOfCommand,
   landsLabel,
+  needsReason,
   outcomeLabel,
   parseRule,
   queueOrder,
@@ -188,5 +189,20 @@ describe("cannotAnswer", () => {
     for (const tier of ["approve", "terminal", "admin", null, undefined]) {
       expect(cannotAnswer(tier)).toBe(false);
     }
+  });
+});
+
+describe("needsReason", () => {
+  const r = (id: string, title: string, over: Partial<NeedsYouRequest> = {}) =>
+    ({ id, title, kind: "permission", lands: "now", ...over }) as NeedsYouRequest;
+  it("names the most urgent request and how many more", () => {
+    const asks = [r("a", "Stuck", { kind: "blocked" }), r("b", "Run docker"), r("c", "Pick one")];
+    expect(needsReason(asks, "x")).toBe("Run docker (+2 more)");
+  });
+  it("says just the title for one", () => {
+    expect(needsReason([r("a", "Run docker")], "x")).toBe("Run docker");
+  });
+  it("falls back to the state line with no request", () => {
+    expect(needsReason([], "builder is waiting for your review")).toBe("builder is waiting for your review");
   });
 });

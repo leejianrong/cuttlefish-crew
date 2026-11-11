@@ -79,6 +79,21 @@ export function limitGroups(groups: readonly Group[], limit: number): (Group & {
   return out;
 }
 
+/** The lead "Needs you" group (CUT-284): the projects whose state is waiting, in the order given,
+ * and the rest. Not offered when the list is already grouped by state, which has its own Waiting. */
+export function splitNeedsYou(
+  projects: readonly ProjectSummary[],
+  waitingBy: Readonly<Record<string, number>>,
+  now = Date.now(),
+): { needs: ProjectSummary[]; rest: ProjectSummary[] } {
+  const needs: ProjectSummary[] = [];
+  const rest: ProjectSummary[] = [];
+  for (const p of projects) {
+    (projectState(p, waitingBy[p.id] ?? 0, now).state === "waiting" ? needs : rest).push(p);
+  }
+  return { needs, rest };
+}
+
 export const UNTAGGED = "Untagged";
 
 /** Groups in the order of `projects` (already ranked): a group sits where its first project does.
