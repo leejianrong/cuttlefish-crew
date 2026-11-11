@@ -6,7 +6,12 @@ permission. The coding itself is done by the agent CLI you already use:
 [kopicode](https://github.com/leejianrong/kopicode), Claude Code or Codex, or any other terminal agent in a tmux
 session. Everything that happens lands in one readable journal.
 
-![The Projects screen from a real run: three projects in Auto mode, each with a Claude Code builder shown as working](docs/assets/dashboard-fleet-hero.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/hero-dark.png">
+  <img src="docs/assets/hero-light.png" alt="The Projects screen on a desktop with the phone view overlaid in the corner. A Needs you group at the top lists projects waiting on you, each with the request it is waiting on.">
+</picture>
+
+*A seeded demo fleet of 100 projects with some requests waiting, not a live run. The phone view is the same app at 390 px wide.*
 
 ## Install
 
@@ -48,8 +53,17 @@ Want the whole walk-through, with two practice repos and two crews side by side?
 [tutorial](https://leejianrong.github.io/cuttlefish-crew/docs/tutorial/) (ten minutes). The
 [quickstart](https://leejianrong.github.io/cuttlefish-crew/docs/quickstart/) is the short version.
 
-## What else it does
+## What it does
 
+- **Needs you comes first.** Projects waiting on a person lead the Projects screen as their own group, one row each
+  with the request it is waiting on, ahead of everything else. A bell in the top bar counts what is new, and can send a
+  desktop notice (no project name or command in it) while a dashboard tab is open; it cannot reach a closed browser.
+  Ctrl-K (Cmd-K, or the search button on a phone) jumps to any project, tab or screen
+  ([quickstart](https://leejianrong.github.io/cuttlefish-crew/docs/quickstart/)).
+- **Review a goal's branch.** The **Changes** card shows the diff of a goal's branch, and pressing a line number sends
+  a note about that line to the builder. The project page opens with a status strip: what is running, its tokens, the
+  branch's `+added −removed` and a link to its pull request
+  ([branches and pull requests](https://leejianrong.github.io/cuttlefish-crew/docs/branches-and-pull-requests/)).
 - **Any agent, three first-class.** kopicode, Claude Code and Codex report status and ask for permission in the
   dashboard. Any other terminal agent (`cuttlefish projects add --terminal-command 'aider'`) runs in the same tmux
   session with a Terminal tab, but with no live status or Needs you cards ([ADR-0047](docs/adr/0047-a-project-can-run-any-terminal-command-in-its-tmux-session-with-no-status-integration.md)).
@@ -71,14 +85,19 @@ Want the whole walk-through, with two practice repos and two crews side by side?
 - **Secrets and keys.** An encrypted per-project secrets store, and an optional credential broker so an agent never
   holds its model key.
 - **More than one machine.** `cuttlefish worker join` pairs a second computer with the daemon (you confirm a code on
-  the PC) and Devices shows it online or offline ([ADR-0057](docs/adr/0057-a-worker-machine-dials-the-controller-pairs-once-and-holds-a-lease-never-the-model-key.md)).
+  the PC) and Devices shows it online or offline with its load and free disk ([ADR-0057](docs/adr/0057-a-worker-machine-dials-the-controller-pairs-once-and-holds-a-lease-never-the-model-key.md)).
   Place a project on it and Start team runs there, streaming its journal back (no model key or project secret is sent yet).
   The team resumes after a restart of either side, and a project can move to another worker, warning first about work
   the old machine has not pushed.
 - **From a phone.** The dashboard is a web app you can pair through Tailscale https or a relay (checked in Chromium
-  only).
+  only), with no native app.
 
-How it compares with other fleet managers, including where it is behind:
+![Ctrl-K over the Projects screen: typing "billing" lists the project that needs you first, then the matching projects](docs/assets/palette-light.png)
+
+Using Orca, Conductor or herdr today? [Switching from another tool](https://leejianrong.github.io/cuttlefish-crew/docs/switching/)
+maps their screens to ours.
+
+How it compares with Orca, herdr, Paseo, Conductor and Claude Code's own remote tools, including where it is behind:
 [how we differ](https://leejianrong.github.io/cuttlefish-crew/docs/comparison/).
 
 ```mermaid

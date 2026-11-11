@@ -79,7 +79,7 @@
     onclick={(e) => e.stopPropagation()}
     onkeydown={onKeydown}
   >
-    <div class="field">
+    <div class="search">
       <Icon name="search" size={20} />
       <input
         bind:this={input}
@@ -152,7 +152,7 @@
     outline: none;
   }
 
-  .field {
+  .search {
     display: flex;
     align-items: center;
     gap: 12px;
