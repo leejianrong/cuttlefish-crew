@@ -80,11 +80,13 @@ def test_uncommitted_and_untracked_work_is_shown_and_ignored_work_is_not(
     (wt / "fresh.py").write_text("print(1)\nprint(2)\n")
     (wt / ".gitignore").write_text("junk.log\n")
     (wt / "junk.log").write_text("noise\n")
+    (wt / ".cuttlefish" / "present").mkdir(parents=True)
+    (wt / ".cuttlefish" / "present" / "SKILL.md").write_text("cuttlefish's own\n")
     diff = goal_diff(str(root), goal)
     files = _by_path(diff)
     assert diff.dirty and files["fresh.py"]["status"] == "untracked"
     assert files["fresh.py"]["additions"] == 2
-    assert "junk.log" not in files
+    assert "junk.log" not in files and not any(p.startswith(".cuttlefish/") for p in files)
     assert files["a.txt"]["additions"] == 1
 
 

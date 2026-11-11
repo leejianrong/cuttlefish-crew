@@ -368,7 +368,7 @@
       {/if}
 
       {#if !project.is_manager}
-        <GoalDiffCard {client} {projectId} refreshKey={sessionChanges} />
+        <GoalDiffCard {client} {projectId} {project} refreshKey={sessionChanges} />
       {/if}
 
       <AgentSessionCard {client} {projectId} onChange={() => sessionChanges++} />

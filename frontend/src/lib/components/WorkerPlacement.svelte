@@ -26,7 +26,7 @@
   $effect(() => {
     void placed?.online;
     client
-      .listWorkers()
+      .listWorkersIfRelay()
       .then((result) => (workers = result.workers))
       .catch(() => (workers = []));
   });
