@@ -20,6 +20,8 @@
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
   import GoalDiffCard from "./GoalDiffCard.svelte";
+  import ProjectPath from "./ProjectPath.svelte";
+  import StatusStrip from "./StatusStrip.svelte";
   import KillSwitch from "./KillSwitch.svelte";
   import ScheduleCard from "./ScheduleCard.svelte";
   import MissionControl from "./MissionControl.svelte";
@@ -315,7 +317,7 @@
           </p>
         {/if}
       {/if}
-      <p class="root mono">{project.root}</p>
+      <div class="path-wrap"><ProjectPath root={project.root} /></div>
       <WorkerPlacement {client} {project} onChanged={refresh} />
       <KillSwitch {client} {projectId} onDone={refresh} />
     </header>
@@ -345,6 +347,10 @@
             />
           {/each}
         </section>
+      {/if}
+
+      {#if !project.is_manager}
+        <StatusStrip {client} {projectId} {project} refreshKey={sessionChanges} />
       {/if}
 
       <MissionControl {client} {projectId} active={tab === "overview"} {onTabChange} onAutopilotChange={() => sessionChanges++} />
@@ -662,7 +668,7 @@
       margin-bottom: 0;
     }
 
-    .page.terminal-tab .root {
+    .page.terminal-tab .path-wrap {
       display: none;
     }
   }
@@ -676,12 +682,6 @@
     color: var(--md-sys-color-error);
   }
 
-  .root {
-    color: var(--text-faint);
-    font-size: 0.8rem;
-    margin: 0.3rem 0 1.25rem;
-    overflow-wrap: anywhere;
-  }
 
   .warning {
     background: var(--status-blocked-bg);

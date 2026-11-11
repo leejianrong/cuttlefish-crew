@@ -1,7 +1,7 @@
 // Unit: the add-project screen's pure helpers (folders.ts).
 
 import { describe, expect, it } from "vitest";
-import { breadcrumbs, cardFolder, folderName, parseAllow, parseLimit } from "./folders";
+import { breadcrumbs, cardFolder, folderName, parseAllow, parseLimit, splitPath } from "./folders";
 
 describe("folderName", () => {
   it("is the last path segment", () => {
@@ -68,5 +68,13 @@ describe("cardFolder", () => {
   it("is the folder name, and nothing when it only repeats the project name", () => {
     expect(cardFolder("shop", "/home/jian/work/shop-api/")).toBe("shop-api");
     expect(cardFolder("shop-api", "/home/jian/work/shop-api")).toBeNull();
+  });
+});
+
+describe("splitPath (CUT-285)", () => {
+  it("splits where the folder name starts, trailing slash or not", () => {
+    expect(splitPath("/home/jian/code/app")).toEqual({ dir: "/home/jian/code/", name: "app" });
+    expect(splitPath("/home/jian/code/app/")).toEqual({ dir: "/home/jian/code/", name: "app" });
+    expect(splitPath("/")).toEqual({ dir: "", name: "/" });
   });
 });

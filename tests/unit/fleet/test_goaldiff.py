@@ -12,7 +12,7 @@ from starlette.testclient import TestClient
 
 from cuttlefish.fleet import goaldiff
 from cuttlefish.fleet.daemon import FleetDaemon
-from cuttlefish.fleet.goaldiff import goal_diff, looks_secret
+from cuttlefish.fleet.goaldiff import goal_diff, goal_stat, looks_secret
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.fleet.tiers import Tier, required_tier
 from cuttlefish.projects.store import ProjectStore
@@ -188,3 +188,32 @@ def test_a_project_on_a_worker_says_so(client: TestClient, tmp_path: Path) -> No
     store.update_worker(pid, "w1")
     body = client.get(f"/api/projects/{pid}/goal/diff").json()
     assert body["ok"] is False and body["code"] == "on_worker" and "remote" in body["reason"]
+
+
+def test_the_stat_is_the_diffs_counts_without_the_patch(repo: tuple[Path, dict[str, str]]) -> None:
+    root, goal = repo
+    wt = Path(goal["worktree"])
+    (wt / "fresh.py").write_text("print(1)\nprint(2)\n")
+    (wt / "a.txt").write_text("changed\n")
+    stat, full = goal_stat(str(root), goal), goal_diff(str(root), goal)
+    assert stat.ok and stat.files == () and stat.dirty
+    assert (stat.files_changed, stat.additions, stat.deletions) == (
+        full.files_changed, full.additions, full.deletions,
+    )  # fmt: skip
+    assert stat.files_changed == len(full.files) and stat.head == full.head
+    assert goal_stat(str(root), None).code == "no_goal"
+    assert goal_stat(str(root), {"text": "g", "at": "x"}).code == "default_branch"
+
+
+def test_the_stat_route_and_its_worker_answer(
+    client: TestClient, repo: tuple[Path, dict[str, str]], tmp_path: Path
+) -> None:
+    root, _goal = repo
+    store = client.store  # type: ignore[attr-defined]
+    pid = store.register(name="alpha", root=str(root)).id
+    body = client.get(f"/api/projects/{pid}/goal/diff/stat").json()
+    assert body["ok"] and body["files_changed"] >= 4 and not body.get("files")
+    assert required_tier("GET", f"/api/projects/{pid}/goal/diff/stat") == Tier.VIEW
+    remote = store.register(name="remote", root=str(tmp_path / "x")).id
+    store.update_worker(remote, "w1")
+    assert client.get(f"/api/projects/{remote}/goal/diff/stat").json()["code"] == "on_worker"

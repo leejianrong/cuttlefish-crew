@@ -11,6 +11,14 @@ export function folderName(path: string): string {
   return segments.length > 0 ? segments[segments.length - 1] : path;
 }
 
+/** A path split where the folder name starts: "/a/b/c" -> `{ dir: "/a/b/", name: "c" }`, so a narrow
+ * screen can shorten the directory and still show the folder. */
+export function splitPath(path: string): { dir: string; name: string } {
+  const name = folderName(path);
+  const end = path.replace(/\/+$/, "").length - name.length;
+  return { dir: path.slice(0, Math.max(0, end)), name };
+}
+
 /** The folder line of a project card: its folder name, or nothing when that only repeats the project's name. */
 export function cardFolder(name: string, root: string): string | null {
   const folder = folderName(root);

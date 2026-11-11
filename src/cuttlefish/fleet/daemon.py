@@ -75,7 +75,7 @@ from cuttlefish.fleet import gitexclude, manager_agent
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
-from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff
+from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff, goal_stat
 from cuttlefish.fleet.placement import Placement, RemoteTeam
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.scheduler import Scheduler
@@ -716,6 +716,15 @@ class FleetDaemon:
     async def goal_diff(self, project_id: str) -> GoalDiff:
         """The last goal's branch diff, read from git now (CUT-289). A project placed on a worker
         has its checkout there, so it says so rather than failing."""
+        return await self._read_goal_diff(project_id, goal_diff)
+
+    async def goal_stat(self, project_id: str) -> GoalDiff:
+        """Only the counts of that diff, without the patch (CUT-286)."""
+        return await self._read_goal_diff(project_id, goal_stat)
+
+    async def _read_goal_diff(
+        self, project_id: str, read: Callable[[str, dict[str, str] | None], GoalDiff]
+    ) -> GoalDiff:
         project = self._projects.get(project_id)
         if project.worker_id is not None:
             state = self.worker_state(project.worker_id)
@@ -727,7 +736,7 @@ class FleetDaemon:
                 "so its diff is not shown here yet.",
             )
         goal = await self.goal(project_id)
-        return await asyncio.to_thread(goal_diff, project.root, goal)
+        return await asyncio.to_thread(read, project.root, goal)
 
     async def open_pull_request(self, project_id: str, *, push: bool = False) -> PullRequest:
         """Open a pull request for the goal's branch with the machine's ``gh`` login (CUT-241,
