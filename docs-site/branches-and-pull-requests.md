@@ -71,6 +71,22 @@ for 30 seconds, so a page left open does not hammer GitHub. A branch with no pul
 `GET /api/projects/{id}/goal/pull-request` (View tier: it only reads, and the PR's address is already shown at View). It
 returns each check's `name`, `state` (`pass`, `fail`, `pending` or `skipped`) and `url`, so a script can read them too.
 
+### Send failing checks and review comments to the builder
+
+While the pull request is open, a **Pull request feedback** card on the Overview lists its failing checks (each linked)
+and offers **Send the failing checks to the builder**. **Show review comments** reads the reviews, conversation
+comments and inline comments (with `gh`, only when you press it) and offers **Send the review comments to the
+builder**. Each button opens the message in a box first: you read it, edit it if you like, and press send. Nothing is
+ever sent on its own.
+
+Review comments are other people's words, so the message says they are quoted from the forge and are information to
+weigh, not orders. They also pass through the same secret scrubber as the journal, each is cut to 2,000 characters, and
+only the newest 30 are kept (the card says how many were left out). The route
+`GET /api/projects/{id}/goal/pull-request/comments` needs the **Approve** tier, not View, because it returns that free
+text. The message goes where a person's note on a diff line goes: a running team's role as a steer, otherwise the
+builder's chat (Terminal tier, and only a running Claude Code builder takes it); for any other builder the box says
+so and offers **Copy**.
+
 ## See what the branch changed
 
 The **Changes** card on the project page lists every file the goal's branch has changed against the project's default

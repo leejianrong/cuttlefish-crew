@@ -20,6 +20,7 @@
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
   import GoalDiffCard from "./GoalDiffCard.svelte";
+  import PrFeedbackCard from "./PrFeedbackCard.svelte";
   import ProjectPath from "./ProjectPath.svelte";
   import StatusStrip from "./StatusStrip.svelte";
   import KillSwitch from "./KillSwitch.svelte";
@@ -368,6 +369,7 @@
       {/if}
 
       {#if !project.is_manager}
+        <PrFeedbackCard {client} {projectId} {project} />
         <GoalDiffCard {client} {projectId} {project} refreshKey={sessionChanges} />
       {/if}
 

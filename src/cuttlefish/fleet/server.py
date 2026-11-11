@@ -1547,6 +1547,16 @@ def create_app(
         except ProjectNotFoundError as exc:
             raise HTTPException(404, str(exc)) from exc
 
+    @app.get("/api/projects/{project_id}/goal/pull-request/comments")
+    async def get_goal_pr_comments(project_id: str) -> dict[str, Any]:
+        """The pull request's review text (reviews, comments, inline comments), scrubbed and
+        bounded, for the page to offer to send to the builder (CUT-293). Approve tier: it is other
+        people's free text, and sending it on is the only use."""
+        try:
+            return (await daemon.pr_comments(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.post("/api/projects/{project_id}/pull-request")
     async def open_pull_request(project_id: str, request: Request) -> dict[str, Any]:
         """Open a pull request for the goal's branch with the machine's own `gh` login (CUT-241,

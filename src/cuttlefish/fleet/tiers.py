@@ -85,6 +85,8 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/approve"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/requests/{request_id}/answer"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/steer"): Tier.APPROVE,
+    # Review text from the forge: other people's free text, and sending it on is its only use.
+    ("GET", "/api/projects/{project_id}/goal/pull-request/comments"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/decisions"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/start"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/stop"): Tier.APPROVE,

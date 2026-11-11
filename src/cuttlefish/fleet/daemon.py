@@ -81,7 +81,7 @@ from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
 from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff, goal_stat
 from cuttlefish.fleet.placement import Placement, RemoteTeam
-from cuttlefish.fleet.prstatus import PrStatus, read_pr_status
+from cuttlefish.fleet.prstatus import PrComments, PrStatus, read_pr_comments, read_pr_status
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.scheduler import Scheduler
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
@@ -801,6 +801,17 @@ class FleetDaemon:
         result = await asyncio.to_thread(read_pr_status, project.root, goal)
         self._pr_cache[project_id] = (now, result)
         return result
+
+    async def pr_comments(self, project_id: str) -> PrComments:
+        """The goal's pull request's review text, scrubbed like the journal (CUT-293). Not cached:
+        a person pressed a button for it. A project on a worker says so."""
+        project = self._projects.get(project_id)
+        if project.worker_id is not None:
+            return PrComments(False, code="on_worker", reason=f"{project.name} runs on a worker.")
+        goal = await self.goal(project_id)
+        return await asyncio.to_thread(
+            read_pr_comments, project.root, goal, lambda text: Redactor().scrub(text)[0]
+        )
 
     async def open_pull_request(self, project_id: str, *, push: bool = False) -> PullRequest:
         """Open a pull request for the goal's branch with the machine's ``gh`` login (CUT-241,
