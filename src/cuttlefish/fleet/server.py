@@ -1468,6 +1468,15 @@ def create_app(
             raise HTTPException(409, str(exc)) from exc
         return {"goal": goal, "session": session.to_json()}
 
+    @app.get("/api/projects/{project_id}/goal/diff")
+    async def get_goal_diff(project_id: str) -> dict[str, Any]:
+        """The last goal's branch diff against its base, files and hunks, read from git now
+        (CUT-289). A refusal is a 200 with `ok: false`, a `code` and a plain `reason`."""
+        try:
+            return (await daemon.goal_diff(project_id)).to_json()
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
     @app.post("/api/projects/{project_id}/pull-request")
     async def open_pull_request(project_id: str, request: Request) -> dict[str, Any]:
         """Open a pull request for the goal's branch with the machine's own `gh` login (CUT-241,
