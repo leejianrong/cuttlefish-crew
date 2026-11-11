@@ -37,6 +37,7 @@ class Rig:
     public: bytes
     room: str
     project_id: str
+    daemon: FleetDaemon
 
     async def post(self, path: str, **body: Any) -> httpx.Response:
         return await self.owner.post(path, headers=OWNER, json=body)
@@ -92,8 +93,9 @@ async def rig(tmp_path: Path) -> AsyncIterator[Rig]:
     root = tmp_path / "alpha"
     root.mkdir()
     project = store.register(name="alpha", root=str(root), backend="claude-code")
+    daemon = FleetDaemon(store)
     app = create_app(
-        FleetDaemon(store),
+        daemon,
         security=link.wrap(satay.control.SecurityPolicy(token="loopback")),
         relay=link,
     )
@@ -110,6 +112,7 @@ async def rig(tmp_path: Path) -> AsyncIterator[Rig]:
             public_bytes(load_or_create_daemon_key(link.settings.key_path)),
             connector.room,
             project.id,
+            daemon,
         )
     finally:
         await owner.aclose()

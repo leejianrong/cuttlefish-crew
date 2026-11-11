@@ -16,6 +16,7 @@
   import { modeLabel, startFailure } from "../team";
   import AgentSessionCard from "./AgentSessionCard.svelte";
   import EnvironmentCard from "./EnvironmentCard.svelte";
+  import WorkerPlacement from "./WorkerPlacement.svelte";
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
   import KillSwitch from "./KillSwitch.svelte";
@@ -314,6 +315,7 @@
         {/if}
       {/if}
       <p class="root mono">{project.root}</p>
+      <WorkerPlacement {client} {project} onChanged={refresh} />
       <KillSwitch {client} {projectId} onDone={refresh} />
     </header>
 

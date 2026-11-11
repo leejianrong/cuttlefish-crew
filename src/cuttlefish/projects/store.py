@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS projects (
     worktree_per_goal INTEGER NOT NULL DEFAULT 0,
     delegate_approvals INTEGER,
     tags_json TEXT,
-    decision_wait_minutes INTEGER
+    decision_wait_minutes INTEGER,
+    worker_id TEXT
 )
 """
 
@@ -142,6 +143,10 @@ _ADD_TAGS_COLUMN = "ALTER TABLE projects ADD COLUMN tags_json TEXT"
 #: `decision_wait_minutes` was added for CUT-185: how long a builder's decision waits for a person
 #: before its recommended option is taken. `NULL` is never.
 _ADD_DECISION_WAIT_COLUMN = "ALTER TABLE projects ADD COLUMN decision_wait_minutes INTEGER"
+
+#: `worker_id` was added for CUT-206/ADR-0057: the worker machine the project's teams run on.
+#: `NULL` is this machine, so a row is unchanged.
+_ADD_WORKER_COLUMN = "ALTER TABLE projects ADD COLUMN worker_id TEXT"
 
 MAX_TAGS = 10
 MAX_TAG_LENGTH = 24
@@ -252,6 +257,8 @@ class Project:
     #: How long a builder's decision waits before its recommended option is taken for the
     #: person (CUT-185). ``None``: it waits for you with no limit.
     decision_wait_minutes: int | None = None
+    #: The worker machine this project's teams run on (ADR-0057); `None` runs here.
+    worker_id: str | None = None
 
     def role(self, name: str) -> RoleDefinition | None:
         """The registered role definition named `name`, or `None` if this project
@@ -392,6 +399,7 @@ def _row_to_project(row: sqlite3.Row) -> Project:
         else bool(row["delegate_approvals"]),
         tags=tuple(json.loads(row["tags_json"])) if row["tags_json"] else (),
         decision_wait_minutes=row["decision_wait_minutes"],
+        worker_id=row["worker_id"],
     )
 
 
@@ -433,6 +441,8 @@ class ProjectStore:
             self._conn.execute(_ADD_TAGS_COLUMN)
         if "decision_wait_minutes" not in columns:
             self._conn.execute(_ADD_DECISION_WAIT_COLUMN)
+        if "worker_id" not in columns:
+            self._conn.execute(_ADD_WORKER_COLUMN)
         self._conn.commit()
 
     @classmethod
@@ -588,6 +598,28 @@ class ProjectStore:
         )
         self._conn.commit()
         return self.get(project_id)
+
+    def update_worker(self, project_id: str, worker_id: str | None) -> Project:
+        """Place the project's teams on a worker machine, or back on this one (`None`). Applies to
+        the next team."""
+        self.get(project_id)  # raises ProjectNotFoundError if unknown
+        self._conn.execute(
+            "UPDATE projects SET worker_id = ? WHERE id = ?", (worker_id, project_id)
+        )
+        self._conn.commit()
+        return self.get(project_id)
+
+    def unplace_worker(self, worker_id: str) -> Sequence[str]:
+        """A worker was removed: every project placed on it runs here again. Returns their ids."""
+        ids = [
+            row["id"]
+            for row in self._conn.execute(
+                "SELECT id FROM projects WHERE worker_id = ?", (worker_id,)
+            )
+        ]
+        self._conn.execute("UPDATE projects SET worker_id = NULL WHERE worker_id = ?", (worker_id,))
+        self._conn.commit()
+        return [str(i) for i in ids]
 
     def update_worktree_per_goal(self, project_id: str, on: bool) -> Project:
         """Turn on or off a worktree and branch per goal. Applies to the next goal."""

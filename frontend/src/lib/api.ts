@@ -248,6 +248,9 @@ export interface ProjectSummary {
   terminal_command?: string | null;
   /** CUT-238: each new goal runs in its own git worktree and branch. */
   worktree_per_goal?: boolean;
+  /** CUT-206: the worker machine this project's teams run on; absent or null runs on this PC.
+   * `name` is null when the worker was removed. */
+  worker?: { id: string; name: string | null; online: boolean } | null;
   /** CUT-191: free-form labels the project list is grouped and filtered by. */
   tags?: string[];
   /** ADR-0052: this is the manager agent's project, not a builder's. */
@@ -713,6 +716,15 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/worktree-per-goal`, {
       method: "PATCH",
       body: JSON.stringify({ worktree_per_goal: on }),
+    });
+  }
+
+  /** CUT-206: run this project's teams on a worker machine, or (null) on this PC. The next team
+   * picks it up; a refusal says why (a team is running, no such worker). */
+  placeProject(id: string, workerId: string | null): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/worker`, {
+      method: "PATCH",
+      body: JSON.stringify({ worker_id: workerId }),
     });
   }
 

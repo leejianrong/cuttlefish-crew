@@ -1,6 +1,6 @@
 # ADR-0057: A worker machine dials the controller, pairs once, and holds a lease, never the model key
 
-- Status: Accepted by Jian, 2026-11-12 (CUT-E25 holds the build; CUT-205 built the join, the registry and the heartbeat, 2026-11-12; leases and placement are not built)
+- Status: Accepted by Jian, 2026-11-12 (CUT-E25 holds the build; CUT-205 built the join, the registry and the heartbeat, CUT-206 placement of a team on a worker, 2026-11-12; leases and the forwarded broker are not built)
 - Date: 2026-11-07
 - Deciders: Jian (accepted 2026-11-12), development agent for CUT-204
 

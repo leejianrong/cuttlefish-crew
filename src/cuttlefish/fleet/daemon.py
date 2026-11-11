@@ -22,6 +22,7 @@ import dataclasses
 import functools
 import logging
 import os
+import subprocess
 import time
 import uuid
 from collections.abc import Awaitable, Callable, Collection, Iterator, Mapping, Sequence
@@ -29,6 +30,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, TypedDict
+from urllib.parse import urlsplit, urlunsplit
 
 import satay
 import satay.control
@@ -65,6 +67,7 @@ from cuttlefish.episodic.events import (
     TaskFailed,
     TeamResumed,
     TeamStopped,
+    decode_payload,
 )
 from cuttlefish.episodic.redact import Redactor
 from cuttlefish.episodic.store import EpisodicEvent, EpisodicStore
@@ -72,6 +75,7 @@ from cuttlefish.fleet import gitexclude, manager_agent
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
+from cuttlefish.fleet.placement import Placement, RemoteTeam
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.scheduler import Scheduler
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
@@ -355,6 +359,8 @@ class FleetDaemon:
         #: Where the dashboard's secrets live: ``~/.cuttlefish/secrets.db`` unless a test says.
         self._secrets_db = secrets_db
         self._running: dict[str, RunningTeam] = {}
+        #: Teams running on worker machines (ADR-0057); `lookup` is set once workers exist.
+        self.placement = Placement()
         # Teams whose operator asked them to stop; the round in flight still has to end.
         self._stopping: set[str] = set()
         #: team id -> its cancel flag, while cuttlefish is installing its dependencies (V5-E3):
@@ -767,6 +773,7 @@ class FleetDaemon:
                 f"A goal is at most {MAX_GOAL_CHARS} characters; put the detail in a file."
             )
         project = self._projects.get(project_id)
+        self._refuse_on_worker(project, "a builder goal")
         if project.terminal_command:
             raise FleetError(
                 "This project runs a terminal command, which has no goal or chat. "
@@ -830,6 +837,7 @@ class FleetDaemon:
         ``prompt`` is its first message, for a session being launched now. ``cwd`` is the goal's
         worktree (ADR-0048); a relaunch without one goes back to the last goal's, if it is there."""
         project = self._projects.get(project_id)
+        self._refuse_on_worker(project, "the builder session")
         if project.terminal_command:
             # A terminal command (ADR-0047): no backend, no hooks, nothing cuttlefish reads back.
             try:
@@ -1452,12 +1460,168 @@ class FleetDaemon:
         return running
 
     def is_running(self, project_id: str) -> bool:
-        return self.running(project_id) is not None
+        return (
+            self.running(project_id) is not None
+            or self.placement.team_of_project(project_id) is not None
+        )
 
     def is_stopping(self, project_id: str) -> bool:
         """The operator asked this project's team to stop and its round has not ended yet."""
+        remote = self.placement.team_of_project(project_id)
+        if remote is not None:
+            return remote.stop_requested
         running = self.running(project_id)
         return running is not None and running.team_id in self._stopping
+
+    # -- a team on a worker machine (ADR-0057, CUT-206) ----------------------------------------
+
+    def worker_state(self, worker_id: str | None) -> tuple[str, bool] | None:
+        """`(name, online)` of a worker, or `None` for no worker or one the registry lost."""
+        return None if worker_id is None else self.placement.lookup(worker_id)
+
+    def _refuse_on_worker(self, project: Project, what: str) -> None:
+        if project.worker_id is not None:
+            state = self.worker_state(project.worker_id)
+            where = state[0] if state else "a worker machine"
+            raise FleetError(
+                f"{project.name} runs on {where}, and {what} is not built for a worker yet. "
+                "Start a team, or move the project back to this machine."
+            )
+
+    async def _start_remote(
+        self, project: Project, roles: list[RoleStart], require_approval: bool
+    ) -> str:
+        """Hand a team to the worker the project is placed on. The worker takes it on its next
+        poll, runs it in its own checkout, and streams its journal events back to this journal."""
+        state = self.worker_state(project.worker_id)
+        assert project.worker_id is not None
+        if state is None:
+            raise FleetError(
+                f"{project.name} is placed on a worker that is no longer paired. "
+                "Place it on another, or move it back to this machine."
+            )
+        name, online = state
+        if not online:
+            raise FleetError(
+                f"{project.name} runs on {name}, which is offline. Start "
+                f"`cuttlefish worker run` there, or move the project back to this machine."
+            )
+        await asyncio.to_thread(gitexclude.ensure_excluded, project.root)
+        team_id = uuid.uuid4().hex
+        role_inputs = _build_role_inputs(project, roles)
+        order: dict[str, Any] = {
+            "team_id": team_id,
+            "project_id": project.id,
+            "name": project.name,
+            "secrets_scope": project.secrets_scope,
+            "backend": project.backend,
+            "roles": role_inputs,
+            "require_approval": require_approval,
+            "repo": await asyncio.to_thread(_remote_url, project.root),
+        }
+        if project.max_tokens is not None:
+            order["max_tokens"] = project.max_tokens
+        if project.max_cost_usd is not None:
+            order["max_cost_usd"] = project.max_cost_usd
+        self.placement.assign(project.id, project.worker_id, order)
+        self._projects.record_team_started(
+            project.id,
+            team_id,
+            _to_persisted_roles(role_inputs),
+            require_approval=require_approval,
+        )
+        with logsetup.bind(project=project.id, team=team_id):
+            logger.info("project %r: team handed to worker %s", project.name, name)
+        return team_id
+
+    def _journal_path(self, project: Project) -> Path:
+        return Path(project.root) / ".cuttlefish" / "episodic.db"
+
+    def _append_to_journal(
+        self, project: Project, team_id: str, payloads: list[tuple[EventPayload, datetime | None]]
+    ) -> None:
+        store = EpisodicStore.open(self._journal_path(project))
+        try:
+            for payload, stamp in payloads:
+                store.append(team_id, payload, ts=stamp)
+        finally:
+            store.close()
+
+    def _team_of_worker(self, worker_id: str, team_id: str) -> RemoteTeam:
+        team = self.placement.team(team_id)
+        if team is None or team.worker_id != worker_id:
+            raise FleetError(f"this controller has no team {team_id!r} on you")
+        return team
+
+    async def worker_claim(self, worker_id: str, wait: float) -> dict[str, Any]:
+        return await self.placement.claim(worker_id, min(max(wait, 0.0), 20.0))
+
+    async def worker_events(
+        self, worker_id: str, team_id: str, events: list[dict[str, Any]]
+    ) -> int:
+        """Append the events a worker reports for its team to this journal. Redaction happens here,
+        at write time, as for any event. Returns the position the controller has reached."""
+        team = self._team_of_worker(worker_id, team_id)
+        project = self._projects.get(team.project_id)
+        fresh: list[tuple[EventPayload, datetime | None]] = []
+        last = team.last_seq
+        for item in events:
+            try:
+                seq = int(item["seq"])
+                payload = decode_payload(str(item["type"]), item["data"])
+                stamp = datetime.fromisoformat(str(item["ts"]))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"an event the worker sent is malformed: {exc}") from exc
+            if seq > last:
+                fresh.append((payload, stamp))
+                last = seq
+        if fresh:
+            await asyncio.to_thread(self._append_to_journal, project, team_id, fresh)
+            team.last_seq = last
+        return team.last_seq
+
+    async def worker_finished(
+        self, worker_id: str, team_id: str, status: str, error: str | None
+    ) -> None:
+        """The worker says its team is over: the journal says how, and the project is free."""
+        team = self._team_of_worker(worker_id, team_id)
+        project = self._projects.get(team.project_id)
+        tail: list[tuple[EventPayload, datetime | None]] = []
+        if status == "stopped":
+            tail.append((TeamStopped(), None))
+        elif status == "failed":
+            reason = f"on the worker: {error or 'the team failed to run'}"
+            tail.append((TaskFailed(error=reason), None))
+        if tail:
+            await asyncio.to_thread(self._append_to_journal, project, team_id, tail)
+        self.placement.end(team_id)
+        with logsetup.bind(project=project.id, team=team_id):
+            logger.info("worker team ended (%s)", status)
+
+    async def worker_removed(self, worker_id: str) -> Sequence[str]:
+        """A worker was removed: what ran on it ends here, and its projects run on this machine
+        again (they are not on any worker until a person places them). Returns their ids."""
+        for team in self.placement.teams_on(worker_id):
+            await self._end_here(team)
+        return self._projects.unplace_worker(worker_id)
+
+    async def _end_here(self, team: RemoteTeam) -> None:
+        """End a team that nothing will report on any more, in the journal and here."""
+        project = self._projects.get(team.project_id)
+        stopped: list[tuple[EventPayload, datetime | None]] = [
+            (StopRequested(), None),
+            (TeamStopped(), None),
+        ]
+        await asyncio.to_thread(self._append_to_journal, project, team.team_id, stopped)
+        self.placement.end(team.team_id)
+
+    async def _stop_remote(self, team: RemoteTeam) -> None:
+        state = self.worker_state(team.worker_id)
+        if team.order is not None or state is None or not state[1]:
+            # The worker never took it, or is gone: nothing there will report, so end it here.
+            await self._end_here(team)
+            return
+        team.stop_requested = True
 
     async def start(
         self,
@@ -1498,6 +1662,8 @@ class FleetDaemon:
                 f"this project's roles are: {', '.join(known)}"
             )
 
+        if project.worker_id is not None:
+            return await self._start_remote(project, roles, require_approval)
         await asyncio.to_thread(gitexclude.ensure_excluded, project.root)
         spec = await asyncio.to_thread(environment.detect, project.root)
         steps = await self._environment_steps(project, prepare, spec)
@@ -1850,6 +2016,10 @@ class FleetDaemon:
         itself exactly as `cuttlefish.steering.send_steering_message`'s own
         docstring warns (`cuttlefish steer`, a separate short-lived CLI process,
         never hits this because it never shares a loop with what it's calling)."""
+        remote = self.placement.team_of_project(project_id)
+        if remote is not None:
+            await self._stop_remote(remote)
+            return
         running = self.running(project_id)
         if running is None:
             raise FleetError(f"project {project_id!r} has no running team")
@@ -1888,6 +2058,11 @@ class FleetDaemon:
     async def steer(self, project_id: str, role: str | None, text: str) -> None:
         """See `stop`'s own docstring -- `asyncio.to_thread` for the identical
         same-loop-deadlock reason."""
+        if self.placement.team_of_project(project_id) is not None:
+            raise FleetError(
+                "this team runs on a worker, and steering one is not built yet; "
+                "stop it and start it again with the new instruction"
+            )
         running = self.running(project_id)
         if running is None:
             # No team: the builder is an agent session, which a message reaches as chat (ADR-0044).
@@ -1931,6 +2106,8 @@ class FleetDaemon:
         """Deliver one approve/reject decision to `project_id`'s running team
         (KAN-1711) -- see `stop`'s own docstring for the identical
         `asyncio.to_thread` same-loop-deadlock reason."""
+        if self.placement.team_of_project(project_id) is not None:
+            raise FleetError("this team runs on a worker, and a review gate there is not built yet")
         running = self.running(project_id)
         if running is None:
             raise FleetError(f"project {project_id!r} has no running team to decide on")
@@ -1998,6 +2175,27 @@ class FleetDaemon:
         journal `cuttlefish show` reads, for the dashboard's own event-tail view."""
         project = self._projects.get(project_id)
         return self._last_team_events(project)
+
+
+def _remote_url(root: str) -> str | None:
+    """The project's `origin` for a worker to clone, with no credential in it, or `None`."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", root, "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if "://" in out:
+        parts = urlsplit(out)
+        if parts.username or parts.password:
+            host = parts.hostname or ""
+            netloc = f"{host}:{parts.port}" if parts.port else host
+            out = urlunsplit((parts.scheme, netloc, *parts[2:]))
+    return out or None
 
 
 def _secret_rows(names: Sequence[str]) -> list[dict[str, str]]:

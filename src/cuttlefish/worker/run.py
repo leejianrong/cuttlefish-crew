@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import contextlib
 import json
 import os
 import platform
@@ -23,10 +22,13 @@ from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from cuttlefish.relay.protocol import format_code, generate_static, static_from_bytes
+from cuttlefish.worker.execute import Executor
 from cuttlefish.worker.link import Controller, LinkError, WorkerLink, parse_join_code, unb64
 
 IDENTITY_FILE = "worker.json"
 HEARTBEAT_EVERY_SECONDS = 15.0
+#: How long the controller may hold a request for work before answering empty-handed.
+WORK_WAIT_SECONDS = 8.0
 RECONNECT_DELAYS = (1.0, 2.0, 5.0, 10.0, 30.0)
 #: How long `join` waits for the owner before giving up (the controller's own waiting room is five
 #: minutes).
@@ -152,6 +154,27 @@ def _about() -> dict[str, str]:
     return {"host": socket.gethostname(), "platform": f"{platform.system()} {platform.machine()}"}
 
 
+async def _beat(link: WorkerLink, beat_every: float, announce: Callable[[], None]) -> None:
+    while True:
+        status, _ = await link.request("POST", "/api/worker/heartbeat", _about())
+        if status != 200:
+            raise LinkError(f"the controller answered {status}")
+        announce()
+        await asyncio.sleep(beat_every)
+
+
+async def _pull(link: WorkerLink, executor: Executor) -> None:
+    """Ask for work and do what is handed over: teams to start, teams to stop."""
+    while True:
+        status, body = await link.request("POST", "/api/worker/work", {"wait": WORK_WAIT_SECONDS})
+        if status != 200:
+            raise LinkError(f"the controller answered {status}")
+        for order in body.get("orders", []):
+            executor.start(order)
+        for team_id in body.get("stop", []):
+            executor.stop(team_id)
+
+
 async def run(
     identity: Identity,
     *,
@@ -160,45 +183,60 @@ async def run(
     beat_every: float = HEARTBEAT_EVERY_SECONDS,
     delays: tuple[float, ...] = RECONNECT_DELAYS,
 ) -> str:
-    """Stay connected and beat until cancelled. Returns `"removed"` once the owner removes this
-    worker on the PC (its file is deleted: the controller no longer knows it)."""
+    """Stay connected, beat and take work until cancelled. Returns `"removed"` once the owner
+    removes this worker on the PC (its file is deleted: the controller no longer knows it). A team
+    already running keeps going while the connection is down and catches the controller up after."""
     attempt = 0
     online = False
-    while True:
-        try:
-            link = await WorkerLink.open(
-                identity.controller, identity.static, identity.secret, {"name": identity.name}
-            )
-        except LinkError as exc:
-            if online or attempt == 0:
-                say(f"Offline: {exc}. Retrying.")
-            online = False
+    executor = Executor(path.parent / "worker-work", say)
+
+    def announce() -> None:
+        nonlocal online, attempt
+        attempt = 0
+        if not online:
+            say(f"Online as {identity.name}.")
+            online = True
+
+    try:
+        while True:
+            try:
+                link = await WorkerLink.open(
+                    identity.controller, identity.static, identity.secret, {"name": identity.name}
+                )
+            except LinkError as exc:
+                if online or attempt == 0:
+                    say(f"Offline: {exc}. Retrying.")
+                online = False
+                await asyncio.sleep(delays[min(attempt, len(delays) - 1)])
+                attempt += 1
+                continue
+            executor.link = link
+            work = [
+                asyncio.create_task(_beat(link, beat_every, announce)),
+                asyncio.create_task(_pull(link, executor)),
+                asyncio.create_task(link.closed.wait()),
+            ]
+            try:
+                await asyncio.wait(work, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for task in work:
+                    task.cancel()
+                results = await asyncio.gather(*work, return_exceptions=True)
+                executor.link = None
+                await link.close()
+            for result in results:
+                if isinstance(result, LinkError):
+                    say(f"Lost the controller: {result}")
+                    online = False
+            while not link.controls.empty():
+                if link.controls.get_nowait().get("t") == "revoked":
+                    path.unlink(missing_ok=True)
+                    say("This worker was removed on the PC. It has forgotten its keys.")
+                    return "removed"
+            if online:
+                say("Lost the controller. Retrying.")
+                online = False
             await asyncio.sleep(delays[min(attempt, len(delays) - 1)])
             attempt += 1
-            continue
-        try:
-            while not link.closed.is_set():
-                status, _ = await link.request("POST", "/api/worker/heartbeat", _about())
-                if status != 200:
-                    raise LinkError(f"the controller answered {status}")
-                if not online:
-                    say(f"Online as {identity.name}.")
-                    online = True
-                attempt = 0
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(link.closed.wait(), beat_every)
-        except LinkError as exc:
-            say(f"Lost the controller: {exc}")
-            online = False
-        finally:
-            await link.close()
-        while not link.controls.empty():
-            if link.controls.get_nowait().get("t") == "revoked":
-                path.unlink(missing_ok=True)
-                say("This worker was removed on the PC. It has forgotten its keys.")
-                return "removed"
-        if online:
-            say("Lost the controller. Retrying.")
-            online = False
-        await asyncio.sleep(delays[min(attempt, len(delays) - 1)])
-        attempt += 1
+    finally:
+        await executor.close()

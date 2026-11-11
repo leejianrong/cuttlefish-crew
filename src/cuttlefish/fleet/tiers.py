@@ -50,6 +50,9 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/hooks/claude-code/{project_id}"): PUBLIC,
     # A worker machine's own routes (ADR-0057): the only ones it may reach.
     ("POST", "/api/worker/heartbeat"): Tier.WORKER,
+    ("POST", "/api/worker/work"): Tier.WORKER,  # what to start or stop on this machine
+    ("POST", "/api/worker/teams/{team_id}/events"): Tier.WORKER,  # its own team's journal only
+    ("POST", "/api/worker/teams/{team_id}/finish"): Tier.WORKER,
     # Read.
     ("GET", "/api/limits"): Tier.VIEW,
     ("GET", "/api/permissions"): Tier.VIEW,
@@ -107,6 +110,7 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("PATCH", "/api/projects/{project_id}/tags"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/terminal-command"): Tier.ADMIN,
     ("PATCH", "/api/projects/{project_id}/worktree-per-goal"): Tier.ADMIN,
+    ("PATCH", "/api/projects/{project_id}/worker"): Tier.ADMIN,  # where its code and secrets go
     ("POST", "/api/projects/{project_id}/goal/worktree/remove"): Tier.ADMIN,  # deletes a folder
     ("POST", "/api/projects/{project_id}/pull-request"): Tier.ADMIN,  # leaves the machine (gh)
     ("PATCH", "/api/projects/{project_id}/roles"): Tier.ADMIN,
