@@ -49,6 +49,8 @@ def test_nothing_or_too_much_is_refused() -> None:
         "Do you want to make this edit to cli.py?",
         "Would you like to run the following command?\n  $ make deploy",  # Codex (CUT-258)
         "Would you like to make the following edits?\n  Yes, just this once",
+        # Real Codex 0.166: its cursor is U+203A, and its update prompt has no other cue.
+        "  \u203a 1. Update now (runs `sh -c ...`)\n    2. Skip\n  enter continue \u00b7 esc skip",
     ],
 )
 def test_a_screen_with_a_dialog_is_recognised(screen: str) -> None:
@@ -61,6 +63,7 @@ def test_a_screen_with_a_dialog_is_recognised(screen: str) -> None:
         "",
         "● Done. All 41 tests pass.\n\n> \n  ? for shortcuts",
         "The list is: 1. first 2. second",  # numbers in prose, no cursor before the first
+        "\u203a Ask Codex to do anything\n  ? for shortcuts",  # Codex's idle prompt
     ],
 )
 def test_an_ordinary_screen_is_not(screen: str) -> None:

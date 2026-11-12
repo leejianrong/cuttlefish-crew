@@ -25,12 +25,13 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 _DIALOG_LINES = (
     re.compile(r"Esc to cancel", re.I),
-    re.compile(r"[\u276f>]\s*1\.\s"),  # a numbered choice with the cursor on the first
+    re.compile(r"[\u276f\u203a>]\s*1\.\s"),  # a numbered choice, cursor on the first
     re.compile(
         r"Do you trust|trust this folder|trust the files|project you created or one you trust", re.I
     ),
     re.compile(r"Do you want to (proceed|make this edit|create|allow)", re.I),
-    # Codex's approval dialogs (CUT-258), from the strings in its binary, not a screen capture.
+    # Codex's approval dialogs (CUT-258): wording from its binary; the cursor is U+203A and the
+    # MCP-tool and update dialogs were seen on a real 0.166 screen.
     re.compile(r"Would you like to (run|make|grant|send)", re.I),
     re.compile(r"Yes, (just this once|proceed|and (allow|don't ask))", re.I),
     re.compile(r"Press Y to apply", re.I),
