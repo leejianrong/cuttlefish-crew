@@ -332,6 +332,26 @@ worker by hand. `cuttlefish worker sync` lists what would be sent and what is re
 The worker reports the digests of what it holds in its heartbeat, and Devices names a difference next to the tool drift:
 "skills/ship/SKILL.md not synced", "mcp.json out of date", "skills/old/SKILL.md was removed on the controller". It is a warning
 only, and it clears at the worker's next sync.
+### A compose stack on a worker
+
+A project placed on a worker can run its own docker compose stack there, and you can open its web page from the
+dashboard. On the project page, **Compose stack** has **Start the stack**: the worker looks for `compose.yaml`,
+`compose.yml`, `docker-compose.yaml` or `docker-compose.yml` in its copy of the project (cloning it first if it has none),
+runs `docker compose -p cuttlefish-<project id> up -d`, and reports the host ports the stack published. Each port gets an
+**Open** button, which has the worker fetch the page from its own loopback (the request goes to the worker as a reply to
+its next poll, so it works through the same channel and needs no inbound port) and shows it in the sandboxed frame an
+agent's design uses. **Stop the stack** runs `docker compose down --remove-orphans` (volumes are kept), and stopping the
+project does the same. A project cannot be moved or removed while its stack is up, and removing the worker forgets the
+stack (its containers stay on that machine: stop them there).
+
+Only a port the stack itself published can be fetched, only on the worker's own loopback, and only a plain path. The page
+is served with a `sandbox` policy and shown in a frame with no access to the dashboard, the network or its own
+assets, so a page that needs files beside it (a single-page app's scripts, say) shows without them; a self-contained page
+or a server-rendered one is fine. Routes: `GET /api/projects/{id}/stack` (View), `POST .../stack/start`, `POST .../stack/stop`
+and `GET .../stack/page?port=N&path=/x` (Approve), since starting runs the project's compose file with the worker's docker.
+A compose file can mount the host or run privileged: it has the trust a worker already has with a project's code. The
+machine needs docker with the compose plugin (`deploy/worker/bootstrap.sh` installs them, and a worker that lacks them shows
+"docker missing" on Devices). Nothing here is for a project that runs on this PC.
 
 A worker keeps its own keypair and a secret the daemon made for it at the confirm in `~/.cuttlefish/worker.json` (mode
 0600), and nothing else. It sits **below View**: it can send a heartbeat and nothing else, no projects, no secrets, no

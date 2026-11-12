@@ -41,6 +41,7 @@ from cuttlefish.resume import mark_resumed, run_status
 from cuttlefish.steering import cancel_run
 from cuttlefish.team import TeamInput, run_team
 from cuttlefish.worker.link import LinkError, WorkerLink
+from cuttlefish.worker.stack import StackRunner
 from cuttlefish.worker.sync import place_instructions
 
 _LOG = logging.getLogger(__name__)
@@ -123,6 +124,8 @@ class Executor:
         self._reporting: set[str] = set()
         #: Where the controller's synced instruction files are kept on this machine (CUT-215).
         self.synced_dir: Path | None = None
+        #: A project's docker compose stack on this machine (CUT-216).
+        self.stacks = StackRunner(workdir, say, self._post)
 
     def start(self, order: dict[str, Any]) -> None:
         team_id = str(order["team_id"])
@@ -141,6 +144,7 @@ class Executor:
             request()
 
     async def close(self) -> None:
+        await self.stacks.close()
         for task in self._jobs.values():
             task.cancel()
         await asyncio.gather(*self._jobs.values(), return_exceptions=True)

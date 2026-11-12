@@ -50,6 +50,15 @@ export interface WorkerInfo {
   last_seen_at: number | null;
 }
 
+/** CUT-216: a project's docker compose stack on its worker. `ports` are the host ports it published. */
+export interface StackInfo {
+  worker: string;
+  state: "starting" | "up" | "stopping" | "down" | "failed";
+  ports: { service: string; target: number; published: number }[];
+  error: string;
+  at: number;
+}
+
 /** A device that proved the pairing secret and is waiting for the owner to confirm it. */
 export interface PendingDevice {
   id: string;
@@ -798,6 +807,38 @@ export class FleetClient {
     try {
       response = await this.transport.fetch(
         `/api/projects/${id}/artifacts/file?path=${encodeURIComponent(path)}`,
+        { headers: { "x-cuttlefish-token": this.token } },
+      );
+    } catch {
+      throw new FleetUnreachableError(this.baseUrl);
+    }
+    this.keepRefreshedToken(response);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({ detail: response.statusText }));
+      throw new FleetApiError(response.status, body.detail ?? response.statusText);
+    }
+    return response.blob();
+  }
+
+  /** The project's compose stack on its worker, or `{ stack: null }` when none was started. */
+  getStack(id: string): Promise<{ stack: StackInfo | null }> {
+    return this.request(`/api/projects/${id}/stack`);
+  }
+
+  startStack(id: string): Promise<{ stack: StackInfo | null }> {
+    return this.request(`/api/projects/${id}/stack/start`, { method: "POST", body: "{}" });
+  }
+
+  stopStack(id: string): Promise<{ stack: StackInfo | null }> {
+    return this.request(`/api/projects/${id}/stack/stop`, { method: "POST", body: "{}" });
+  }
+
+  /** A page from the running stack's published port, fetched by its worker. */
+  async readStackPage(id: string, port: number, path: string): Promise<Blob> {
+    let response: Response;
+    try {
+      response = await this.transport.fetch(
+        `/api/projects/${id}/stack/page?port=${port}&path=${encodeURIComponent(path)}`,
         { headers: { "x-cuttlefish-token": this.token } },
       );
     } catch {

@@ -84,6 +84,7 @@ from cuttlefish.fleet.digest import DEFAULT_EVENTS
 from cuttlefish.fleet.fs import FolderBrowser, NotAFolderError, OutsideBrowseRootsError
 from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings, TierRefusal
 from cuttlefish.fleet.serve_token import load_or_create_token
+from cuttlefish.fleet.stacks import StackError
 from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, manager_may, parse_tier, steer_tier_refusal
 from cuttlefish.fleet.workers import clean_synced
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
@@ -800,6 +801,86 @@ def create_app(
             "remove": [path for path in have if path not in manifest],
         }
 
+    @app.post("/api/worker/stack")
+    async def worker_stack(request: Request) -> dict[str, str]:
+        """A worker says how a stack it was ordered to bring up or down went (CUT-216)."""
+        worker = _calling_worker(request)
+        body = await _json_body(request)
+        try:
+            daemon.stacks.report(
+                worker.id,
+                str(body.get("project_id", "")),
+                body.get("state"),
+                body.get("ports"),
+                body.get("error"),
+            )
+        except StackError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"status": "ok"}
+
+    @app.post("/api/worker/stack/pages/{request_id}")
+    async def worker_stack_page(request_id: str, request: Request) -> dict[str, str]:
+        """The page a worker fetched from its stack's port, for a person's waiting request."""
+        worker = _calling_worker(request)
+        body = await _json_body(request)
+        try:
+            content = base64.b64decode(str(body.get("body", "")), validate=True)
+        except ValueError as exc:
+            raise HTTPException(400, "'body' must be base64") from exc
+        try:
+            daemon.stacks.answer(
+                worker.id, request_id, body.get("status"), body.get("content_type"), content
+            )
+        except StackError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        return {"status": "ok"}
+
+    @app.get("/api/projects/{project_id}/stack")
+    async def get_stack(project_id: str) -> dict[str, Any]:
+        try:
+            return daemon.stack_status(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/stack/start")
+    async def start_stack(project_id: str) -> dict[str, Any]:
+        try:
+            return await daemon.stack_start(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/projects/{project_id}/stack/stop")
+    async def stop_stack(project_id: str) -> dict[str, Any]:
+        try:
+            return await daemon.stack_stop(project_id)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/stack/page")
+    async def stack_page(project_id: str, port: int, path: str = "/") -> Response:
+        """A page from the running stack's published port, fetched by its worker. Served under a
+        policy that gives it no access to the dashboard's origin, wherever it is opened."""
+        try:
+            page = await daemon.stack_page(project_id, port, path)
+        except ProjectNotFoundError as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except FleetError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return Response(
+            page.body,
+            status_code=page.status,
+            media_type=page.content_type,
+            headers={
+                "content-security-policy": "sandbox allow-scripts allow-forms",
+                "x-content-type-options": "nosniff",
+                "cache-control": "no-store",
+            },
+        )
+
     @app.post("/api/worker/work")
     async def worker_work(request: Request) -> dict[str, Any]:
         """What the worker should start or stop now; waits a few seconds for something."""
@@ -1419,6 +1500,10 @@ def create_app(
 
     @app.delete("/api/projects/{project_id}", status_code=204)
     async def deregister_project(project_id: str) -> None:
+        if daemon.stacks.active(project_id):
+            raise HTTPException(
+                409, "this project has a compose stack on a worker; stop the stack first"
+            )
         if not daemon.projects.deregister(project_id):
             raise HTTPException(404, f"project {project_id!r} not found")
 

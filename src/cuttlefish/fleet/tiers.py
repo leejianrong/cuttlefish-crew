@@ -57,10 +57,13 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
         "POST",
         "/api/worker/sync",
     ): Tier.WORKER,  # the skills and files it should hold; never a secret
+    ("POST", "/api/worker/stack"): Tier.WORKER,  # how its compose stack order went
+    ("POST", "/api/worker/stack/pages/{request_id}"): Tier.WORKER,  # a page it fetched for a person
     # Read.
     ("GET", "/api/limits"): Tier.VIEW,
     ("GET", "/api/permissions"): Tier.VIEW,
     ("GET", "/api/roles"): Tier.VIEW,
+    ("GET", "/api/projects/{project_id}/stack"): Tier.VIEW,
     ("GET", "/api/templates"): Tier.VIEW,
     ("GET", "/api/projects"): Tier.VIEW,
     ("GET", "/api/projects/{project_id}"): Tier.VIEW,
@@ -94,6 +97,12 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/projects/{project_id}/decisions"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/start"): Tier.APPROVE,
     ("POST", "/api/projects/{project_id}/stop"): Tier.APPROVE,
+    (
+        "POST",
+        "/api/projects/{project_id}/stack/start",
+    ): Tier.APPROVE,  # runs its compose file on a worker
+    ("POST", "/api/projects/{project_id}/stack/stop"): Tier.APPROVE,
+    ("GET", "/api/projects/{project_id}/stack/page"): Tier.APPROVE,  # what its web port serves
     ("POST", "/api/projects/{project_id}/kill"): Tier.APPROVE,  # stop everything here
     ("POST", "/api/kill-all"): Tier.APPROVE,  # stop everything everywhere, from a phone
     ("POST", "/api/projects/{project_id}/goal"): Tier.APPROVE,
