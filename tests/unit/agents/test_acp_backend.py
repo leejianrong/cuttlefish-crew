@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -172,3 +173,13 @@ def test_a_needs_login_failure_is_named_for_the_dashboard() -> None:
     assert _failure_kind(failed("AuthRequiredError")) == "needs_login"
     assert _failure_kind(failed("DelegationError")) == "agent_error"
     assert _failure_kind(failed("ValueError")) is None
+
+
+async def test_an_agent_behind_a_launcher_does_not_hang_the_round(tmp_path: Path) -> None:
+    # CUT-266: the npm codex-acp is node around a native binary. The launcher dies, its child keeps
+    # the pipes open, and a round used to wait on them forever after the agent had answered.
+    launcher = tmp_path / "launcher.py"
+    launcher.write_text(f"import subprocess, sys\nsubprocess.run([sys.executable, {FAKE!r}])\n")
+    backend = AcpBackend(sys.executable, (str(launcher),), timeout=30.0)
+    out = await asyncio.wait_for(_run(tmp_path, "hello", backend=backend), 20)
+    assert out.kind == "completed"
