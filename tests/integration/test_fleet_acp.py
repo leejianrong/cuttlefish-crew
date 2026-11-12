@@ -8,6 +8,7 @@ protocol path, end to end, not a real agent.
 from __future__ import annotations
 
 import asyncio
+import json
 import shlex
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ from typing import Any
 import pytest
 
 from cuttlefish import runtime
-from cuttlefish.config import ConfigError, prepare_run
+from cuttlefish.config import ConfigError, prepare_run, resolve_acp_commands
 from cuttlefish.episodic.events import (
     ConsentDecided,
     DelegationCompleted,
@@ -116,3 +117,77 @@ def test_the_acp_backend_needs_a_command_and_it_must_be_on_path(
     monkeypatch.setenv("CUTTLEFISH_ACP_AGENT", "no-such-acp-agent-binary --acp")
     with pytest.raises(ConfigError, match="not on PATH"):
         prepare_run(project="p", secret_names=[], base_dir=tmp_path, agent_backend="acp")
+
+
+# -- a project's or a role's own agent command (CUT-266) -------------------------------------------
+
+
+def _fake_line() -> str:
+    return shlex.join([sys.executable, str(FAKE)])
+
+
+def test_agents_env_gives_a_project_and_a_role_their_own_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(
+        "CUTTLEFISH_ACP_AGENTS",
+        json.dumps({"alpha": "one --acp", "alpha/reviewer": "two --x", "beta": "other"}),
+    )
+    assert resolve_acp_commands(("alpha", "id-1")) == {
+        "": ("one", "--acp"),
+        "reviewer": ("two", "--x"),
+    }
+    assert resolve_acp_commands(("id-9",)) == {}
+    monkeypatch.setenv("CUTTLEFISH_ACP_AGENTS", "[1]")
+    with pytest.raises(ConfigError, match="must be an object"):
+        resolve_acp_commands(("alpha",))
+    monkeypatch.setenv("CUTTLEFISH_ACP_AGENTS", "{nope")
+    with pytest.raises(ConfigError, match="not valid JSON"):
+        resolve_acp_commands(("alpha",))
+
+
+def test_a_project_command_replaces_the_one_global_variable_and_is_checked_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CUTTLEFISH_ACP_AGENT")
+    monkeypatch.setenv("CUTTLEFISH_ACP_AGENTS", json.dumps({"alpha": _fake_line()}))
+    prepared = prepare_run(
+        project="p",
+        secret_names=[],
+        base_dir=tmp_path,
+        agent_backend="acp",
+        project_keys=("alpha",),
+    )
+    try:
+        assert prepared.acp_commands[""][0] == sys.executable
+    finally:
+        prepared.close()
+    monkeypatch.setenv("CUTTLEFISH_ACP_AGENTS", json.dumps({"alpha/builder": "no-such-agent"}))
+    with pytest.raises(ConfigError, match="not on PATH"):
+        prepare_run(
+            project="p",
+            secret_names=[],
+            base_dir=tmp_path,
+            agent_backend="acp",
+            project_keys=("alpha",),
+        )
+
+
+@pytest.mark.parametrize("key", ["alpha", "alpha/builder"])
+async def test_an_acp_project_or_role_runs_on_its_own_command_with_no_global_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, key: str
+) -> None:
+    monkeypatch.delenv("CUTTLEFISH_ACP_AGENT")
+    monkeypatch.setenv("CUTTLEFISH_ACP_AGENTS", json.dumps({key: _fake_line()}))
+    daemon = FleetDaemon(ProjectStore.open(tmp_path / "projects.db"), request_window_s=60)
+    root = tmp_path / "alpha"
+    root.mkdir()
+    project = daemon.projects.register(name="alpha", root=str(root), backend="acp")
+    team_id = await daemon.start(project.id, [{"name": "builder", "text": "hello"}])
+    try:
+        await _until(
+            lambda: any(isinstance(p, DelegationCompleted) for p in _journal(project.root, team_id))
+        )
+    finally:
+        if daemon.is_running(project.id):
+            await daemon.stop(project.id)

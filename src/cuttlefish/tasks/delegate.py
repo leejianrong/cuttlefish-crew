@@ -85,12 +85,19 @@ async def delegate_to_agent_backend(
     (``conversations.project_root``), and the agent's own never-allowed check holds the role to
     its worktree, which is inside the project root."""
     runtime_ = runtime.current()
+    # The role this round belongs to: only the daemon knows it (`requests`), so a one-shot run has
+    # the project's own ACP command at most (CUT-266).
+    role = runtime_.requests.role_for(task_text) if runtime_.requests else None
     backend = resolve_backend(
         agent_backend or runtime_.agent_backend,
         kopicode_binary=runtime_.kopicode_binary,
         claude_code_binary=runtime_.claude_code_binary,
         codex_binary=runtime_.codex_binary,
-        acp_command=runtime_.acp_command,
+        acp_command=(
+            (runtime_.acp_commands.get(role) if role else None)
+            or runtime_.acp_commands.get("")
+            or runtime_.acp_command
+        ),
     )
     names = sorted(
         set(secret_names or []) | set(backend.CREDENTIAL_ENV_VARS) | set(runtime_.secret_names)
@@ -123,7 +130,6 @@ async def delegate_to_agent_backend(
         # calls and replay are unchanged. `session` (the conversation to continue) only when
         # continuity is on; `live_role` (who can steer the running turn, ADR-0033) only for
         # Codex, inside the daemon.
-        role = requests.role_for(task_text) if requests else None
         if conversations.resume_enabled(backend_name):
             mode_kwargs["session"] = role
         if backend_name == "codex" and role:
