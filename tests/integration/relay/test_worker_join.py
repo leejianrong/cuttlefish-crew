@@ -97,6 +97,28 @@ async def test_a_worker_joins_after_the_owner_confirms_and_shows_online(
         await asyncio.gather(runner, return_exceptions=True)
 
 
+async def test_a_worker_reports_what_it_has_and_the_controller_names_what_differs(
+    rig: Rig, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CUT-214: this worker's profile lists only git; the controller's standard one lists more, so
+    the dashboard's worker row names each tool the machine did not report."""
+    own = tmp_path / "git-only.toml"
+    own.write_text('version = 1\n[[tool]]\nname = "git"\napt = ["git"]\n')
+    monkeypatch.setenv("CUTTLEFISH_WORKER_PROFILE", str(own))
+    identity, path = await _join(rig, tmp_path)
+    runner = asyncio.create_task(worker_run.run(identity, path=path, say=lambda _t: None, **FAST))
+    try:
+        await _until(_online(rig))
+        [worker] = await _workers(rig)
+        assert "git missing" not in worker["drift"]
+        assert {"tmux missing", "docker missing", "none of kopicode, claude, codex"} <= set(
+            worker["drift"]
+        )
+    finally:
+        runner.cancel()
+        await asyncio.gather(runner, return_exceptions=True)
+
+
 async def test_a_worker_that_goes_silent_shows_offline(rig: Rig, tmp_path: Path) -> None:
     identity, path = await _join(rig, tmp_path)
     runner = asyncio.create_task(worker_run.run(identity, path=path, say=lambda _t: None, **FAST))
