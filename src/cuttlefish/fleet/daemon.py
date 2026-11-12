@@ -88,6 +88,7 @@ from cuttlefish.fleet.placement import Placement, RemoteTeam
 from cuttlefish.fleet.prstatus import PrComments, PrStatus, read_pr_comments, read_pr_status
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
 from cuttlefish.fleet.scheduler import Scheduler
+from cuttlefish.fleet.stacks import Page, StackBoard, StackError
 from cuttlefish.fleet.status import RoleStatus, role_statuses, roles_in
 from cuttlefish.limits import merge_limits
 from cuttlefish.permissions import DEFAULT_MODE, effective_access
@@ -407,6 +408,8 @@ class FleetDaemon:
         self._running: dict[str, RunningTeam] = {}
         #: Teams running on worker machines (ADR-0057); `lookup` is set once workers exist.
         self.placement = Placement()
+        #: Docker compose stacks running for projects on worker machines (CUT-216).
+        self.stacks = StackBoard()
         #: `project id -> (when, status)`: gh is a network call, so polling reads this.
         self._pr_cache: dict[str, tuple[float, PrStatus]] = {}
         self._card_stats = CardStats(self._projects.list, self._goal_of)
@@ -1773,7 +1776,71 @@ class FleetDaemon:
     async def worker_claim(
         self, worker_id: str, wait: float, running: set[str] | None = None
     ) -> dict[str, Any]:
-        return await self.placement.claim(worker_id, min(max(wait, 0.0), 20.0), running)
+        """Teams to start or stop, and a stack's orders and page requests (CUT-216), whichever comes
+        first within `wait`."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + min(max(wait, 0.0), 20.0)
+        while True:
+            left = deadline - loop.time()
+            # Short slices, so a stack order or a page request does not wait out a long poll.
+            got = await self.placement.claim(worker_id, min(0.5, max(left, 0.0)), running)
+            got.update(self.stacks.claim(worker_id))
+            if got["orders"] or got["stop"] or len(got) > 2 or loop.time() >= deadline:
+                return got
+
+    # -- a docker compose stack on a worker (CUT-216) ------------------------------------------
+
+    def _stack_worker(self, project: Project) -> str:
+        """The id of the worker a stack for this project would run on, or why it cannot."""
+        if project.worker_id is None:
+            raise FleetError(
+                f"{project.name} runs on this PC. A compose stack runs on a worker machine: "
+                "place the project on one first."
+            )
+        self._worker_ready(project)
+        return project.worker_id
+
+    async def stack_start(self, project_id: str) -> dict[str, Any]:
+        project = self._projects.get(project_id)
+        worker_id = self._stack_worker(project)
+        remote = await asyncio.to_thread(_remote_url, project.root)
+        name = (self.worker_state(worker_id) or ("the worker",))[0]
+        self.stacks.request(project_id, worker_id, name, remote, "up")
+        return self.stack_status(project_id)
+
+    async def stack_stop(self, project_id: str) -> dict[str, Any]:
+        project = self._projects.get(project_id)
+        if not self.stacks.active(project_id):
+            raise FleetError("this project has no stack running")
+        state = self.worker_state(project.worker_id)
+        if state is None or not state[1]:
+            raise FleetError(
+                "the worker is offline, so its stack cannot be stopped from here; "
+                "stop it when the worker is back"
+            )
+        self.stacks.request(
+            project_id, project.worker_id or "", state[0], None, "down"
+        )  # fmt: skip
+        return self.stack_status(project_id)
+
+    def stack_status(self, project_id: str) -> dict[str, Any]:
+        self._projects.get(project_id)  # a 404 for a project that is not registered
+        return {"stack": self.stacks.status(project_id)}
+
+    async def stack_page(self, project_id: str, port: int, path: str) -> Page:
+        self._projects.get(project_id)
+        try:
+            return await self.stacks.fetch(project_id, port, path)
+        except StackError as exc:
+            raise FleetError(str(exc)) from exc
+
+    def _stop_stack_with_project(self, project: Project) -> None:
+        """Stopping a project takes its stack down with it, when its worker can be told."""
+        if project.worker_id is None or not self.stacks.active(project.id, project.worker_id):
+            return
+        state = self.worker_state(project.worker_id)
+        if state is not None and state[1]:
+            self.stacks.request(project.id, project.worker_id, state[0], None, "down")
 
     async def worker_events(
         self,
@@ -1836,6 +1903,7 @@ class FleetDaemon:
         again (they are not on any worker until a person places them). Each shows a Needs you
         card saying so, and carries a warning about what the machine may still hold. Returns
         their ids."""
+        self.stacks.forget_worker(worker_id)
         for team in self.placement.teams_on(worker_id):
             await self._end_here(team)
         placed = [p for p in self._projects.list() if p.worker_id == worker_id]
@@ -1890,6 +1958,8 @@ class FleetDaemon:
             raise FleetError("this project has a running team; stop it first, or move it")
         if worker_id == project.worker_id:
             return project
+        if self.stacks.active(project_id):
+            raise FleetError("this project has a compose stack on its worker; stop the stack first")
         self._check_handover(project, acknowledge)
         placed = self._projects.update_worker(project_id, worker_id)
         self._projects.set_worker_team(project_id, is_open=False, handover=None)
@@ -2364,11 +2434,16 @@ class FleetDaemon:
         docstring warns (`cuttlefish steer`, a separate short-lived CLI process,
         never hits this because it never shares a loop with what it's calling)."""
         remote = self.placement.team_of_project(project_id)
+        stacked = self.stacks.active(project_id)
+        if stacked:
+            self._stop_stack_with_project(self._projects.get(project_id))
         if remote is not None:
             await self._stop_remote(remote)
             return
         running = self.running(project_id)
         if running is None:
+            if stacked:  # only a stack was going; taking it down is the stop
+                return
             raise FleetError(f"project {project_id!r} has no running team")
         preparing = self._preparing.get(running.team_id)
         if preparing is not None:
