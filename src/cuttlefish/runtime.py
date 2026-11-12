@@ -21,7 +21,8 @@ linear flow behaves identically to the plain global it replaces.
 from __future__ import annotations
 
 import contextvars
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from cuttlefish.broker import Broker
 from cuttlefish.episodic.store import EpisodicStore
@@ -65,6 +66,8 @@ class Runtime:
     codex_binary: str = "codex"
     #: The ACP agent's command line (CUT-260); empty unless the ``acp`` backend is configured.
     acp_command: tuple[str, ...] = ()
+    #: This project's own ACP commands by role, ``""`` for the whole project (CUT-266).
+    acp_commands: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
     agent_backend: str = "kopicode"
     sandbox_provider: SandboxProvider | None = None
     secrets_store: SecretsResolver | None = None

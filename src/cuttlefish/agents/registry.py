@@ -41,7 +41,10 @@ def resolve_backend(
         from cuttlefish.agents.acp import AcpBackend
 
         if not acp_command:
-            raise UnknownBackendError("the acp backend needs CUTTLEFISH_ACP_AGENT")
+            raise UnknownBackendError(
+                "the acp backend needs a command: CUTTLEFISH_ACP_AGENT, or CUTTLEFISH_ACP_AGENTS "
+                "for this project or role"
+            )
         return AcpBackend(acp_command[0], acp_command[1:])
     raise UnknownBackendError(
         f"unknown agent backend {name!r}; expected 'kopicode', 'claude-code', 'codex', or 'acp'"
