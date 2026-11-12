@@ -14,6 +14,7 @@ Low capacity is flagged for a person to see and never stops a placement or a sta
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ from typing import Any
 
 from cuttlefish.fleet.devices import Device
 from cuttlefish.usage import BACKENDS, Window
+from cuttlefish.worker.profile import Profile, drift
 
 #: A worker beats this often (`cuttlefish.worker.run`)...
 HEARTBEAT_EVERY_SECONDS = 15.0
@@ -48,6 +50,8 @@ class Beat:
     health: dict[str, float] | None = None
     #: What each backend on the machine reported about its limits, checked (CUT-292).
     usage: dict[str, dict[str, Any]] | None = None
+    #: The profile tools the machine says it has, `name -> version` (CUT-214); `None`: none sent.
+    tools: dict[str, str] | None = None
 
 
 def _clean(raw: object) -> str:
@@ -68,6 +72,23 @@ def _clean_health(raw: object) -> dict[str, float] | None:
         ):
             found[name] = value
     return found or None
+
+
+_MAX_TOOLS = 40
+_TOOL_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
+_TOOL_VERSION = re.compile(r"^\d+(\.\d+){0,3}$")
+
+
+def _clean_tools(raw: object) -> dict[str, str] | None:
+    """`name -> version` from a heartbeat's `tools`: plain names and dotted-number versions only, so
+    nothing a worker adds can be free text. An empty report is still a report (it has nothing)."""
+    if not isinstance(raw, dict):
+        return None
+    found: dict[str, str] = {}
+    for name, version in list(raw.items())[:_MAX_TOOLS]:
+        if isinstance(name, str) and _TOOL_NAME.match(name) and isinstance(version, str):
+            found[name] = version if _TOOL_VERSION.match(version) else ""
+    return found
 
 
 _MAX_WINDOWS = 6
@@ -144,7 +165,9 @@ class WorkerLiveness:
         *,
         offline_after: float = OFFLINE_AFTER_SECONDS,
         now: Callable[[], float] = time.monotonic,
+        profile: Profile | None = None,
     ) -> None:
+        self._profile = profile
         self._offline_after = offline_after
         self._now = now
         self._beats: dict[str, Beat] = {}
@@ -156,11 +179,13 @@ class WorkerLiveness:
                 (previous.host, previous.platform, previous.health) if previous else ("", "", None)
             )
             usage = previous.usage if previous else None
+            tools = previous.tools if previous else None
         else:
             host, kind = _clean(info.get("host")), _clean(info.get("platform"))
             health = _clean_health(info.get("health"))
             usage = _clean_usage(info.get("usage"))
-        self._beats[worker_id] = Beat(self._now(), host, kind, health, usage)
+            tools = _clean_tools(info.get("tools"))
+        self._beats[worker_id] = Beat(self._now(), host, kind, health, usage, tools)
 
     def forget(self, worker_id: str) -> None:
         self._beats.pop(worker_id, None)
@@ -180,4 +205,11 @@ class WorkerLiveness:
             "health": health,
             "flags": flags(health),
             "usage": beat.usage if beat and self.online(worker.id) else None,
+            "drift": self._drift(beat) if beat and self.online(worker.id) else None,
         }
+
+    def _drift(self, beat: Beat) -> list[str] | None:
+        """What the machine lacks of the profile; `None` when it has not said, or no profile."""
+        if self._profile is None or beat.tools is None:
+            return None
+        return drift(self._profile, beat.tools)
