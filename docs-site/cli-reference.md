@@ -295,8 +295,16 @@ optional `group` (tools in one group are alternatives: one agent CLI is enough) 
 `how` the bootstrap knows). The standard dev worker lists git, tmux, gh, docker, docker compose, uv, node and the three agent
 CLIs (kopicode, claude, codex). `cuttlefish worker profile` prints the list. A file named by `CUTTLEFISH_WORKER_PROFILE`
 replaces it (set it on the worker and on the daemon). The file is validated when read: an unknown key, a command that is a
-path or a version argument with a space is refused, naming the entry. The profile only says what is wanted; checking a
-machine against it is a separate step.
+path or a version argument with a space is refused, naming the entry.
+
+**Drift.** Each heartbeat carries the profile tools the worker found on its `PATH` and their versions (probed at most once a
+minute). The daemon compares that with its own profile and Devices names what differs under the machine: "docker missing",
+"git 2.20 is older than 2.30", "none of kopicode, claude, codex". A machine that matches shows "Matches the worker profile".
+It is a warning only, like the capacity flags: a project can still be placed there. An offline worker, and one too old to
+report tools, show nothing. The worker reports only names and dotted version numbers, so it cannot put text of its own on the
+page. Both sides read the profile, so a custom `CUTTLEFISH_WORKER_PROFILE` belongs on the worker and on the daemon; a
+tool the daemon's profile lists and the worker's does not is shown missing. `cuttlefish worker verify` runs the same check
+on the machine you are on and exits 1 naming each item (it needs no join).
 
 A worker keeps its own keypair and a secret the daemon made for it at the confirm in `~/.cuttlefish/worker.json` (mode
 0600), and nothing else. It sits **below View**: it can send a heartbeat and nothing else, no projects, no secrets, no

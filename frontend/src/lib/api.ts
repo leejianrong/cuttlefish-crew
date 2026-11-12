@@ -41,6 +41,9 @@ export interface WorkerInfo {
   } | null;
   /** `disk` (nearly full) and `load` (busy). A warning only: nothing is blocked. */
   flags?: string[];
+  /** CUT-214: what the machine lacks of the worker profile, each item named ("docker missing"); `[]`
+   * matches it, null while offline or when the worker did not report its tools. A warning only. */
+  drift?: string[] | null;
   /** CUT-292: what the machine's backends reported about their limits; null while offline. */
   usage?: Record<string, BackendUsage> | null;
   created_at: number;
