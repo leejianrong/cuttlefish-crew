@@ -21,6 +21,7 @@ import contextlib
 import json
 import os
 import shlex
+import signal
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, ClassVar
 
@@ -148,11 +149,12 @@ class _Conn:
         self._reader.cancel()
         for task in self._tasks:
             task.cancel()
-        if self._proc.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                self._proc.kill()
+        # The whole group: an agent behind a launcher (the npm codex-acp is node around a native
+        # binary) holds the pipes through its child, and asyncio's wait() blocks until they close.
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(self._proc.pid, signal.SIGKILL)
         with contextlib.suppress(Exception):
-            await self._proc.wait()
+            await asyncio.wait_for(self._proc.wait(), 5)
 
 
 class AcpBackend:
@@ -197,6 +199,7 @@ class AcpBackend:
                 cwd=root,
                 env=merge_env(secrets, root=root),
                 limit=_LIMIT,
+                start_new_session=True,  # a launcher has children; close() kills the group
             )
         except OSError as exc:
             raise DelegationError(f"ACP agent {self._binary!r} could not start: {exc}") from exc
