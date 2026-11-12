@@ -28,10 +28,15 @@
     client,
     onOpenProject,
     onAddProject,
+    compact = false,
+    selectedId = null,
   }: {
     client: FleetClient;
     onOpenProject: (id: string) => void;
     onAddProject: () => void;
+    /** The narrow list beside an open project on a tablet or larger screen (CUT-209). */
+    compact?: boolean;
+    selectedId?: string | null;
   } = $props();
 
   let projects = $state<ProjectSummary[]>([]);
@@ -150,7 +155,7 @@
   }
 </script>
 
-<div class="page">
+<div class="page" class:compact>
   <header class="topbar">
     <h1 class="headline-medium">Projects</h1>
     <span class="endpoint mono">{client.baseUrl}</span>
@@ -205,6 +210,7 @@
         {#each group.shown as project (project.id)}
           <ProjectCard
             {project}
+            selected={project.id === selectedId}
             waiting={waitingBy[project.id] ?? 0}
             pinned={pins.has(project.id)}
             onPin={() => togglePin(project.id)}
@@ -245,6 +251,21 @@
     max-width: 72rem;
     margin: 0 auto;
     padding: 2rem 1.5rem 4rem;
+  }
+
+  /* Beside an open project the list is one narrow column: no endpoint line, one card per row. */
+  .compact.page {
+    max-width: none;
+    padding: 1.25rem 1rem 2rem;
+  }
+
+  .compact .endpoint,
+  .compact .kill-row {
+    display: none;
+  }
+
+  .compact .grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .topbar {
