@@ -10,6 +10,7 @@ adds which paired device a request came from, and `RelayGuard` holds that device
 
 from __future__ import annotations
 
+import logging
 import secrets
 import time
 from collections.abc import Mapping
@@ -30,6 +31,7 @@ from cuttlefish.relay.connector import (
     room_id_for,
 )
 from cuttlefish.relay.protocol import public_bytes
+from cuttlefish.worker import profile as worker_profile
 
 DEVICE_HEADER = "x-cuttlefish-device"
 #: A device's last-seen time is written at most this often.
@@ -130,6 +132,18 @@ class RelaySettings:
         return self.public_url or self.url
 
 
+_LOG = logging.getLogger(__name__)
+
+
+def _worker_profile() -> worker_profile.Profile | None:
+    """The profile workers are compared with; an unreadable one is logged and drift is not shown."""
+    try:
+        return worker_profile.load()
+    except worker_profile.ProfileError as exc:
+        _LOG.warning("worker profile ignored, so drift is not shown: %s", exc)
+        return None
+
+
 class RelayLink:
     """What `run_daemon` and `create_app` need once a relay is configured."""
 
@@ -147,7 +161,7 @@ class RelayLink:
         self.workers = workers or DeviceStore.open(
             settings.workers_path or settings.key_path.parent / "workers.db"
         )
-        self.liveness = WorkerLiveness()
+        self.liveness = WorkerLiveness(profile=_worker_profile())
         self.pairing = PairingManager(self.store, workers=self.workers)
         self.authority = DeviceAuthority(self.store, self.pairing, self.workers)
         self.guard = RelayGuard(self.internal_token, self.store, self.workers)

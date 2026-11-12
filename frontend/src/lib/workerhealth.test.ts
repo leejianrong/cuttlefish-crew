@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentsText, diskText, loadText, pickerNote, warnings } from "./workerhealth";
+import { agentsText, diskText, driftText, loadText, pickerNote, warnings } from "./workerhealth";
 
 const GIB = 1024 ** 3;
 
@@ -25,5 +25,14 @@ describe("worker health text", () => {
     expect(pickerNote({ online: true, flags: ["disk", "load"] })).toBe(" (disk low, busy)");
     expect(pickerNote({ online: true, flags: [] })).toBe("");
     expect(pickerNote({ online: false, flags: [] })).toBe(" (offline)");
+  });
+
+  it("names what differs from the worker profile", () => {
+    expect(driftText({ drift: ["docker missing", "git 2.20 is older than 2.30"] })).toBe(
+      "Differs from the worker profile: docker missing, git 2.20 is older than 2.30",
+    );
+    expect(driftText({ drift: [] })).toBe("");
+    expect(driftText({ drift: null })).toBe("");
+    expect(driftText({})).toBe("");
   });
 });
