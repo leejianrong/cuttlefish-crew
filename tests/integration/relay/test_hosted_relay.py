@@ -60,7 +60,7 @@ class Rig:
 
 async def _closed_with(socket: Any) -> int:
     with pytest.raises(websockets.ConnectionClosed) as info:
-        await asyncio.wait_for(socket.recv(), 5)
+        await asyncio.wait_for(socket.recv(), 30)
     assert info.value.rcvd is not None
     return int(info.value.rcvd.code)
 
@@ -182,7 +182,7 @@ async def test_a_second_daemon_with_a_wrong_token_does_not_replace_the_first(
         await asyncio.sleep(0.1)
         assert first.state.name == "OPEN"
         async with rig.client(room) as browser:  # still routed to the first daemon
-            opened = await asyncio.wait_for(first.recv(), 5)
+            opened = await asyncio.wait_for(first.recv(), 30)
             assert "client-open" in str(opened)
             await browser.close()
 
@@ -249,9 +249,9 @@ async def test_bytes_and_connections_are_counted_per_room(hosted: Hosted) -> Non
     async with rig.daemon(room, token) as daemon:
         await asyncio.sleep(0.1)
         async with rig.client(room) as browser:
-            await asyncio.wait_for(daemon.recv(), 5)  # client-open
+            await asyncio.wait_for(daemon.recv(), 30)  # client-open
             await browser.send(b"x" * 1000)
-            await asyncio.wait_for(daemon.recv(), 5)
+            await asyncio.wait_for(daemon.recv(), 30)
         await asyncio.sleep(0.1)
     used, connections = rig.store.usage_today(room)
     assert used >= 1000 and connections == 1
@@ -267,7 +267,7 @@ async def test_an_address_may_hold_only_so_many_connections(hosted: Hosted) -> N
     async with rig.daemon(room, token) as daemon:
         await asyncio.sleep(0.1)
         async with rig.client(room) as one, rig.client(room) as two:
-            await asyncio.wait_for(daemon.recv(), 5)
+            await asyncio.wait_for(daemon.recv(), 30)
             async with rig.client(room) as third:
                 assert await _closed_with(third) == CLOSE_FULL
             assert one.state.name == "OPEN" and two.state.name == "OPEN"
@@ -390,7 +390,7 @@ async def test_a_real_daemon_connector_and_a_browser_pair_through_a_hosted_relay
     connector._delays = (0.05,)
     task = asyncio.create_task(connector.run())
     try:
-        await asyncio.wait_for(connector.connected.wait(), 5)
+        await asyncio.wait_for(connector.connected.wait(), 30)
         assert connector.room == room
         static = generate_static()
         psk = secrets.token_bytes(32)

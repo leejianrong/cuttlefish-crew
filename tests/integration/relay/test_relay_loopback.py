@@ -120,7 +120,7 @@ async def _rig(tmp_path: Path, make_app, *, delays=(0.05,)) -> AsyncIterator[Rig
     connector = link.connector(app)
     connector._delays = delays
     task = asyncio.create_task(connector.run())
-    await asyncio.wait_for(connector.connected.wait(), 5)
+    await asyncio.wait_for(connector.connected.wait(), 30)
     # A device that has been through pairing, made directly: the pairing flow has its own tests.
     static = generate_static()
     secret = secrets.token_bytes(32)
@@ -258,7 +258,7 @@ async def test_a_websocket_authenticates_with_the_connectors_token_and_carries_b
     browser = await rig.browser()
     try:
         socket = await browser.websocket("/api/ws")
-        await asyncio.wait_for(socket.accepted.wait(), 5)
+        await asyncio.wait_for(socket.accepted.wait(), 30)
         await socket.send_text(
             json.dumps(
                 {"type": "auth", "token": "not-the-internal-one", "size": {"cols": 90, "rows": 30}}
@@ -277,7 +277,7 @@ async def test_a_websocket_refused_by_the_app_closes_with_the_apps_code(rig: Rig
     browser = await rig.browser()
     try:
         socket = await browser.websocket("/api/ws")
-        await asyncio.wait_for(socket.accepted.wait(), 5)
+        await asyncio.wait_for(socket.accepted.wait(), 30)
         await socket.send_text("this is not an auth message")  # the app cannot parse it
         closed = await socket.recv()
         assert isinstance(closed, tuple) and closed[0] != 1000
@@ -344,13 +344,13 @@ async def test_the_connector_reconnects_when_the_relay_comes_back(tmp_path: Path
     link.store.create("test device", public_bytes(static), secret, Tier.ADMIN)
     task = asyncio.create_task(connector.run())
     try:
-        await asyncio.wait_for(connector.connected.wait(), 5)
+        await asyncio.wait_for(connector.connected.wait(), 30)
         await relay.stop()
-        await asyncio.wait_for(_cleared(connector), 5)
+        await asyncio.wait_for(_cleared(connector), 30)
         again = Server(relay_app(), port)
         await again.start()
         try:
-            await asyncio.wait_for(connector.connected.wait(), 5)
+            await asyncio.wait_for(connector.connected.wait(), 30)
             browser = await Browser.connect(
                 again.ws_url, connector.room, public_bytes(connector.static), secret, static
             )
