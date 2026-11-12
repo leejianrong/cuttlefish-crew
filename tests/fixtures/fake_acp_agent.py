@@ -1,6 +1,8 @@
 """A tiny fake ACP agent over stdio (CUT-232 spike). Behaviour is chosen by the prompt text:
 ``edit`` asks to edit ``<cwd>/out.txt``, ``run <cmd>`` asks to execute, ``hang`` waits for
-``session/cancel``, anything else just answers. ``FAKE_ACP_AUTH=1`` advertises an auth method."""
+``session/cancel``, anything else just answers. ``FAKE_ACP_AUTH=1`` advertises an auth method
+and works anyway, ``required`` answers ``session/new`` with auth_required until ``authenticate``
+is called, ``fail`` never lets it in."""
 
 from __future__ import annotations
 
@@ -115,6 +117,7 @@ def prompt(mid: int, params: dict) -> None:
 
 
 def main() -> None:
+    signed_in = False
     for line in sys.stdin:
         msg = json.loads(line)
         method = msg.get("method")
@@ -127,8 +130,20 @@ def main() -> None:
             if os.environ.get("FAKE_ACP_AUTH"):
                 result["authMethods"] = [{"id": "login", "name": "Login"}]
             send({"jsonrpc": "2.0", "id": msg["id"], "result": result})
+        elif method == "authenticate":
+            if os.environ.get("FAKE_ACP_AUTH") == "fail":
+                send(
+                    {"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32603, "message": "no"}}
+                )
+            else:
+                signed_in = True
+                send({"jsonrpc": "2.0", "id": msg["id"], "result": {}})
         elif method == "session/new":
-            send({"jsonrpc": "2.0", "id": msg["id"], "result": {"sessionId": "s-new"}})
+            if os.environ.get("FAKE_ACP_AUTH") in ("required", "fail") and not signed_in:
+                error = {"code": -32000, "message": "Authentication required"}
+                send({"jsonrpc": "2.0", "id": msg["id"], "error": error})
+            else:
+                send({"jsonrpc": "2.0", "id": msg["id"], "result": {"sessionId": "s-new"}})
         elif method == "session/load":
             sid = msg["params"]["sessionId"]
             update(

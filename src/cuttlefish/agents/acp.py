@@ -26,6 +26,7 @@ from typing import Any, ClassVar
 
 from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import (
+    AuthRequiredError,
     ConsentDecisionRecord,
     DelegationError,
     DelegationOutcome,
@@ -39,6 +40,9 @@ from cuttlefish.sandbox.provider import SandboxProvider
 PROTOCOL_VERSION = 1
 _LIMIT = 8 * 1024 * 1024
 _EDIT_KINDS = frozenset({"edit", "delete", "move"})
+#: JSON-RPC code an ACP agent answers ``session/new`` or ``session/load`` with when it needs
+#: ``authenticate`` first.
+_AUTH_REQUIRED = -32000
 
 Json = dict[str, Any]
 
@@ -57,6 +61,14 @@ def _inside(path: str, root: str) -> bool:
     if not path:
         return False
     return os.path.realpath(path).startswith(os.path.realpath(root) + os.sep)
+
+
+class _RpcError(DelegationError):
+    """An error reply from the agent, with its JSON-RPC ``code``."""
+
+    def __init__(self, code: object, message: object) -> None:
+        super().__init__(f"ACP error {code}: {message}")
+        self.code = code
 
 
 class _Conn:
@@ -124,9 +136,7 @@ class _Conn:
                 elif (future := self._pending.pop(message.get("id", -1), None)) is not None:
                     if "error" in message:
                         err = message["error"]
-                        future.set_exception(
-                            DelegationError(f"ACP error {err.get('code')}: {err.get('message')}")
-                        )
+                        future.set_exception(_RpcError(err.get("code"), err.get("message")))
                     else:
                         future.set_result(message.get("result") or {})
         finally:
@@ -232,10 +242,7 @@ class AcpBackend:
                 30,
             )
             self.agent_capabilities = init.get("agentCapabilities") or {}
-            if init.get("authMethods"):
-                # Auth is the agent's and the operator's business; cuttlefish holds no login.
-                names = ", ".join(str(m.get("id")) for m in init["authMethods"])
-                raise DelegationError(f"ACP agent wants authentication first ({names})")
+            methods = [m for m in init.get("authMethods") or [] if isinstance(m, dict)]
             params: Json = {"cwd": root, "mcpServers": []}
             key = session or conversations.DEFAULT_KEY
             resuming = conversations.resume_enabled(self.NAME)
@@ -248,13 +255,19 @@ class AcpBackend:
             if remembered:
                 state["replaying"] = True
                 try:
-                    await conn.call("session/load", {"sessionId": remembered, **params})
+                    await self._signed_in(
+                        conn, methods, "session/load", {"sessionId": remembered, **params}
+                    )
                     session_id = remembered
+                except AuthRequiredError:
+                    raise
                 except DelegationError:
                     conversations.forget(root, self.NAME, key)
                 state["replaying"] = False
             if not session_id:
-                session_id = str((await conn.call("session/new", params))["sessionId"])
+                session_id = str(
+                    (await self._signed_in(conn, methods, "session/new", params))["sessionId"]
+                )
             if resuming:
                 conversations.remember(root, self.NAME, key, session_id)
             prompt = asyncio.ensure_future(
@@ -307,6 +320,36 @@ class AcpBackend:
             session_id,
             None if kind == "completed" else stop,
             None,
+        )
+
+    @staticmethod
+    async def _signed_in(conn: _Conn, methods: list[Json], method: str, params: Json) -> Json:
+        """``conn.call(method, params)``, with ``authenticate`` in between when the agent says it
+        needs it (CUT-266). An agent that lists ``authMethods`` but is already signed in is simply
+        used; one that answers ``auth_required`` is asked to authenticate with each method that
+        needs nothing from cuttlefish (its own login, no variables), then the call is tried once
+        more. cuttlefish holds no login, so when that fails the round stops as
+        :class:`AuthRequiredError`, which reads as "needs login" on the dashboard."""
+        try:
+            return await conn.call(method, params)
+        except _RpcError as exc:
+            if exc.code != _AUTH_REQUIRED:
+                raise
+        own = [m for m in methods if m.get("type") in (None, "agent") and m.get("id")]
+        for chosen in own:
+            try:
+                await conn.call("authenticate", {"methodId": str(chosen["id"])})
+            except DelegationError:
+                continue
+            try:
+                return await conn.call(method, params)
+            except _RpcError as exc:
+                if exc.code != _AUTH_REQUIRED:
+                    raise
+        names = ", ".join(str(m.get("id")) for m in methods) or "none offered"
+        raise AuthRequiredError(
+            f"ACP agent needs you to sign in first (methods: {names}). Log in to the agent's own "
+            "tool on this machine, then start again."
         )
 
     @staticmethod

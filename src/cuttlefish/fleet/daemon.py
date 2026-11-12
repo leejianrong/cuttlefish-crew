@@ -2217,6 +2217,7 @@ class FleetDaemon:
                     agent_backend=project.backend,
                     extra_backends=[r["backend"] for r in role_inputs if r.get("backend")],
                     central_secrets_db=self.secrets_path(),
+                    project_keys=(project.name, project.id),
                 )
                 self._team_stores[team_id] = prepared.episodic_store
                 events = list(prepared.episodic_store.read(team_id))
