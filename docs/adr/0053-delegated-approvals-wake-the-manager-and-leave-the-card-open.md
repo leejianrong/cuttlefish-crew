@@ -1,6 +1,6 @@
 # ADR-0053: Delegated approvals wake the manager and leave the card open
 
-- Status: Accepted (built, CUT-230)
+- Status: Accepted (built, CUT-230; Codex managers, CUT-258)
 - Date: 2026-11-01
 - Deciders: development agent for CUT-230, open to review by Jian
 
@@ -22,6 +22,6 @@ it a request had been raised: it acted only when a person messaged it.
 
 ## Consequences
 
-- Needs a running manager session on Claude Code (the chat is typed in for Claude Code only); otherwise the wake is logged
+- Needs a running manager session on Claude Code or Codex (the chat is typed in for those two; a Codex session has no hooks, so only its screen says a dialog is open; kopicode has no send path); otherwise the wake is logged
   and skipped.
 - The setting is global, not per project; a per-project switch can come with a use for it.

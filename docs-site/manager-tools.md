@@ -59,7 +59,7 @@ for the project that hosts the manager's own session.
 ## Delegating approvals
 
 Set `CUTTLEFISH_DELEGATE_APPROVALS=1` on the daemon (off by default) and a permission request raised in any project wakes the
-manager: the daemon types one message into its session (Claude Code only), batching a burst and spacing messages 30
+manager: the daemon types one message into its session (Claude Code or Codex; for Codex only the screen says a dialog is open), batching a burst and spacing messages 30
 seconds apart. The manager reads the digests and allows once or denies what is routine. The request stays in Needs you the
 whole time, so one it cannot decide, or a manager that is not running, reaches you as before; `raise_decision` asks you
 outright. The never-allowed list still holds and every answer is journaled as `manager`. See
@@ -104,7 +104,7 @@ reaches the manager. The manager's project page shows today's use against the ce
 ## Waking the manager on a schedule
 
 The manager's own project takes a [schedule](schedules.md) like any other, but its text is a check-in rather than a goal:
-when one is due the daemon types it into the manager's session (Claude Code only, the same send path as the approval
+when one is due the daemon types it into the manager's session (Claude Code or Codex, the same send path as the approval
 wake) and the manager looks over your projects. A run is skipped, journaled and shown on the project page when the
 manager is busy, waiting at a permission dialog, not running, or on Codex, so a check-in never interrupts work or lands
 as the answer to a dialog. Add one with `cuttlefish schedule add <manager-project-id> --goal "Check in on every project" --recurrence "daily 07:00"`.
