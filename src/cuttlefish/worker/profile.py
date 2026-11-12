@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import re
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -117,3 +118,34 @@ def load(path: Path | None = None) -> Profile:
         return parse(chosen.read_text())
     except OSError as exc:
         raise ProfileError(f"cannot read the profile {chosen}: {exc}") from exc
+
+
+def drift(profile: Profile, have: Mapping[str, str]) -> list[str]:
+    """What a machine that reports `have` (`name -> version`, `""` unknown) lacks of `profile`, each
+    item named: "docker missing", "git 2.20 is older than 2.30", "none of kopicode, claude, codex".
+    Empty means it matches. A version a tool would not print is not judged."""
+    found: list[str] = []
+    grouped = profile.groups()
+    for tool in profile.tools:
+        if tool.group:
+            continue
+        found.extend(_lacks(tool, have))
+    for members in grouped.values():
+        if not any(tool.name in have for tool in members):
+            found.append(f"none of {', '.join(tool.name for tool in members)}")
+        else:
+            found.extend(
+                item for tool in members if tool.name in have for item in _lacks(tool, have)
+            )
+    return found
+
+
+def _lacks(tool: Tool, have: Mapping[str, str]) -> list[str]:
+    if tool.name not in have:
+        return [f"{tool.name} missing"]
+    version = have[tool.name]
+    if tool.minimum and version:
+        wanted, got = parse_version(tool.minimum), parse_version(version)
+        if wanted and got and got < wanted:
+            return [f"{tool.name} {version} is older than {tool.minimum}"]
+    return []
