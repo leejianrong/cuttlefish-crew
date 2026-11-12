@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import stat
 import time
@@ -230,7 +231,7 @@ def test_a_goal_is_the_first_message_of_a_fresh_claude_or_codex_session(rig: Rig
     assert claude[-1] == "Fix it" and claude[:3] == ["claude", "--session-id", "abc"]
     assert launch_argv("codex", root=root, session_id="x", resume=False, prompt="Fix it") == [
         "codex",
-        "Fix it",
+        f"Fix it\n\n{AGENT_NOTE}",  # Codex has no system prompt flag: the goal carries the note
     ]
 
 
@@ -243,7 +244,8 @@ def test_a_goal_reaches_a_resumed_session_as_one_quoted_argument(rig: Rig) -> No
     # Both the resume and the fresh fallback carry it, quoted so the shell reads it as one word.
     assert resumed[2].count("'it'\"'\"'s \"quoted\" $(x)'") == 2
     codex = launch_argv("codex", root=root, session_id="x", resume=True, prompt="go")
-    assert codex[2] == "codex resume --last go || exec codex go"
+    note = shlex.quote(f"go\n\n{AGENT_NOTE}")
+    assert codex[2] == f"codex resume --last {note} || exec codex {note}"
 
 
 def test_a_goal_that_looks_like_a_flag_cannot_become_one(rig: Rig) -> None:
