@@ -1877,6 +1877,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     worker_join.add_argument("--name", help="What the dashboard calls this machine (default: host)")
     worker_sub.add_parser("run", help="Reconnect a machine that has already joined")
+    worker_sub.add_parser("profile", help="List the tools a worker machine needs (CUT-212)")
+    worker_sub.add_parser(
+        "verify",
+        help="Check this machine against the worker profile; exit 1 and name what is missing",
+    )
 
     serve_parser = subparsers.add_parser(
         "serve", help="Start the fleet daemon: launches and owns every registered project's team"
@@ -2140,6 +2145,31 @@ def _worker(args: argparse.Namespace) -> int:
     secret and no model key until the controller places work on it."""
     from cuttlefish.worker import run as worker_run
     from cuttlefish.worker.link import JoinLinkError
+
+    if args.worker_command in ("profile", "verify"):
+        from cuttlefish.worker import inventory as worker_inventory
+        from cuttlefish.worker import profile as worker_profile
+
+        try:
+            listed = worker_profile.load()
+        except worker_profile.ProfileError as exc:
+            print(f"cuttlefish worker: {exc}", file=sys.stderr)
+            return EXIT_CONFIG_ERROR
+        if args.worker_command == "verify":
+            have = worker_inventory.probe(listed)
+            for tool in listed.tools:
+                if tool.name in have:
+                    print(f"ok      {tool.name} {have[tool.name]}".rstrip())
+            lacking = worker_profile.drift(listed, have)
+            for item in lacking:
+                print(f"DRIFT   {item}")
+            print("matches the worker profile" if not lacking else f"{len(lacking)} item(s) differ")
+            return EXIT_OK if not lacking else EXIT_TASK_FAILED
+        for tool in listed.tools:
+            more = [f">= {tool.minimum}"] if tool.minimum else []
+            more += [f"one of {tool.group}"] if tool.group else []
+            print(f"{tool.name:<16}{' '.join(more)}")
+        return EXIT_OK
 
     path = worker_run.identity_path()
 

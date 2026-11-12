@@ -1,0 +1,65 @@
+# The standard dev worker (CUT-212): what a machine needs before cuttlefish places a project on it.
+#
+# One [[tool]] per thing. Fields:
+#   name      what the dashboard calls it (lowercase letters, digits, . _ -)
+#   command   the program looked up on PATH (default: name)
+#   version   arguments that print its version (default: ["--version"])
+#   min       the oldest version accepted, dotted numbers (default: any)
+#   group     tools sharing a group are alternatives: one of them is enough
+#   apt       the Ubuntu packages that provide it (what the bootstrap, CUT-213, installs)
+#   how       how the bootstrap gets it when apt has none: "uv", "node" or "agent-cli" (see its script)
+#
+# A machine that lacks one is flagged on Devices; nothing is blocked (warn only, like capacity).
+
+version = 1
+
+[[tool]]
+name = "git"
+min = "2.30"
+apt = ["git"]
+
+[[tool]]
+name = "tmux"
+min = "3.0"
+apt = ["tmux"]
+
+[[tool]]
+name = "gh"
+min = "2.0"
+apt = ["gh"]
+
+[[tool]]
+name = "docker"
+min = "20.10"
+apt = ["docker.io"]
+
+[[tool]]
+name = "docker-compose"
+command = "docker"
+version = ["compose", "version", "--short"]
+min = "2.0"
+apt = ["docker-compose-v2"]
+
+[[tool]]
+name = "uv"
+how = "uv"
+
+[[tool]]
+name = "node"
+min = "20"
+how = "node"
+
+[[tool]]
+name = "kopicode"
+group = "agent"
+how = "agent-cli"
+
+[[tool]]
+name = "claude"
+group = "agent"
+how = "agent-cli"
+
+[[tool]]
+name = "codex"
+group = "agent"
+how = "agent-cli"

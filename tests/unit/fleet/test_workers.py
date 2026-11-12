@@ -15,6 +15,7 @@ from cuttlefish.fleet.workers import WorkerLiveness
 from cuttlefish.relay.connector import load_or_create_daemon_key, pairing_payload
 from cuttlefish.relay.protocol import public_bytes
 from cuttlefish.worker.link import Controller, JoinLinkError, parse_join_code
+from cuttlefish.worker.profile import parse
 from cuttlefish.worker.run import Identity
 
 KEY = bytes(range(32))
@@ -115,6 +116,7 @@ def test_a_worker_keeps_its_keys_in_one_private_file(tmp_path: Path) -> None:
 
 
 GIB = 1024**3
+PROFILE = 'version = 1\n[[tool]]\nname = "git"\napt = ["git"]\n'
 
 
 def test_a_heartbeats_health_is_checked_kept_and_flagged_only_when_low(
@@ -184,3 +186,46 @@ def test_a_workers_usage_is_checked_and_its_warning_is_worked_out_here(
     assert liveness.as_json(worker)["usage"] is not None
     liveness.beat(worker.id, {"usage": "nonsense"})
     assert liveness.as_json(worker)["usage"] is None
+
+
+def test_a_workers_tools_are_checked_and_compared_with_the_profile_here(
+    stores: tuple[DeviceStore, DeviceStore],
+) -> None:
+    """CUT-214: the worker says what it has; the controller names what the profile lacks."""
+    _devices, workers = stores
+    profile = parse(
+        'version = 1\n[[tool]]\nname = "git"\nmin = "2.30"\napt = ["git"]\n'
+        '[[tool]]\nname = "docker"\napt = ["docker.io"]\n'
+    )
+    liveness = WorkerLiveness(now=lambda: 0.0, profile=profile)
+    worker = workers.create("laptop", KEY, b"s" * 32, Tier.WORKER)
+    assert liveness.as_json(worker)["drift"] is None  # never beat: nothing is claimed
+    liveness.beat(worker.id, {"host": "h"})
+    assert liveness.as_json(worker)["drift"] is None  # an old worker that sends no tools
+    liveness.beat(worker.id, {"tools": {"git": "2.43.0", "docker": "27.1"}})
+    assert liveness.as_json(worker)["drift"] == []
+    liveness.beat(worker.id, {"tools": {"git": "2.43.0"}})
+    assert liveness.as_json(worker)["drift"] == ["docker missing"]
+    liveness.beat(worker.id)  # a bare sign of life keeps the last report
+    assert liveness.as_json(worker)["drift"] == ["docker missing"]
+    liveness.beat(worker.id, {"tools": {"git": "2.1", "docker": "x"}})  # "x" is not a version
+    assert liveness.as_json(worker)["drift"] == ["git 2.1 is older than 2.30"]
+    liveness.beat(worker.id, {"tools": {}})  # a report of nothing is still a report
+    assert liveness.as_json(worker)["drift"] == ["git missing", "docker missing"]
+    for junk in ("x", [1]):
+        liveness.beat(worker.id, {"tools": junk})
+        assert liveness.as_json(worker)["drift"] is None
+    liveness.beat(worker.id, {"tools": {"Not A Name": "1", "ok": 3, "git": "<script>"}})
+    assert liveness.as_json(worker)["drift"] == ["docker missing"]  # only a plain name and version
+    liveness.beat(worker.id, {"tools": {f"t{i}": "1" for i in range(500)}})
+    assert len(liveness._beats[worker.id].tools or {}) <= 40
+
+
+def test_an_offline_worker_shows_no_drift(stores: tuple[DeviceStore, DeviceStore]) -> None:
+    _devices, workers = stores
+    now = [0.0]
+    liveness = WorkerLiveness(offline_after=45, now=lambda: now[0], profile=parse(PROFILE))
+    worker = workers.create("laptop", KEY, b"s" * 32, Tier.WORKER)
+    liveness.beat(worker.id, {"tools": {}})
+    now[0] = 100
+    assert liveness.as_json(worker)["drift"] is None
