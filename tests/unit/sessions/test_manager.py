@@ -103,7 +103,9 @@ def test_the_agent_gets_exactly_the_env_it_is_given(rig: Rig, tmp_path: Path) ->
     (rig.bin / "claude").write_text(f"#!/bin/sh\nenv > {tmp_path}/env.txt\nexec sleep 300\n")
     rig.manager.ensure("p1", str(rig.root), "claude-code")
     for _ in range(50):
-        if (tmp_path / "env.txt").exists():
+        if (tmp_path / "env.txt").exists() and (
+            tmp_path / "env.txt"
+        ).stat().st_size:  # not just created
             break
         time.sleep(0.1)
     names = {line.split("=", 1)[0] for line in (tmp_path / "env.txt").read_text().splitlines()}

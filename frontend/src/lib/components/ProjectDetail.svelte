@@ -16,6 +16,7 @@
   import { modeLabel, startFailure } from "../team";
   import AgentSessionCard from "./AgentSessionCard.svelte";
   import EnvironmentCard from "./EnvironmentCard.svelte";
+  import StackCard from "./StackCard.svelte";
   import WorkerPlacement from "./WorkerPlacement.svelte";
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
@@ -321,6 +322,7 @@
       {/if}
       <div class="path-wrap"><ProjectPath root={project.root} /></div>
       <WorkerPlacement {client} {project} onChanged={refresh} />
+      {#if project.worker}<StackCard {client} {projectId} />{/if}
       <KillSwitch {client} {projectId} onDone={refresh} />
     </header>
 
