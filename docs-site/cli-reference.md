@@ -287,6 +287,17 @@ offline worker shows no numbers, since they would be stale. The controller keeps
 heartbeat, so a worker cannot put text of its own on the page. **Remove** on the PC deletes the worker's record
 and closes its connection at once; the worker notices, deletes `~/.cuttlefish/worker.json` and stops.
 
+### The worker profile: `cuttlefish worker profile`
+
+What a machine needs before a project is placed on it is one small file, `src/cuttlefish/worker/profile.toml`: a `[[tool]]`
+per program, with the command looked up on `PATH`, the arguments that print its version, an optional `min` version, an
+optional `group` (tools in one group are alternatives: one agent CLI is enough) and how to install it (`apt` packages, or a
+`how` the bootstrap knows). The standard dev worker lists git, tmux, gh, docker, docker compose, uv, node and the three agent
+CLIs (kopicode, claude, codex). `cuttlefish worker profile` prints the list. A file named by `CUTTLEFISH_WORKER_PROFILE`
+replaces it (set it on the worker and on the daemon). The file is validated when read: an unknown key, a command that is a
+path or a version argument with a space is refused, naming the entry. The profile only says what is wanted; checking a
+machine against it is a separate step.
+
 A worker keeps its own keypair and a secret the daemon made for it at the confirm in `~/.cuttlefish/worker.json` (mode
 0600), and nothing else. It sits **below View**: it can send a heartbeat and nothing else, no projects, no secrets, no
 settings, no device list. It holds no project yet and never gets the model key. Workers are kept in `~/.cuttlefish/workers.db` beside `devices.db`.

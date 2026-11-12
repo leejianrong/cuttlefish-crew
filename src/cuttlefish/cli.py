@@ -1877,6 +1877,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     worker_join.add_argument("--name", help="What the dashboard calls this machine (default: host)")
     worker_sub.add_parser("run", help="Reconnect a machine that has already joined")
+    worker_sub.add_parser("profile", help="List the tools a worker machine needs (CUT-212)")
 
     serve_parser = subparsers.add_parser(
         "serve", help="Start the fleet daemon: launches and owns every registered project's team"
@@ -2140,6 +2141,20 @@ def _worker(args: argparse.Namespace) -> int:
     secret and no model key until the controller places work on it."""
     from cuttlefish.worker import run as worker_run
     from cuttlefish.worker.link import JoinLinkError
+
+    if args.worker_command == "profile":
+        from cuttlefish.worker import profile as worker_profile
+
+        try:
+            listed = worker_profile.load()
+        except worker_profile.ProfileError as exc:
+            print(f"cuttlefish worker: {exc}", file=sys.stderr)
+            return EXIT_CONFIG_ERROR
+        for tool in listed.tools:
+            more = [f">= {tool.minimum}"] if tool.minimum else []
+            more += [f"one of {tool.group}"] if tool.group else []
+            print(f"{tool.name:<16}{' '.join(more)}")
+        return EXIT_OK
 
     path = worker_run.identity_path()
 
