@@ -101,3 +101,29 @@ def test_verify_exits_1_and_names_what_is_missing(
     monkeypatch.setattr("cuttlefish.worker.inventory.probe", lambda _p: everything)
     assert cli.main(["worker", "verify"]) == 0
     assert "matches the worker profile" in capsys.readouterr().out
+
+
+def test_tmux_is_asked_with_dash_v_because_its_usage_line_is_not_a_version() -> None:
+    usage = "usage: tmux [-2CDlNuVv] [-c shell-command] [-f file] [-L socket-name]"
+
+    def run(argv: list[str]) -> tuple[int, str]:
+        if argv[1:] == ["-V"]:
+            return 0, "tmux next-3.5"
+        return 1, usage  # anything else, `--version` included, gets the usage line
+
+    tmux = next(t for t in load().tools if t.name == "tmux")
+    assert tmux.version_args == ("-V",)
+    found = probe(
+        parse(
+            'version = 1\n[[tool]]\nname = "tmux"\nversion = ["-V"]\nmin = "3.0"\napt = ["tmux"]\n'
+        ),
+        {"tmux": "/usr/bin/tmux"}.get,
+        run,
+    )
+    assert found == {"tmux": "3.5"}
+    assert drift(load(), {**{t.name: "99" for t in load().tools}, "tmux": found["tmux"]}) == []
+    # What the old `--version` probe saw: the "2" in the usage line, which fails min 3.0.
+    from cuttlefish.worker.profile import parse_version
+
+    assert parse_version(usage) == (2,)
+    assert parse_version("tmux 3.4") == (3, 4)
