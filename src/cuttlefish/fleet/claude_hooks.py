@@ -311,6 +311,9 @@ class ClaudeHooks:
             return {}
         if outcome.allows:
             return {"decision": "allow"}
+        if outcome.resolution == "abandoned":
+            # The daemon is shutting down: tell the script to ask the restarted one again (CUT-277).
+            return {"retry": True}
         if outcome.resolution == "denied":
             return {"decision": "deny", "message": "Denied from Needs you in cuttlefish."}
         return {}
