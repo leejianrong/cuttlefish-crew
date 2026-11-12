@@ -52,7 +52,9 @@ def _build(image: str, tag: str, root_steps: str) -> None:
 
 def _push(tag: str) -> str:
     docker("push", "-q", tag)
-    return docker("image", "inspect", "-f", "{{index .RepoDigests 0}}", tag).stdout.strip()
+    shown = docker("image", "inspect", "-f", "{{range .RepoDigests}}{{.}} {{end}}", tag).stdout
+    # An image may be known under several repositories: take the one just pushed to.
+    return next(d for d in shown.split() if d.startswith(tag.rsplit(":", 1)[0] + "@"))
 
 
 @pytest.fixture(scope="module")
