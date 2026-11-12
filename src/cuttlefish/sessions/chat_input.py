@@ -30,6 +30,10 @@ _DIALOG_LINES = (
         r"Do you trust|trust this folder|trust the files|project you created or one you trust", re.I
     ),
     re.compile(r"Do you want to (proceed|make this edit|create|allow)", re.I),
+    # Codex's approval dialogs (CUT-258), from the strings in its binary, not a screen capture.
+    re.compile(r"Would you like to (run|make|grant|send)", re.I),
+    re.compile(r"Yes, (just this once|proceed|and (allow|don't ask))", re.I),
+    re.compile(r"Press Y to apply", re.I),
 )
 
 

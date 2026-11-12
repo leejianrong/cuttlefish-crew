@@ -676,7 +676,9 @@ class FleetDaemon:
         except TmuxError:
             return ""
 
-    async def send_chat(self, project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+    async def send_chat(
+        self, project_id: str, text: str, *, fresh: bool = False, codex: bool = False
+    ) -> dict[str, str]:
         """Type ``text`` into the project's running Claude Code session as one bracketed paste,
         then Enter (CUT-173). Refused when there is no such session, when the tool is not one
         whose input is wired in yet, and while a dialog is open (a permission waiting, here or in
@@ -685,7 +687,11 @@ class FleetDaemon:
 
         ``fresh`` (the manager's wakes, CUT-273, ADR-0055) types ``/clear`` first when the session
         is idle, so the message starts a short conversation instead of adding to a long one. It
-        is Claude Code's own command, no model call; a busy or unknown session is not cleared."""
+        is Claude Code's own command, no model call; a busy or unknown session is not cleared.
+
+        ``codex`` (the manager's wakes, CUT-258) also types into a Codex session: the same paste
+        and Enter, guarded by the screen alone, since Codex has no hooks to say a dialog is open.
+        It is never set for a person's chat, where Codex stays on the Terminal tab."""
         try:
             message = clean_message(text)
         except MessageError as exc:
@@ -695,7 +701,7 @@ class FleetDaemon:
         info = await asyncio.to_thread(manager.status, project.id, project.root)
         if info.state != "running":
             raise FleetError("The builder is not running. Give it a goal on the Overview first.")
-        if info.backend != "claude-code":
+        if info.backend != "claude-code" and not (codex and info.backend == "codex"):
             raise FleetError(
                 "Typing from the chat is only wired in for Claude Code so far; "
                 "use the Terminal tab for this builder."
@@ -733,14 +739,16 @@ class FleetDaemon:
     async def check_in_manager(self, text: str) -> str | None:
         """Type a scheduled check-in into the manager's session (CUT-257, ADR-0053). ``None`` once
         it is typed, else why it was not: a busy session is never interrupted, and a missing
-        session, a dialog or a tool without a send path (Codex) refuses in ``send_chat``."""
+        session, a dialog or a tool without a send path (kopicode) refuses in ``send_chat``."""
         assert self.manager_project is not None
         if (over := self._manager_over_budget()) is not None:
             return over
         if self._claude_hooks.activity(self.manager_project)[0] == "busy":
             return "the manager is busy"
         try:
-            await self.send_chat(self.manager_project, text, fresh=manager_clear_context())
+            await self.send_chat(
+                self.manager_project, text, fresh=manager_clear_context(), codex=True
+            )
         except FleetError as exc:
             return str(exc)
         return None
@@ -1439,6 +1447,7 @@ class FleetDaemon:
                 self.manager_project,
                 _WAKE_MESSAGE.format(projects=projects),
                 fresh=manager_clear_context(),
+                codex=True,
             )
         except FleetError as exc:
             logger.info("manager not woken for approvals: %s", exc)

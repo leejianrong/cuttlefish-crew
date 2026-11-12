@@ -18,7 +18,7 @@ from cuttlefish import mcp as mcp_module
 from cuttlefish.episodic.events import DelegateApprovalsSet, RequestRaised, RequestResolved
 from cuttlefish.episodic.store import EpisodicStore
 from cuttlefish.fleet.claude_hooks import session_scope
-from cuttlefish.fleet.daemon import FleetDaemon
+from cuttlefish.fleet.daemon import FleetDaemon, FleetError
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.mcp import FleetApiError, build_manager_mcp_server
 from cuttlefish.projects.store import ProjectStore
@@ -362,7 +362,9 @@ async def _woken(
 
     sent: list[tuple[str, str]] = []
 
-    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+    async def send_chat(
+        project_id: str, text: str, *, fresh: bool = False, codex: bool = False
+    ) -> dict[str, str]:
         assert not fresh  # clearing is opt-in (CUT-273, ADR-0055)
         sent.append((project_id, text))
         return {}
@@ -430,12 +432,12 @@ async def test_a_project_can_opt_in_or_out_of_delegated_approvals(
 async def test_a_scheduled_check_in_is_typed_unless_the_manager_is_busy_or_refuses(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from cuttlefish.fleet.daemon import FleetError
-
     sent: list[str] = []
     refusal: list[str] = []
 
-    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+    async def send_chat(
+        project_id: str, text: str, *, fresh: bool = False, codex: bool = False
+    ) -> dict[str, str]:
         assert not fresh
         if refusal:
             raise FleetError(refusal[0])
@@ -509,7 +511,14 @@ class _Tmux:
 
 
 async def _typed(
-    rig: Rig, monkeypatch: pytest.MonkeyPatch, *, state: str, fresh: bool
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    state: str,
+    fresh: bool,
+    backend: str = "claude-code",
+    screen: str = "",
+    codex: bool = False,
 ) -> tuple[list[str], dict[str, str]]:
     import cuttlefish.fleet.daemon as fleet_daemon
 
@@ -517,7 +526,7 @@ async def _typed(
 
     class Sessions:
         def status(self, *_: object) -> SessionInfo:
-            return SessionInfo(state="running", backend="claude-code", tmux_session="s")  # type: ignore[arg-type]
+            return SessionInfo(state="running", backend=backend, tmux_session="s")
 
         def tmux_session(self, _id: str) -> tuple[_Tmux, str]:
             return tmux, "s"
@@ -525,9 +534,9 @@ async def _typed(
     monkeypatch.setattr(fleet_daemon, "_PASTE_SETTLE_S", 0.0)
     monkeypatch.setattr(fleet_daemon, "_CLEAR_SETTLE_S", 0.0)
     monkeypatch.setattr(rig.daemon, "_session_manager", lambda: Sessions())
-    monkeypatch.setattr(rig.daemon, "_screen", lambda *_: "")
+    monkeypatch.setattr(rig.daemon, "_screen", lambda *_: screen)
     monkeypatch.setattr(rig.daemon._claude_hooks, "activity", lambda _: (state, None))
-    reply = await rig.daemon.send_chat(rig.project_id, "wake", fresh=fresh)
+    reply = await rig.daemon.send_chat(rig.project_id, "wake", fresh=fresh, codex=codex)
     return tmux.typed, reply
 
 
@@ -542,12 +551,87 @@ async def test_a_fresh_send_clears_an_idle_session_first_and_never_a_busy_one(
     assert typed == ["wake", "<enter>"]
 
 
+async def test_a_codex_manager_is_typed_to_for_a_wake_and_never_cleared(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """CUT-258: the wake path reaches a Codex session (no hooks, so the screen is the guard)."""
+    typed, reply = await _typed(
+        rig, monkeypatch, state="unknown", fresh=True, backend="codex", codex=True
+    )
+    assert typed == ["wake", "<enter>"] and "context" not in reply
+
+
+async def test_a_persons_chat_still_does_not_type_into_codex(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(FleetError, match="only wired in for Claude Code"):
+        await _typed(rig, monkeypatch, state="unknown", fresh=False, backend="codex")
+
+
+@pytest.mark.parametrize(
+    "screen",
+    [
+        "Would you like to run the following command?\n  $ make deploy\n> 1. Yes, proceed (y)",
+        "Would you like to make the following edits?",
+        "Do you trust the contents of this directory?",
+    ],
+)
+async def test_a_codex_manager_at_a_dialog_is_skipped_not_typed_into(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, screen: str
+) -> None:
+    with pytest.raises(FleetError, match="waiting on a permission"):
+        await _typed(
+            rig,
+            monkeypatch,
+            state="unknown",
+            fresh=False,
+            backend="codex",
+            screen=screen,
+            codex=True,
+        )
+
+
+async def test_the_wake_logs_and_skips_a_codex_manager_at_a_dialog(
+    rig: Rig, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import cuttlefish.fleet.daemon as fleet_daemon
+
+    tmux = _Tmux()
+
+    class Sessions:
+        def status(self, *_: object) -> SessionInfo:
+            return SessionInfo(state="running", backend="codex", tmux_session="s")
+
+        def tmux_session(self, _id: str) -> tuple[_Tmux, str]:
+            return tmux, "s"
+
+    monkeypatch.setattr(fleet_daemon, "_WAKE_BATCH_S", 0.0)
+    monkeypatch.setattr(rig.daemon, "_session_manager", lambda: Sessions())
+    monkeypatch.setattr(
+        rig.daemon, "_screen", lambda *_: "Would you like to run the following command?"
+    )
+    root = rig.root.parent / "mgr"
+    root.mkdir()
+    rig.daemon.delegate_approvals = True
+    rig.daemon.manager_project = rig.daemon.projects.register(name="mgr", root=str(root)).id
+    rig.ask()
+    with caplog.at_level("INFO", logger="cuttlefish.fleet.daemon"):
+        for _ in range(100):
+            if "manager not woken" in caplog.text:
+                break
+            await asyncio.sleep(0.01)
+    assert "manager not woken for approvals" in caplog.text
+    assert tmux.typed == []  # nothing was typed into the dialog
+
+
 async def test_the_manager_is_cleared_only_when_clear_context_is_set(
     rig: Rig, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     calls: list[bool] = []
 
-    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+    async def send_chat(
+        project_id: str, text: str, *, fresh: bool = False, codex: bool = False
+    ) -> dict[str, str]:
         calls.append(fresh)
         return {}
 
@@ -684,7 +768,9 @@ async def test_the_manager_pauses_at_its_daily_budget_and_asks_the_person(
     _claude_code(manager, monkeypatch, ["claude-code"])
     sent: list[str] = []
 
-    async def send_chat(project_id: str, text: str, *, fresh: bool = False) -> dict[str, str]:
+    async def send_chat(
+        project_id: str, text: str, *, fresh: bool = False, codex: bool = False
+    ) -> dict[str, str]:
         sent.append(text)
         return {}
 
