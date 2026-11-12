@@ -25,6 +25,12 @@ class DelegationError(Exception):
     """
 
 
+class AuthRequiredError(DelegationError):
+    """The agent wants a sign-in cuttlefish cannot do for it (CUT-266). A distinct type so the
+    journal says ``needs_login`` instead of a generic agent error, and the person is told to log
+    in to the agent's own tool and start again."""
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class ToolCallRecord:
     """One individual tool invocation inside a single delegation round

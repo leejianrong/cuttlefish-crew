@@ -20,6 +20,7 @@ apt = ["git"]
 
 [[tool]]
 name = "tmux"
+version = ["-V"]  # tmux has no --version: it prints its usage line, whose "-2" reads as version 2
 min = "3.0"
 apt = ["tmux"]
 

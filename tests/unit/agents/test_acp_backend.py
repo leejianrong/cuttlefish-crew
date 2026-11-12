@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from cuttlefish.agents.acp import AcpBackend, _inside
-from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.agents.outcome import AuthRequiredError, DelegationError, DelegationOutcome
 from cuttlefish.delegate import conversations
 
 FAKE = str(Path(__file__).parents[2] / "fixtures" / "fake_acp_agent.py")
@@ -111,12 +111,29 @@ async def test_an_edit_is_denied_for_a_read_only_role(tmp_path: Path) -> None:
     assert not (tmp_path / "out.txt").exists()
 
 
-async def test_an_agent_that_wants_auth_is_an_error_not_a_hang(
+async def test_an_agent_that_needs_auth_is_authenticated_then_used(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_AGENT_ENV_PASSTHROUGH", "FAKE_ACP_*")
+    monkeypatch.setenv("FAKE_ACP_AUTH", "required")
+    out = await _run(tmp_path, "hello")  # authenticate was called, then session/new worked
+    assert out.kind == "completed"
+
+
+async def test_an_agent_that_lists_auth_methods_but_is_signed_in_is_used(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("CUTTLEFISH_AGENT_ENV_PASSTHROUGH", "FAKE_ACP_*")
     monkeypatch.setenv("FAKE_ACP_AUTH", "1")
-    with pytest.raises(DelegationError, match="authentication"):
+    assert (await _run(tmp_path, "hello")).kind == "completed"
+
+
+async def test_an_agent_that_will_not_authenticate_needs_login(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_AGENT_ENV_PASSTHROUGH", "FAKE_ACP_*")
+    monkeypatch.setenv("FAKE_ACP_AUTH", "fail")
+    with pytest.raises(AuthRequiredError, match="sign in first"):
         await _run(tmp_path, "hello")
 
 
@@ -142,3 +159,16 @@ async def test_it_refuses_a_sandbox_provider(tmp_path: Path) -> None:
             secrets={},
             sandbox_provider=object(),  # type: ignore[arg-type]
         )
+
+
+def test_a_needs_login_failure_is_named_for_the_dashboard() -> None:
+    import satay
+
+    from cuttlefish.team import _failure_kind
+
+    def failed(kind: str) -> BaseException:
+        return satay.TaskFailedError("delegate_to_agent_backend", kind, "x")
+
+    assert _failure_kind(failed("AuthRequiredError")) == "needs_login"
+    assert _failure_kind(failed("DelegationError")) == "agent_error"
+    assert _failure_kind(failed("ValueError")) is None

@@ -15,7 +15,7 @@ from typing import Any, NotRequired, TypedDict
 import satay
 
 from cuttlefish import runtime
-from cuttlefish.agents.outcome import DelegationError
+from cuttlefish.agents.outcome import AuthRequiredError, DelegationError
 from cuttlefish.budget import cumulative_usage
 from cuttlefish.budget import exceeded as budget_exceeded
 from cuttlefish.delegate.policy import DEFAULT_SHELL_ALLOWLIST
@@ -177,7 +177,8 @@ async def run_task(task_input: TaskInput) -> dict[str, Any]:
             # steered around (ADR-0008) -- it fails the task immediately, the same as
             # it always has.
             reason = str(exc)
-            await journal(task_id, DelegationFailed(reason=reason, failure_kind="agent_error"))
+            kind = "needs_login" if isinstance(exc, AuthRequiredError) else "agent_error"
+            await journal(task_id, DelegationFailed(reason=reason, failure_kind=kind))
             await maybe_handover(task_id, token_budget=token_budget, root=root)
             await journal(task_id, TaskFailed(error=reason))
             return {"status": "failed", "error": reason}
