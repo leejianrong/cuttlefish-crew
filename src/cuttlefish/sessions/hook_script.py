@@ -9,14 +9,25 @@ the daemon said so in this very response.
 
 The daemon is found through ``~/.cuttlefish/daemon.json`` and trusted with ``~/.cuttlefish/hook-
 token`` (mode 0600), so a daemon that restarted on another port still answers a session that
-kept running."""
+kept running. A held `PermissionRequest` whose connection the daemon dropped mid-wait (a crash or
+restart) asks again for up to a minute, because the terminal dialog is still open and a new card
+lets the person answer from the dashboard; every other failure is silence."""
 
 from __future__ import annotations
 
+import http.client
 import json
 import sys
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
+
+#: How long a held `PermissionRequest` keeps retrying after the daemon dropped the connection
+#: mid-wait (a crash or restart), and the pause between tries. The terminal's own dialog is up the
+#: whole time, so retrying only ever adds a card the person can answer from the dashboard.
+_RETRY_FOR_S = 60.0
+_RETRY_EVERY_S = 3.0
 
 #: The longest a single string in `tool_input` is sent. A `Write` can carry a whole file.
 _MAX_STRING = 4000
@@ -48,8 +59,6 @@ def main(argv: list[str]) -> int:
         if not project or not isinstance(payload, dict):
             return 0
         home = Path.home() / ".cuttlefish"
-        url = str(json.loads((home / "daemon.json").read_text())["url"]).rstrip("/")
-        token = (home / "hook-token").read_text().strip()
         slim = {
             key: _clip(payload.get(key))
             for key in (
@@ -66,14 +75,38 @@ def main(argv: list[str]) -> int:
             )
             if key in payload
         }
-        request = urllib.request.Request(
-            f"{url}/api/hooks/claude-code/{project}",
-            data=json.dumps(slim).encode(),
-            headers={"content-type": "application/json", "x-cuttlefish-hook-token": token},
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            answer = json.load(response)
+        body = json.dumps(slim).encode()
+        started = time.monotonic()
+        retry_until: float | None = None
+        while True:
+            # Read on every try: a restarted daemon may be on another port.
+            try:
+                url = str(json.loads((home / "daemon.json").read_text())["url"]).rstrip("/")
+                token = (home / "hook-token").read_text().strip()
+                request = urllib.request.Request(
+                    f"{url}/api/hooks/claude-code/{project}",
+                    data=body,
+                    headers={"content-type": "application/json", "x-cuttlefish-hook-token": token},
+                    method="POST",
+                )
+                left = timeout - (time.monotonic() - started)
+                with urllib.request.urlopen(request, timeout=max(left, 1.0)) as response:
+                    answer = json.load(response)
+                if not (isinstance(answer, dict) and answer.get("retry") is True):
+                    break
+                raise ConnectionAbortedError("the daemon is shutting down")
+            except (ConnectionError, http.client.HTTPException, urllib.error.URLError) as err:
+                # Only a held permission whose daemon vanished mid-wait retries; a refused first
+                # connection, a timeout or an HTTP error stays silent (the terminal asks).
+                if payload.get("hook_event_name") != "PermissionRequest":
+                    raise
+                if retry_until is None:
+                    if not isinstance(err, ConnectionError | http.client.HTTPException):
+                        raise
+                    retry_until = time.monotonic() + _RETRY_FOR_S
+                if time.monotonic() + _RETRY_EVERY_S > min(retry_until, started + timeout):
+                    raise
+                time.sleep(_RETRY_EVERY_S)
         event = payload.get("hook_event_name")
         if event not in ("PermissionRequest", "PreToolUse") or not isinstance(answer, dict):
             return 0

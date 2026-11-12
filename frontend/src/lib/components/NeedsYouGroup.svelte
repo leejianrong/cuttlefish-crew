@@ -52,6 +52,7 @@
 
 <style>
   .needs {
+    container: needs / inline-size;
     margin-bottom: 1.5rem;
   }
 
@@ -117,7 +118,9 @@
     margin-top: 0.25rem;
   }
 
-  @media (max-width: 640px) {
+  /* The container, not the window: in the narrow list beside a project (CUT-209) the reason goes
+     under the name too. */
+  @container needs (max-width: 40rem) {
     .row {
       grid-template-columns: 1fr auto;
       row-gap: 0;
@@ -130,6 +133,9 @@
       grid-column: 2;
       grid-row: 1 / span 2;
     }
+  }
+
+  @media (max-width: 640px) {
     .more {
       min-height: 44px;
     }
