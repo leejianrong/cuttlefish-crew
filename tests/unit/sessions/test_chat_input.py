@@ -47,6 +47,8 @@ def test_nothing_or_too_much_is_refused() -> None:
         " \u276f No, exit\n   Yes, I trust this folder\n Enter to confirm \u00b7 Esc to cancel",
         " \u276f No, exit\n   Yes, I trust this folder",
         "Do you want to make this edit to cli.py?",
+        "Would you like to run the following command?\n  $ make deploy",  # Codex (CUT-258)
+        "Would you like to make the following edits?\n  Yes, just this once",
     ],
 )
 def test_a_screen_with_a_dialog_is_recognised(screen: str) -> None:

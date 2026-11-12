@@ -332,6 +332,26 @@ worker by hand. `cuttlefish worker sync` lists what would be sent and what is re
 The worker reports the digests of what it holds in its heartbeat, and Devices names a difference next to the tool drift:
 "skills/ship/SKILL.md not synced", "mcp.json out of date", "skills/old/SKILL.md was removed on the controller". It is a warning
 only, and it clears at the worker's next sync.
+### Preparing a bare machine: `deploy/worker/bootstrap.sh`
+
+On a fresh Ubuntu 22.04 or 24.04 machine (a rented VM, say), run the script from a checkout as root:
+
+```bash
+sudo WORKER_AGENTS=kopicode,claude deploy/worker/bootstrap.sh
+```
+
+It installs what the worker profile lists and nothing else: git, tmux, gh, docker and the compose plugin from Ubuntu's
+packages; `uv` and Node 22 from pinned releases (Ubuntu 24.04's own Node is too old); and the agent CLIs named in
+`WORKER_AGENTS` (default `kopicode`; one is enough, and `claude` and `codex` are the vendors' npm packages). Each download
+is checked against the checksum its publisher posts, and nothing is piped into a shell. It makes no user, firewall rule,
+service for the worker or secret, and an agent CLI is installed but not signed in: do that as the user who runs the worker.
+It ends by checking the machine against the profile, and `cuttlefish worker verify` (which needs cuttlefish installed)
+gives the same answer afterwards. Then install cuttlefish and `cuttlefish worker join` as above.
+
+Running it again is safe: a tool that is already there and recent enough is skipped, so a docker or node you installed another way
+is left alone, and one that is too old is replaced. `WORKER_USER=name` also adds that existing user to the `docker` group.
+`deploy/worker/bootstrap.sh --plan` prints what the profile asks for and changes nothing. `make test-worker-bootstrap` runs the
+script in a fresh Ubuntu container, then `cuttlefish worker verify`, then it again (network; several minutes).
 ### A compose stack on a worker
 
 A project placed on a worker can run its own docker compose stack there, and you can open its web page from the

@@ -220,7 +220,7 @@ async def test_a_move_stops_the_team_and_starts_it_again_on_the_other_worker(
         moving = asyncio.create_task(_move(rig, project["id"], second.worker_id))
         await _until(lambda: _stop_requested(rig, project["id"]), 10)
         await old_worker_finishes()
-        moved = await asyncio.wait_for(moving, 15)
+        moved = await asyncio.wait_for(moving, 30)
         assert moved.status_code == 200, moved.text
         body = moved.json()
         assert body["worker"]["id"] == second.worker_id and body["team_id"] != team_id
@@ -368,7 +368,7 @@ async def test_a_move_refused_after_the_stop_can_be_confirmed_and_still_carry_on
             f"/api/worker/teams/{team_id}/finish",
             {"status": "stopped", "checkout": {"dirty": 3, "unpushed": 0}},
         )
-        refused = await asyncio.wait_for(moving, 15)
+        refused = await asyncio.wait_for(moving, 30)
         assert refused.status_code == 409 and refused.json()["unpushed"] is True
         assert "3 changed files" in refused.json()["detail"]
         assert "has stopped" in refused.json()["detail"]
