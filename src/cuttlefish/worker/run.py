@@ -220,6 +220,10 @@ async def _pull(link: WorkerLink, executor: Executor) -> None:
             executor.start(order)
         for team_id in body.get("stop", []):
             executor.stop(team_id)
+        for stack in body.get("stacks", []):
+            executor.stacks.handle(stack)
+        for page in body.get("pages", []):
+            executor.stacks.serve(page)
 
 
 async def run(
