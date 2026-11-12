@@ -51,5 +51,17 @@ once instead of three times, and the list draws 20 cards at a time.
 Not fixed: the connect screen checks the token with a full list fetch and the Overview then fetches
 it again, which is about 0.9 s on this profile on a first visit.
 
+### Rerun after the paged list and Needs you group (CUT-304, 2026-11-12)
+
+The script used to wait for 100 `article`s. Since CUT-284 the waiting projects (15 of 100) sit in the
+Needs you group, and the rest are drawn 20 at a time, so the seeded fleet shows 85 project cards and the
+wait timed out. It now treats the list as drawn once the card count holds for a second.
+
+Median of 5 runs, seeded 100-project fleet, same profile: first card 4.1 s, last card 4.8 s, main
+thread busy 3.1 s per 10 s, 2,801 DOM nodes (85 cards). Do not read the times against the table above:
+the box had a load average near 30 (other test suites running; 16 cores), which inflates a 4x
+CPU-throttled page several times over. DOM nodes are load-independent and went down (3,233 to 2,801).
+Rerun on a quiet machine before quoting a time.
+
 To look at it: `HOME=$HOME_SCRATCH CUTTLEFISH_SECRETS_KEY=$(uv run cuttlefish secrets generate-key)
-uv run cuttlefish serve --port <free port>`, from a directory outside the repo.
+uv run cuttlefish serve --port <free port> --dashboard-dir <repo>/frontend/dist`, from a directory outside the repo.
