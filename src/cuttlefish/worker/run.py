@@ -30,6 +30,8 @@ from cuttlefish.worker.inventory import Inventory
 from cuttlefish.worker.link import Controller, LinkError, WorkerLink, parse_join_code, unb64
 from cuttlefish.worker.profile import ProfileError
 from cuttlefish.worker.profile import load as load_profile
+from cuttlefish.worker.sync import EVERY_SECONDS as SYNC_EVERY_SECONDS
+from cuttlefish.worker.sync import Synced, claude_skills_dir
 
 IDENTITY_FILE = "worker.json"
 HEARTBEAT_EVERY_SECONDS = 15.0
@@ -170,9 +172,15 @@ def health(disk_path: Path, agents: int) -> dict[str, float]:
     return found
 
 
-def _about(disk_path: Path, agents: int, tools: dict[str, str] | None = None) -> dict[str, object]:
+def _about(
+    disk_path: Path,
+    agents: int,
+    tools: dict[str, str] | None = None,
+    synced: dict[str, str] | None = None,
+) -> dict[str, object]:
     return {
         "tools": tools,
+        "synced": synced,
         "host": socket.gethostname(),
         "platform": f"{platform.system()} {platform.machine()}",
         "health": health(disk_path, agents),
@@ -196,16 +204,33 @@ async def _beat(
     executor: Executor,
     disk: Path,
     inventory: Inventory | None,
+    synced: Synced,
 ) -> None:
     while True:
         tools = await asyncio.to_thread(inventory.tools) if inventory else None
         status, _ = await link.request(
-            "POST", "/api/worker/heartbeat", _about(disk, len(executor.running()), tools)
+            "POST",
+            "/api/worker/heartbeat",
+            _about(disk, len(executor.running()), tools, synced.have()),
         )
         if status != 200:
             raise LinkError(f"the controller answered {status}")
         announce()
         await asyncio.sleep(beat_every)
+
+
+async def _sync(link: WorkerLink, synced: Synced, every: float, say: Callable[[str], None]) -> None:
+    """Keep this machine's copy of the controller's skills, instruction files and MCP config
+    current."""
+    while True:
+        status, body = await link.request("POST", "/api/worker/sync", {"have": synced.have()})
+        if status != 200:
+            raise LinkError(f"the controller answered {status}")
+        files, remove = body.get("files", []), body.get("remove", [])
+        if files or remove:
+            await asyncio.to_thread(synced.apply, files, remove)
+            say(f"Synced {len(files)} file(s) from the controller, removed {len(remove)}.")
+        await asyncio.sleep(every)
 
 
 async def _pull(link: WorkerLink, executor: Executor) -> None:
@@ -229,6 +254,7 @@ async def run(
     say: Callable[[str], None] = _say,
     beat_every: float = HEARTBEAT_EVERY_SECONDS,
     delays: tuple[float, ...] = RECONNECT_DELAYS,
+    sync_every: float = SYNC_EVERY_SECONDS,
 ) -> str:
     """Stay connected, beat and take work until cancelled. Returns `"removed"` once the owner
     removes this worker on the PC (its file is deleted: the controller no longer knows it). A team
@@ -237,6 +263,8 @@ async def run(
     online = False
     executor = Executor(path.parent / "worker-work", say)
     inventory = _inventory(say)
+    synced = Synced(path.parent / "synced", claude_skills_dir())
+    executor.synced_dir = synced.folder
 
     def announce() -> None:
         nonlocal online, attempt
@@ -263,8 +291,9 @@ async def run(
             executor.link = link
             work = [
                 asyncio.create_task(
-                    _beat(link, beat_every, announce, executor, path.parent, inventory)
+                    _beat(link, beat_every, announce, executor, path.parent, inventory, synced)
                 ),
+                asyncio.create_task(_sync(link, synced, sync_every, say)),
                 asyncio.create_task(_pull(link, executor)),
                 asyncio.create_task(link.closed.wait()),
             ]

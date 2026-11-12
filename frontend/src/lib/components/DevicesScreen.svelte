@@ -342,7 +342,7 @@
             {#if driftText(worker)}
               <p class="flag" role="status">{driftText(worker)}. Projects can still be placed here.</p>
             {:else if worker.online && worker.drift}
-              <p class="muted">Matches the worker profile.</p>
+              <p class="muted">Matches the expected setup.</p>
             {/if}
           </div>
           {#if canAdmin}

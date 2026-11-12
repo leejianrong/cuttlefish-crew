@@ -1879,6 +1879,9 @@ def build_parser() -> argparse.ArgumentParser:
     worker_sub.add_parser("run", help="Reconnect a machine that has already joined")
     worker_sub.add_parser("profile", help="List the tools a worker machine needs (CUT-212)")
     worker_sub.add_parser(
+        "sync", help="List the skills, instruction files and MCP config sent to workers (CUT-215)"
+    )
+    worker_sub.add_parser(
         "verify",
         help="Check this machine against the worker profile; exit 1 and name what is missing",
     )
@@ -2145,6 +2148,23 @@ def _worker(args: argparse.Namespace) -> int:
     secret and no model key until the controller places work on it."""
     from cuttlefish.worker import run as worker_run
     from cuttlefish.worker.link import JoinLinkError
+
+    if args.worker_command == "sync":
+        from cuttlefish.fleet import worker_sync
+
+        folder = worker_sync.default_folder(Path.home() / ".cuttlefish")
+        found = worker_sync.load(folder)
+        print(f"Sync folder: {folder}")
+        for rel, digest in found.manifest().items():
+            print(f"sent     {rel}  {digest[:12]}")
+        for rel, why in found.refused:
+            print(f"REFUSED  {rel}: {why}")
+        for note in found.notes:
+            print(f"note     {note}")
+        if not found.files and not found.refused:
+            print("Nothing to send. Put skills/<name>/SKILL.md, instructions/<name>.md")
+            print("or mcp.json in the folder above.")
+        return EXIT_OK
 
     if args.worker_command in ("profile", "verify"):
         from cuttlefish.worker import inventory as worker_inventory

@@ -53,6 +53,10 @@ ROUTE_TIERS: dict[tuple[str, str], Tier | None] = {
     ("POST", "/api/worker/work"): Tier.WORKER,  # what to start or stop on this machine
     ("POST", "/api/worker/teams/{team_id}/events"): Tier.WORKER,  # its own team's journal only
     ("POST", "/api/worker/teams/{team_id}/finish"): Tier.WORKER,
+    (
+        "POST",
+        "/api/worker/sync",
+    ): Tier.WORKER,  # the skills and files it should hold; never a secret
     # Read.
     ("GET", "/api/limits"): Tier.VIEW,
     ("GET", "/api/permissions"): Tier.VIEW,

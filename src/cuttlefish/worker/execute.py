@@ -41,6 +41,7 @@ from cuttlefish.resume import mark_resumed, run_status
 from cuttlefish.steering import cancel_run
 from cuttlefish.team import TeamInput, run_team
 from cuttlefish.worker.link import LinkError, WorkerLink
+from cuttlefish.worker.sync import place_instructions
 
 _LOG = logging.getLogger(__name__)
 
@@ -120,6 +121,8 @@ class Executor:
         self._background: set[asyncio.Task[None]] = set()
         #: Teams whose end the controller has not been told yet: still "running" to it.
         self._reporting: set[str] = set()
+        #: Where the controller's synced instruction files are kept on this machine (CUT-215).
+        self.synced_dir: Path | None = None
 
     def start(self, order: dict[str, Any]) -> None:
         team_id = str(order["team_id"])
@@ -199,6 +202,8 @@ class Executor:
         root = await asyncio.to_thread(
             checkout, self._workdir, str(order["project_id"]), order.get("repo")
         )
+        if self.synced_dir is not None:
+            await asyncio.to_thread(place_instructions, self.synced_dir, root)
         prepared = prepare_run(
             project=str(order.get("secrets_scope") or order["project_id"]),
             secret_names=[],

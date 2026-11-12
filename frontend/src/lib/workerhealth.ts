@@ -39,5 +39,5 @@ export function pickerNote(worker: Pick<WorkerInfo, "online" | "flags">): string
 
 /** What differs from the worker profile, in words; "" when it matches or the machine did not say. */
 export function driftText(worker: Pick<WorkerInfo, "drift">): string {
-  return worker.drift?.length ? `Differs from the worker profile: ${worker.drift.join(", ")}` : "";
+  return worker.drift?.length ? `Differs from the expected setup: ${worker.drift.join(", ")}` : "";
 }

@@ -23,6 +23,7 @@ from starlette.types import ASGIApp
 from cuttlefish.fleet.auth import SecurityCheck
 from cuttlefish.fleet.devices import Device, DeviceAuthority, DeviceStore, PairingManager
 from cuttlefish.fleet.tiers import Tier, required_tier
+from cuttlefish.fleet.worker_sync import SyncCache, default_folder
 from cuttlefish.fleet.workers import WorkerLiveness
 from cuttlefish.relay.connector import (
     RelayConnector,
@@ -161,7 +162,11 @@ class RelayLink:
         self.workers = workers or DeviceStore.open(
             settings.workers_path or settings.key_path.parent / "workers.db"
         )
-        self.liveness = WorkerLiveness(profile=_worker_profile())
+        #: The files every worker is sent (CUT-215), read from a folder beside the keys.
+        self.sync = SyncCache(default_folder(settings.key_path.parent))
+        self.liveness = WorkerLiveness(
+            profile=_worker_profile(), sync=lambda: self.sync.get().manifest()
+        )
         self.pairing = PairingManager(self.store, workers=self.workers)
         self.authority = DeviceAuthority(self.store, self.pairing, self.workers)
         self.guard = RelayGuard(self.internal_token, self.store, self.workers)
