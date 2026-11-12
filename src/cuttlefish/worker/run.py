@@ -26,7 +26,10 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from cuttlefish.relay.protocol import format_code, generate_static, static_from_bytes
 from cuttlefish.usage import BOARD
 from cuttlefish.worker.execute import Executor
+from cuttlefish.worker.inventory import Inventory
 from cuttlefish.worker.link import Controller, LinkError, WorkerLink, parse_join_code, unb64
+from cuttlefish.worker.profile import ProfileError
+from cuttlefish.worker.profile import load as load_profile
 
 IDENTITY_FILE = "worker.json"
 HEARTBEAT_EVERY_SECONDS = 15.0
@@ -167,13 +170,23 @@ def health(disk_path: Path, agents: int) -> dict[str, float]:
     return found
 
 
-def _about(disk_path: Path, agents: int) -> dict[str, object]:
+def _about(disk_path: Path, agents: int, tools: dict[str, str] | None = None) -> dict[str, object]:
     return {
+        "tools": tools,
         "host": socket.gethostname(),
         "platform": f"{platform.system()} {platform.machine()}",
         "health": health(disk_path, agents),
         "usage": BOARD.heartbeat(),
     }
+
+
+def _inventory(say: Callable[[str], None]) -> Inventory | None:
+    """What this machine has of the worker profile, or `None` (and a line) if the profile is bad."""
+    try:
+        return Inventory(load_profile())
+    except ProfileError as exc:
+        say(f"The worker profile is not valid, so tools are not reported: {exc}")
+        return None
 
 
 async def _beat(
@@ -182,10 +195,12 @@ async def _beat(
     announce: Callable[[], None],
     executor: Executor,
     disk: Path,
+    inventory: Inventory | None,
 ) -> None:
     while True:
+        tools = await asyncio.to_thread(inventory.tools) if inventory else None
         status, _ = await link.request(
-            "POST", "/api/worker/heartbeat", _about(disk, len(executor.running()))
+            "POST", "/api/worker/heartbeat", _about(disk, len(executor.running()), tools)
         )
         if status != 200:
             raise LinkError(f"the controller answered {status}")
@@ -221,6 +236,7 @@ async def run(
     attempt = 0
     online = False
     executor = Executor(path.parent / "worker-work", say)
+    inventory = _inventory(say)
 
     def announce() -> None:
         nonlocal online, attempt
@@ -229,6 +245,8 @@ async def run(
             say(f"Online as {identity.name}.")
             online = True
 
+    if inventory:  # so the first heartbeat is not held up by the probe
+        await asyncio.to_thread(inventory.tools)
     try:
         while True:
             try:
@@ -244,7 +262,9 @@ async def run(
                 continue
             executor.link = link
             work = [
-                asyncio.create_task(_beat(link, beat_every, announce, executor, path.parent)),
+                asyncio.create_task(
+                    _beat(link, beat_every, announce, executor, path.parent, inventory)
+                ),
                 asyncio.create_task(_pull(link, executor)),
                 asyncio.create_task(link.closed.wait()),
             ]
