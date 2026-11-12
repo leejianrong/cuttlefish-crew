@@ -16,12 +16,13 @@ asking.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shlex
 import shutil
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from cuttlefish import runtime
@@ -47,6 +48,11 @@ DEFAULT_CODEX_BIN = "codex"
 #: The command that starts an ACP agent (CUT-260, ADR-0055): its own ACP entry point and arguments,
 #: split like a shell would. Unset, the ``acp`` backend cannot be used.
 ACP_AGENT_ENV = "CUTTLEFISH_ACP_AGENT"
+#: A JSON object that gives one project, or one of its roles, its own ACP agent command (CUT-266):
+#: ``{"my-project": "agent-a --acp", "my-project/reviewer": "agent-b --acp"}``. A key is a project's
+#: name or id, then ``/<role>`` for a role. Kept in the operator's environment, not in a project
+#: folder, because an agent that could write the command could run anything.
+ACP_AGENTS_ENV = "CUTTLEFISH_ACP_AGENTS"
 AGENT_BACKEND_ENV = "CUTTLEFISH_AGENT_BACKEND"
 DEFAULT_AGENT_BACKEND = "kopicode"
 SANDBOX_ENV = "CUTTLEFISH_SANDBOX"
@@ -134,6 +140,34 @@ def resolve_acp_command() -> tuple[str, ...]:
         return tuple(shlex.split(raw))
     except ValueError as exc:
         raise ConfigError(f"{ACP_AGENT_ENV} is not a valid command line: {exc}") from exc
+
+
+def resolve_acp_commands(project_keys: Sequence[str]) -> dict[str, tuple[str, ...]]:
+    """The commands ``CUTTLEFISH_ACP_AGENTS`` gives this project, by role (``""`` is the whole
+    project). ``project_keys`` are the names it may be listed under (its name and its id)."""
+    raw = os.environ.get(ACP_AGENTS_ENV, "").strip()
+    if not raw:
+        return {}
+    try:
+        table = json.loads(raw)
+    except ValueError as exc:
+        raise ConfigError(f"{ACP_AGENTS_ENV} is not valid JSON: {exc}") from exc
+    if not isinstance(table, dict) or not all(isinstance(v, str) for v in table.values()):
+        raise ConfigError(f'{ACP_AGENTS_ENV} must be an object of "project[/role]": "command"')
+    found: dict[str, tuple[str, ...]] = {}
+    for key, line in table.items():
+        for name in project_keys:
+            if key == name or key.startswith(f"{name}/"):
+                try:
+                    command = tuple(shlex.split(line))
+                except ValueError as exc:
+                    raise ConfigError(
+                        f"{ACP_AGENTS_ENV}[{key!r}] is not a command line: {exc}"
+                    ) from exc
+                if not command:
+                    raise ConfigError(f"{ACP_AGENTS_ENV}[{key!r}] is empty")
+                found[key[len(name) + 1 :]] = command
+    return found
 
 
 def validate_backend_name(choice: str, *, source: str) -> str:
@@ -273,6 +307,8 @@ class PreparedRun:
     secret_names: tuple[str, ...] = ()
     #: The ACP agent's command line (``CUTTLEFISH_ACP_AGENT``); empty when unset.
     acp_command: tuple[str, ...] = ()
+    #: This project's own ACP commands by role, ``""`` for the whole project (CUT-266).
+    acp_commands: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def close(self) -> None:
         self.episodic_store.close()
@@ -286,6 +322,7 @@ class PreparedRun:
             claude_code_binary=self.claude_code_binary,
             codex_binary=self.codex_binary,
             acp_command=self.acp_command,
+            acp_commands=self.acp_commands,
             agent_backend=self.agent_backend,
             sandbox_provider=self.sandbox_provider,
             secrets_store=self.secrets_store,
@@ -301,6 +338,7 @@ def prepare_run(
     agent_backend: str | None = None,
     extra_backends: Sequence[str] = (),
     central_secrets_db: Path | None = None,
+    project_keys: Sequence[str] = (),
 ) -> PreparedRun:
     """Resolve the backend, LLM provider, sandbox, and secrets store for one
     delegation rooted at `base_dir` (default: `Path.cwd()`) -- or raise
@@ -318,6 +356,7 @@ def prepare_run(
     claude_code_binary = resolve_claude_code_binary()
     codex_binary = resolve_codex_binary()
     acp_command = resolve_acp_command()
+    acp_commands = resolve_acp_commands(project_keys)
 
     from cuttlefish.agents.registry import resolve_backend
 
@@ -332,12 +371,15 @@ def prepare_run(
             elif needed == "claude-code":
                 check_binary_on_path(claude_code_binary, env_hint=CLAUDE_CODE_BIN_ENV)
             elif needed == "acp":
-                if not acp_command:
+                if not acp_command and not acp_commands:
                     raise ConfigError(
                         f"the acp backend needs {ACP_AGENT_ENV}: the command that starts "
                         "your ACP agent, for example 'my-agent --acp'"
                     )
-                check_binary_on_path(acp_command[0], env_hint=ACP_AGENT_ENV)
+                for command in dict.fromkeys(
+                    [*([acp_command] if acp_command else []), *acp_commands.values()]
+                ):
+                    check_binary_on_path(command[0], env_hint=ACP_AGENTS_ENV)
             else:
                 check_binary_on_path(codex_binary, env_hint=CODEX_BIN_ENV)
         _LOG.info(
@@ -352,7 +394,9 @@ def prepare_run(
             kopicode_binary=kopicode_binary,
             claude_code_binary=claude_code_binary,
             codex_binary=codex_binary,
-            acp_command=acp_command,
+            acp_command=acp_commands.get("")
+            or acp_command
+            or next(iter(acp_commands.values()), ()),
         )
         secrets_store = resolve_secrets_store(resolved_base_dir, central_db=central_secrets_db)
         sandbox_provider = resolve_sandbox_provider()
@@ -386,6 +430,7 @@ def prepare_run(
         claude_code_binary=claude_code_binary,
         codex_binary=codex_binary,
         acp_command=acp_command,
+        acp_commands=acp_commands,
         agent_backend=agent_backend,
         sandbox_provider=sandbox_provider,
         secrets_store=secrets_store,

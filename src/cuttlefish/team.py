@@ -297,10 +297,14 @@ async def _dispatch_round(
 
 
 def _failure_kind(outcome: BaseException) -> str | None:
-    """`agent_error` for a `DelegationError` (the agent program died or never started), so the
+    """`needs_login` for an `AuthRequiredError`, else `agent_error` for a `DelegationError` (the
+    agent program died or never started), so the
     dashboard can say so in words; any other exception has no kind and shows its own text."""
-    if isinstance(outcome, satay.TaskFailedError) and outcome.error_type == "DelegationError":
-        return "agent_error"
+    if isinstance(outcome, satay.TaskFailedError):
+        if outcome.error_type == "AuthRequiredError":
+            return "needs_login"
+        if outcome.error_type == "DelegationError":
+            return "agent_error"
     return None
 
 
