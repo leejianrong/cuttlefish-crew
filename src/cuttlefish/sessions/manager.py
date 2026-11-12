@@ -223,14 +223,16 @@ def launch_argv(
     ``plan_first`` (Autopilot, CUT-174) tells the builder to write a checklist and wait to be
     approved:
     in Claude Code's system prompt, which keeps the first message the person's own words, and on the
-    end of the goal for Codex, which has no such flag.
+    end of the goal for Codex, which has no such flag. The artifacts note (``AGENT_NOTE``) goes
+    the same way, so a Codex session is taught to present like a Claude Code one.
 
     ``extra_args`` are flags for the tool itself (the manager's MCP server, ADR-0052).
     """
     claude_args = [*claude_args, *extra_args]
     first = _first_prompt(prompt) if prompt else None
-    if first and plan_first and backend == "codex":
-        first = f"{first}\n\n{PLAN_INSTRUCTION}"
+    if first and backend == "codex":
+        # Codex has no system-prompt flag, so the goal carries the note (ADR-0056).
+        first = f"{first}\n\n{AGENT_NOTE}" + (f" {PLAN_INSTRUCTION}" if plan_first else "")
     system_note = f"{AGENT_NOTE} {PLAN_INSTRUCTION}" if plan_first else AGENT_NOTE
     tail = f" {shlex.quote(first)}" if first else ""
     if backend == "claude-code":
