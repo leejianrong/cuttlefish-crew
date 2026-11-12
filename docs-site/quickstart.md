@@ -210,7 +210,7 @@ rail with a count) with the command, why it stopped and a countdown. Choose **Al
 **Always allow** (the start of the command, which applies to the running team at once and is saved
 to the project's own commands for later starts), or **Deny**. If you do nothing, the request denies
 itself when `CUTTLEFISH_REQUEST_WINDOW` runs out (ten minutes by default) and the agent carries on
-with a refusal. Restarting the daemon abandons a waiting request; it is not asked again.
+with a refusal. Restarting the daemon abandons a waiting request; it is not asked again. A Claude Code session's held permission is the exception to being "not asked again": its hook script asks the restarted daemon again for up to a minute, so a card that was abandoned comes back as a new one (the old one stays in History as "may still be open in the terminal"); a session that outlasts that minute is answered in the terminal.
 
 When an agent asks you a question with kopicode's `ask` tool (kopicode v0.4.0 or later), it is a
 **Question** card with a text box: **Send answer** gives the agent your words, **Decline** (or no

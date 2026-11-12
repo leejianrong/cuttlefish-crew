@@ -525,8 +525,8 @@ async def test_a_daemon_that_is_shutting_down_releases_every_held_hook(rig: Rig)
         while len(await rig.cards()) < 2:
             await asyncio.sleep(0.02)
     rig.daemon.release_held_hooks()
-    # Each hook is told there is no decision (so the terminal's dialog stays), and the cards end.
-    assert [await asyncio.wait_for(task, 5) for task in held] == [{}, {}]
+    # Each hook is told to ask the restarted daemon again (the dialog stays meanwhile).
+    assert [await asyncio.wait_for(task, 5) for task in held] == [{"retry": True}, {"retry": True}]
     assert await rig.cards() == []
     assert {entry["state"] for entry in await rig.history()} == {"abandoned"}
 
