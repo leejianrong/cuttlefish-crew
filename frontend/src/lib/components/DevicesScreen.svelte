@@ -10,7 +10,7 @@
     type WorkerInfo,
   } from "../api";
   import { formatCode, pairingAddressProblem } from "../relay";
-  import { agentsText, diskText, loadText, warnings } from "../workerhealth";
+  import { agentsText, diskText, driftText, loadText, warnings } from "../workerhealth";
   import UsageCard from "./UsageCard.svelte";
 
   let { client }: { client: FleetClient } = $props();
@@ -338,6 +338,11 @@
             {/if}
             {#if warnings(worker).length > 0}
               <p class="flag" role="status">{warnings(worker).join(". ")}. Projects can still be placed here.</p>
+            {/if}
+            {#if driftText(worker)}
+              <p class="flag" role="status">{driftText(worker)}. Projects can still be placed here.</p>
+            {:else if worker.online && worker.drift}
+              <p class="muted">Matches the worker profile.</p>
             {/if}
           </div>
           {#if canAdmin}
