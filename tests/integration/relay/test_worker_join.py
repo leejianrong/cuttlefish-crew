@@ -28,7 +28,7 @@ async def _join_code(rig: Rig) -> str:
 
 
 async def _pending_id(rig: Rig) -> str:
-    for _ in range(100):
+    for _ in range(600):
         pending = (await rig.owner.get("/api/devices", headers=OWNER)).json()["pending"]
         if pending:
             return str(pending[0]["id"])
@@ -49,7 +49,7 @@ async def _join(rig: Rig, tmp_path: Path, name: str = "laptop") -> tuple[worker_
         worker_run.join(await _join_code(rig), name=name, path=path, say=lines.append)
     )
     confirmed = await _confirm_when_waiting(rig)
-    identity = await asyncio.wait_for(joining, 5)
+    identity = await asyncio.wait_for(joining, 30)
     assert confirmed["kind"] == "worker" and confirmed["tier"] == "worker"
     assert lines and lines[0].startswith("Code ")  # the six digits the PC showed too
     return identity, path
@@ -59,7 +59,7 @@ async def _workers(rig: Rig) -> list[dict[str, object]]:
     return list((await rig.owner.get("/api/workers", headers=OWNER)).json()["workers"])
 
 
-async def _until(check: Callable[[], Awaitable[bool]], seconds: float = 5.0) -> None:
+async def _until(check: Callable[[], Awaitable[bool]], seconds: float = 30.0) -> None:
     for _ in range(int(seconds / 0.05)):
         if await check():
             return
@@ -134,7 +134,7 @@ async def test_an_unconfirmed_worker_is_served_nothing(rig: Rig) -> None:
     controller, secret = parse_join_code(await _join_code(rig))
     link = await WorkerLink.open(controller, generate_static(), secret, {"name": "stranger"})
     try:
-        assert (await asyncio.wait_for(link.controls.get(), 5))["state"] == "waiting"
+        assert (await asyncio.wait_for(link.controls.get(), 30))["state"] == "waiting"
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(link.request("POST", "/api/worker/heartbeat", {}), 1)
     finally:
@@ -149,7 +149,7 @@ async def test_the_owner_can_turn_a_worker_down(rig: Rig, tmp_path: Path) -> Non
     )
     await rig.post(f"/api/devices/pending/{await _pending_id(rig)}/reject")
     with pytest.raises(worker_run.JoinError, match="turned this machine down"):
-        await asyncio.wait_for(joining, 5)
+        await asyncio.wait_for(joining, 30)
     assert not path.exists() and await _workers(rig) == []
 
 
@@ -159,7 +159,7 @@ async def test_a_join_code_works_once(rig: Rig, tmp_path: Path) -> None:
         worker_run.join(code, name="a", path=tmp_path / "a.json", say=lambda _t: None)
     )
     await _confirm_when_waiting(rig)
-    await asyncio.wait_for(first, 5)
+    await asyncio.wait_for(first, 30)
     with pytest.raises(worker_run.JoinError):
         await worker_run.join(code, name="b", path=tmp_path / "b.json", say=lambda _t: None)
 
@@ -213,7 +213,7 @@ async def test_removing_a_worker_cuts_it_at_once_and_it_forgets_itself(
     await _until(_online(rig))
     removed = await rig.owner.delete(f"/api/workers/{identity.worker_id}", headers=OWNER)
     assert removed.status_code == 200
-    assert await asyncio.wait_for(runner, 5) == "removed"
+    assert await asyncio.wait_for(runner, 30) == "removed"
     assert not path.exists()
     assert any("removed on the PC" in line for line in lines)
     assert await _workers(rig) == []

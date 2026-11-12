@@ -85,7 +85,7 @@ Want the whole walk-through, with two practice repos and two crews side by side?
 - **Secrets and keys.** An encrypted per-project secrets store, and an optional credential broker so an agent never
   holds its model key.
 - **More than one machine.** `cuttlefish worker join` pairs a second computer with the daemon (you confirm a code on
-  the PC) and Devices shows it online or offline with its load and free disk, and names any tool it lacks of the worker profile; a project on a worker can run its docker compose stack there and open its web page from the dashboard ([ADR-0057](docs/adr/0057-a-worker-machine-dials-the-controller-pairs-once-and-holds-a-lease-never-the-model-key.md)).
+  the PC) and Devices shows it online or offline with its load and free disk, and names any tool it lacks of the worker profile; `deploy/worker/bootstrap.sh` sets a bare Ubuntu machine up to match it; a project on a worker can run its docker compose stack there and open its web page from the dashboard ([ADR-0057](docs/adr/0057-a-worker-machine-dials-the-controller-pairs-once-and-holds-a-lease-never-the-model-key.md)).
   Place a project on it and Start team runs there, streaming its journal back (no model key or project secret is sent yet).
   The team resumes after a restart of either side, and a project can move to another worker, warning first about work
   the old machine has not pushed.

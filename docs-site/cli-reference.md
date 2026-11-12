@@ -306,6 +306,26 @@ page. Both sides read the profile, so a custom `CUTTLEFISH_WORKER_PROFILE` belon
 tool the daemon's profile lists and the worker's does not is shown missing. `cuttlefish worker verify` runs the same check
 on the machine you are on and exits 1 naming each item (it needs no join).
 
+### Preparing a bare machine: `deploy/worker/bootstrap.sh`
+
+On a fresh Ubuntu 22.04 or 24.04 machine (a rented VM, say), run the script from a checkout as root:
+
+```bash
+sudo WORKER_AGENTS=kopicode,claude deploy/worker/bootstrap.sh
+```
+
+It installs what the worker profile lists and nothing else: git, tmux, gh, docker and the compose plugin from Ubuntu's
+packages; `uv` and Node 22 from pinned releases (Ubuntu 24.04's own Node is too old); and the agent CLIs named in
+`WORKER_AGENTS` (default `kopicode`; one is enough, and `claude` and `codex` are the vendors' npm packages). Each download
+is checked against the checksum its publisher posts, and nothing is piped into a shell. It makes no user, firewall rule,
+service for the worker or secret, and an agent CLI is installed but not signed in: do that as the user who runs the worker.
+It ends by checking the machine against the profile, and `cuttlefish worker verify` (which needs cuttlefish installed)
+gives the same answer afterwards. Then install cuttlefish and `cuttlefish worker join` as above.
+
+Running it again is safe: a tool that is already there and recent enough is skipped, so a docker or node you installed another way
+is left alone, and one that is too old is replaced. `WORKER_USER=name` also adds that existing user to the `docker` group.
+`deploy/worker/bootstrap.sh --plan` prints what the profile asks for and changes nothing. `make test-worker-bootstrap` runs the
+script in a fresh Ubuntu container, then `cuttlefish worker verify`, then it again (network; several minutes).
 ### A compose stack on a worker
 
 A project placed on a worker can run its own docker compose stack there, and you can open its web page from the

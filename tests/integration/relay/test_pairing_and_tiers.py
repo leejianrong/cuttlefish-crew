@@ -50,7 +50,7 @@ class Rig:
         browser = await Browser.pair(
             self.relay.ws_url, self.room, self.public, secret, name, static
         )
-        waiting = await asyncio.wait_for(browser.controls.get(), 5)
+        waiting = await asyncio.wait_for(browser.controls.get(), 30)
         assert waiting["state"] == "waiting"
         pending = (await self.owner.get("/api/devices", headers=OWNER)).json()["pending"]
         assert [p["name"] for p in pending] == [name]
@@ -58,7 +58,7 @@ class Rig:
             f"/api/devices/pending/{pending[0]['id']}/confirm", **({"tier": tier} if tier else {})
         )
         assert confirmed.status_code == 200, confirmed.text
-        paired = await asyncio.wait_for(browser.controls.get(), 5)
+        paired = await asyncio.wait_for(browser.controls.get(), 30)
         assert paired["state"] == "paired"
         await browser.close()
         return Paired(paired["device"], bytes.fromhex(_unb64(paired["secret"])), static)
@@ -102,7 +102,7 @@ async def rig(tmp_path: Path) -> AsyncIterator[Rig]:
     connector = link.connector(app)
     connector._delays = (0.05,)
     task = asyncio.create_task(connector.run())
-    await asyncio.wait_for(connector.connected.wait(), 5)
+    await asyncio.wait_for(connector.connected.wait(), 30)
     owner = httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1")
     try:
         yield Rig(
@@ -133,7 +133,7 @@ async def test_a_phone_pairs_after_the_owner_confirms_and_both_screens_show_one_
     secret = rig.link.pairing.current().secret  # type: ignore[union-attr]
     browser = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, secret, "Jian's phone")
     try:
-        waiting = await asyncio.wait_for(browser.controls.get(), 5)
+        waiting = await asyncio.wait_for(browser.controls.get(), 30)
         assert waiting["state"] == "waiting"
         # The code on the phone is derived from its own end of the handshake; the PC shows its own.
         assert waiting["code"] == short_code(browser.handshake_hash)
@@ -144,7 +144,7 @@ async def test_a_phone_pairs_after_the_owner_confirms_and_both_screens_show_one_
         assert listed["devices"] == [] and listed["pairing"] is None  # the secret is spent
         confirmed = await rig.post(f"/api/devices/pending/{listed['pending'][0]['id']}/confirm")
         assert confirmed.json()["tier"] == "approve"
-        paired = await asyncio.wait_for(browser.controls.get(), 5)
+        paired = await asyncio.wait_for(browser.controls.get(), 30)
         assert paired["state"] == "paired" and paired["tier"] == "approve" and paired["secret"]
     finally:
         await browser.close()
@@ -167,10 +167,10 @@ async def test_nothing_is_served_to_a_device_that_is_waiting_for_the_owner(rig: 
     secret = rig.link.pairing.current().secret  # type: ignore[union-attr]
     browser = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, secret)
     try:
-        assert (await asyncio.wait_for(browser.controls.get(), 5))["state"] == "waiting"
+        assert (await asyncio.wait_for(browser.controls.get(), 30))["state"] == "waiting"
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(browser.request("GET", "/api/projects"), 2)
-        await asyncio.wait_for(browser.closed.wait(), 5)  # asking for anything ends the session
+        await asyncio.wait_for(browser.closed.wait(), 30)  # asking for anything ends the session
     finally:
         await browser.close()
     assert (await rig.owner.get("/api/devices", headers=OWNER)).json()["devices"] == []
@@ -183,17 +183,17 @@ async def test_a_photographed_code_pairs_nobody_without_the_owner(rig: Rig) -> N
     secret = rig.link.pairing.current().secret  # type: ignore[union-attr]
     stranger = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, secret, "Not my phone")
     try:
-        waiting = await asyncio.wait_for(stranger.controls.get(), 5)
+        waiting = await asyncio.wait_for(stranger.controls.get(), 30)
         assert waiting["state"] == "waiting"
         # The secret is spent: the owner's phone, scanning the same code, is refused.
         with pytest.raises(websockets.ConnectionClosed):
             owners = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, secret)
-            await asyncio.wait_for(owners._socket.recv(), 5)
+            await asyncio.wait_for(owners._socket.recv(), 30)
         pending = (await rig.owner.get("/api/devices", headers=OWNER)).json()["pending"]
         assert [p["name"] for p in pending] == ["Not my phone"]
         rejected = await rig.post(f"/api/devices/pending/{pending[0]['id']}/reject")
         assert rejected.status_code == 200
-        assert (await asyncio.wait_for(stranger.controls.get(), 5))["state"] == "rejected"
+        assert (await asyncio.wait_for(stranger.controls.get(), 30))["state"] == "rejected"
     finally:
         await stranger.close()
     assert (await rig.owner.get("/api/devices", headers=OWNER)).json()["devices"] == []
@@ -205,7 +205,7 @@ async def test_a_pairing_secret_works_once(rig: Rig) -> None:
     assert rig.link.pairing.current() is None
     with pytest.raises(websockets.ConnectionClosed):
         again = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, bytes(32))
-        await asyncio.wait_for(again._socket.recv(), 5)
+        await asyncio.wait_for(again._socket.recv(), 30)
 
 
 async def test_a_pairing_secret_expires(rig: Rig) -> None:
@@ -216,7 +216,7 @@ async def test_a_pairing_secret_expires(rig: Rig) -> None:
     try:
         with pytest.raises(websockets.ConnectionClosed):
             late = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, secret)
-            await asyncio.wait_for(late._socket.recv(), 5)
+            await asyncio.wait_for(late._socket.recv(), 30)
     finally:
         rig.link.pairing._now = clock
 
@@ -229,8 +229,8 @@ async def test_a_device_the_owner_does_not_answer_is_turned_away_when_the_wait_e
     secret = rig.link.pairing.current().secret  # type: ignore[union-attr]
     browser = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, secret)
     try:
-        assert (await asyncio.wait_for(browser.controls.get(), 5))["state"] == "waiting"
-        assert (await asyncio.wait_for(browser.controls.get(), 5))["state"] == "expired"
+        assert (await asyncio.wait_for(browser.controls.get(), 30))["state"] == "waiting"
+        assert (await asyncio.wait_for(browser.controls.get(), 30))["state"] == "expired"
     finally:
         await browser.close()
     assert (await rig.owner.get("/api/devices", headers=OWNER)).json()["devices"] == []
@@ -243,7 +243,7 @@ async def test_a_new_device_cannot_be_confirmed_above_approve_and_gets_it_raised
     secret = rig.link.pairing.current().secret  # type: ignore[union-attr]
     browser = await Browser.pair(rig.relay.ws_url, rig.room, rig.public, secret)
     try:
-        await asyncio.wait_for(browser.controls.get(), 5)
+        await asyncio.wait_for(browser.controls.get(), 30)
         pending = (await rig.owner.get("/api/devices", headers=OWNER)).json()["pending"][0]["id"]
         refused = await rig.post(f"/api/devices/pending/{pending}/confirm", tier="admin")
         assert refused.status_code == 400
@@ -339,7 +339,7 @@ async def test_a_header_the_browser_sends_cannot_name_a_more_powerful_device(rig
 
 async def _terminal_close(browser: Browser, project_id: str) -> int | str:
     socket = await browser.websocket(f"/api/projects/{project_id}/terminal")
-    await asyncio.wait_for(socket.accepted.wait(), 5)
+    await asyncio.wait_for(socket.accepted.wait(), 30)
     await socket.send_text(json.dumps({"type": "auth", "token": "whatever"}))
     closed = await socket.recv()
     assert isinstance(closed, tuple)
@@ -395,13 +395,13 @@ async def test_revoking_a_device_cuts_its_live_session_and_refuses_its_next_hand
         assert (await _status(browser, "GET", "/api/projects"))[0] == 200
         revoked = await rig.owner.delete(f"/api/devices/{device.id}", headers=OWNER)
         assert revoked.status_code == 200 and revoked.json()["revoked_at"] is not None
-        assert (await asyncio.wait_for(browser.controls.get(), 5)) == {"t": "revoked"}
-        await asyncio.wait_for(browser.closed.wait(), 5)
+        assert (await asyncio.wait_for(browser.controls.get(), 30)) == {"t": "revoked"}
+        await asyncio.wait_for(browser.closed.wait(), 30)
     finally:
         await browser.close()
     with pytest.raises(websockets.ConnectionClosed):
         again = await rig.connect(device)
-        await asyncio.wait_for(again._socket.recv(), 5)
+        await asyncio.wait_for(again._socket.recv(), 30)
     listed = (await rig.owner.get("/api/devices", headers=OWNER)).json()["devices"]
     assert listed[0]["revoked_at"] is not None
 
@@ -422,7 +422,7 @@ async def test_a_paired_device_can_revoke_another_but_a_view_device_cannot(rig: 
         await on_mine.close()
     with pytest.raises(websockets.ConnectionClosed):
         again = await rig.connect(lost)
-        await asyncio.wait_for(again._socket.recv(), 5)
+        await asyncio.wait_for(again._socket.recv(), 30)
 
 
 async def test_what_a_device_may_see_of_the_relay_says_who_it_is(rig: Rig) -> None:

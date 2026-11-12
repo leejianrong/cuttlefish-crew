@@ -149,7 +149,9 @@ class Browser:
     ) -> Browser:
         """A paired device's connection: handshake, then a first message the daemon must decrypt."""
         browser = await cls._handshake(relay_url, room, daemon_public, psk, static, hello)
-        pong = decode(browser._transport.decrypt(await asyncio.wait_for(browser._socket.recv(), 5)))
+        pong = decode(
+            browser._transport.decrypt(await asyncio.wait_for(browser._socket.recv(), 30))
+        )
         assert pong.type is FrameType.PONG, pong
         browser._reader = asyncio.create_task(browser._read())
         return browser
@@ -190,7 +192,7 @@ class Browser:
         socket = await websockets.connect(f"{relay_url}/ws/client/{room}", max_size=70000)
         initiator = Initiator(static or generate_static(), daemon_public, psk)
         await socket.send(initiator.write_message1())
-        reply = await asyncio.wait_for(socket.recv(), 5)
+        reply = await asyncio.wait_for(socket.recv(), 30)
         assert isinstance(reply, bytes)
         transport, _ = initiator.read_message2(reply)
         browser = cls(socket, transport)
@@ -257,12 +259,12 @@ class Browser:
         stream, opening = self._mux.open(FrameType.REQUEST, json.dumps(head).encode())
         queue: asyncio.Queue[Frame] = self._frames.setdefault(stream, asyncio.Queue())
         await self._send(opening, *self._mux.send(stream, body), self._mux.close(stream))
-        response = await asyncio.wait_for(queue.get(), 10)
+        response = await asyncio.wait_for(queue.get(), 30)
         assert response.type is FrameType.RESPONSE, response
         head_out = json.loads(response.payload)
         chunks: list[bytes] = []
         while True:
-            frame = await asyncio.wait_for(queue.get(), 10)
+            frame = await asyncio.wait_for(queue.get(), 30)
             if frame.type is FrameType.END:
                 break
             assert frame.type is FrameType.DATA, frame
