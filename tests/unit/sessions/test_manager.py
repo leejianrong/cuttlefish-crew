@@ -296,10 +296,11 @@ def test_a_terminal_command_runs_in_tmux_with_no_status_integration(rig: Rig) ->
 def test_a_terminal_command_starts_again_without_a_resume_after_it_is_gone(rig: Rig) -> None:
     command = f"echo run >> {rig.log}; exec sleep 300"
     rig.manager.ensure("p1", str(rig.root), "x", command=command)
+    assert rig.launches() == ["run"]  # the first command ran before the session is stopped
     rig.manager.stop("p1", str(rig.root))
     info = rig.manager.ensure("p1", str(rig.root), "x", command=command)
     assert info.last_action == "started"
-    deadline = time.monotonic() + 10  # a loaded CI runner took longer than a fixed half second
+    deadline = time.monotonic() + 10  # the second launch is asynchronous too
     while time.monotonic() < deadline and rig.log.read_text().splitlines() != ["run", "run"]:
         time.sleep(0.1)
     assert rig.log.read_text().splitlines() == ["run", "run"]
