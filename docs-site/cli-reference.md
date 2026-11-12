@@ -299,13 +299,39 @@ path or a version argument with a space is refused, naming the entry.
 
 **Drift.** Each heartbeat carries the profile tools the worker found on its `PATH` and their versions (probed at most once a
 minute). The daemon compares that with its own profile and Devices names what differs under the machine: "docker missing",
-"git 2.20 is older than 2.30", "none of kopicode, claude, codex". A machine that matches shows "Matches the worker profile".
+"git 2.20 is older than 2.30", "none of kopicode, claude, codex". A machine that matches shows "Matches the expected setup".
 It is a warning only, like the capacity flags: a project can still be placed there. An offline worker, and one too old to
 report tools, show nothing. The worker reports only names and dotted version numbers, so it cannot put text of its own on the
 page. Both sides read the profile, so a custom `CUTTLEFISH_WORKER_PROFILE` belongs on the worker and on the daemon; a
 tool the daemon's profile lists and the worker's does not is shown missing. `cuttlefish worker verify` runs the same check
 on the machine you are on and exits 1 naming each item (it needs no join).
 
+### Skills, instruction files and MCP config on every worker
+
+Agents behave differently by machine when a skill exists on one and not another. Put what you want everywhere in one folder
+on the controller, `~/.cuttlefish/worker-sync/` (or the folder `CUTTLEFISH_WORKER_SYNC_DIR` names):
+
+| In the folder | Lands on each worker |
+|---|---|
+| `skills/<name>/SKILL.md` and files beside it | `~/.cuttlefish/synced/skills/<name>/`, and `~/.claude/skills/<name>/` for Claude Code |
+| `instructions/<name>.md` | `~/.cuttlefish/synced/instructions/`, and `.cuttlefish/instructions/` in each project's checkout when a team starts there |
+| `mcp.json` | `~/.cuttlefish/synced/mcp.json` only |
+
+A worker asks every minute and fetches what differs (each file's digest is checked again on the worker). A skill is
+installed for Claude Code only where that folder is new or was made by this sync, so a skill of the machine owner's own
+with the same name is never overwritten or removed; removing a file on the controller removes it on the workers. Codex and
+kopicode have no skill folder this writes to, and the MCP config is not merged into any agent's own configuration. Name an
+instruction file in a goal for an agent to read it: nothing adds it to a task yet.
+
+**Secrets are never sent.** A file is left out, and listed with its reason (never its content), when it is named like a
+credential (`.env*`, `*.pem`, `*.key`, `id_rsa`, `credentials*`, `.netrc`...), is not text, or holds a private key, a provider
+or GitHub token, or a `token = <long value>` line. In `mcp.json` only each server's `command`, `args`, `url` and `type` are
+kept: the `env` and `headers` fields, where MCP config holds keys, are dropped, so a server that needs a key is set up on the
+worker by hand. `cuttlefish worker sync` lists what would be sent and what is refused, on the controller.
+
+The worker reports the digests of what it holds in its heartbeat, and Devices names a difference next to the tool drift:
+"skills/ship/SKILL.md not synced", "mcp.json out of date", "skills/old/SKILL.md was removed on the controller". It is a warning
+only, and it clears at the worker's next sync.
 ### Preparing a bare machine: `deploy/worker/bootstrap.sh`
 
 On a fresh Ubuntu 22.04 or 24.04 machine (a rented VM, say), run the script from a checkout as root:

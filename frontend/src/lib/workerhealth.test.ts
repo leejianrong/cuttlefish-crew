@@ -29,7 +29,7 @@ describe("worker health text", () => {
 
   it("names what differs from the worker profile", () => {
     expect(driftText({ drift: ["docker missing", "git 2.20 is older than 2.30"] })).toBe(
-      "Differs from the worker profile: docker missing, git 2.20 is older than 2.30",
+      "Differs from the expected setup: docker missing, git 2.20 is older than 2.30",
     );
     expect(driftText({ drift: [] })).toBe("");
     expect(driftText({ drift: null })).toBe("");

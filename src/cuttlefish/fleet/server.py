@@ -86,6 +86,7 @@ from cuttlefish.fleet.relay_link import DEVICE_HEADER, RelayLink, RelaySettings,
 from cuttlefish.fleet.serve_token import load_or_create_token
 from cuttlefish.fleet.stacks import StackError
 from cuttlefish.fleet.tiers import DEFAULT_TIER, Tier, manager_may, parse_tier, steer_tier_refusal
+from cuttlefish.fleet.workers import clean_synced
 from cuttlefish.limits import LIMIT_SPECS, LimitsError, validate_limits
 from cuttlefish.permissions import (
     ACCESS_LEVELS,
@@ -777,6 +778,28 @@ def create_app(
         worker = _calling_worker(request)
         _relay().liveness.beat(worker.id, await _json_body(request))
         return {"status": "ok"}
+
+    @app.post("/api/worker/sync")
+    async def worker_sync(request: Request) -> dict[str, Any]:
+        """The files this worker lacks of the controller's sync set (CUT-215), and the ones to drop.
+        The set is already cleared of anything that looks like a secret."""
+        _calling_worker(request)
+        body = await _json_body(request)
+        have = clean_synced(body.get("have")) or {}
+        wanted = _relay().sync.get()
+        manifest = wanted.manifest()
+        return {
+            "files": [
+                {
+                    "path": path,
+                    "sha256": sha,
+                    "content": base64.b64encode(wanted.files[path]).decode(),
+                }
+                for path, sha in manifest.items()
+                if have.get(path) != sha
+            ],
+            "remove": [path for path in have if path not in manifest],
+        }
 
     @app.post("/api/worker/stack")
     async def worker_stack(request: Request) -> dict[str, str]:

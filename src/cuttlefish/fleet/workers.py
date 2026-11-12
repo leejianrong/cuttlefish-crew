@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from cuttlefish.fleet.devices import Device
+from cuttlefish.fleet.worker_sync import allowed_path, differences
 from cuttlefish.usage import BACKENDS, Window
 from cuttlefish.worker.profile import Profile, drift
 
@@ -52,6 +53,8 @@ class Beat:
     usage: dict[str, dict[str, Any]] | None = None
     #: The profile tools the machine says it has, `name -> version` (CUT-214); `None`: none sent.
     tools: dict[str, str] | None = None
+    #: The sync files the machine holds, `path -> sha256` (CUT-215); `None` if it sent none.
+    synced: dict[str, str] | None = None
 
 
 def _clean(raw: object) -> str:
@@ -88,6 +91,27 @@ def _clean_tools(raw: object) -> dict[str, str] | None:
     for name, version in list(raw.items())[:_MAX_TOOLS]:
         if isinstance(name, str) and _TOOL_NAME.match(name) and isinstance(version, str):
             found[name] = version if _TOOL_VERSION.match(version) else ""
+    return found
+
+
+_SHA = re.compile(r"^[0-9a-f]{64}$")
+
+
+def clean_synced(raw: object) -> dict[str, str] | None:
+    """`path -> sha256` for the sync files a heartbeat says the machine holds: allowed paths and
+    real
+    digests only, a bounded number."""
+    if not isinstance(raw, dict):
+        return None
+    found: dict[str, str] = {}
+    for path, sha in list(raw.items())[:200]:
+        if (
+            isinstance(path, str)
+            and allowed_path(path)
+            and isinstance(sha, str)
+            and _SHA.match(sha)
+        ):
+            found[path] = sha
     return found
 
 
@@ -166,8 +190,10 @@ class WorkerLiveness:
         offline_after: float = OFFLINE_AFTER_SECONDS,
         now: Callable[[], float] = time.monotonic,
         profile: Profile | None = None,
+        sync: Callable[[], dict[str, str]] | None = None,
     ) -> None:
         self._profile = profile
+        self._sync = sync
         self._offline_after = offline_after
         self._now = now
         self._beats: dict[str, Beat] = {}
@@ -180,12 +206,14 @@ class WorkerLiveness:
             )
             usage = previous.usage if previous else None
             tools = previous.tools if previous else None
+            synced = previous.synced if previous else None
         else:
             host, kind = _clean(info.get("host")), _clean(info.get("platform"))
             health = _clean_health(info.get("health"))
             usage = _clean_usage(info.get("usage"))
             tools = _clean_tools(info.get("tools"))
-        self._beats[worker_id] = Beat(self._now(), host, kind, health, usage, tools)
+            synced = clean_synced(info.get("synced"))
+        self._beats[worker_id] = Beat(self._now(), host, kind, health, usage, tools, synced)
 
     def forget(self, worker_id: str) -> None:
         self._beats.pop(worker_id, None)
@@ -209,7 +237,14 @@ class WorkerLiveness:
         }
 
     def _drift(self, beat: Beat) -> list[str] | None:
-        """What the machine lacks of the profile; `None` when it has not said, or no profile."""
-        if self._profile is None or beat.tools is None:
-            return None
-        return drift(self._profile, beat.tools)
+        """What the machine lacks of the profile and of the sync set, each named; `None` when it has
+        reported neither (an older worker) or there is nothing to compare with."""
+        found: list[str] = []
+        reported = False
+        if self._profile is not None and beat.tools is not None:
+            found += drift(self._profile, beat.tools)
+            reported = True
+        if self._sync is not None and beat.synced is not None:
+            found += differences(beat.synced, self._sync())
+            reported = True
+        return found if reported else None
