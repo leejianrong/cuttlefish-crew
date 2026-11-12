@@ -20,6 +20,7 @@ from cuttlefish.autopilot import (
     Limits,
     reset_from_failure,
 )
+from cuttlefish.fleet import autopilot
 from cuttlefish.fleet.autopilot import Autopilot
 from cuttlefish.usage import BOARD, Window
 
@@ -68,8 +69,12 @@ def _board() -> Iterator[None]:
 
 
 @pytest.fixture
-def clock() -> Clock:
-    return Clock()
+def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    clock = Clock()
+    # approved_at is stamped by the wall clock; without this the tests pass only before 10:00 UTC
+    # on the day START was written.
+    monkeypatch.setattr(autopilot, "_now", lambda: autopilot._iso(clock.now))
+    return clock
 
 
 def _rig(tmp_path: Any, clock: Clock) -> Rig:
