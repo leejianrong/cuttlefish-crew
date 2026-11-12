@@ -15,6 +15,7 @@
     onStop,
     onRemove,
     waiting = 0,
+    selected = false,
     pinned = false,
     onPin,
     onTags,
@@ -22,6 +23,8 @@
     project: ProjectSummary;
     /** Requests of this project waiting for a person (the Needs-you list). */
     waiting?: number;
+    /** The project open in the pane beside the list (CUT-209). */
+    selected?: boolean;
     onOpen: () => void;
     onStop: () => void;
     onRemove: () => void;
@@ -81,7 +84,7 @@
   const stat = $derived(cardStatLine(project.gs));
 </script>
 
-<article class="card filled project">
+<article class="card filled project" class:selected aria-current={selected ? "true" : undefined}>
   <header>
     <button class="title title-medium" title={project.root} onclick={onOpen}>{project.name}</button>
     {#if pinned}<span class="pinned label-small">Pinned</span>{/if}
@@ -203,6 +206,11 @@
     .title {
       min-height: 44px;
     }
+  }
+
+  .selected {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: -2px;
   }
 
   .pinned {

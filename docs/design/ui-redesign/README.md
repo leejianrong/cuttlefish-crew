@@ -140,6 +140,12 @@ and this folder disagree after a slice lands, update this folder.
   output under a collapsed **Output**. Neutral surfaces throughout: nothing here needs a decision from you in the
   coral sense once you have chosen, so coral stays for Needs you.
 
+- **Tablet and large screens (CUT-209).** From 768 px wide, an open project shows the project list as a narrow
+  pane on the left (sticky, scrolls by itself, the open project outlined) and the project page on the right, so
+  moving between projects does not go through the list. Below 768 px it is the phone's one screen at a time. The
+  list screen itself is unchanged at every width. The pane's Needs you rows put the reason under the name (a
+  container query, not the window width).
+
 ## Known gaps in the mockup
 
 - Static: no working interactions, no empty or error states, no dark theme, no phone

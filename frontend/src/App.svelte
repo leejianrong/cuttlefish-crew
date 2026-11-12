@@ -79,6 +79,15 @@
   let signedOut = $state(false);
   // Where we are lives in the URL hash, so a reload, Back and a pasted link land on the same screen.
   let route = $state<Route>(parseHash(window.location.hash));
+  // A tablet or larger window shows the project list beside the open project (CUT-209).
+  const SPLIT = "(min-width: 768px)";
+  let split = $state(typeof window !== "undefined" && window.matchMedia(SPLIT).matches);
+  $effect(() => {
+    const media = window.matchMedia(SPLIT);
+    const sync = () => (split = media.matches);
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  });
   const openProjectId = $derived(route.view === "project" ? route.id : null);
   const projectTab = $derived<ProjectTab>(route.view === "project" ? route.tab : "overview");
   const showGallery = $derived(route.view === "sprites");
@@ -334,15 +343,30 @@
     {:else if openProjectId}
       <!-- Keyed by project: switching by the URL alone must not carry one project's page state (a
            draft, a half-typed task) over to another. -->
-      {#key openProjectId}
-        <ProjectDetail
-          {client}
-          projectId={openProjectId}
-          tab={projectTab}
-          onTabChange={(tab) => go({ view: "project", id: openProjectId, tab })}
-          onBack={() => go(HOME)}
-        />
-      {/key}
+      <div class="panes" class:split>
+        {#if split}
+          <aside class="list-pane" aria-label="Projects">
+            <Portfolio
+              {client}
+              compact
+              selectedId={openProjectId}
+              onOpenProject={(id) => go({ view: "project", id, tab: "overview" })}
+              onAddProject={() => go({ view: "add" })}
+            />
+          </aside>
+        {/if}
+        <div class="detail-pane">
+          {#key openProjectId}
+            <ProjectDetail
+              {client}
+              projectId={openProjectId}
+              tab={projectTab}
+              onTabChange={(tab) => go({ view: "project", id: openProjectId, tab })}
+              onBack={() => go(HOME)}
+            />
+          {/key}
+        </div>
+      </div>
     {:else}
       <Portfolio
         {client}
@@ -375,6 +399,24 @@
 {/if}
 
 <style>
+  .panes.split {
+    display: grid;
+    grid-template-columns: clamp(15rem, 28%, 21rem) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .list-pane {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    border-right: 1px solid var(--md-sys-color-outline-variant);
+  }
+
+  .detail-pane {
+    min-width: 0;
+  }
+
   .jump {
     all: unset;
     box-sizing: border-box;
