@@ -17,6 +17,7 @@
     worktreeRemovalNote,
   } from "../goal";
   import type { ProjectTab } from "../route";
+  import { shareNotes } from "../worktreeshare";
 
   let {
     client,
@@ -342,6 +343,9 @@
           merges.
         </p>
       {/if}
+      {#each shareNotes(goal.shared) as line (line)}
+        <p class="body-small muted" data-testid="share-note">{line}</p>
+      {/each}
       {#if goal.worktree && !running}
         <div class="actions" data-testid="remove-worktree">
           <button class="btn btn-tonal" disabled={rmBusy} onclick={removeWorktree}>

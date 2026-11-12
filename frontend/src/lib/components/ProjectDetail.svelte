@@ -19,6 +19,7 @@
   import WorkerPlacement from "./WorkerPlacement.svelte";
   import EventLog from "./EventLog.svelte";
   import GoalCard from "./GoalCard.svelte";
+  import WorktreeShareCard from "./WorktreeShareCard.svelte";
   import GoalDiffCard from "./GoalDiffCard.svelte";
   import PrFeedbackCard from "./PrFeedbackCard.svelte";
   import ProjectPath from "./ProjectPath.svelte";
@@ -367,6 +368,10 @@
           refreshKey={sessionChanges}
           {onTabChange}
         />
+      {/if}
+
+      {#if !project.is_manager && !project.worker}
+        <WorktreeShareCard {client} {projectId} {project} onChanged={refresh} />
       {/if}
 
       {#if !project.is_manager}
