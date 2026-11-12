@@ -20,6 +20,20 @@ that names `acp` refuses to start, with a message, if the variable is unset or t
 checked at team start, not in the middle of a task. In the dashboard pick **ACP agent** under a project's advanced
 settings or a role's **Agent** list. `CUTTLEFISH_AGENT_BACKEND=acp` makes it the daemon's default.
 
+### A different agent for one project or role
+
+`CUTTLEFISH_ACP_AGENT` is the default. To give one project, or one role in it, its own agent, set `CUTTLEFISH_ACP_AGENTS`
+to a JSON object. A key is the project's name (or id), and `/<role>` after it names a role:
+
+```bash
+export CUTTLEFISH_ACP_AGENTS='{"my-app": "agent-a --acp", "my-app/reviewer": "agent-b --acp"}'
+```
+
+A round uses the role's command, else the project's, else `CUTTLEFISH_ACP_AGENT`. Every command named for the project is
+checked on `PATH` at team start. It lives in the daemon's environment and not in a file in the project folder on purpose:
+an agent that could write its own launch command could run anything. A one-shot `cuttlefish run` has no role, so it uses
+the project's command at most.
+
 ## What it does
 
 - **One round is one turn.** A task goes in as `session/prompt`; the agent's text, tool calls and usage stream back and
@@ -50,10 +64,13 @@ Also, plainly:
 
 - **The command policy is weaker than on the other backends.** The agent writes its own description of a command, and
   only the `title` is guaranteed; your command list matches on that text.
-- **No sandbox provider,** and no live steer or checkpoint handoff yet. A project whose own backend is `acp` runs its
+- **No sandbox provider,** and no live steer, checkpoint handoff, client file or terminal methods, or terminal session
+  (an ACP agent has no terminal screen to attach to). A project whose own backend is `acp` runs its
   rounds under Advanced; it has no terminal session, so the goal box asks you to pick Claude Code or Codex.
-- **An agent that needs `authenticate` first** fails the round with its auth method named; cuttlefish holds no login
-  for it.
+- **An agent that needs to sign in** is asked to `authenticate` with each of its own login methods (the ones that need
+  nothing from cuttlefish). An agent that lists methods but is already signed in is simply used. If it still refuses, the
+  round fails as **needs login** ("log in to the agent's own tool on this machine, then start again"); cuttlefish holds no
+  login for it.
 - **Tested against a fake agent.** The suite runs the whole path (a team, a permission asked and answered, a blocked
   command, resume) against `tests/fixtures/fake_acp_agent.py`. Running a real agent costs model credit and was not
   done for this slice; see [the spike](https://github.com/leejianrong/cuttlefish-crew/blob/main/docs/research/acp-backend-spike.md)

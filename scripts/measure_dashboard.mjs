@@ -5,7 +5,7 @@
 //
 // Seed and serve first (agent_docs/scale-testing.md). The profile is Lighthouse's mobile default:
 // 390x844, 4x CPU slowdown, 1.6 Mbps down, 150 ms round trip. A returning visit is timed (the
-// token is remembered): reload to the first project card, and to all 100. The idle cost is the main
+// token is remembered): reload to the first project card, and to the last card drawn (the count stops changing for a second). The idle cost is the main
 // thread's busy seconds per 10 s of polling, sprites and timers included. Exits 1 when the median
 // first card is over BUDGET_MS. Needs Playwright and a Chromium; it is not part of `make ci`.
 import { createRequire } from "node:module";
@@ -45,8 +45,16 @@ for (let i = 0; i < Number(RUNS); i++) {
   await page.reload({ waitUntil: "commit" });
   await page.waitForSelector("article");
   const first = Date.now() - start;
-  await page.waitForFunction(() => document.querySelectorAll("article").length >= 100, null, { timeout: 60000 });
-  const all = Date.now() - start;
+  // The list draws 20 cards at a time and the waiting projects sit in their own "Needs you" group, so
+  // there is no fixed count to wait for (CUT-304): the list is drawn when the count holds for a second.
+  let cards = 0;
+  let changed = Date.now();
+  while (Date.now() - changed < 1000) {
+    await page.waitForTimeout(100);
+    const n = await page.locator("article").count();
+    if (n !== cards) [cards, changed] = [n, Date.now()];
+  }
+  const all = changed - start;
 
   const before = await metric(cdp);
   await page.waitForTimeout(12500);
@@ -55,6 +63,7 @@ for (let i = 0; i < Number(RUNS); i++) {
     first,
     all,
     idleBusySecPer10s: ((after.TaskDuration - before.TaskDuration) / 12.5) * 10,
+    cards,
     domNodes: await page.evaluate(() => document.getElementsByTagName("*").length),
   });
   await ctx.close();

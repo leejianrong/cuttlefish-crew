@@ -220,6 +220,11 @@ describe("failureText", () => {
       "It used all its turns before finishing. (stop=max_turns exit_code=4)",
     );
   });
+  it("says a login is needed when an ACP agent asks to sign in", () => {
+    expect(failureText("needs_login", "AuthRequiredError: ACP agent needs you to sign in")).toContain(
+      "needs you to sign in",
+    );
+  });
   it("reads the stop word when an older event has no failure kind", () => {
     expect(failureText(undefined, "stop=max_turns exit_code=4")).toContain("all its turns");
     expect(failureText(null, "stop=verification_failed exit_code=5")).toContain("tests");

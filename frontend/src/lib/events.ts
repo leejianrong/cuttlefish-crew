@@ -142,6 +142,8 @@ const FAILURE_KINDS: Record<string, string> = {
   provider_outage: "The model provider had an outage",
   provider_other: "The model provider could not be reached or refused the request",
   harness_error: "The agent program itself failed",
+  needs_login:
+    "The agent needs you to sign in first: log in to its own tool on this machine, then start again",
   agent_error: "The agent program stopped before the round finished, or could not start",
   open_failed: "The agent could not start its session (a bad model or a missing credential)",
   protocol_error: "The agent program and cuttlefish stopped understanding each other",

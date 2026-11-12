@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import stat
 import time
@@ -230,7 +231,7 @@ def test_a_goal_is_the_first_message_of_a_fresh_claude_or_codex_session(rig: Rig
     assert claude[-1] == "Fix it" and claude[:3] == ["claude", "--session-id", "abc"]
     assert launch_argv("codex", root=root, session_id="x", resume=False, prompt="Fix it") == [
         "codex",
-        "Fix it",
+        f"Fix it\n\n{AGENT_NOTE}",  # Codex has no system prompt flag: the goal carries the note
     ]
 
 
@@ -243,7 +244,8 @@ def test_a_goal_reaches_a_resumed_session_as_one_quoted_argument(rig: Rig) -> No
     # Both the resume and the fresh fallback carry it, quoted so the shell reads it as one word.
     assert resumed[2].count("'it'\"'\"'s \"quoted\" $(x)'") == 2
     codex = launch_argv("codex", root=root, session_id="x", resume=True, prompt="go")
-    assert codex[2] == "codex resume --last go || exec codex go"
+    note = shlex.quote(f"go\n\n{AGENT_NOTE}")
+    assert codex[2] == f"codex resume --last {note} || exec codex {note}"
 
 
 def test_a_goal_that_looks_like_a_flag_cannot_become_one(rig: Rig) -> None:
@@ -296,10 +298,13 @@ def test_a_terminal_command_runs_in_tmux_with_no_status_integration(rig: Rig) ->
 def test_a_terminal_command_starts_again_without_a_resume_after_it_is_gone(rig: Rig) -> None:
     command = f"echo run >> {rig.log}; exec sleep 300"
     rig.manager.ensure("p1", str(rig.root), "x", command=command)
+    assert rig.launches() == ["run"]  # the first command ran before the session is stopped
     rig.manager.stop("p1", str(rig.root))
     info = rig.manager.ensure("p1", str(rig.root), "x", command=command)
     assert info.last_action == "started"
-    time.sleep(0.5)
+    deadline = time.monotonic() + 10  # the second launch is asynchronous too
+    while time.monotonic() < deadline and rig.log.read_text().splitlines() != ["run", "run"]:
+        time.sleep(0.1)
     assert rig.log.read_text().splitlines() == ["run", "run"]
 
 
