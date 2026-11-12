@@ -57,7 +57,7 @@ uv run cuttlefish projects worktree-share <project-id>            # show what is
 uv run cuttlefish projects worktree-share <project-id> --clear    # back to sharing nothing
 ```
 
-The same is `PATCH /api/projects/{id}/worktree-share` with `{"dirs": [...], "files": [...]}` (Admin tier). It applies to
+In the dashboard it is the **Share with a goal's worktree** card on the project's Overview, under the goal card, with the same rules written beside the two lists; the goal card then lists what the new worktree got and what was left out. The same is `PATCH /api/projects/{id}/worktree-share` with `{"dirs": [...], "files": [...]}` (Admin tier). It applies to
 the next goal's worktree, and the response that starts a goal says what it got:
 `"shared": {"linked": [...], "copied": [...], "skipped": [{"path": ..., "why": ...}]}`. A path that cannot be shared is
 skipped with its reason and never stops the goal. The list is stored in cuttlefish's own registry, not in a file in your

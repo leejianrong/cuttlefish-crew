@@ -274,6 +274,8 @@ export interface ProjectSummary {
   terminal_command?: string | null;
   /** CUT-238: each new goal runs in its own git worktree and branch. */
   worktree_per_goal?: boolean;
+  /** CUT-296: what a goal's worktree links (directories) and copies (files) from the checkout. */
+  worktree_share?: { dirs: string[]; files: string[] };
   /** CUT-206: the worker machine this project's teams run on; absent or null runs on this PC.
    * `name` is null when the worker was removed. */
   worker?: { id: string; name: string | null; online: boolean } | null;
@@ -537,6 +539,8 @@ export interface Goal {
   /** CUT-238: the branch the goal is worked on, when the project gives each goal a worktree. */
   branch?: string;
   worktree?: string;
+  /** CUT-296: what the new worktree got from the checkout, in the response that starts the goal. */
+  shared?: { linked?: string[]; copied?: string[]; skipped?: { path: string; why: string }[] };
   /** CUT-241: the pull request opened for this goal, read back from the journal. */
   pr_url?: string;
 }
@@ -891,6 +895,14 @@ export class FleetClient {
     return this.request(`/api/projects/${id}/worktree-per-goal`, {
       method: "PATCH",
       body: JSON.stringify({ worktree_per_goal: on }),
+    });
+  }
+
+  /** CUT-296: the ignored directories each new goal's worktree links to and the files it copies. */
+  setWorktreeShare(id: string, dirs: string[], files: string[]): Promise<ProjectSummary> {
+    return this.request(`/api/projects/${id}/worktree-share`, {
+      method: "PATCH",
+      body: JSON.stringify({ dirs, files }),
     });
   }
 
