@@ -74,7 +74,7 @@ Filed as CUT-282 to CUT-288, in that order (findings 1 to 7).
 6. **Review surface: show a diff stat and PR link on the card or strip** for any project with a branch, as Paseo and Claude Squad
    do. Check what the Artifacts tab and git integration already expose first (code beats prose). Effort medium to large.
 7. **Retake with a live team.** Put the real Chat, Terminal and Needs-you screens (a pending request, the badge) beside herdr's
-   Inbox and Paseo's session view. This needs an agent run and so needs Jian's yes; not done here.
+   Inbox and Paseo's session view. Done 2026-11-13 (CUT-288), see "Live retake" below.
 
 Two competitive facts that change earlier notes, for the front door (E28) and the README:
 
@@ -82,6 +82,57 @@ Two competitive facts that change earlier notes, for the front door (E28) and th
   docs". Our claim of E2E encryption and a hosted relay is not matched there, but their phone path has fewer moving parts.
 - Paseo is **Apache-2.0**, not AGPL; it also has a hosted Hub ($15 per seat per month, free self-hosted) that starts agents from
   GitHub, Slack and Discord. That is the same job as the "Devin in Slack" flow we listed as worth copying.
+
+## Live retake (CUT-288, 2026-11-13)
+
+Finding 7 above, done. A scratch `cuttlefish serve` (scratch `HOME`, fresh secrets key, port 8791, the built dashboard) with one
+project, a tiny git repo, and **one real Claude Code session in tmux on Jian's subscription** (`CLAUDE_CONFIG_DIR` passthrough,
+as in `agent_docs/exploratory-testing.md`; no kopicode, no OpenRouter, no API key). The session wrote a file, then asked for
+WebFetch, which raised a real Needs-you request through the hook (ADR-0040). Three Chat messages, a few thousand tokens. Driven
+by Playwright at 1440x900 light, 1440x900 dark and 390x844; no console errors and no horizontal overflow in any of them.
+Captures are in `assets/teardown-live/` (`cuttlefish-live-<screen>-<size>.png`: projects, overview, chat, terminal, needsyou).
+Competitor images are the same vendor shots as above.
+
+**The dashboard has moved since the first pass**, so some findings are already fixed: Projects now leads with a "Needs you" group
+(a compact row with the request text; finding 3), "Stop all agents" is a quiet outlined button (finding 2), and the nav badge
+shows the pending count on the Needs you item and on the project's tab. Those work as designed with a real request.
+
+What the live screens show:
+
+1. **Needs you, with a real request, is good.** One card: kind pill, backend, project, "Paused until you answer here or in the
+   terminal", the tool and its arguments in a code block, Allow once / Deny, a countdown ("Denies on its own in 8:43"). It is
+   the same card in Chat and Overview, and at 390 px it fits with the buttons above the fold. Compared with herdr's Inbox (one
+   orange "Needs you" pill per row, answer by opening the terminal) ours answers in place; compared with Paseo (a red shield
+   icon, answers in the composer) ours is more explicit.
+2. **The card has a wrong line.** A WebFetch request says "This command uses shell syntax (a redirect, variable or substitution),
+   or has a part that is not on the list, so it can only be allowed once." It is not a command (CUT-307).
+3. **Chat reads well but the composer is not on screen.** The thread is a tidy chat: "You" bubbles, one collapsed row per tool
+   burst ("Edited 1 file", "Ran 1 command, 1 failed", "Looked up 1 page"), the agent's reply as plain text. But at 1440x900 the
+   page scrolls, not the thread, so the composer sits below the fold, and the right column ("Nothing to show yet") is a third of
+   the width. Paseo's composer is pinned and carries model, effort and a permission shield; ours has no model or mode on it, and
+   "Edited 1 file" has no `+N` (Orca: "Edited CHANGELOG.md +6") (CUT-308, CUT-309). On a phone the composer is reachable but
+   two paragraphs of help sit under it while a request is pending; the Send button is correctly disabled with the reason.
+4. **Terminal is the strongest screen.** The real Claude Code TUI in the browser, a "1 file changed" diff panel beside it, and on
+   a phone a key bar (Esc, Tab, Ctrl-C, arrows, Enter), as herdr and Paseo have. The cost: at 390 px the Agent/Shell and
+   Match app/Dark/Light toggles take about 300 px before the terminal starts (CUT-309).
+5. **Project page header.** "Stop everything here" is still the loudest thing on the project page (pink in light, solid red in
+   dark), and the path takes a full row; the top bar says "Projects" on a project page. The Overview does lead with the
+   waiting request and a "Claude Code running, started 06:47 PM" line, which is the beginning of finding 5's status strip, but
+   it has no last action or tokens (CUT-308).
+6. **"While you were away: Since 06:50 PM yesterday"** appeared for a session started minutes earlier, on a browser that had
+   never opened the page. Probably the first-visit default; not carded, worth a look when the card is next touched.
+7. **Light and dark** both hold; the "You" bubble is a saturated cyan in light and loud against everything else.
+
+Not a product gap: the user's own `PreToolUse` hook (a `secrets-guard.py` addressed through `$HOME`) failed under the scratch
+`HOME` and denied the Bash call, so the Needs-you request was raised with WebFetch instead. The chat showed that failure
+honestly ("Ran 1 command, 1 failed", the agent's explanation).
+
+Cleanup: the session, tmux server (own socket) and daemon were stopped by pid/socket; the Claude project folder for the
+scratch path under `~/.claude/projects` was removed. Claude also wrote `.claude.json.backup.*` files under the real config
+directory, left in place (Jian's, newest ones to keep per the notes above).
+
+New cards: CUT-307 (wrong shell-syntax line), CUT-308 (project-page Stop, composer below the fold, bubble colour), CUT-309
+(model and mode on the composer, `+N` on edits, phone Terminal toggles).
 
 ## Orca against our screens (added 2026-11-12)
 
@@ -131,5 +182,6 @@ All competitor images are the vendors' own, kept for internal comparison only, n
 | `../orca/orca-mobile-companion.jpg` | https://raw.githubusercontent.com/stablyai/orca/main/docs/assets/readme-features/mobile-companion.poster.jpg |
 | `../orca/orca-orchestration.jpg` | https://raw.githubusercontent.com/stablyai/orca/main/docs/assets/readme-features/orchestration.poster.jpg |
 | `cuttlefish-*.png` | our own capture, 2026-11-12 |
+| `../teardown-live/cuttlefish-live-*.png` | our own capture of a live Claude Code session, 2026-11-13 |
 
 No screenshots from Jian were available (`~/teardown-shots/` did not exist).
