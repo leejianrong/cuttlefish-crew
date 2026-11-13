@@ -8,7 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from cuttlefish.agents.acp import AcpBackend, _inside
+from cuttlefish.agents.acp import AcpBackend
+from cuttlefish.agents.acp_client import inside
 from cuttlefish.agents.outcome import AuthRequiredError, DelegationError, DelegationOutcome
 from cuttlefish.delegate import conversations
 
@@ -141,9 +142,9 @@ async def test_an_agent_that_will_not_authenticate_needs_login(
 def test_a_path_that_climbs_out_of_the_root_is_not_inside_it(tmp_path: Path) -> None:
     root = tmp_path / "proj"
     root.mkdir()
-    assert _inside(str(root / "a.txt"), str(root))
-    assert not _inside(str(root / ".." / "b.txt"), str(root))
-    assert not _inside("", str(root))
+    assert inside(str(root / "a.txt"), str(root))
+    assert not inside(str(root / ".." / "b.txt"), str(root))
+    assert not inside("", str(root))
 
 
 async def test_a_missing_binary_is_a_delegation_error(tmp_path: Path) -> None:
@@ -183,3 +184,71 @@ async def test_an_agent_behind_a_launcher_does_not_hang_the_round(tmp_path: Path
     backend = AcpBackend(sys.executable, (str(launcher),), timeout=30.0)
     out = await asyncio.wait_for(_run(tmp_path, "hello", backend=backend), 20)
     assert out.kind == "completed"
+
+
+async def test_an_agent_reads_and_writes_a_file_inside_the_root_through_the_client(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "a.txt").write_text("one\ntwo\n")
+    read = await _run(tmp_path, f"fsread {tmp_path / 'a.txt'}")
+    assert read.summary.startswith('OK({"content": "one\\ntwo\\n"})')
+    wrote = await _run(tmp_path, f"fswrite {tmp_path / 'b.txt'}")
+    assert (tmp_path / "b.txt").read_text() == "via"
+    assert [c.answer for c in wrote.consent_decisions] == ["allow"]
+
+
+async def test_client_file_methods_refuse_a_path_outside_the_root(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    root.mkdir()
+    (tmp_path / "secret.txt").write_text("s")
+    read = await _run(root, f"fsread {tmp_path / 'secret.txt'}")
+    assert "ERR(" in read.summary and "secret" not in read.summary.replace("secret.txt", "")
+    await _run(root, f"fswrite {tmp_path / 'out.txt'}")
+    assert not (tmp_path / "out.txt").exists()
+    await _run(root, f"fswrite {root}/../out.txt")
+    assert not (tmp_path / "out.txt").exists()
+
+
+async def test_client_file_writes_are_refused_for_a_read_only_role(tmp_path: Path) -> None:
+    out = await _run(tmp_path, f"fswrite {tmp_path / 'b.txt'}", mode="read-only")
+    assert "ERR(" in out.summary
+    assert not (tmp_path / "b.txt").exists()
+
+
+async def test_a_client_terminal_runs_an_allowed_command_and_returns_its_output(
+    tmp_path: Path,
+) -> None:
+    out = await _run(tmp_path, "term echo hi", allow=[["echo", "hi"]])
+    assert '"output": "hi\\n"' in out.summary
+    assert '"exitCode": 0' in out.summary
+
+
+async def test_a_client_terminal_command_no_rule_allows_is_refused(tmp_path: Path) -> None:
+    out = await _run(tmp_path, f"term touch {tmp_path / 'x'}")
+    assert "ERR(" in out.summary
+    assert not (tmp_path / "x").exists()
+    assert [c.answer for c in out.consent_decisions] == ["deny"]
+
+
+async def test_a_never_allowed_client_terminal_command_is_refused_even_in_auto(
+    tmp_path: Path,
+) -> None:
+    out = await _run(tmp_path, "term sudo rm -rf /", mode="auto")
+    assert "ERR(" in out.summary
+
+
+async def test_a_timed_out_round_carries_the_agents_own_handoff(tmp_path: Path) -> None:
+    out = await _run(tmp_path, "hang", timeout=0.5)
+    assert out.kind == "failed"
+    assert out.handoff is not None and "## Remaining" in out.handoff
+    assert "## Done" not in out.summary  # the handoff is not the round's answer
+
+
+async def test_a_reply_without_the_headings_is_not_a_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_ACP_HANDOFF", "none")
+    monkeypatch.setenv("CUTTLEFISH_AGENT_ENV_PASSTHROUGH", "FAKE_ACP_HANDOFF")
+    out = await _run(tmp_path, "hang", timeout=0.5)
+    assert out.kind == "failed"
+    assert out.handoff is None
