@@ -49,7 +49,14 @@ the project's command at most.
 - **Resume.** With `CUTTLEFISH_RESUME=1`, a role's session id is kept in `<root>/.cuttlefish/conversations.json` and the
   next round continues it with `session/load`, when the agent says it supports `loadSession`. A load the agent refuses
   starts a new session. The replayed history is not counted as the answer.
-- **A timeout** sends `session/cancel`, then ends the round as failed.
+- **Files and commands through cuttlefish.** cuttlefish offers the agent its own `fs/read_text_file`,
+  `fs/write_text_file` and `terminal/*` methods, so an agent that uses them is held to the role's policy rather than its own
+  judgment. Files only inside the project folder (never a write for a read-only role); a terminal command goes through your
+  command list and the blocked list like any `execute` request, and runs in the project folder. Variables the agent asks to
+  set for a command are ignored.
+- **A timeout** sends `session/cancel`, then asks the agent, in the same session, to write its own handoff (one more
+  `session/prompt`, every permission refused). A reply with the Done and Remaining headings becomes the handoff for the next
+  session; anything else falls back to the digest read from the journal. The round still ends as failed.
 
 ## Know before you use it
 
@@ -64,8 +71,9 @@ Also, plainly:
 
 - **The command policy is weaker than on the other backends.** The agent writes its own description of a command, and
   only the `title` is guaranteed; your command list matches on that text.
-- **No sandbox provider,** and no live steer, checkpoint handoff, client file or terminal methods, or terminal session
-  (an ACP agent has no terminal screen to attach to). A project whose own backend is `acp` runs its
+- **No sandbox provider** (a sandbox's `exec` returns when the command ends, and an ACP agent is a long-lived stdio
+  process), **no live steer** (ACP has no method to add to a turn in flight, so a message waits for the round boundary), and
+  **no terminal session** (an ACP agent has no terminal screen to attach to). A project whose own backend is `acp` runs its
   rounds under Advanced; it has no terminal session, so the goal box asks you to pick Claude Code or Codex.
 - **An agent that needs to sign in** is asked to `authenticate` with each of its own login methods (the ones that need
   nothing from cuttlefish). An agent that lists methods but is already signed in is simply used. If it still refuses, the

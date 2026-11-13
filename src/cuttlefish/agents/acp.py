@@ -10,14 +10,20 @@ agent's ``session/request_permission`` answered by the role's policy, ``session/
 timeout. ``session/load`` continues a role's earlier session (``CUTTLEFISH_RESUME=1``) when the
 agent advertises ``loadSession``.
 
-Gaps, on purpose: no sandbox provider, no credential broker, no fs/terminal client methods
-(the agent uses its own tools), no usage figure beyond ``usage_update``.
+The client's own ``fs/*`` and ``terminal/*`` methods are offered (``acp_client``), so an agent that
+uses them is held to the role's policy. A round that times out is asked for its own handoff in a
+second ``session/prompt`` (ADR-0042).
+
+Gaps, on purpose: no sandbox provider (``SandboxProvider.exec`` returns when the command ends, and
+an ACP agent is a long-lived stdio peer), no credential broker, no live steer (ACP has no method to
+add to a turn in flight), no usage figure beyond ``usage_update``.
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import os
 import shlex
@@ -25,6 +31,7 @@ import signal
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any, ClassVar
 
+from cuttlefish.agents.acp_client import CLIENT_CAPABILITIES, ClientMethods, inside
 from cuttlefish.agents.deciders import command_decider
 from cuttlefish.agents.outcome import (
     AuthRequiredError,
@@ -34,6 +41,12 @@ from cuttlefish.agents.outcome import (
     ToolCallRecord,
 )
 from cuttlefish.delegate import conversations
+from cuttlefish.delegate.handoff import (
+    HANDOFF_PROMPT,
+    HANDOFF_TIMEOUT,
+    handoff_goal,
+    handoff_is_usable,
+)
 from cuttlefish.delegate.subprocess_env import merge_env
 from cuttlefish.requests import ShellAsker
 from cuttlefish.sandbox.provider import SandboxProvider
@@ -54,14 +67,6 @@ def _pick(options: list[Json], *kinds: str) -> str | None:
             if option.get("kind") == kind and isinstance(option.get("optionId"), str):
                 return str(option["optionId"])
     return None
-
-
-def _inside(path: str, root: str) -> bool:
-    """``path`` is under ``root`` once ``..`` and symlinks are resolved (a write outside the root
-    is never allowed)."""
-    if not path:
-        return False
-    return os.path.realpath(path).startswith(os.path.realpath(root) + os.sep)
 
 
 class _RpcError(DelegationError):
@@ -135,6 +140,8 @@ class _Conn:
                 elif "method" in message:
                     self._on_notify(str(message["method"]), message.get("params") or {})
                 elif (future := self._pending.pop(message.get("id", -1), None)) is not None:
+                    if future.done():  # a prompt we gave up on
+                        continue
                     if "error" in message:
                         err = message["error"]
                         future.set_exception(_RpcError(err.get("code"), err.get("message")))
@@ -210,7 +217,8 @@ class AcpBackend:
         consents: list[ConsentDecisionRecord] = []
         tokens: list[int] = []
         cost: list[float] = []
-        state = {"replaying": False}
+        state = {"replaying": False, "handoff": False}
+        reply: list[str] = []  # the handoff turn's text, kept apart from the round's
 
         def on_notify(method: str, params: Json) -> None:
             if method != "session/update" or state["replaying"]:
@@ -220,7 +228,7 @@ class AcpBackend:
             if kind == "agent_message_chunk":
                 block = update.get("content") or {}
                 if block.get("type") == "text":
-                    text.append(str(block.get("text", "")))
+                    (reply if state["handoff"] else text).append(str(block.get("text", "")))
             elif kind in ("tool_call", "tool_call_update"):
                 self._track(calls, edited, update)
             elif kind == "usage_update":
@@ -232,15 +240,31 @@ class AcpBackend:
 
         async def on_request(method: str, params: Json) -> Json:
             if method != "session/request_permission":
-                raise DelegationError(f"unsupported client method {method}")
+                return await client.handle(method, params)
+            if state["handoff"]:  # the handoff turn only talks
+                return await self._permission(
+                    params, root, mode, decide, calls, consents, deny_all=True
+                )
             return await self._permission(params, root, mode, decide, calls, consents)
 
+        client = ClientMethods(
+            root=root,
+            mode=mode,
+            decide_shell=lambda command: decide("run_shell", f"/bin/sh -c {command}"),
+            consents=consents,
+            secrets=secrets,
+        )
         conn = _Conn(proc, on_request, on_notify)
+        handoff: str | None = None
         session_id = ""
         try:
             init = await asyncio.wait_for(
                 conn.call(
-                    "initialize", {"protocolVersion": PROTOCOL_VERSION, "clientCapabilities": {}}
+                    "initialize",
+                    {
+                        "protocolVersion": PROTOCOL_VERSION,
+                        "clientCapabilities": CLIENT_CAPABILITIES,
+                    },
                 ),
                 30,
             )
@@ -285,7 +309,8 @@ class AcpBackend:
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(prompt, 10)
                 prompt.cancel()
-                return self._outcome(
+                handoff = await self._handoff(conn, session_id, task_text, state, reply)
+                outcome = self._outcome(
                     "failed",
                     text,
                     edited,
@@ -297,12 +322,14 @@ class AcpBackend:
                     "timeout",
                     f"no answer in {self._timeout:.0f}s",
                 )
+                return dataclasses.replace(outcome, handoff=handoff)
             stop = str(prompt.result().get("stopReason", ""))
         except (DelegationError, TimeoutError) as exc:
             if isinstance(exc, TimeoutError):
                 exc = DelegationError("the ACP agent did not answer initialize")
             raise exc from None
         finally:
+            client.close()
             await conn.close()
 
         denied = any(c.answer == "deny" for c in consents)
@@ -324,6 +351,38 @@ class AcpBackend:
             None if kind == "completed" else stop,
             None,
         )
+
+    @staticmethod
+    async def _handoff(
+        conn: _Conn, session_id: str, task_text: str, state: dict[str, bool], reply: list[str]
+    ) -> str | None:
+        """Ask the agent, in the session it just worked in, for its handoff document (ADR-0042),
+        with every permission refused. ``None`` when it cannot be had, for any reason: the round has
+        already ended and the caller has its own digest."""
+        state["handoff"] = True
+        try:
+            await asyncio.wait_for(
+                conn.call(
+                    "session/prompt",
+                    {
+                        "sessionId": session_id,
+                        "prompt": [
+                            {
+                                "type": "text",
+                                "text": HANDOFF_PROMPT.format(goal=handoff_goal(task_text)),
+                            }
+                        ],
+                    },
+                ),
+                HANDOFF_TIMEOUT,
+            )
+        except (DelegationError, TimeoutError):
+            await conn.notify("session/cancel", {"sessionId": session_id})
+            return None
+        finally:
+            state["handoff"] = False
+        document = "".join(reply).strip()
+        return document if handoff_is_usable(document) else None
 
     @staticmethod
     async def _signed_in(conn: _Conn, methods: list[Json], method: str, params: Json) -> Json:
@@ -385,6 +444,8 @@ class AcpBackend:
         decide: Callable[[str, str], Any],
         calls: dict[str, ToolCallRecord],
         consents: list[ConsentDecisionRecord],
+        *,
+        deny_all: bool = False,
     ) -> Json:
         """Map the role's policy onto the options the agent offered. Only ``execute`` goes through
         the shell policy; edits inside the root are allowed (not for a read-only role), anything
@@ -394,7 +455,9 @@ class AcpBackend:
         call = params.get("toolCall") or {}
         kind = str(call.get("kind") or "other")
         detail = str(call.get("title") or "")
-        if kind == "execute":
+        if deny_all:
+            allowed, rule = False, "acp:handoff_turn_only_talks"
+        elif kind == "execute":
             command = (call.get("rawInput") or {}).get("command", detail)
             if isinstance(command, list):
                 command = shlex.join(str(c) for c in command)
@@ -405,9 +468,7 @@ class AcpBackend:
         elif kind in ("read", "search", "think") or (
             kind in _EDIT_KINDS
             and mode != "read-only"
-            and all(
-                _inside(str(loc.get("path", "")), root) for loc in call.get("locations") or [{}]
-            )
+            and all(inside(str(loc.get("path", "")), root) for loc in call.get("locations") or [{}])
         ):
             allowed, rule = True, f"acp:{kind}_in_root"
         else:

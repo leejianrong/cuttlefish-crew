@@ -2,7 +2,9 @@
 ``edit`` asks to edit ``<cwd>/out.txt``, ``run <cmd>`` asks to execute, ``hang`` waits for
 ``session/cancel``, anything else just answers. ``FAKE_ACP_AUTH=1`` advertises an auth method
 and works anyway, ``required`` answers ``session/new`` with auth_required until ``authenticate``
-is called, ``fail`` never lets it in."""
+is called, ``fail`` never lets it in. ``fsread <path>``, ``fswrite <path>`` and ``term <cmd>`` use
+the client's file and terminal methods and report each reply as a message chunk. A handoff request
+(cuttlefish's prompt) is answered with a document, or plainly when ``FAKE_ACP_HANDOFF=none``."""
 
 from __future__ import annotations
 
@@ -58,9 +60,62 @@ def ask(session: str, call: dict) -> dict:
         return _responses.pop(mid)["result"]["outcome"]
 
 
+def call(method: str, params: dict) -> dict:
+    """A request to the client; its whole reply (``result`` or ``error``)."""
+    global _next_id
+    _next_id += 1
+    mid = _next_id
+    send({"jsonrpc": "2.0", "id": mid, "method": method, "params": params})
+    with _cond:
+        while mid not in _responses:
+            _cond.wait()
+        return _responses.pop(mid)
+
+
+def client_methods(session: str, text: str) -> str:
+    verb, _, arg = text.partition(" ")
+    if verb == "fsread":
+        reply = call("fs/read_text_file", {"sessionId": session, "path": arg})
+    elif verb == "fswrite":
+        reply = call("fs/write_text_file", {"sessionId": session, "path": arg, "content": "via"})
+    else:
+        reply = call(
+            "terminal/create", {"sessionId": session, "command": "/bin/sh", "args": ["-c", arg]}
+        )
+        if "result" in reply:
+            tid = reply["result"]["terminalId"]
+            call("terminal/wait_for_exit", {"sessionId": session, "terminalId": tid})
+            reply = call("terminal/output", {"sessionId": session, "terminalId": tid})
+            call("terminal/release", {"sessionId": session, "terminalId": tid})
+    if "error" in reply:
+        return "ERR(" + reply["error"]["message"] + ")"
+    return "OK(" + json.dumps(reply["result"]) + ")"
+
+
 def prompt(mid: int, params: dict) -> None:
     session = params["sessionId"]
     text = params["prompt"][0]["text"].strip().splitlines()[-1]  # cuttlefish prefixes a note
+    if text.startswith("Your round has ended"):
+        body = (
+            "just talking"
+            if os.environ.get("FAKE_ACP_HANDOFF") == "none"
+            else "## Done\nnothing\n## Remaining\neverything\n## Failed or refused\nnone\n"
+            "## Open questions\nnone"
+        )
+        update(
+            session,
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": body}},
+        )
+        send({"jsonrpc": "2.0", "id": mid, "result": {"stopReason": "end_turn"}})
+        return
+    if text.split(" ")[0] in ("fsread", "fswrite", "term"):
+        out = client_methods(session, text)
+        update(
+            session,
+            {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": out}},
+        )
+        send({"jsonrpc": "2.0", "id": mid, "result": {"stopReason": "end_turn"}})
+        return
     cwd = str(Path.cwd())
     update(
         session,
