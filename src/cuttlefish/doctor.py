@@ -7,6 +7,7 @@ ever reported by *name*: set or not, valid or not, never the value.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import subprocess
@@ -28,6 +29,7 @@ from cuttlefish.config import (
     resolve_codex_binary,
     resolve_kopicode_binary,
 )
+from cuttlefish.delegate.kopicode_serve import serve_features
 from cuttlefish.delegate.subprocess_env import merge_env, withheld_names
 from cuttlefish.projects.store import Project
 from cuttlefish.secrets.store import SECRETS_KEY_ENV
@@ -72,6 +74,7 @@ def check_backends(
     environ: Mapping[str, str],
     which: Callable[[str], str | None] = shutil.which,
     version: Callable[[str], str] = _version,
+    features: Callable[[str], frozenset[str]] = lambda b: asyncio.run(serve_features(b)),
 ) -> list[Check]:
     """Each backend's binary: on PATH or not, where, and its version. A missing one is only
     a warning: it matters only to a project that uses that backend (checked at team start)."""
@@ -89,6 +92,15 @@ def check_backends(
             )
         else:
             checks.append(Check("ok", f"backend {label}", f"{found} ({version(found)})"))
+            if label == "kopicode" and "provider_url.flag" not in features(found):
+                checks.append(
+                    Check(
+                        "warn",
+                        "kopicode provider_url.flag",
+                        "missing: CUTTLEFISH_KOPICODE_PROVIDER_URL needs kopicode v0.5.0 or "
+                        f"later (update it or set {KOPICODE_BIN_ENV})",
+                    )
+                )
     return checks
 
 

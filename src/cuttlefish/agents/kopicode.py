@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import ClassVar, Literal
 
 from cuttlefish.agents.outcome import DelegationError, DelegationOutcome
+from cuttlefish.config import KOPICODE_BIN_ENV
 from cuttlefish.delegate import conversations
 from cuttlefish.delegate.consent import ConsentPolicy, ConsentPolicyError
 from cuttlefish.delegate.kopicode import run_kopicode, run_kopicode_in_sandbox
@@ -37,6 +38,7 @@ from cuttlefish.delegate.kopicode_serve import (
     serve_supports_limits,
     serve_supports_resume,
     serve_supports_usage,
+    serve_version,
 )
 from cuttlefish.delegate.policy import write_policy_file
 from cuttlefish.limits import (
@@ -284,7 +286,9 @@ class KopicodeBackend:
             raise DelegationError(f"{PROVIDER_URL_ENV} is not supported with a sandbox provider")
         if "provider_url.flag" not in await serve_features(self._binary):
             raise DelegationError(
-                "this kopicode has no --provider-url (needs the provider_url.flag feature)"
+                "this kopicode has no --provider-url (needs the provider_url.flag feature); "
+                f"it is version {await serve_version(self._binary)} and v0.5.0 or later is "
+                f"needed: update kopicode or set {KOPICODE_BIN_ENV} to a newer binary"
             )
         return url, model
 

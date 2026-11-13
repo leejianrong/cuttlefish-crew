@@ -27,6 +27,21 @@ def test_a_backend_on_path_reports_its_location_and_version() -> None:
     assert missing.status == "warn" and "CUTTLEFISH_CODEX_BIN" in missing.detail
 
 
+def test_a_kopicode_without_provider_url_is_a_warning_with_the_fix() -> None:
+    def run(features: frozenset[str]) -> list[doctor.Check]:
+        return doctor.check_backends(
+            {}, which=lambda b: f"/bin/{b}", version=lambda _: "v0.4.0", features=lambda _: features
+        )
+
+    old = _by_name(run(frozenset({"session.close"})), "kopicode provider_url.flag")
+    assert (
+        old.status == "warn" and "v0.5.0" in old.detail and "CUTTLEFISH_KOPICODE_BIN" in old.detail
+    )
+    assert not any(
+        c.name == "kopicode provider_url.flag" for c in run(frozenset({"provider_url.flag"}))
+    )
+
+
 def test_the_env_example_placeholder_secrets_key_fails() -> None:
     checks = doctor.check_credentials(
         {"CUTTLEFISH_SECRETS_KEY": "REPLACE_WITH_A_GENERATED_FERNET_KEY"}

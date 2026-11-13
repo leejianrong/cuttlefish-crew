@@ -24,7 +24,8 @@ _FAKE = """#!{python}
 import json, os, sys
 log = open(os.environ["FAKE_KOPICODE_LOG"], "a")
 if sys.argv[1:2] == ["version"]:
-    print(json.dumps({{"features": os.environ.get("FAKE_KOPICODE_FEATURES", "").split(",")}}))
+    features = os.environ.get("FAKE_KOPICODE_FEATURES", "").split(",")
+    print(json.dumps({{"version": "v0.4.0", "features": features}}))
     sys.exit(0)
 log.write(json.dumps({{"argv": sys.argv[1:], "env": sorted(os.environ)}}) + "\\n"); log.flush()
 if sys.argv[1:2] == ["run"]:
@@ -160,7 +161,11 @@ async def test_no_url_leaves_everything_as_it_was(
     ("model", "features", "message"),
     [
         ("", "session.close,provider_url.flag", "CUTTLEFISH_KOPICODE_MODEL"),
-        ("llama3.2", "session.close", "provider_url.flag"),
+        (
+            "llama3.2",
+            "session.close",
+            r"provider_url.flag.*v0\.4\.0.*v0\.5\.0.*CUTTLEFISH_KOPICODE_BIN",
+        ),
     ],
 )
 async def test_a_half_configured_endpoint_is_refused_before_anything_runs(

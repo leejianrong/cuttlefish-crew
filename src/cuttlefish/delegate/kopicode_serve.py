@@ -142,6 +142,7 @@ _TIMEOUT_FLAG_SUPPORT: dict[str, bool] = {}
 
 
 _FEATURES: dict[str, frozenset[str]] = {}
+_VERSIONS: dict[str, str] = {}
 
 
 async def serve_features(binary: str) -> frozenset[str]:
@@ -167,13 +168,22 @@ async def serve_features(binary: str) -> frozenset[str]:
             process.kill()
             await process.wait()
             output = b""
-        listed = json.loads(output).get("features")
+        parsed = json.loads(output)
+        if isinstance(parsed.get("version"), str):
+            _VERSIONS[binary] = parsed["version"]
+        listed = parsed.get("features")
         if isinstance(listed, list):
             features = frozenset(f for f in listed if isinstance(f, str))
     except (OSError, ValueError, AttributeError):
         features = frozenset()
     _FEATURES[binary] = features
     return features
+
+
+async def serve_version(binary: str) -> str:
+    """``binary``'s version from the same probe as :func:`serve_features`, or ``"unknown"``."""
+    await serve_features(binary)
+    return _VERSIONS.get(binary, "unknown")
 
 
 async def serve_supports_resume(binary: str) -> bool:
