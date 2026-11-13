@@ -9,6 +9,7 @@ import stat
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -76,7 +77,16 @@ def test_serve_exits_and_ends_its_resident_agent(sig: signal.Signals, tmp_path: 
                 data=json.dumps(body).encode(),
                 headers={header: token, "Content-Type": "application/json"},
             )
-            return json.load(urllib.request.urlopen(request, timeout=20))  # type: ignore[no-any-return]
+            # serve prints its URL before uvicorn is listening; under load the gap is seconds
+            while True:
+                try:
+                    return json.load(urllib.request.urlopen(request, timeout=20))  # type: ignore[no-any-return]
+                except urllib.error.URLError as exc:
+                    if not isinstance(exc.reason, ConnectionRefusedError) or (
+                        time.monotonic() > deadline
+                    ):
+                        raise
+                    time.sleep(0.2)
 
         created = call("/api/projects", {"name": "demo", "root": str(project)})
         call(
