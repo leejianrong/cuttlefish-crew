@@ -139,6 +139,19 @@ async def test_the_plan_waits_for_approval_once_the_builder_stops_with_a_checkli
     assert rig.state.phase == "awaiting_approval" and "2 steps" in rig.state.reason
 
 
+async def test_the_plan_is_read_from_the_goals_worktree_when_it_has_one(rig: Rig) -> None:
+    """A builder in a goal worktree (ADR-0048) writes its plan there, not in the project root."""
+    tree = rig.tmp / "wt"
+    (tree / PLAN_PATH).parent.mkdir(parents=True)
+    (tree / PLAN_PATH).write_text("# Plan\n- [ ] one\n- [ ] two\n")
+    goal = rig.tmp / ".cuttlefish" / "goal.json"
+    goal.parent.mkdir(parents=True, exist_ok=True)
+    goal.write_text(json.dumps({"text": "Build it", "worktree": str(tree)}))
+    await rig.begin()
+    await rig.stopped()
+    assert rig.state.phase == "awaiting_approval" and "2 steps" in rig.state.reason
+
+
 async def test_approving_needs_a_plan_and_sends_the_fixed_approval(rig: Rig) -> None:
     await rig.begin()
     with pytest.raises(AutopilotError, match="not written a checklist"):
