@@ -102,12 +102,12 @@ without it; inline style, script and `data:` images work.
 
 The project's **Chat** tab shows the builder's conversation as a thread, read live from Claude Code's own
 session record (`~/.claude/projects/<folder>/<session>.jsonl`; nothing is stored a second time). Tool calls are
-folded into one line each run ("Ran 4 commands, edited 2 files") that opens to the calls and their output, a context
+folded into one line each run ("Ran 4 commands, edited 2 files", with a "+N" for the lines the edits add) that opens to the calls and their output, a context
 compaction is a divider, and a permission the builder is waiting on is answered inline, as under Needs you.
 Under the thread a box types to the builder: the text is pasted into the session as one bracketed paste and then
 Enter, so a line break in your message is not an Enter and the terminal and the chat stay one conversation. A message to a
 builder that is working is queued by Claude Code and read at its next step. The box refuses while a dialog is open (a
-permission waiting here or in the terminal), because a dialog would read the message as its answer; whether one is open
+permission waiting here or in the terminal), because a dialog would read the message as its answer; whether one is open Beside it a small line names the builder and the project's permission mode (read-only; change it on the Permissions tab).
 comes from the session's hooks and the last lines of its screen. It needs the Terminal level on a paired device, as typing
 in the terminal does, and the control characters in a message are removed so it cannot end its own paste early.
 A Codex session is shown there too, read from Codex's own session record (`~/.codex/sessions`, found by the project's folder);

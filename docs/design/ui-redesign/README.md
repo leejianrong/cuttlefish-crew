@@ -235,8 +235,12 @@ and this folder disagree after a slice lands, update this folder.
   that says what sending does now: "waiting for you" (idle), "working, your message is queued" (busy), "no activity
   seen yet, so it is not known whether it is ready" (unknown), or, when a permission is waiting, the box and Send are
   disabled and the line says a message would be read as the answer. A builder that is not running disables it too, and
-  Codex and kopicode builders get no box (their input is not wired in). The foot says the Terminal tab is the same
-  session. The plan rail and canvas of `Main.dc.html` arrive with CUT-174 and CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
+  Codex and kopicode builders get no box (their input is not wired in). A small line under the box names the builder, the project's permission mode as a read-only chip ("Standard mode"; change it on
+  the Permissions tab) and says it is the same conversation as the Terminal tab. No model is shown: cuttlefish does not learn which
+  model Claude Code picked (CUT-309). A tool row shows "+N", the lines the run's edits add (CUT-309). Your bubble is
+  `secondary-container`, not the saturated primary one. On a wide screen the thread scrolls inside the page (it is bounded to the
+  viewport minus about 38rem) so the box stays on screen at 1440x900 (CUT-308); on a phone the page scrolls as before. A read-only
+  view (no box) still ends with a foot line pointing at the Terminal tab. The plan rail and canvas of `Main.dc.html` arrive with CUT-174 and CUT-175. With six tabs the bar scrolls sideways on a 390 px phone once the Needs-you badge shows. Codex and kopicode
   say their record is not wired in yet.
 - **Chat on a phone (CUT-179, 2026-10-22).** At 640px and under the Chat tab is one column, from `Phone.dc.html`: a **plan strip**
   (the step it is on, "3 of 6", a 6px bar; tap it for the full rail) with Pause or Approve and Stop under it as 44px buttons;
@@ -377,7 +381,7 @@ and this folder disagree after a slice lands, update this folder.
   chips, tag chips and Group by hide behind one outlined "Filter" button (a count of what is picked beside it; `aria-expanded`), so
   the first project card is fully inside a 390x844 screen. "Stop all agents" is an outlined button in `on-surface-variant`, red
   (`--md-sys-color-error`) only on hover, press, focus and in its confirm step; the project page's "Stop everything here" is
-  unchanged. A card shows its folder name (replacing the CUT-160 left-cut path) and only when it differs from the project name;
+  the same quiet outlined button (CUT-308). A card shows its folder name (replacing the CUT-160 left-cut path) and only when it differs from the project name;
   the full path is the tooltip on the name and the line. The project page's path wrapping is not part of this change.
 
 - **Projects leads with a Needs you group (CUT-284, 2026-11-12).** From the CUT-228 teardown (herdr's Inbox). Every project whose

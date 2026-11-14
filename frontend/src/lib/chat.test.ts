@@ -114,6 +114,14 @@ describe("toRows", () => {
     expect(tools.failed).toBe(1);
   });
 
+  it("totals the lines the edits add, and says nothing when no call counts", () => {
+    const edit = (id: string, added: number): ChatItem => ({ ...call(id, "Edit", "a.py"), added }) as ChatItem;
+    const rows = toRows([edit("1", 4), edit("2", 2), call("3", "Bash")]);
+    expect(rows[0].t === "tools" && rows[0].added).toBe(6);
+    const none = toRows([call("1", "Bash")]);
+    expect(none[0].t === "tools" && none[0].added).toBeNull();
+  });
+
   it("starts a new group after a message", () => {
     const rows = toRows([call("1", "Bash"), say("a", "assistant", "x"), call("2", "Bash")]);
     expect(rows.map((r) => r.t)).toEqual(["tools", "message", "tools"]);

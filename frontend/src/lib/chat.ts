@@ -12,7 +12,7 @@ export interface ChatBase {
 
 export type ChatItem =
   | (ChatBase & { kind: "user" | "assistant" | "note" | "divider" | "command"; text: string })
-  | (ChatBase & { kind: "tool"; tool_id: string; name: string; summary: string })
+  | (ChatBase & { kind: "tool"; tool_id: string; name: string; summary: string; added?: number })
   | (ChatBase & {
       kind: "tool_result";
       tool_id: string;
@@ -63,6 +63,8 @@ export interface ToolCall {
   toolId: string;
   name: string;
   summary: string;
+  /** Lines a file edit adds, when the record says (Claude Code's edit tools). */
+  added?: number;
   result: { text: string; isError: boolean } | null;
 }
 
@@ -75,6 +77,8 @@ export type Row =
       at: string | null;
       label: string;
       failed: number;
+      /** Lines the edits in this run add, or null when no call says. */
+      added: number | null;
       /** Files the calls left for a person in the artifacts folder (CUT-179): shown as cards. */
       made: MadeFile[];
     }
@@ -160,7 +164,7 @@ export function toRows(items: readonly ChatItem[]): Row[] {
   let group: Extract<Row, { t: "tools" }> | null = null;
   const place = (at: string | null) => {
     if (!group) {
-      group = { t: "tools", id: `tools-${rows.length}`, calls: [], at, label: "", failed: 0, made: [] };
+      group = { t: "tools", id: `tools-${rows.length}`, calls: [], at, label: "", failed: 0, added: null, made: [] };
       rows.push(group);
     }
     return group;
@@ -168,7 +172,7 @@ export function toRows(items: readonly ChatItem[]): Row[] {
   items.forEach((item, index) => {
     const id = item.id ?? `${item.kind}-${index}`;
     if (item.kind === "tool") {
-      const call: ToolCall = { toolId: item.tool_id, name: item.name, summary: item.summary, result: null };
+      const call: ToolCall = { toolId: item.tool_id, name: item.name, summary: item.summary, added: item.added, result: null };
       byTool.set(item.tool_id, call);
       place(item.at).calls.push(call);
       return;
@@ -195,6 +199,8 @@ export function toRows(items: readonly ChatItem[]): Row[] {
   for (const row of rows) {
     if (row.t === "tools") {
       row.label = toolLabel(row.calls) || "Used a tool";
+      const counted = row.calls.filter((c) => c.added !== undefined);
+      row.added = counted.length ? counted.reduce((n, c) => n + (c.added ?? 0), 0) : null;
       row.failed = row.calls.filter((c) => c.result?.isError).length;
       row.made = row.calls
         .map(madeFile)
