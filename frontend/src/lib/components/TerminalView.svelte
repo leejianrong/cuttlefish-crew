@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
@@ -121,6 +122,14 @@
       return; // hidden or zero-sized: the next resize fits it
     }
     if (socket?.readyState === WebSocket.OPEN) socket.send(resizeMessage(term.cols, term.rows));
+  }
+
+  // On a phone the two switches fold behind one button, so the terminal starts higher.
+  let optionsOpen = $state(false);
+  async function toggleOptions() {
+    optionsOpen = !optionsOpen;
+    await tick();
+    layout();
   }
 
   function layout() {
@@ -272,18 +281,15 @@
 <section class="terminal" aria-labelledby="terminal-heading" bind:this={panel}>
   <div class="bar" bind:this={bar}>
     <h2 id="terminal-heading" class="title-medium">Terminal</h2>
-    <div class="seg" role="group" aria-label="Which terminal">
-      {#each TERMINAL_KINDS as choice (choice.id)}
-        <button
-          type="button"
-          class:on={kind === choice.id}
-          aria-pressed={kind === choice.id}
-          onclick={() => chooseKind(choice.id)}
-        >
-          {choice.label}
-        </button>
-      {/each}
-    </div>
+    <button
+      type="button"
+      class="fold"
+      aria-expanded={optionsOpen}
+      aria-controls="terminal-options"
+      onclick={toggleOptions}
+    >
+      Options
+    </button>
     <span class="state body-small muted" role="status">
       {#if status === "connected" && kind === "shell"}Your shell, in the project folder
       {:else if status === "connected"}Connected to the agent's tmux session
@@ -291,17 +297,31 @@
       {:else if status === "closed"}Not connected
       {/if}
     </span>
-    <div class="seg" role="group" aria-label="Terminal theme">
-      {#each TERMINAL_THEME_CHOICES as choice (choice.id)}
-        <button
-          type="button"
-          class:on={themePref === choice.id}
-          aria-pressed={themePref === choice.id}
-          onclick={() => chooseTheme(choice.id)}
-        >
-          {choice.label}
-        </button>
-      {/each}
+    <div class="opts" id="terminal-options" class:open={optionsOpen}>
+      <div class="seg" role="group" aria-label="Which terminal">
+        {#each TERMINAL_KINDS as choice (choice.id)}
+          <button
+            type="button"
+            class:on={kind === choice.id}
+            aria-pressed={kind === choice.id}
+            onclick={() => chooseKind(choice.id)}
+          >
+            {choice.label}
+          </button>
+        {/each}
+      </div>
+      <div class="seg" role="group" aria-label="Terminal theme">
+        {#each TERMINAL_THEME_CHOICES as choice (choice.id)}
+          <button
+            type="button"
+            class:on={themePref === choice.id}
+            aria-pressed={themePref === choice.id}
+            onclick={() => chooseTheme(choice.id)}
+          >
+            {choice.label}
+          </button>
+        {/each}
+      </div>
     </div>
   </div>
 
@@ -365,6 +385,31 @@
 
   .bar h2 {
     margin: 0;
+  }
+
+  /* Wide screens show both switches inline, state between them; the fold button is phone only. */
+  .opts {
+    display: contents;
+  }
+
+  .bar h2 {
+    order: 0;
+  }
+
+  .opts > :first-child {
+    order: 1;
+  }
+
+  .state {
+    order: 2;
+  }
+
+  .opts > :last-child {
+    order: 3;
+  }
+
+  .fold {
+    display: none;
   }
 
   .shell-note {
@@ -455,6 +500,54 @@
 
     .bar {
       row-gap: 0.25rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .fold {
+      display: inline-flex;
+      align-items: center;
+      order: 0;
+      min-height: 2.75rem;
+      padding: 0 0.75rem;
+      border: 1px solid var(--md-sys-color-outline);
+      border-radius: 1.25rem;
+      background: transparent;
+      color: var(--md-sys-color-on-surface);
+      font: inherit;
+      font-size: 0.8125rem;
+      cursor: pointer;
+    }
+
+    .fold[aria-expanded="true"] {
+      background: var(--md-sys-color-secondary-container);
+      color: var(--md-sys-color-on-secondary-container);
+    }
+
+    .fold:focus-visible {
+      outline: 2px solid var(--md-sys-color-primary);
+      outline-offset: 2px;
+    }
+
+    .state {
+      order: 1;
+    }
+
+    .opts {
+      display: none;
+      order: 4;
+      flex-basis: 100%;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .opts.open {
+      display: flex;
+    }
+
+    .opts > :first-child,
+    .opts > :last-child {
+      order: 0;
     }
   }
 
