@@ -316,9 +316,9 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   2026-10-27, Claude Code on Sonnet 5.5, a scratch Python repo (`quill`, a SQL-subset engine), Auto mode: 12 of 12 steps ticked
   and 12 commits in 20 min (18 min useful, 88%), 0 stalled, 0 blocked, 0 stuck, 0 human interventions (plus the one expected plan
   approval), 0 nudges, 0 handoffs, 215,427 tokens (cache reads left out). It finished before it could stress anything, so a
-  multi-hour run (CUT-182) still needs a goal big enough to last. A fresh run also stops at Claude Code's trust-folder dialog
-  for the goal's worktree, whose default is "No, exit"; the harness cannot answer it, so a person (or a pre-trusted folder)
-  has to. `cuttlefish soak run` (`soak.py` scores, `soak_run.py`
+  multi-hour run (CUT-182) still needs a goal big enough to last. A fresh run used to stop at Claude Code's trust-folder dialog
+  for the goal's worktree (default "No, exit"); since CUT-182 the daemon answers it for a worktree it made itself (`sessions/trust.py`;
+  see the trust entry below). `cuttlefish soak run` (`soak.py` scores, `soak_run.py`
   drives) is checked against a fake daemon and a fake HTTP server only. Its measures are definitions, not facts about the builder:
   "stalled" is running with the token figure unmoved for 10 minutes (a long turn in one tool call that writes no transcript line
   would count), a person's message is any user line in the thread that is not the goal or one of Autopilot's two messages (the
@@ -339,6 +339,17 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   card, so nothing outside the page tells a person away from it; the token figure leaves out cache reads and is a guard, not a
   bill; the daemon restarting between an approval message and its journal line could send it twice. A real run in a fresh
   `HOME` also meets Claude's first-run theme and security screens before the trust dialog (see the next entry).
+- **The trust-folder answer is a screen read, scoped to one kind of folder (CUT-182).** Claude Code 2.1.325 has no flag or setting for
+  per-folder trust (it is `projects[<path>]` in the person's `.claude.json`, which cuttlefish does not edit). So after launching a Claude
+  Code builder in a goal worktree, `sessions/trust.py` watches the screen (up to 45 s) and, only when the dialog names exactly that
+  folder and the folder is a direct child of `<root>/.cuttlefish/worktrees`, moves to "Yes, I trust this folder", checks the cursor is
+  there, and presses Enter; a `FolderTrustAnswered` event goes in the journal and the project's history. A project's own root, any other
+  folder and a layout it does not recognise are left to the person. It is wording-dependent ("Accessing workspace:", "Is this a project
+  you created or one you trust", "Yes, I trust this folder", checked on 2.1.325), so a reworded dialog is simply not answered and the run
+  waits as before. Each worktree adds an entry to the person's `.claude.json`. A worktree relaunched by `--resume` inherits nothing
+  special; it is checked the same way. Only `claude-code` in tmux; the one-shot and stream-json transports have no dialog. `ANTHROPIC_MODEL`
+  does not pick a session's model when `~/.claude/settings.json` sets `model` or `env`; `CUTTLEFISH_CLAUDE_CODE_MODEL` (a `--model` flag)
+  does, for the builder session only.
 - **The Chat message box has been checked against a real Claude Code for the short case only (CUT-173).** Verified 2026-10-23
   (2.1.308): a bracketed paste then Enter 0.3 s later is submitted (both the approval and the "continue" were acted on); the
   trust-folder dialog is recognised and a message to it is refused, but only because of its "Esc to cancel" footer, since its

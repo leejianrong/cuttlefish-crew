@@ -21,6 +21,7 @@ from cuttlefish.artifacts import Artifact
 from cuttlefish.episodic.events import (
     AutopilotUpdated,
     DelegateApprovalsSet,
+    FolderTrustAnswered,
     PullRequestOpened,
     RequestRaised,
     ScheduleRan,
@@ -88,6 +89,14 @@ def journal_events(events: Iterable[Any]) -> list[Event]:
         elif isinstance(payload, DelegateApprovalsSet):
             choice = {None: "the daemon's setting", True: "on", False: "off"}[payload.value]
             found.append(Event(at, "note", f"Manager approvals for this project: {choice}."))
+        elif isinstance(payload, FolderTrustAnswered):
+            found.append(
+                Event(
+                    at,
+                    "note",
+                    f"cuttlefish trusted the goal's worktree for Claude Code: {payload.folder}",
+                )
+            )
         elif isinstance(payload, AutopilotUpdated) and payload.phase != previous:
             text = _autopilot_text(payload)
             if text:

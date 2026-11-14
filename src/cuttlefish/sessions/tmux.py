@@ -108,3 +108,7 @@ class Tmux:
         """The last ``lines`` non-blank lines the session's screen shows."""
         shown = self._run("capture-pane", "-p", "-t", f"={name}:").stdout.splitlines()
         return "\n".join([line for line in shown if line.strip()][-lines:])
+
+    def send_key(self, name: str, key: str) -> None:
+        """One named key (``Down``, ``Enter``) to the session, for a dialog cuttlefish answers."""
+        self._run("send-keys", "-t", f"={name}:", key)

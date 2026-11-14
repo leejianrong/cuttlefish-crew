@@ -116,6 +116,8 @@ agent's tools printed. `GET /api/projects/{id}/chat?after=<cursor>` is the same 
 
 A builder started in a folder Claude Code has not seen before first shows Claude's own "trust this folder" dialog in the
 terminal. The dashboard sees it as a dialog: the message box is disabled and a send is refused, so answer it in the Terminal tab.
+The exception is a goal's own worktree that cuttlefish made (see [Branches and pull requests](branches-and-pull-requests.md)):
+cuttlefish answers "Yes, I trust this folder" there so an unattended run is not stopped.
 
 **Autopilot** is on by default for a builder given a goal from the dashboard. The builder is told to plan first: to write
 a checklist (`- [ ] step`) to `.cuttlefish/artifacts/plan.md` and wait. The Chat tab shows the plan as a card with **Approve

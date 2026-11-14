@@ -596,6 +596,16 @@ class DelegateApprovalsSet:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class FolderTrustAnswered:
+    """cuttlefish chose "Yes, I trust this folder" on Claude Code's dialog for a goal worktree it
+    made itself (CUT-182). ``folder`` is that worktree."""
+
+    EVENT_TYPE: ClassVar[str] = "FolderTrustAnswered"
+
+    folder: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class UnknownPayload:
     """A payload whose event type this build does not recognise, preserved verbatim.
 
@@ -642,6 +652,7 @@ EventPayload = (
     | ScheduleRan
     | ScheduleSkipped
     | DelegateApprovalsSet
+    | FolderTrustAnswered
     | TeamBranchMade
     | RoleMergeReported
     | UnknownPayload
@@ -681,6 +692,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         ScheduleRan,
         ScheduleSkipped,
         DelegateApprovalsSet,
+        FolderTrustAnswered,
         TeamBranchMade,
         RoleMergeReported,
     )
