@@ -312,7 +312,13 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   nothing loaded from outside the file, so a design that pulls a library, font or image from a URL renders without it. That
   is deliberate (ADR-0036's update); do not add `allow-same-origin` or a `connect-src` to fix a design, tell the agent to
   inline. Video is held in memory (100 MB cap) and played from a blob. Checked in Chromium only, not Safari or Firefox.
-- **The soak harness has not yet scored a real multi-hour run (CUT-136).** `cuttlefish soak run` (`soak.py` scores, `soak_run.py`
+- **The soak harness has scored one short real run, not a multi-hour one (CUT-136).** The baseline (arm `baseline`, no manager),
+  2026-10-27, Claude Code on Sonnet 5.5, a scratch Python repo (`quill`, a SQL-subset engine), Auto mode: 12 of 12 steps ticked
+  and 12 commits in 20 min (18 min useful, 88%), 0 stalled, 0 blocked, 0 stuck, 0 human interventions (plus the one expected plan
+  approval), 0 nudges, 0 handoffs, 215,427 tokens (cache reads left out). It finished before it could stress anything, so a
+  multi-hour run (CUT-182) still needs a goal big enough to last. A fresh run also stops at Claude Code's trust-folder dialog
+  for the goal's worktree, whose default is "No, exit"; the harness cannot answer it, so a person (or a pre-trusted folder)
+  has to. `cuttlefish soak run` (`soak.py` scores, `soak_run.py`
   drives) is checked against a fake daemon and a fake HTTP server only. Its measures are definitions, not facts about the builder:
   "stalled" is running with the token figure unmoved for 10 minutes (a long turn in one tool call that writes no transcript line
   would count), a person's message is any user line in the thread that is not the goal or one of Autopilot's two messages (the
