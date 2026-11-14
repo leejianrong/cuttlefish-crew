@@ -17,7 +17,7 @@ import satay.control
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from cuttlefish.episodic.events import KillSwitchPressed
+from cuttlefish.episodic.events import FolderTrustAnswered, KillSwitchPressed
 from cuttlefish.fleet.daemon import FleetDaemon
 from cuttlefish.fleet.server import TOKEN_HEADER, create_app
 from cuttlefish.projects.store import ProjectStore
@@ -638,6 +638,52 @@ def test_a_goal_runs_in_its_own_worktree_only_when_the_project_opts_in(rig: Rig)
     assert client.get(f"{path}/goal").json()["goal"]["branch"] == goal["branch"]
     assert goal["branch"] in _out(rig.root, "branch", "--list")
     assert _out(rig.root, "status", "--porcelain") == ""  # not an untracked folder
+
+
+_FAKE_TRUST_CLAUDE = r"""#!/bin/sh
+# Claude Code's trust dialog (cursor on "No, exit"), then raw keys: Down moves to Yes, Enter logs
+# "trusted" on Yes and "exited" on No.
+show() {
+  printf '\033[2J\033[H'
+  printf ' Accessing workspace:\n %s\n Quick safety check: Is this a project' "$PWD"
+  printf ' you created or one you trust?\n'
+  if [ "$1" = yes ]; then printf '   No, exit\n > Yes, I trust this folder\n'
+  else printf ' > No, exit\n   Yes, I trust this folder\n'; fi
+  printf ' Enter to confirm - Esc to cancel\n'
+}
+stty -icanon -echo
+at=no
+show no
+while :; do
+  key=$(dd bs=1 count=1 2>/dev/null | od -An -c | tr -d ' ')
+  case "$key" in
+    B) at=yes; show yes ;;
+    '\r'|'\n') if [ $at = yes ]; then echo trusted >> LOG; else echo exited >> LOG; fi
+               exec sleep 300 ;;
+  esac
+done
+"""
+
+
+def test_a_claude_goal_worktree_is_trusted_and_the_decision_journaled(rig: Rig) -> None:
+    """CUT-182: Claude Code's trust dialog for the worktree cuttlefish made is answered "Yes",
+    so an unattended run is not stopped by it; the answer is in the journal."""
+    _repo(rig.root)
+    (rig.bin / "claude").write_text(_FAKE_TRUST_CLAUDE.replace("LOG", str(rig.log)))
+    project = rig.store.register(name="alpha", root=str(rig.root), mode="auto")
+    daemon = rig.daemon()
+    path = f"/api/projects/{project.id}"
+    with _client(daemon) as client:  # the daemon's loop must outlive the request
+        goal = client.post(f"{path}/goal", json={"text": "Add a summary", "backend": "claude-code"})
+        folder = goal.json()["goal"]["worktree"]
+        for _ in range(100):
+            events = [e.payload for e in daemon.session_events(project)]
+            if any(isinstance(e, FolderTrustAnswered) and e.folder == folder for e in events):
+                break
+            time.sleep(0.1)
+        else:
+            pytest.fail("the trust answer was never journaled")
+    assert rig.log.read_text().split() == ["trusted"]
 
 
 def test_a_goal_worktree_gets_only_what_the_project_lists(rig: Rig) -> None:

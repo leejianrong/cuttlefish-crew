@@ -64,6 +64,7 @@ from cuttlefish.episodic.events import (
     EnvironmentPrepared,
     EnvironmentPrepareStarted,
     EventPayload,
+    FolderTrustAnswered,
     KillSwitchPressed,
     PullRequestOpened,
     RequestResolved,
@@ -138,7 +139,12 @@ from cuttlefish.sessions.chat_input import MessageError, clean_message, dialog_o
 from cuttlefish.sessions.codex_record import find_rollout, read_rollout
 from cuttlefish.sessions.hooks import write_settings
 from cuttlefish.sessions.kopicode_record import find_events, read_events
-from cuttlefish.sessions.manager import TERMINAL_BACKEND, read_goal, write_goal
+from cuttlefish.sessions.manager import (
+    TERMINAL_BACKEND,
+    claude_model_args,
+    read_goal,
+    write_goal,
+)
 from cuttlefish.sessions.manager import wanted as session_wanted
 from cuttlefish.sessions.tmux import TmuxError
 from cuttlefish.sessions.transcript import candidate_paths, read_thread
@@ -1022,6 +1028,7 @@ class FleetDaemon:
                 raise FleetError(str(exc)) from exc
         settings: Path | None = None
         if chosen == "claude-code":
+            extra_args = [*extra_args, *claude_model_args()]
             # Its permission questions come to Needs you through our hooks (ADR-0040).
             settings = await asyncio.to_thread(
                 write_settings, project.root, project.id, self._request_window_s
@@ -1032,7 +1039,7 @@ class FleetDaemon:
             kept = last.get("worktree") if last else None
             cwd = kept if kept and Path(kept).is_dir() else None
         try:
-            return await asyncio.to_thread(
+            info = await asyncio.to_thread(
                 functools.partial(
                     self._session_manager().ensure,
                     project.id,
@@ -1048,6 +1055,28 @@ class FleetDaemon:
             )
         except SessionError as exc:
             raise FleetError(str(exc)) from exc
+        if chosen == "claude-code" and cwd and info.last_action in ("started", "relaunched"):
+            self._accept_worktree_trust(project, cwd)
+        return info
+
+    def _accept_worktree_trust(self, project: Project, folder: str) -> None:
+        """Answer Claude Code's trust dialog for a goal worktree we made (CUT-182), off the request:
+        it waits for a dialog that may never come (a folder already trusted)."""
+
+        async def run() -> None:
+            try:
+                done = await asyncio.to_thread(
+                    self._session_manager().accept_worktree_trust, project.id, project.root, folder
+                )
+                logger.info("trust dialog for %s: %s", folder, "answered" if done else "not seen")
+                if done:
+                    self.append_session_event(project, FolderTrustAnswered(folder))
+            except Exception:
+                logger.warning("the trust dialog was not answered for %s", folder, exc_info=True)
+
+        with contextlib.suppress(RuntimeError):  # no loop: nothing to answer
+            self._chat_tasks.add(task := asyncio.get_running_loop().create_task(run()))
+            task.add_done_callback(self._chat_tasks.discard)
 
     def adopt_manager(self, backend: str | None = None) -> Project | None:
         """Find the manager's project, making it when ``backend`` is given and there is none

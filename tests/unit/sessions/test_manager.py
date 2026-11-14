@@ -14,7 +14,7 @@ import pytest
 
 from cuttlefish.artifacts import AGENT_NOTE
 from cuttlefish.sessions import SessionError, SessionManager, Tmux
-from cuttlefish.sessions.manager import launch_argv, wanted
+from cuttlefish.sessions.manager import claude_model_args, launch_argv, wanted
 
 pytestmark = pytest.mark.skipif(shutil.which("tmux") is None, reason="tmux is not installed")
 
@@ -342,3 +342,15 @@ def test_note_session_id_records_the_newest_conversation_of_a_claude_session(
     _write(str(tmp_path), {"backend": "codex", "session_id": first})
     note_session_id(str(tmp_path), second)
     assert _read(str(tmp_path))["session_id"] == first
+
+
+def test_a_claude_model_comes_from_the_environment_as_a_flag_and_nothing_else() -> None:
+    """CUT-182: the flag outranks the person's settings file; a value that could be read as
+    another flag is dropped."""
+    name = "CUTTLEFISH_CLAUDE_CODE_MODEL"
+    assert claude_model_args({}) == []
+    assert claude_model_args({name: " haiku "}) == ["--model", "haiku"]
+    assert claude_model_args({name: "claude-sonnet-5-5"}) == ["--model", "claude-sonnet-5-5"]
+    assert claude_model_args({name: "sonnet[1m]"}) == ["--model", "sonnet[1m]"]
+    assert claude_model_args({name: "--dangerously-skip-permissions"}) == []
+    assert claude_model_args({name: "a b"}) == []

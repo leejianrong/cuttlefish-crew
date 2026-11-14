@@ -33,6 +33,14 @@ git log --oneline cuttlefish/<slug>
 Your checkout and its branch are not touched. If the folder is not a repository, or has no commit, the goal is refused
 with the reason; it does not quietly run in your checkout.
 
+!!! note "Claude Code's trust question"
+    A worktree is a folder Claude Code has never seen, so it opens on "Is this a project you created or one you trust?",
+    whose cursor is on "No, exit". An unattended run would stop there. For a worktree cuttlefish itself just made (a
+    folder directly inside `<project>/.cuttlefish/worktrees`, named on the dialog itself), cuttlefish picks "Yes, I trust
+    this folder" and records "cuttlefish trusted the goal's worktree" in the project's history. It never answers that
+    question for any other folder, including your project's own, and it does not edit `~/.claude.json`: Claude Code
+    keeps the trust it was given there, one entry per worktree. Claude Code only; Codex and kopicode have no such dialog.
+
 ## Auto always uses a branch
 
 A project in **Auto** runs unattended, so nothing it does may land on the default branch unreviewed. Its goals get their

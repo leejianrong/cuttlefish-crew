@@ -36,6 +36,7 @@ from typing import Any, Literal
 from cuttlefish import present
 from cuttlefish.artifacts import AGENT_NOTE
 from cuttlefish.plan import PLAN_INSTRUCTION
+from cuttlefish.sessions import trust
 from cuttlefish.sessions.hooks import permission_mode
 from cuttlefish.sessions.tmux import Tmux, TmuxError, session_name, shell_session_name
 
@@ -446,6 +447,11 @@ class SessionManager:
         """The tmux server and session name a terminal view attaches to."""
         return self._tmux, session_name(project_id)
 
+    def accept_worktree_trust(self, project_id: str, root: str, folder: str) -> bool:
+        """Accept Claude Code's trust dialog for a goal worktree cuttlefish made (CUT-182); blocks
+        while it waits for the dialog, so call it from a thread. See ``sessions.trust``."""
+        return trust.answer(self._tmux, session_name(project_id), root, folder)
+
     def stop(self, project_id: str, root: str) -> SessionInfo:
         """End the tmux session and stop reconciling it. The conversation stays on disk."""
         self._tmux.kill_session(session_name(project_id))
@@ -480,6 +486,20 @@ _BACKEND_ENV = {
     "codex": ("OPENAI_API_KEY",),
     "kopicode": ("OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"),
 }
+
+
+MODEL_ENV = "CUTTLEFISH_CLAUDE_CODE_MODEL"
+_MODEL_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:\[\]-]*")
+
+
+def claude_model_args(environ: Mapping[str, str] | None = None) -> list[str]:
+    """``--model <name>`` from ``CUTTLEFISH_CLAUDE_CODE_MODEL`` for a Claude Code builder session,
+    or nothing. The flag outranks the person's ``~/.claude/settings.json``: its ``model`` and its
+    ``env`` block beat a plain ``ANTHROPIC_MODEL`` in the process environment, which is why that
+    variable alone did not pick the model. A name that is not a plain alias or model id is
+    ignored, so the value can never be read as another flag."""
+    name = (environ if environ is not None else os.environ).get(MODEL_ENV, "").strip()
+    return ["--model", name] if _MODEL_NAME.fullmatch(name) else []
 
 
 def agent_env(root: str, backend: str) -> dict[str, str]:
