@@ -280,6 +280,7 @@ async def test_ask_first_asks_about_every_command(rig: Rig) -> None:
     held = rig.start("PermissionRequest", tool_name="Bash", tool_input={"command": "ls"})
     card = await rig.one_card()
     assert "waits for you" in card["why"].lower()
+    assert card["command"] is True
     await rig.answer(card, "allow_once")
     assert await asyncio.wait_for(held, 5) == {"decision": "allow"}
 
@@ -291,6 +292,7 @@ async def test_any_other_tool_is_a_card_with_allow_once_and_deny_only(rig: Rig) 
     card = await rig.one_card()
     assert card["title"] == "Claude Code wants to use WebFetch"
     assert card["answers"] == ["allow_once", "deny"] and card["suggested_rule"] is None
+    assert card["command"] is False  # CUT-307: no command-list explanation on the card
     assert "example.org" in card["detail"]
     await rig.answer(card, "deny")
     assert (await asyncio.wait_for(held, 5))["decision"] == "deny"
