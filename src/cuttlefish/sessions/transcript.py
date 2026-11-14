@@ -101,6 +101,24 @@ def summarise_call(name: str, tool_input: Mapping[str, Any]) -> str:
     return ""
 
 
+def _added_lines(name: str, tool_input: Mapping[str, Any]) -> int | None:
+    """Lines a file-editing call adds (what a person reads as "+6"), or None for any other tool."""
+    if name == "Write":
+        texts = [tool_input.get("content")]
+    elif name == "Edit":
+        texts = [tool_input.get("new_string")]
+    elif name == "MultiEdit":
+        edits = tool_input.get("edits")
+        texts = (
+            [e.get("new_string") for e in edits if isinstance(e, Mapping)]
+            if isinstance(edits, list)
+            else []
+        )
+    else:
+        return None
+    return sum(len(t.splitlines()) for t in texts if isinstance(t, str))
+
+
 def _result_text(content: object) -> str:
     if isinstance(content, str):
         return content
@@ -187,6 +205,7 @@ def items_for(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
             elif block.get("type") == "tool_use" and isinstance(block.get("id"), str):
                 raw = block.get("input")
                 name = str(block.get("name") or "tool")
+                added = _added_lines(name, raw if isinstance(raw, Mapping) else {})
                 out.append(
                     _item(
                         entry,
@@ -195,6 +214,7 @@ def items_for(entry: Mapping[str, Any]) -> list[dict[str, Any]]:
                         tool_id=block["id"],
                         name=name,
                         summary=summarise_call(name, raw if isinstance(raw, Mapping) else {}),
+                        **({} if added is None else {"added": added}),
                     )
                 )
         return out

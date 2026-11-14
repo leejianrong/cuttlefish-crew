@@ -323,7 +323,7 @@
       <div class="path-wrap"><ProjectPath root={project.root} /></div>
       <WorkerPlacement {client} {project} onChanged={refresh} />
       {#if project.worker}<StackCard {client} {projectId} />{/if}
-      <KillSwitch {client} {projectId} onDone={refresh} />
+      <KillSwitch {client} {projectId} quiet onDone={refresh} />
     </header>
 
     <Tabs tabs={TABS} active={inSettings ? "settings" : tab} label="Project" onSelect={selectTab} />
@@ -586,6 +586,7 @@
         offline={unreachable}
         onOpenTerminal={() => onTabChange("terminal")}
         onAutopilotChange={() => sessionChanges++}
+        mode={project.mode}
         onOpenArtifacts={() => onTabChange("artifacts")}
       />
     </div>

@@ -23,7 +23,9 @@
     type ChatResponse,
     type ChatState,
   } from "../chat";
+  import { backendLabel } from "../agentsession";
   import { parseMarkdown } from "../markdown";
+  import { modeLabel } from "../team";
   import Icon from "./Icon.svelte";
   import ArtifactCanvas from "./ArtifactCanvas.svelte";
   import Markdown from "./Markdown.svelte";
@@ -42,6 +44,7 @@
     onOpenTerminal,
     onOpenArtifacts,
     onAutopilotChange = () => {},
+    mode = null,
   }: {
     client: FleetClient;
     projectId: string;
@@ -53,6 +56,8 @@
     onOpenTerminal: () => void;
     onOpenArtifacts: () => void;
     onAutopilotChange?: () => void;
+    /** The project's permission mode, shown (not changed) beside the message box. */
+    mode?: string | null;
   } = $props();
 
   let thread = $state<ChatState>(EMPTY_CHAT);
@@ -344,6 +349,7 @@
           >
             <span class="chev" class:open={opened[row.id]}><Icon name="chevron-right" size={16} /></span>
             <span class="body-medium">{row.label}</span>
+            {#if row.added}<span class="added label-small">+{row.added}</span>{/if}
             {#if row.failed > 0}
               <span class="failed label-small">{row.failed} failed</span>
             {/if}
@@ -432,6 +438,14 @@
           placeholder="Message the builder. It goes into the same session as the Terminal tab."
         ></textarea>
       </label>
+      <p class="meta label-small muted" data-testid="composer-meta">
+        <span>{backendLabel(latest?.backend ?? null)}</span>
+        {#if mode}<span class="chip" title="Change it on the Permissions tab">{modeLabel(mode)} mode</span>{/if}
+        <span>
+          Same conversation as the
+          <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>
+        </span>
+      </p>
       <div class="composer-row">
         <p class="body-small muted hint" role="status">{sendError ?? sentNote ?? composer.hint}</p>
         <button
@@ -445,17 +459,13 @@
     </div>
   {/if}
 
-  <p class="foot body-small muted">
-    {#if composer}
-      One conversation: what you type here goes into the session that is live in the
-      <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>, and what you
-      type there appears here.
-    {:else}
+  {#if !composer}
+    <p class="foot body-small muted">
       This is a view of the conversation. To say something to the builder, type in the
       <button type="button" class="link" onclick={onOpenTerminal}>Terminal tab</button>; it is the same
       session.
-    {/if}
-  </p>
+    </p>
+  {/if}
 </section>
 
 <details
@@ -600,7 +610,9 @@
   }
 
   .scroller {
-    max-height: min(70vh, 44rem);
+    /* The thread scrolls, not the page: what is above and below it (header, tabs, message box) is
+       about 38rem, so at 1440x900 the box stays on screen (CUT-308). */
+    max-height: min(calc(100dvh - 38rem), 44rem);
     min-height: 12rem;
     overflow-y: auto;
     display: flex;
@@ -633,8 +645,8 @@
   .message.you .plain {
     padding: 0.75rem 1rem;
     border-radius: var(--md-sys-shape-corner-large, 16px);
-    background: var(--md-sys-color-primary-container);
-    color: var(--md-sys-color-on-primary-container);
+    background: var(--md-sys-color-secondary-container);
+    color: var(--md-sys-color-on-secondary-container);
   }
 
   .md {
@@ -679,6 +691,26 @@
 
   .grow {
     flex: 1;
+  }
+
+  .added {
+    color: var(--md-sys-color-on-surface-variant);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  .chip {
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.75rem;
+    background: var(--md-sys-color-surface-container-high);
+    color: var(--md-sys-color-on-surface-variant);
   }
 
   .failed {

@@ -111,6 +111,18 @@ def test_a_tool_call_is_one_line_and_its_result_is_keyed_to_it() -> None:
     )
 
 
+def test_a_file_edit_carries_the_lines_it_adds_and_other_tools_carry_none() -> None:
+    def tool(name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
+        block = {"type": "tool_use", "id": "t", "name": name, "input": tool_input}
+        return items_for(_assistant([block]))[0]
+
+    assert tool("Write", {"file_path": "a", "content": "x\ny\nz\n"})["added"] == 3
+    assert tool("Edit", {"file_path": "a", "old_string": "q", "new_string": "x\ny"})["added"] == 2
+    multi = {"file_path": "a", "edits": [{"new_string": "x"}, {"new_string": "y\nz"}]}
+    assert tool("MultiEdit", multi)["added"] == 3
+    assert "added" not in tool("Bash", {"command": "ls"})
+
+
 def test_thinking_meta_sidechains_and_bookkeeping_are_left_out() -> None:
     assert items_for(_assistant([{"type": "thinking", "thinking": "", "signature": "x"}])) == []
     assert items_for(_user("<local-command-caveat>…", isMeta=True)) == []
