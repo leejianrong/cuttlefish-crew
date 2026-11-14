@@ -142,6 +142,7 @@ from cuttlefish.sessions.kopicode_record import find_events, read_events
 from cuttlefish.sessions.manager import (
     TERMINAL_BACKEND,
     claude_model_args,
+    goal_work_dir,
     read_goal,
     write_goal,
 )
@@ -481,11 +482,13 @@ class FleetDaemon:
 
     async def list_artifacts(self, project_id: str) -> list[Artifact]:
         project = self._projects.get(project_id)
-        return await asyncio.to_thread(artifacts.list_artifacts, project.root)
+        work = await asyncio.to_thread(goal_work_dir, project.root)
+        return await asyncio.to_thread(artifacts.list_artifacts, work)
 
     async def read_artifact(self, project_id: str, relative: str) -> tuple[bytes, str]:
         project = self._projects.get(project_id)
-        return await asyncio.to_thread(artifacts.read_artifact, project.root, relative)
+        work = await asyncio.to_thread(goal_work_dir, project.root)
+        return await asyncio.to_thread(artifacts.read_artifact, work, relative)
 
     async def agent_session(self, project_id: str) -> SessionInfo:
         project = self._projects.get(project_id)
@@ -607,9 +610,10 @@ class FleetDaemon:
         # A time the page remembers, or a day back: ISO 8601 UTC strings compare as text.
         since_iso = since or timeline.iso(datetime.now(UTC) - timedelta(days=1))
         journal = await asyncio.to_thread(self.session_events, project)
-        artifacts_found = await asyncio.to_thread(artifacts.list_artifacts, project.root)
+        work = await asyncio.to_thread(goal_work_dir, project.root)
+        artifacts_found = await asyncio.to_thread(artifacts.list_artifacts, work)
         env = agent_env(project.root, "shell")  # the agents' filtered environment, no secrets
-        branch, commits = await asyncio.to_thread(timeline.read_commits, project.root, env)
+        branch, commits = await asyncio.to_thread(timeline.read_commits, work, env)
         path = await asyncio.to_thread(self.chat_transcript_path, project)
         chat_items: list[dict[str, Any]] = []
         if path is not None:

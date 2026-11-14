@@ -69,5 +69,10 @@ Claude finds its login. Know before repeating it:
   call ("PreToolUse hook error"). Symlink the real `hooks` folder into `<scratch HOME>/.claude/hooks`.
 - `ANTHROPIC_MODEL` is passed through but not honoured: the `model` and `env` entries in the person's `~/.claude/settings.json` win. Use
   `CUTTLEFISH_CLAUDE_CODE_MODEL=haiku` (a `--model` flag, which beats them; checked 2026-11-14, the header read Haiku 5.5). A Write-only task costs a few thousand tokens.
+- A person's Claude Code can register an `advisor` tool that consults Opus whatever `model` says (the request shape in the session
+  transcript shows `advisor_...` with `claude-opus-5-5`). When a run must not touch Opus, add `CLAUDE_CODE_DISABLE_ADVISOR_TOOL=1` to the
+  daemon's environment and to `CUTTLEFISH_AGENT_ENV_PASSTHROUGH` (a comma list), and check the transcript has no `advisor_` tool.
+- A soak needs a goal that lasts: Sonnet ticked about 100 plan steps in 4 hours. The soak's project and its goal worktree are under the
+  project's `.cuttlefish/worktrees/`; a second goal on the same repo resumes the first one's conversation unless the session is stopped and cleared.
 - Keep the task to the Write tool: a Bash call raises a Needs you card, and approving it by script is not allowed.
 - To fire a hook by hand use `sessions/hook_script.py --project <id>` with the scratch `HOME`; it reads the token itself.

@@ -26,7 +26,6 @@ import logging
 import time
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from cuttlefish import autopilot as rules
@@ -47,7 +46,7 @@ from cuttlefish.episodic.events import AutopilotUpdated
 from cuttlefish.plan import PLAN_PATH, Plan, read_plan
 from cuttlefish.projects.store import Project
 from cuttlefish.requests import RequestError
-from cuttlefish.sessions.manager import read_goal
+from cuttlefish.sessions.manager import goal_work_dir
 from cuttlefish.sessions.transcript import UsageMeter
 from cuttlefish.usage import BOARD
 
@@ -63,14 +62,6 @@ SETTLE_S = 2.0
 
 class AutopilotError(Exception):
     """An action Autopilot cannot take now; the message says why."""
-
-
-def _work_dir(project: Project) -> str:
-    """Where the builder writes its plan and decisions: the goal's worktree when it has one
-    (ADR-0048), else the project root."""
-    goal = read_goal(project.root)
-    where = goal.get("worktree") if goal else None
-    return where if where and Path(where).is_dir() else project.root
 
 
 def _now() -> str:
@@ -132,7 +123,7 @@ class Autopilot:
     async def status(self, project: Project) -> dict[str, Any]:
         """Everything the page shows about Autopilot: its state, the plan and what it has used."""
         run = await self._run(project)
-        plan = await asyncio.to_thread(read_plan, _work_dir(project))
+        plan = await asyncio.to_thread(read_plan, goal_work_dir(project.root))
         if run is None:
             return {"phase": "off", "plan": _plan_json(plan), "plan_path": PLAN_PATH}
         state = run.state
@@ -193,7 +184,7 @@ class Autopilot:
         run = await self._run(project)
         if run is None or run.state.phase not in ("planning", "awaiting_approval"):
             raise AutopilotError("There is no plan waiting for approval.")
-        plan = await asyncio.to_thread(read_plan, _work_dir(project))
+        plan = await asyncio.to_thread(read_plan, goal_work_dir(project.root))
         if plan is None or not plan.steps:
             raise AutopilotError(
                 f"The builder has not written a checklist to {PLAN_PATH} yet, "
@@ -431,9 +422,9 @@ class Autopilot:
     async def _decision_pending(self, project: Project, run: _Run) -> bool:
         """The builder wrote a decision (CUT-184), or one is still waiting for the person: raise
         the card and do not nudge a builder that is waiting on an answer."""
-        ask = await asyncio.to_thread(read_ask, _work_dir(project))
+        ask = await asyncio.to_thread(read_ask, goal_work_dir(project.root))
         if ask is not None:
-            await asyncio.to_thread(consume_ask, _work_dir(project))
+            await asyncio.to_thread(consume_ask, goal_work_dir(project.root))
             try:
                 self._daemon.raise_decision(
                     project.id,
@@ -459,7 +450,7 @@ class Autopilot:
         )
 
     async def _plan_ready(self, project: Project, run: _Run) -> None:
-        plan = await asyncio.to_thread(read_plan, _work_dir(project))
+        plan = await asyncio.to_thread(read_plan, goal_work_dir(project.root))
         if plan is not None and plan.steps:
             self._journal(
                 project,
@@ -474,7 +465,7 @@ class Autopilot:
 
     async def _evaluate(self, project: Project, run: _Run) -> None:
         state = run.state
-        plan = await asyncio.to_thread(read_plan, _work_dir(project))
+        plan = await asyncio.to_thread(read_plan, goal_work_dir(project.root))
         started = _parse(state.approved_at) or self._clock()
         facts = Facts(
             steps_total=len(plan.steps) if plan else 0,

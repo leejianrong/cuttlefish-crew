@@ -140,6 +140,14 @@ def read_goal(root: str) -> dict[str, str] | None:
     return {k: v for k, v in data.items() if isinstance(v, str)}
 
 
+def goal_work_dir(root: str) -> str:
+    """Where the builder works and writes its plan, decisions and commits: the goal's worktree
+    when it has one (ADR-0048), else the project root."""
+    goal = read_goal(root)
+    where = goal.get("worktree") if goal else None
+    return where if where and Path(where).is_dir() else root
+
+
 def write_goal(
     root: str,
     text: str,

@@ -466,6 +466,38 @@ def test_the_overview_gathers_the_goal_the_timeline_and_a_digest(rig: Rig) -> No
     assert client.get("/api/projects/nope/overview").status_code == 404
 
 
+def test_the_overview_reads_the_goals_worktree_when_it_has_one(rig: Rig) -> None:
+    import json
+    import subprocess
+
+    tree = rig.tmp / "wt"
+    art = tree / ".cuttlefish" / "artifacts"
+    art.mkdir(parents=True)
+    (art / "chart.png").write_bytes(b"\x89PNG")
+    who = {"NAME": "t", "EMAIL": "t@e.co"}
+    git_vars = {
+        f"GIT_{role}_{key}": value for role in ("AUTHOR", "COMMITTER") for key, value in who.items()
+    }
+    git_vars |= {"PATH": "/usr/bin:/bin", "HOME": str(rig.tmp)}
+    (tree / "a.txt").write_text("a")
+    for args in (["init", "-q", "-b", "cuttlefish/g"], ["add", "."], ["commit", "-q", "-m", "one"]):
+        subprocess.run(
+            ["git", "-C", str(tree), *args], check=True, env=git_vars, capture_output=True
+        )
+    (rig.root / ".cuttlefish").mkdir(exist_ok=True)
+    (rig.root / ".cuttlefish" / "goal.json").write_text(
+        json.dumps({"text": "Build it", "worktree": str(tree)})
+    )
+    project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
+    client = _client(rig.daemon())
+    body = client.get(
+        f"/api/projects/{project.id}/overview", params={"since": "2000-01-01T00:00:00Z"}
+    ).json()
+    texts = [e["text"] for e in body["timeline"]]
+    assert body["branch"] == "cuttlefish/g"
+    assert "Commit: one" in texts and "Produced an image: chart.png" in texts
+
+
 def test_the_digest_route_serves_the_allowlisted_digest(rig: Rig) -> None:
     project = rig.store.register(name="alpha", root=str(rig.root), backend="claude-code")
     client = _client(rig.daemon())

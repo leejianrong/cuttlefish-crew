@@ -219,6 +219,21 @@ def test_a_run_approves_the_plan_once_and_ends_when_autopilot_does() -> None:
     assert not daemon.stopped
 
 
+def test_commits_that_scroll_out_of_the_timeline_window_are_still_counted() -> None:
+    class Windowed(FakeDaemon):
+        def get(self, path: str) -> dict[str, Any]:
+            if "/overview" in path:  # a different single commit on every read, as a window gives
+                self.reads_overview = getattr(self, "reads_overview", 0) + 1
+                at = f"2099-01-01T00:00:{self.reads_overview:02d}Z"
+                return {"timeline": [{"at": at, "kind": "commit", "text": "x"}]}
+            return super().get(path)
+
+    daemon = Windowed(
+        [{"phase": "off"}, {"phase": "running"}, {"phase": "running"}, {"phase": "done"}]
+    )
+    assert _drive(daemon).result.commits >= 3
+
+
 def test_the_deadline_stops_autopilot_and_says_so() -> None:
     daemon = FakeDaemon([{"phase": "off"}, {"phase": "running", "tokens_used": 5}])
     outcome = _drive(daemon, hours=1.0)
