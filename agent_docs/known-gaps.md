@@ -312,7 +312,24 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   nothing loaded from outside the file, so a design that pulls a library, font or image from a URL renders without it. That
   is deliberate (ADR-0036's update); do not add `allow-same-origin` or a `connect-src` to fix a design, tell the agent to
   inline. Video is held in memory (100 MB cap) and played from a blob. Checked in Chromium only, not Safari or Firefox.
-- **The soak harness has scored one short real run, not a multi-hour one (CUT-136).** The baseline (arm `baseline`, no manager),
+- **First multi-hour Auto soak, 2026-11-14 (CUT-182).** Arm `baseline`, Claude Code 2.1.325 on Sonnet 5.5 (`CUTTLEFISH_CLAUDE_CODE_MODEL=sonnet`),
+  Auto mode, the scratch repo `quill`, a goal with a 100-step plan, driven by `cuttlefish soak run --hours 6`. It was started on a
+  repo that already held a finished 49-step run, so it resumed that run's conversation (the daemon relaunches the project's session
+  with `--resume`). The run was stopped by the operator at **5 h 02 min**, not ended by Autopilot: **5 h 00 min useful (99%)**, 0 stalled, 0 blocked on a
+  permission, 0 stuck, 0 human interventions (plus the one plan approval), 0 nudges, 2,497,332 tokens (cache reads left out), 100
+  of 100 steps ticked. The builder had written 143 steps and kept working (about 99 commits on the goal branch, tests green when
+  last run), so the score undercounts: see below. The earlier 73-minute run of a 49-step goal on the same repo scored 49 of 49, 1 nudge, 725,234 tokens, 0 of everything else.
+  A scored run needs a goal that is not finished in an hour: Sonnet ticked 100 steps in 3 h 51 min.
+  What the soak found and fixed (all in `fix/cut-182-autopilot-goal-worktree`): Autopilot, the overview, the artifacts list and the commit
+  count read the project root, so a builder in its goal worktree (the default) never got past "planning" (`sessions.manager.goal_work_dir`);
+  a plan was cut at 100 steps, so a longer plan looked finished at step 100 (`plan.MAX_STEPS` is now 500); and the harness counted commits and
+  refreshes from a window (`read_commits -n40`, the latest ~120 thread items), so it reported 40 commits and 0 handoffs, where the truth was ~99 and at least 2 (it now
+  counts each event once as first seen, but a commit that left the window between two reads, 10 min apart in a fast stretch, can still be missed).
+  Not fixed: the run did not exercise a rate limit, a permission card or a decision card (Auto needed none: 0 command or edit approvals reached the person), and
+  its context refreshed on its own (2 seen) with no check of the handoff's quality. One more finding: Jian's Claude Code registers an
+  `advisor` tool pointing at Opus 5.5 even with `model` set to Sonnet; the tool was never called, but a run that must not touch Opus
+  needs `CLAUDE_CODE_DISABLE_ADVISOR_TOOL=1` (also in `CUTTLEFISH_AGENT_ENV_PASSTHROUGH`). The earlier note follows.
+- **The soak harness had scored one short real run before that (CUT-136).** The baseline (arm `baseline`, no manager),
   2026-10-27, Claude Code on Sonnet 5.5, a scratch Python repo (`quill`, a SQL-subset engine), Auto mode: 12 of 12 steps ticked
   and 12 commits in 20 min (18 min useful, 88%), 0 stalled, 0 blocked, 0 stuck, 0 human interventions (plus the one expected plan
   approval), 0 nudges, 0 handoffs, 215,427 tokens (cache reads left out). It finished before it could stress anything, so a

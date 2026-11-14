@@ -32,7 +32,7 @@ PLAN_INSTRUCTION = (
 #: A step line: a bullet or a number, then a checkbox. ``x`` or ``X`` is done.
 _STEP = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\[([ xX])\]\s+(.*\S)\s*$")
 
-MAX_STEPS = 100
+MAX_STEPS = 500  # a 4-hour run wrote 143; a cap below the plan ends Autopilot early
 _STEP_CHARS = 300
 _PLAN_BYTES = 200_000
 

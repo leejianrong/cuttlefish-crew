@@ -136,6 +136,7 @@ def read_sample(
     slow: bool,
     carried: Sample | None,
     started_iso: str,
+    seen: set[tuple[str, str, str]],
 ) -> tuple[Sample, list[dict[str, Any]]]:
     """One sample. The slow reads (timeline, thread) are repeated from ``carried`` between turns."""
     pid = plan.project_id
@@ -149,8 +150,14 @@ def read_sample(
         events = [
             e for e in timeline if isinstance(e, dict) and str(e.get("at", "")) >= started_iso
         ]
-        commits = sum(1 for e in events if e.get("kind") == "commit")
-        refreshes = sum(1 for e in events if e.get("kind") == "refresh")
+        # The timeline is a window (the last commits, the latest thread items), so an event that
+        # scrolled out between two reads would be lost: count each one once, as it is first seen.
+        for e in events:
+            kind = e.get("kind")
+            if kind in ("commit", "refresh"):
+                seen.add((str(kind), str(e.get("at")), str(e.get("text"))))
+        commits = sum(1 for k, _, _ in seen if k == "commit")
+        refreshes = sum(1 for k, _, _ in seen if k == "refresh")
     tokens = status.get("tokens_used")
     sample = Sample(
         t=t,
@@ -227,6 +234,7 @@ def run_soak(
     deadline = start + plan.hours * 3600
     last_phase = ""
     last_waiting = 0
+    seen_events: set[tuple[str, str, str]] = set()
     seen_messages: set[str] = set()
     approved = False
     tick = 0
@@ -240,6 +248,7 @@ def run_soak(
             slow=slow,
             carried=samples[-1] if samples else None,
             started_iso=started_iso,
+            seen=seen_events,
         )
         # A request that was waiting and no longer is was answered by a person (never the driver).
         if last_waiting > sample.waiting:
