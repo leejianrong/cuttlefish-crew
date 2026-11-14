@@ -376,6 +376,8 @@ export interface NeedsYouRequest {
   lands: "now" | "end_of_turn" | "next_round";
   /** From a project's agent session in tmux: its own terminal can answer too (ADR-0040). */
   session?: boolean;
+  /** False for a tool that is not a shell command (a WebFetch); absent means a command. */
+  command?: boolean;
   expires_at: string;
   project_id: string;
   project_name: string;

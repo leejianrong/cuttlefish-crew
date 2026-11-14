@@ -285,6 +285,7 @@ class ClaudeHooks:
             suggestion=suggestion,
             title=title,
             session=True,
+            command=tool == "Bash",
         )
         key = input_key(tool, tool_input)
         call_id = self._calls[project.id].get(key) if project.id in self._calls else None

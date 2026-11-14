@@ -340,6 +340,9 @@ class RequestRaised:
     #: What stalls while a ``decision`` waits, in the builder's words (CUT-184). ``expires_at``
     #: on a decision is when its recommended option is taken for the person (CUT-185).
     cost_of_waiting: str | None = None
+    #: False for a permission to use a tool that is not a shell command (a WebFetch), so a card
+    #: does not explain command-list rules that do not apply to it (CUT-307).
+    command: bool = True
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

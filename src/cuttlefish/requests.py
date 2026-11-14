@@ -226,6 +226,7 @@ class RequestBroker:
         suggestion: Sequence[str] | None = None,
         title: str | None = None,
         session: bool = False,
+        command: bool = True,
     ) -> PendingRequest:
         """A shell command nothing approves yet: journal it and return it to be held.
 
@@ -251,6 +252,7 @@ class RequestBroker:
                 role=role,
                 backend=backend,
                 session=session,
+                command=command,
             ),
             window_s=window_s,
         )

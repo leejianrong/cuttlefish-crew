@@ -253,7 +253,7 @@
       Applies to this team now and is saved to the project's commands, so it stays after a restart.
       {#if !ruleOk}<span class="bad">The rule must be the start of this command.</span>{/if}
     </p>
-  {:else}
+  {:else if request.command !== false}
     <p class="body-small muted">
       This command uses shell syntax (a redirect, variable or substitution), or has a part that is not on the list, so it can only be allowed once.
     </p>
