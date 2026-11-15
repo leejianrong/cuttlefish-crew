@@ -59,11 +59,14 @@
     { value: false, label: "Off" },
   ];
 
+  /** What a person who is away most of the day is likely to want; never applied on its own. */
+  const SUGGESTED_WAIT = 30;
   let waitBusy = $state(false);
   let waitError = $state<string | null>(null);
   const waitChoices: { value: number | null; label: string }[] = [
     { value: null, label: "Never" },
     { value: 15, label: "15 min" },
+    { value: SUGGESTED_WAIT, label: "30 min (suggested)" },
     { value: 60, label: "1 hour" },
     { value: 240, label: "4 hours" },
     { value: 1440, label: "24 hours" },
@@ -318,9 +321,11 @@
     <section class="card panel" aria-labelledby="wait-heading">
       <h2 class="title-medium" id="wait-heading">Decisions the builder asks you</h2>
       <p class="body-small muted">
-        When the builder asks you to choose, wait this long, then take the option it recommends and
-        tell it so. An option that deletes or overwrites work is never taken for you, whatever you
-        set. Applies to the next decision. Now: {project.decision_wait_minutes
+        With "Never" the builder stays stopped until you answer, even for days. Set a wait and, when
+        it runs out with no answer, cuttlefish takes the option the builder recommends and tells it
+        so; the journal says it was chosen automatically. An option that deletes or overwrites work
+        is never taken for you, whatever you set, and a plan is never approved for you. Applies to
+        the next decision. Now: {project.decision_wait_minutes
           ? `${project.decision_wait_minutes} min`
           : "wait for you with no limit"}.
       </p>
