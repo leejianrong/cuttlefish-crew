@@ -139,6 +139,8 @@ class Autopilot:
             if started and state.phase == "running"
             else None,
             "resume_at": state.resume_at if state.phase == "limit_wait" else None,
+            "limit_kind": state.kind or None,
+            "limit_source": state.source or None,
             "continue_after_reset": project.continue_after_reset,
             "nudges": state.nudges,
             "nudges_since_progress": state.nudges_since_progress,
@@ -160,6 +162,8 @@ class Autopilot:
     # -- changing --------------------------------------------------------------------------------
 
     def _journal(self, project: Project, run: _Run, **changes: Any) -> None:
+        if run.state.kind and "kind" not in changes and ("phase" in changes or "nudges" in changes):
+            changes.update(kind="", source="")  # the limit it described is over
         run.state = dataclasses.replace(run.state, **changes)
         self._daemon.append_session_event(project, run.state)
 
@@ -271,8 +275,23 @@ class Autopilot:
         self, project: Project, error: str | None, details: str | None
     ) -> None:
         """A turn ended on an API error. A usage limit on a running Autopilot is waited for."""
-        if error != "rate_limit":
-            return
+        if error == "rate_limit":
+            await self.on_limit(project, details=details, source="hook")
+
+    async def on_board(self, project: Project, backend: str) -> None:
+        """A backend's usage windows were just refreshed (Codex's ``account/rateLimits``): a
+        running Autopilot on that backend whose window is out waits for it (CUT-311)."""
+        run = await self._run(project)
+        out = BOARD.blocked_until(backend, self._clock()) is not None
+        if out and run is not None and run.state.backend == backend:
+            await self.on_limit(project, source="board")
+
+    async def on_limit(
+        self, project: Project, *, details: str | None = None, source: str = "board"
+    ) -> None:
+        """A usage window is out. ``details`` is the failed turn's own words, ``source`` where the
+        signal came from (``hook`` or ``board``); the reset is read from the words first, then
+        from what the backend reported on the usage board. Never a guess: no reset, no timer."""
         run = await self._run(project)
         if run is None or run.state.phase != "running":
             return
@@ -286,11 +305,16 @@ class Autopilot:
             )
             return
         now = self._clock()
-        reset = reset_from_failure(details, now) or BOARD.blocked_until(state.backend, now)
+        reset = reset_from_failure(details, now)
+        if reset is None:
+            reset = BOARD.blocked_until(state.backend, now)
+            source = "board" if reset is not None else source
         if reset is None:
             self._journal(
                 project,
                 run,
+                kind="window",
+                source=source,
                 reason="The builder hit a usage limit and the reset time is not known, so it "
                 "will not continue by itself. Carry on from here when the limit has reset.",
             )
@@ -323,6 +347,8 @@ class Autopilot:
             phase="limit_wait",
             resume_at=_iso(due),
             limit_waits=waits,
+            kind="window",
+            source=source,
             reason=f"Usage limit reached. Will continue at {_utc_text(due)}.",
         )
         self._arm(project.id, due)

@@ -528,6 +528,11 @@ class AutopilotUpdated:
     resume_at: str | None = None
     #: How many times in a row the agent has stopped on a usage limit and been waited for.
     limit_waits: int = 0
+    #: What Autopilot is waiting out (CUT-311): ``window`` (a usage window), later ``backoff``.
+    #: In ``running`` with no ``resume_at`` it means the reset time is unknown. Empty otherwise.
+    kind: str = ""
+    #: Where the wait's signal came from: ``hook``, ``board`` or ``backoff``. Empty otherwise.
+    source: str = ""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
