@@ -35,6 +35,12 @@ DEFAULT_CONTEXT_LIMIT_PERCENT = 75
 CHECKPOINT_STOPS = frozenset({"max_turns", "budget_exhausted", "round_timeout", "context_pressure"})
 
 
+#: Autopilot's wait after a provider error that names no reset (an API 429 or 529, kopicode's
+#: ``provider_rate_limit``): this many seconds, doubling each time in a row, capped (CUT-311).
+DEFAULT_LIMIT_BACKOFF_S = 300
+MAX_LIMIT_BACKOFF_S = 3600
+
+
 def _whole(name: str, default: int, *, minimum: int, environ: Mapping[str, str] | None) -> int:
     raw = (environ if environ is not None else os.environ).get(name)
     if raw is None or not raw.strip():
@@ -70,6 +76,18 @@ def round_timeout_from_env(environ: Mapping[str, str] | None = None) -> float | 
         "CUTTLEFISH_ROUND_TIMEOUT", DEFAULT_ROUND_TIMEOUT_S, minimum=0, environ=environ
     )
     return float(seconds) if seconds > 0 else None
+
+
+def limit_backoff_from_env(environ: Mapping[str, str] | None = None) -> int:
+    """``CUTTLEFISH_LIMIT_BACKOFF_S``: the first backoff wait, at least 1 s, else the default."""
+    return _whole("CUTTLEFISH_LIMIT_BACKOFF_S", DEFAULT_LIMIT_BACKOFF_S, minimum=1, environ=environ)
+
+
+def max_limit_waits_from_env(environ: Mapping[str, str] | None = None) -> int:
+    """``CUTTLEFISH_MAX_LIMIT_WAITS``: limited stops in a row Autopilot waits out, else five."""
+    from cuttlefish.autopilot import MAX_LIMIT_WAITS
+
+    return _whole("CUTTLEFISH_MAX_LIMIT_WAITS", MAX_LIMIT_WAITS, minimum=1, environ=environ)
 
 
 def max_idle_rounds_from_env(environ: Mapping[str, str] | None = None) -> int:
