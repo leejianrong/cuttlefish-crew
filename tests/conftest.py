@@ -74,6 +74,7 @@ def _let_the_fake_agent_see_its_scenario(monkeypatch: pytest.MonkeyPatch) -> Non
     the operator's passthrough, as a person with a custom setting would; a test of the
     allowlist itself sets its own value."""
     monkeypatch.setenv("CUTTLEFISH_AGENT_ENV_PASSTHROUGH", "FAKE_KOPICODE_*")
+    monkeypatch.delenv("CUTTLEFISH_NOTIFY_URL", raising=False)  # no test sends a notification
 
 
 @pytest.fixture(autouse=True)

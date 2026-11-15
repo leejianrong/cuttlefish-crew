@@ -160,6 +160,10 @@ When the builder needs a choice only you can make, it is told to write `.cuttlef
 meanwhile, and does not nudge while it waits. Pick an option and it is typed to the builder as a message. The card and who
 answered are in the journal.
 
+To be told when the dashboard is closed, set `CUTTLEFISH_NOTIFY_URL` (a webhook or ntfy topic) in the environment of `cuttlefish serve`:
+it gets one POST with the project's name and the card's title when a card is raised or Autopilot reaches a limit or is stuck, and
+nothing else (see the [CLI reference](cli-reference.md)). Push to a phone through the relay is not built.
+
 By default the card waits with no timer, so a builder left alone stays stopped until you answer. On the project's
 Permissions tab, **Decisions the builder asks you** sets a wait (15 minutes to 24 hours, with 30 minutes suggested but
 never applied for you; `PATCH /api/projects/{id}/decision-wait` with `{"decision_wait_minutes": 60}` is the Admin-tier

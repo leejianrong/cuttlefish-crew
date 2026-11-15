@@ -208,6 +208,8 @@ class RequestBroker:
         self._closed: set[str] = set()
         #: Called with each permission request as it is raised (CUT-230, ADR-0053).
         self.on_permission: Callable[[PendingRequest], None] | None = None
+        #: Called with every request as it is raised, of any kind (CUT-312: the notification sink).
+        self.on_raised: Callable[[PendingRequest], None] | None = None
         #: Called with each ``decision`` as it ends, however it ended (CUT-184).
         self.on_decision_resolved: Callable[[PendingRequest, Outcome], None] | None = None
 
@@ -485,6 +487,8 @@ class RequestBroker:
         self._pending[pending.id] = pending
         if self.on_permission is not None and stored.kind == "permission":
             self.on_permission(pending)
+        if self.on_raised is not None:
+            self.on_raised(pending)
         return pending
 
     # -- holding ----------------------------------------------------------------------
