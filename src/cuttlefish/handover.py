@@ -20,6 +20,7 @@ sees.
 
 from __future__ import annotations
 
+from cuttlefish import handoff_quality
 from cuttlefish.episodic.events import (
     ConsentDecided,
     DelegationCompleted,
@@ -27,9 +28,12 @@ from cuttlefish.episodic.events import (
     DelegationRefused,
     DelegationStarted,
     EventPayload,
+    HandoverChecked,
     HandoverWritten,
     LlmCallCompleted,
     LlmCallFailed,
+    RequestRaised,
+    RequestResolved,
     SteeringMessage,
     TaskCompleted,
     TaskFailed,
@@ -39,7 +43,7 @@ from cuttlefish.episodic.events import (
 )
 from cuttlefish.limits import CHECKPOINT_STOPS
 from cuttlefish.tasks.journal import journal, read_episodic_events
-from cuttlefish.tasks.repo import REPO_STATE_MARKER, read_repo_state
+from cuttlefish.tasks.repo import REPO_STATE_MARKER, read_plan_step, read_repo_state
 
 #: A placeholder default, not a tuned value — callers configure their own
 #: (``cuttlefish.workflow.TaskInput.token_budget``).
@@ -143,9 +147,9 @@ async def maybe_handover(
     own ``HandoverWritten`` could wrongly suppress a different role's next one.
     """
     raw_events = await read_episodic_events(task_id)
-    all_decoded = (
+    all_decoded = [
         (raw["seq"], decode_payload(raw["event_type"], raw["data"])) for raw in raw_events
-    )
+    ]
     decoded = [
         (seq, payload) for seq, payload in all_decoded if getattr(payload, "role", None) == role
     ]
@@ -163,15 +167,19 @@ async def maybe_handover(
     if total_tokens < token_budget and not force:
         return False
 
-    if agent_document is not None and agent_document.strip():
-        summary = agent_document.strip()
-    else:
-        summary = _digest(decoded, _previous_summary(decoded, last_handover_seq))
+    document = (agent_document or "").strip()
+    from_agent = bool(document)
+    summary = document or _digest(decoded, _previous_summary(decoded, last_handover_seq))
+    checked = summary
     if root:
         state = await read_repo_state(root)
         if state:
             summary = f"{summary}\n\n{state}"
 
+    plan_step = await read_plan_step(root) if root else None
+    await journal(
+        task_id, _check(checked, from_agent, window, decoded, all_decoded, plan_step, role)
+    )
     await journal(
         task_id,
         HandoverWritten(
@@ -182,6 +190,60 @@ async def maybe_handover(
         ),
     )
     return True
+
+
+def _check(
+    text: str,
+    from_agent: bool,
+    window: list[tuple[int, EventPayload]],
+    decoded: list[tuple[int, EventPayload]],
+    everything: list[tuple[int, EventPayload]],
+    plan_step: str | None,
+    role: str | None,
+) -> HandoverChecked:
+    """Advisory checks on the handover just written (CUT-313): what the journal says happened
+    against what the text mentions. Never gates anything."""
+
+    def edited(events: list[tuple[int, EventPayload]]) -> list[str]:
+        paths = (getattr(p, "edited_paths", []) for _, p in events)
+        return list(dict.fromkeys(path for group in paths for path in group))
+
+    failures = [
+        p.reason
+        for _, p in window
+        if isinstance(p, DelegationFailed | DelegationRefused)
+        and getattr(p, "failure_kind", None) not in CHECKPOINT_STOPS
+    ][-_MOST_RECENT:]
+    resolved = {p.request_id for _, p in everything if isinstance(p, RequestResolved)}
+    pending = [
+        p.title
+        for _, p in everything
+        if isinstance(p, RequestRaised) and p.role == role and p.request_id not in resolved
+    ]
+    sheet = handoff_quality.checklist(text, known_paths=edited(decoded))
+    found = handoff_quality.recall(
+        text,
+        edited_paths=edited(window),
+        plan_step=plan_step,
+        failures=failures,
+        open_requests=pending,
+    )
+    return HandoverChecked(
+        source="agent" if from_agent else "digest",
+        headings=sheet.headings,
+        remaining_ok=sheet.remaining_ok,
+        done_names_path=sheet.done_names_path,
+        unconfirmed=sheet.unconfirmed,
+        length_ok=sheet.length_ok,
+        files_found=found.files[0],
+        files_total=found.files[1],
+        failures_found=found.failures[0],
+        failures_total=found.failures[1],
+        requests_found=found.requests[0],
+        requests_total=found.requests[1],
+        plan_step=found.plan_step,
+        role=role,
+    )
 
 
 async def latest_handover_summary(task_id: str, *, role: str | None = None) -> str | None:

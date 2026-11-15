@@ -10,6 +10,7 @@ from cuttlefish.episodic.events import (
     DelegationCompleted,
     DelegationFailed,
     DelegationRefused,
+    HandoverChecked,
     HandoverWritten,
     SteeringMessage,
     TaskSubmitted,
@@ -75,10 +76,10 @@ async def test_a_second_handover_only_covers_the_window_after_the_first(tmp_path
 
     second = list(store.read("task-1"))[-1]
     assert isinstance(second.payload, HandoverWritten)
-    # Covers only the new TaskSubmitted (seq 3: the first handover took seq 2), not the first one
+    # Covers only the new TaskSubmitted (seq 4: the first handover's check and the handover took 2 and 3), not the first one
     # already folded into the first handover.
-    assert second.payload.covers_seq_from == 3
-    assert second.payload.covers_seq_to == 3
+    assert second.payload.covers_seq_from == 4
+    assert second.payload.covers_seq_to == 4
     store.close()
 
 
@@ -306,4 +307,38 @@ async def test_a_handover_carries_the_repository_state_git_reports(tmp_path: Pat
     await maybe_handover("task-1", token_budget=50, root=str(tmp_path / "nowhere"))
     last = _handovers(store)[-1]
     assert "feat: slug" not in last.summary and "?? wip.py" not in last.summary
+    store.close()
+
+
+async def test_a_handover_is_checked_and_the_check_is_journaled_first(tmp_path: Path) -> None:
+    store = _configure(tmp_path)
+    store.append("task-1", TaskSubmitted(text="x" * 400))
+    store.append(
+        "task-1",
+        DelegationCompleted(summary="did it", edited_paths=["src/a.py", "src/b.py"]),
+    )
+    document = "## Done\nEdited src/a.py.\n## Remaining\nWire it up properly.\n"
+
+    assert await maybe_handover("task-1", token_budget=50, agent_document=document)
+
+    events = [e.payload for e in store.read("task-1")]
+    assert isinstance(events[-1], HandoverWritten)
+    checked = events[-2]
+    assert isinstance(checked, HandoverChecked)
+    assert checked.source == "agent"
+    assert (checked.headings, checked.remaining_ok) == (2, True)
+    assert (checked.files_found, checked.files_total) == (1, 2)
+    store.close()
+
+
+async def test_a_digest_is_checked_as_a_digest(tmp_path: Path) -> None:
+    store = _configure(tmp_path)
+    store.append("task-1", TaskSubmitted(text="x" * 400))
+
+    assert await maybe_handover("task-1", token_budget=50)
+
+    checked = next(
+        e.payload for e in store.read("task-1") if isinstance(e.payload, HandoverChecked)
+    )
+    assert checked.source == "digest" and checked.headings == 4
     store.close()

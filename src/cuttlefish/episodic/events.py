@@ -183,6 +183,32 @@ class HandoverWritten:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class HandoverChecked:
+    """Advisory string checks on the handover just written (CUT-313, ADR-0042): which headings it
+    has and how many of the known facts it mentions. Numbers and flags only, no text; a failed
+    check blocks nothing. ``source`` is ``agent`` or ``digest``. ``*_found``/``*_total`` are
+    recall ratios against the journal (files edited, recent failures, open requests);
+    ``plan_step`` is whether the plan's next step is named, ``None`` without a plan."""
+
+    EVENT_TYPE: ClassVar[str] = "HandoverChecked"
+
+    source: str
+    headings: int
+    remaining_ok: bool
+    done_names_path: bool | None
+    unconfirmed: int
+    length_ok: bool
+    files_found: int
+    files_total: int
+    failures_found: int
+    failures_total: int
+    requests_found: int
+    requests_total: int
+    plan_step: bool | None = None
+    role: str | None = None
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class TaskCompleted:
     """The task reached a successful terminal state."""
 
@@ -633,6 +659,7 @@ EventPayload = (
     | DelegationRefused
     | DelegationFailed
     | HandoverWritten
+    | HandoverChecked
     | TaskCompleted
     | TaskFailed
     | SteeringMessage
@@ -673,6 +700,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         DelegationRefused,
         DelegationFailed,
         HandoverWritten,
+        HandoverChecked,
         TaskCompleted,
         TaskFailed,
         SteeringMessage,
