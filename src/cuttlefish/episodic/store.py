@@ -37,6 +37,7 @@ from cuttlefish.episodic.events import (
     RequestResolved,
     RoundContinued,
     RoundUsageUpdated,
+    SessionBlocked,
     StopRequested,
     TaskCompleted,
     TaskFailed,
@@ -146,6 +147,8 @@ def _describe(payload: EventPayload) -> tuple[int, str]:
             return logging.INFO, f"{reason}: continuing ({count} of {limit})"
         case AutopilotUpdated(phase=phase, reason=reason, nudges=nudges):
             return logging.INFO, f"{phase} after {nudges} nudges: {_clip(reason)}".rstrip(": ")
+        case SessionBlocked(kind=kind, message=message):
+            return logging.WARNING, f"{kind} {_clip(message)}".rstrip()
         case RoundUsageUpdated(tokens=tokens):
             return logging.DEBUG, f"{tokens} tokens so far"
         case TeamStopped() | TeamResumed() | StopRequested():

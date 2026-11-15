@@ -562,6 +562,19 @@ class AutopilotUpdated:
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
+class SessionBlocked:
+    """An unattended (Auto) Claude Code session is stopped on a dialog only its terminal can answer
+    (CUT-312): the ``Notification`` hook said so (``kind`` is its ``notification_type``). No card
+    exists for it and none can answer it; this entry is how the dashboard knows. ``message`` is
+    Claude Code's own text, redacted at write time."""
+
+    EVENT_TYPE: ClassVar[str] = "SessionBlocked"
+
+    kind: str
+    message: str = ""
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
 class PullRequestOpened:
     """A pull request was opened (or found already open) for a goal's branch (CUT-241, ADR-0049).
     ``title`` is the text sent to the forge, already scrubbed of secrets."""
@@ -683,6 +696,7 @@ EventPayload = (
     | EnvironmentPrepareStarted
     | EnvironmentPrepared
     | AutopilotUpdated
+    | SessionBlocked
     | PullRequestOpened
     | ScheduleRan
     | ScheduleSkipped
@@ -724,6 +738,7 @@ _REGISTRY: Mapping[str, type[Any]] = {
         EnvironmentPrepareStarted,
         EnvironmentPrepared,
         AutopilotUpdated,
+        SessionBlocked,
         PullRequestOpened,
         ScheduleRan,
         ScheduleSkipped,

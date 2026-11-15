@@ -27,6 +27,7 @@ from cuttlefish.delegate.codex_app_server import inside
 from cuttlefish.delegate.consent import ConsentPolicy, command_line
 from cuttlefish.delegate.never_allowed import default_branch_reason, repo_default_branches
 from cuttlefish.delegate.presets import resolve_allow
+from cuttlefish.episodic.events import SessionBlocked
 from cuttlefish.projects.store import Project
 from cuttlefish.requests import WHY, UnknownRequestError
 from cuttlefish.sessions.manager import note_session_id
@@ -47,6 +48,9 @@ QUESTION_REFUSAL = (
     "Unattended (Auto) work cannot ask the person a question here. Decide yourself and say what "
     "you chose, or write .cuttlefish/artifacts/decision.json to put the choice to them."
 )
+#: ``Notification`` types that mean the terminal is showing a dialog only a person there can answer.
+#: ``idle_prompt`` is a session waiting for its next message, which the ``Stop`` hook already says.
+BLOCKING_NOTIFICATIONS = frozenset({"permission_prompt", "elicitation_dialog"})
 _DETAIL_CHARS = 1024
 _REJECTED = "doesn't want to proceed"
 #: A turn with no hook for this long is shown as unknown, not busy: Esc in the terminal ends a turn
@@ -181,6 +185,8 @@ class ClaudeHooks:
             await self._daemon.autopilot.on_stop_failure(
                 project, _str(payload.get("error")), _str(payload.get("error_details"))
             )
+        elif event == "Notification":
+            self._note_blocked(project, payload)
         tool = str(payload.get("tool_name") or "")
         raw = payload.get("tool_input")
         tool_input: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
@@ -203,6 +209,21 @@ class ClaudeHooks:
                 self._terminal_dialog.add(project.id)  # the terminal's own dialog asks
             return answer
         return {}
+
+    def _note_blocked(self, project: Project, payload: Mapping[str, Any]) -> None:
+        """An Auto session showing a dialog the hooks never decided (an edge permission prompt, an
+        elicitation) is stuck until someone is at its terminal. No card can answer it, so it is
+        journaled once per block (CUT-312) and the session reads as ``dialog`` until it moves on."""
+        kind = _str(payload.get("notification_type"))
+        if project.mode != "auto" or kind not in BLOCKING_NOTIFICATIONS:
+            return
+        if project.id in self._terminal_dialog:
+            return
+        self._terminal_dialog.add(project.id)
+        self._daemon.append_session_event(
+            project,
+            SessionBlocked(kind=kind or "", message=(_str(payload.get("message")) or "")[:500]),
+        )
 
     async def _refuse_default_branch(
         self, project: Project, payload: Mapping[str, Any], tool_input: Mapping[str, Any]
