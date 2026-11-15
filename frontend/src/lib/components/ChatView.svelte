@@ -30,6 +30,7 @@
   import ArtifactCanvas from "./ArtifactCanvas.svelte";
   import Markdown from "./Markdown.svelte";
   import PlanCard from "./PlanCard.svelte";
+  import LimitChip from "./LimitChip.svelte";
   import PlanRail from "./PlanRail.svelte";
   import RequestCard from "./RequestCard.svelte";
 
@@ -299,6 +300,7 @@
           <span class="strip-fill" style:width="{(autopilot.plan.done / autopilot.plan.total) * 100}%"></span>
         </span>
       {/if}
+      {#if !wide}<LimitChip status={autopilot} />{/if}
     </summary>
     <PlanRail status={autopilot} busy={controlBusy} error={controlError} onControl={control} />
   </details>
