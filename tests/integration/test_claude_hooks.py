@@ -163,6 +163,35 @@ async def test_auto_denies_a_question_with_a_way_forward_and_journals_it(rig: Ri
     assert "Which database?" in refused["detail"]
 
 
+async def test_a_dialog_the_hooks_never_decided_is_journaled_as_a_blocked_session_in_auto(
+    rig: Rig,
+) -> None:
+    hooks = rig.daemon._claude_hooks
+    rig.set_mode("auto")
+    note = {"notification_type": "permission_prompt", "message": "Claude needs your permission"}
+    await rig.hook("Notification", **note)
+    await rig.hook("Notification", **note)  # the same block is one entry
+    assert hooks.activity(rig.project_id)[0] == "dialog" and await rig.cards() == []
+    project = rig.daemon.projects.get(rig.project_id)
+    blocked = [
+        e.payload
+        for e in rig.daemon.session_events(project)
+        if type(e.payload).__name__ == "SessionBlocked"
+    ]
+    assert [(b.kind, b.message) for b in blocked] == [  # type: ignore[attr-defined]
+        ("permission_prompt", "Claude needs your permission")
+    ]
+    await rig.hook("PostToolUse", tool_name="Bash", tool_input={})
+    assert hooks.activity(rig.project_id)[0] == "busy"
+    await rig.hook("Notification", notification_type="idle_prompt")  # not a block
+    assert hooks.activity(rig.project_id)[0] == "busy"
+
+
+async def test_a_notification_outside_auto_adds_nothing(rig: Rig) -> None:
+    await rig.hook("Notification", notification_type="permission_prompt", message="x")
+    assert rig.daemon._claude_hooks.activity(rig.project_id)[0] == "unknown"
+
+
 # -- what the session is doing, from its hooks (CUT-173) -------------
 
 
