@@ -8,7 +8,7 @@ and the check on the reply are the same for both.
 
 from __future__ import annotations
 
-import re
+from cuttlefish.handoff_quality import sections
 
 #: How long the agent has to write its handoff once asked.
 HANDOFF_TIMEOUT = 240.0
@@ -33,9 +33,8 @@ def handoff_goal(task_text: str) -> str:
 
 
 def handoff_is_usable(text: str) -> bool:
-    """Whether a reply is a handoff document: it has the Done and the Remaining headings. A reply
-    without them is the agent talking, and the caller falls back to the journal's digest."""
-    return all(
-        re.search(rf"^\s*#{{1,4}}\s*{name}\b", text, re.IGNORECASE | re.MULTILINE)
-        for name in ("Done", "Remaining")
-    )
+    """Whether a reply is a handoff document: the Done and the Remaining headings, each with
+    something under it. A reply without them is the agent talking, and the caller falls back to
+    the journal's digest."""
+    body = sections(text)
+    return all(body.get(name) for name in ("Done", "Remaining"))
