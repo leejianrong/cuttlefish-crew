@@ -6,6 +6,7 @@ can opt out."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -117,7 +118,7 @@ async def test_only_a_usage_limit_on_a_running_autopilot_is_waited_for(
     rig.plan("- [ ] one", "- [ ] two")
     await rig.stopped()
     await rig.autopilot.approve(rig.project)  # type: ignore[arg-type]
-    for other in ("overloaded", "billing_error", "server_error", "authentication_failed", None):
+    for other in ("billing_error", "server_error", "authentication_failed", None):
         await _limited(rig, clock.reset_in(60), error=other)  # type: ignore[arg-type]
         assert rig.state.phase == "running"
     await rig.autopilot.pause(rig.project)  # type: ignore[arg-type]
@@ -298,6 +299,92 @@ async def test_a_restarted_daemon_gets_the_timer_back_and_a_due_one_fires_at_onc
     assert rig.state.phase == "running" and rig.daemon.sent[-1] == NUDGE_TEXT
 
 
+async def test_a_codex_window_that_is_out_is_waited_for_from_the_usage_board(
+    tmp_path: Any, clock: Clock
+) -> None:
+    rig = _rig(tmp_path, clock)
+    await rig.approved()
+    rig.autopilot._runs[rig.project.id].state = dataclasses.replace(rig.state, backend="codex")
+    await rig.autopilot.on_board(rig.project, "claude-code")  # type: ignore[arg-type]
+    await rig.autopilot.on_board(rig.project, "codex")  # type: ignore[arg-type]
+    assert rig.state.phase == "running"  # nothing out yet: nothing happens
+    BOARD.report_codex(
+        {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": int(START + 1800)}}}
+    )
+    await rig.autopilot.on_board(rig.project, "codex")  # type: ignore[arg-type]
+    assert rig.state.phase == "limit_wait" and (rig.state.kind, rig.state.source) == (
+        "window",
+        "board",
+    )
+    assert rig.state.resume_at == "2026-11-12T10:31:00Z"
+    status = await rig.autopilot.status(rig.project)  # type: ignore[arg-type]
+    assert (status["limit_kind"], status["limit_source"]) == ("window", "board")
+    await clock.release()
+    assert rig.state.phase == "running" and rig.state.kind == "" and rig.state.source == ""
+    assert rig.daemon.sent[-1] == NUDGE_TEXT
+
+
+async def test_a_limit_with_no_reset_is_marked_so_the_page_can_say_it(
+    tmp_path: Any, clock: Clock
+) -> None:
+    rig = _rig(tmp_path, clock)
+    await rig.approved()
+    await _limited(rig, "try again later")
+    assert rig.state.phase == "running" and rig.state.resume_at is None
+    assert (rig.state.kind, rig.state.source) == ("window", "hook")
+    await rig.stopped()  # the builder is back: nothing is left to wait for
+    assert rig.state.kind == ""
+
+
+async def test_a_provider_error_with_no_reset_backs_off_doubling_up_to_a_cap(
+    tmp_path: Any, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_LIMIT_BACKOFF_S", "1000")
+    rig = _rig(tmp_path, clock)
+    await rig.approved(Limits(hours=720))
+    waits = []
+    for done in range(4):
+        rig.plan(*[f"- [{'x' if i < done else ' '}] step {i}" for i in range(12)])
+        await rig.autopilot.on_stop_failure(rig.project, "overloaded", None)  # type: ignore[arg-type]
+        assert rig.state.phase == "limit_wait" and (rig.state.kind, rig.state.source) == (
+            "backoff",
+            "backoff",
+        )
+        waits.append(clock.now)
+        await clock.release()
+        assert rig.state.phase == "running" and rig.daemon.sent[-1] == NUDGE_TEXT
+    assert clock.slept == [1000, 2000, 3600, 3600]  # no grace added, and never past an hour
+    assert waits == sorted(waits)
+
+
+async def test_kopicode_and_codex_rate_limits_back_off_or_wait_for_a_named_window(
+    tmp_path: Any, clock: Clock
+) -> None:
+    rig = _rig(tmp_path, clock)
+    await rig.approved()
+    await rig.autopilot.on_failure_kind(rig.project, "provider_outage")  # type: ignore[arg-type]
+    assert rig.state.phase == "running"  # only a rate limit is waited for
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    assert rig.state.phase == "limit_wait" and rig.state.kind == "backoff"
+    assert rig.state.resume_at == "2026-11-12T10:05:00Z"
+    await clock.release()
+    BOARD.report("claude-code", {"p": Window("p", 100.0, int(clock.now + 7200), None, None)})
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    assert rig.state.kind == "window" and rig.state.source == "board"
+
+
+async def test_the_waits_in_a_row_cap_can_be_set_by_the_environment(
+    tmp_path: Any, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_MAX_LIMIT_WAITS", "1")
+    rig = _rig(tmp_path, clock)
+    await rig.approved(Limits(hours=720))
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    await clock.release()
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    assert rig.state.phase == "limit" and "1 times in a row" in rig.state.reason
+
+
 def test_a_reset_is_read_only_from_what_the_failure_says() -> None:
     now = START
     assert reset_from_failure(None, now) is None
@@ -348,3 +435,38 @@ def test_the_continue_option_defaults_on_survives_a_reopen_and_has_a_route(tmp_p
         )
     store.close()
     assert ProjectStore.open(tmp_path / "p.db").get(project.id).continue_after_reset is False
+
+
+# Shaped like what Claude Code writes on a real limit (stub payloads: no real limit was hit).
+_STOP_FAILURE_DETAILS = (
+    'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Number of '
+    'request tokens has exceeded your 5-hour limit"}} retry-after: 5400 '
+    "anthropic-ratelimit-unified-reset: 1794483600"
+)
+_RATE_LIMIT_EVENT = {
+    "type": "rate_limit_event",
+    "rate_limit_info": {
+        "status": "rejected",
+        "resetsAt": 1794483600,
+        "rateLimitType": "five_hour",
+        "overageStatus": "rejected",
+        "isUsingOverage": False,
+    },
+    "uuid": "u",
+    "session_id": "s",
+}
+
+
+def test_a_reset_is_read_from_payloads_shaped_like_the_real_ones() -> None:
+    import json
+
+    assert reset_from_failure(_STOP_FAILURE_DETAILS, START) == 1794483600.0
+    assert reset_from_failure(json.dumps(_RATE_LIMIT_EVENT), START) == 1794483600.0
+    # milliseconds, an underscore name and a milliseconds retry are each one reading
+    assert reset_from_failure('{"resetsAt": 1794483600000}', START) == 1794483600.0
+    assert reset_from_failure('{"retry_after": 90}', START) == START + 90
+    assert reset_from_failure('{"retry-after-ms": 90000}', START) == START + 90
+    # the words a person sees carry no machine-readable time: not a guess
+    assert reset_from_failure("You've hit your limit · resets 3pm (Asia/Singapore)", START) is None
+    assert reset_from_failure('{"resetsAt": null}', START) is None
+    assert reset_from_failure('{"resetsAt": "soon", "retry-after": "x"}', START) is None

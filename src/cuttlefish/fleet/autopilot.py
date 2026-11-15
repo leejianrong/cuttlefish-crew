@@ -32,7 +32,6 @@ from cuttlefish import autopilot as rules
 from cuttlefish.autopilot import (
     APPROVAL_TEXT,
     ENDED,
-    MAX_LIMIT_WAITS,
     NUDGE_TEXT,
     RESET_GRACE_S,
     Decision,
@@ -43,6 +42,7 @@ from cuttlefish.autopilot import (
 from cuttlefish.decision import consume as consume_ask
 from cuttlefish.decision import read_ask
 from cuttlefish.episodic.events import AutopilotUpdated
+from cuttlefish.limits import MAX_LIMIT_BACKOFF_S, limit_backoff_from_env, max_limit_waits_from_env
 from cuttlefish.plan import PLAN_PATH, Plan, read_plan
 from cuttlefish.projects.store import Project
 from cuttlefish.requests import RequestError
@@ -139,6 +139,8 @@ class Autopilot:
             if started and state.phase == "running"
             else None,
             "resume_at": state.resume_at if state.phase == "limit_wait" else None,
+            "limit_kind": state.kind or None,
+            "limit_source": state.source or None,
             "continue_after_reset": project.continue_after_reset,
             "nudges": state.nudges,
             "nudges_since_progress": state.nudges_since_progress,
@@ -160,6 +162,8 @@ class Autopilot:
     # -- changing --------------------------------------------------------------------------------
 
     def _journal(self, project: Project, run: _Run, **changes: Any) -> None:
+        if run.state.kind and "kind" not in changes and ("phase" in changes or "nudges" in changes):
+            changes.update(kind="", source="")  # the limit it described is over
         run.state = dataclasses.replace(run.state, **changes)
         self._daemon.append_session_event(project, run.state)
 
@@ -271,8 +275,25 @@ class Autopilot:
         self, project: Project, error: str | None, details: str | None
     ) -> None:
         """A turn ended on an API error. A usage limit on a running Autopilot is waited for."""
-        if error != "rate_limit":
-            return
+        if error == "rate_limit":
+            await self.on_limit(project, details=details, source="hook")
+        elif error == "overloaded":  # an API 529: no window, no reset time
+            await self.on_backoff(project)
+
+    async def on_board(self, project: Project, backend: str) -> None:
+        """A backend's usage windows were just refreshed (Codex's ``account/rateLimits``): a
+        running Autopilot on that backend whose window is out waits for it (CUT-311)."""
+        run = await self._run(project)
+        out = BOARD.blocked_until(backend, self._clock()) is not None
+        if out and run is not None and run.state.backend == backend:
+            await self.on_limit(project, source="board")
+
+    async def on_limit(
+        self, project: Project, *, details: str | None = None, source: str = "board"
+    ) -> None:
+        """A usage window is out. ``details`` is the failed turn's own words, ``source`` where the
+        signal came from (``hook`` or ``board``); the reset is read from the words first, then
+        from what the backend reported on the usage board. Never a guess: no reset, no timer."""
         run = await self._run(project)
         if run is None or run.state.phase != "running":
             return
@@ -286,35 +307,77 @@ class Autopilot:
             )
             return
         now = self._clock()
-        reset = reset_from_failure(details, now) or BOARD.blocked_until(state.backend, now)
+        reset = reset_from_failure(details, now)
+        if reset is None:
+            reset = BOARD.blocked_until(state.backend, now)
+            source = "board" if reset is not None else source
         if reset is None:
             self._journal(
                 project,
                 run,
+                kind="window",
+                source=source,
                 reason="The builder hit a usage limit and the reset time is not known, so it "
                 "will not continue by itself. Carry on from here when the limit has reset.",
             )
             return
+        await self._enter_wait(project, run, reset + RESET_GRACE_S, "window", source)
+
+    async def on_failure_kind(self, project: Project, failure_kind: str | None) -> None:
+        """A backend's own normalised failure (``DelegationOutcome.failure_kind``): a provider
+        rate limit waits for the window if the usage board names one, else backs off."""
+        run = await self._run(project)
+        if failure_kind != "provider_rate_limit" or run is None:
+            return
+        if BOARD.blocked_until(run.state.backend, self._clock()) is not None:
+            await self.on_limit(project, source="board")
+        else:
+            await self.on_backoff(project)
+
+    async def on_backoff(self, project: Project) -> None:
+        """A provider error that names no reset (an API 429 or 529, kopicode's
+        ``provider_rate_limit``): retry after a bounded, doubling delay (CUT-311). The same
+        wait, the same one "continue", the same cap on waits in a row."""
+        run = await self._run(project)
+        if run is None or run.state.phase != "running":
+            return
+        if not project.continue_after_reset:
+            self._journal(
+                project,
+                run,
+                reason="The builder's provider refused a request. Continuing after a wait is "
+                "off for this project, so it will not continue by itself.",
+            )
+            return
+        delay = min(limit_backoff_from_env() * 2**run.state.limit_waits, MAX_LIMIT_BACKOFF_S)
+        await self._enter_wait(project, run, self._clock() + delay, "backoff", "backoff")
+
+    async def _enter_wait(
+        self, project: Project, run: _Run, due: float, kind: str, source: str
+    ) -> None:
+        state = run.state
         waits = state.limit_waits + 1
-        if waits > MAX_LIMIT_WAITS:
+        most = max_limit_waits_from_env()
+        what = "a usage limit" if kind == "window" else "a provider error"
+        if waits > most:
             self._journal(
                 project,
                 run,
                 phase="limit",
                 limit_waits=waits,
-                reason=f"The builder stopped on a usage limit {MAX_LIMIT_WAITS} times in a row, "
+                reason=f"The builder stopped on {what} {most} times in a row, "
                 "so Autopilot gave up. Carry on when you are ready.",
             )
             return
-        due = reset + RESET_GRACE_S
-        started = _parse(state.approved_at) or now
+        started = _parse(state.approved_at) or self._clock()
         if due - started >= state.limit_hours * 3600:
             self._journal(
                 project,
                 run,
                 phase="limit",
-                reason=f"The usage limit resets at {_utc_text(reset)}, after Autopilot's time "
-                "limit ends. Carry on when you are ready.",
+                reason=f"The {'usage limit resets' if kind == 'window' else 'retry is due'} at "
+                f"{_utc_text(due - RESET_GRACE_S if kind == 'window' else due)}, after "
+                "Autopilot's time limit ends. Carry on when you are ready.",
             )
             return
         self._journal(
@@ -323,7 +386,13 @@ class Autopilot:
             phase="limit_wait",
             resume_at=_iso(due),
             limit_waits=waits,
-            reason=f"Usage limit reached. Will continue at {_utc_text(due)}.",
+            kind=kind,
+            source=source,
+            reason=(
+                f"Usage limit reached. Will continue at {_utc_text(due)}."
+                if kind == "window"
+                else f"The provider refused a request. Will retry at {_utc_text(due)}."
+            ),
         )
         self._arm(project.id, due)
 

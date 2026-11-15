@@ -38,6 +38,7 @@ import dataclasses
 import inspect
 import json
 import logging
+import re
 import shlex
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -219,9 +220,18 @@ class _Round:
             else "Codex did not finish cleanly",
             reason=self.error or f"the turn ended {self.status or 'without a status'}",
             edited_paths=self.edited_paths,
-            failure_kind="cancelled" if self.status == "interrupted" else None,
+            failure_kind="cancelled"
+            if interrupted
+            else "provider_rate_limit"
+            if _USAGE_LIMIT.search(self.error or "")
+            else None,
             **common,
         )
+
+
+#: What a Codex turn error says on a usage limit ("You've hit your usage limit ...", an HTTP 429).
+#: Read on our side only; Codex's own wire is not changed (ADR-0003).
+_USAGE_LIMIT = re.compile(r"usage limit|rate[ _-]?limit|\b429\b", re.IGNORECASE)
 
 
 def _io_tokens(counts: Mapping[str, Any]) -> int:

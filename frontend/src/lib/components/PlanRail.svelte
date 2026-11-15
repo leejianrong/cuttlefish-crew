@@ -8,12 +8,14 @@
     controlsFor,
     currentStep,
     elapsedText,
+    limitChip,
     needsPerson,
     phaseLabel,
     planProgress,
     type AutopilotStatus,
     type Control,
   } from "../autopilot";
+  import LimitChip from "./LimitChip.svelte";
 
   let {
     status,
@@ -30,6 +32,7 @@
   const controls = $derived(controlsFor(status.phase));
   const current = $derived(currentStep(status));
   const progress = $derived(planProgress(status));
+  const limited = $derived(limitChip(status, new Date()) !== null);
 </script>
 
 <aside class="rail" aria-label="Plan and run">
@@ -82,10 +85,14 @@
   {#if status.phase !== "off"}
     <section>
       <h3 class="label-medium muted">Run</h3>
-      <p class="state body-medium" class:attention={needsPerson(status.phase)} role="status">
-        {phaseLabel(status.phase)}
-      </p>
-      {#if status.reason}<p class="body-small muted">{status.reason}</p>{/if}
+      {#if limited}
+        <LimitChip {status} />
+      {:else}
+        <p class="state body-medium" class:attention={needsPerson(status.phase)} role="status">
+          {phaseLabel(status.phase)}
+        </p>
+      {/if}
+      {#if status.reason && !limited}<p class="body-small muted">{status.reason}</p>{/if}
       {#if status.limits}
         <dl class="figures">
           <div>

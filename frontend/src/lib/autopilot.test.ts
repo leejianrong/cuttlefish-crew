@@ -7,6 +7,7 @@ import {
   controlsFor,
   currentStep,
   elapsedText,
+  limitChip,
   needsPerson,
   phaseLabel,
   planProgress,
@@ -91,5 +92,35 @@ describe("waiting for a usage limit (CUT-299)", () => {
     expect(controlsFor("limit_wait")).toEqual(["resume", "stop"]);
     expect(controlLabel("resume", "limit_wait")).toBe("Carry on now");
     expect(controlLabel("resume", "limit")).toBe("Carry on");
+  });
+
+  it("words a usage-limit wait with the time it continues and a countdown", () => {
+    const now = new Date(2026, 10, 12, 10, 0, 0);
+    const at = new Date(2026, 10, 12, 12, 14, 0);
+    const wait = { ...status([false], "limit_wait"), resume_at: at.toISOString(), limit_kind: "window" as const };
+    expect(limitChip(wait, now)).toEqual({
+      text: "Waiting for usage limit, continues 12:14",
+      countdown: "in 2 h 14 m",
+      needsYou: false,
+    });
+    expect(limitChip({ ...wait, limit_kind: "backoff" }, now)?.text).toBe("Provider busy, retrying 12:14");
+    expect(limitChip({ ...wait, resume_at: new Date(2026, 10, 12, 10, 0, 20).toISOString() }, now)?.countdown).toBe(
+      "any moment",
+    );
+    const days = limitChip({ ...wait, resume_at: new Date(2026, 10, 16, 9, 0, 0).toISOString() }, now);
+    expect(days?.text).toMatch(/^Waiting for usage limit, continues .*09:00$/);
+    expect(days?.text).not.toBe("Waiting for usage limit, continues 09:00");
+  });
+
+  it("says plainly when the reset time is not known and a person has to act", () => {
+    const now = new Date(2026, 10, 12, 10, 0, 0);
+    const unknown = { ...status([false], "running"), limit_kind: "window" as const, resume_at: null };
+    expect(limitChip(unknown, now)).toEqual({
+      text: "Usage limit reached, reset unknown, waiting for you",
+      countdown: null,
+      needsYou: true,
+    });
+    expect(limitChip(status([false], "running"), now)).toBeNull();
+    expect(limitChip({ ...status([false], "limit_wait"), resume_at: "nonsense" }, now)).toBeNull();
   });
 });
