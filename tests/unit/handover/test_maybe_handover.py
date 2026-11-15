@@ -76,8 +76,8 @@ async def test_a_second_handover_only_covers_the_window_after_the_first(tmp_path
 
     second = list(store.read("task-1"))[-1]
     assert isinstance(second.payload, HandoverWritten)
-    # Covers only the new TaskSubmitted (seq 4: the first handover's check and the handover took 2 and 3), not the first one
-    # already folded into the first handover.
+    # Covers only the new TaskSubmitted (seq 4; seqs 2 and 3 are the first handover's check and
+    # text), not the first one already folded into the first handover.
     assert second.payload.covers_seq_from == 4
     assert second.payload.covers_seq_to == 4
     store.close()
