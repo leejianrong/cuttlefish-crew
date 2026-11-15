@@ -425,3 +425,9 @@ and this folder disagree after a slice lands, update this folder.
   `cmd` exits 0." (monospace); the last result reads "Skipped by the precheck at <time> UTC: it exited 1." or "Not started at <time>
   UTC: missed by 95 minutes, past the 60 minute grace." Checked at 1280 (light, dark) and 390 px.
 
+
+- **Usage-limit chip (CUT-311, 2026-11-15).** While Autopilot waits on a usage window the Run section of the plan rail shows one chip
+  in place of the phase label: a clock icon on `secondary-container`, "Waiting for usage limit, continues 14:18 (in 2 h 11 m)" in the
+  viewer's local time (weekday and date when it is not today), recounted every 30 s; a provider backoff reads "Provider busy,
+  retrying ...". With no reset time known it is the attention colour (`attention-container`, bell icon) and says "Usage limit
+  reached, reset unknown, waiting for you". On a phone the same chip sits in the folded plan strip. `LimitChip.svelte`, `limitChip()`.

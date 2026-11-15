@@ -526,3 +526,19 @@ before proposing to "fix" a limitation, and add a bullet (with the ADR or
   stream-json process (the handoff ask) was run once by another agent before merge and its outcome was never written down. Run it again on a
   scratch project, with Jian's yes because it spends model credit, and record what happened here (did the reply come back as one result, did
   the session carry on, what it cost).
+- **Usage limits in an unattended run: what is covered and what is not** (CUT-311, 2026-11-15). Checked against fakes and
+  stub payloads shaped like Claude Code's `StopFailure` and `rate_limit_event`; no real limit was hit on purpose. Autopilot
+  enters a wait from one entry, `Autopilot.on_limit`: Claude Code's `StopFailure` hook (reset read from the failure's words, else
+  the usage board), a refreshed Codex usage board that says the window is out (`Autopilot.on_board`), and a bounded backoff
+  (`on_backoff`/`on_failure_kind`: `CUTTLEFISH_LIMIT_BACKOFF_S`, default 300, doubling, capped at one hour; an API 529
+  `overloaded` stop uses it too). `CUTTLEFISH_MAX_LIMIT_WAITS` (default 5) bounds waits in a row. Not covered: (1) only
+  Claude Code's tmux builder tells Autopilot that a turn ended, so a Codex or kopicode builder in tmux has no signal that calls
+  `on_limit`/`on_failure_kind` by itself; the Codex board path runs when its usage is refreshed, and the kopicode `provider_rate_limit`
+  (HTTP 429, no reset time) and Codex turn-error classification exist for a delegation's `DelegationOutcome` only. (2) A **team
+  run** treats a limit stop as an ordinary failed round: `limits.CHECKPOINT_STOPS` holds `max_turns`, `budget_exhausted`,
+  `round_timeout` and `context_pressure`, not `provider_rate_limit`, so the role is not continued and does not wait for the reset.
+  Making it a waiting checkpoint is a design choice, not built. (3) A weekly window whose reset is past the run's hours ends in
+  phase `limit` on purpose. (4) The reset grace stays 60 s, a constant. (5) With `CUTTLEFISH_CREDENTIAL_BROKER=1` a lease lives
+  until its delegation revokes it (no timer, `broker.py`), and a tmux builder is not brokered at all, so a multi-hour wait holds
+  no lease; a delegation that ends on a limit revokes it in its `finally` and the next round leases afresh.
+- **An Auto Claude Code session stuck on a terminal dialog the hooks ignore is journaled, not answered** (CUT-312 spike, 2026-11-15). Claude Code's `Notification` hook (installed 2.1.325 carries the types `permission_prompt`, `idle_prompt`, `elicitation_dialog`, `auth_success`; read from the binary and the hooks docs, no real session was run) does fire for such a dialog. The session's hook set now includes it, and in Auto a `permission_prompt` or `elicitation_dialog` is journaled once as `SessionBlocked` and shows the session as waiting on a dialog until the next hook shows it moved on. Nothing can answer that dialog from the dashboard (the `PermissionRequest` hook is the only route that answers, and it did not decide this one), so it is only visible, never a card. `AskUserQuestion` in Auto is a separate case and is denied with a message (no dialog). A session started before this change has the old hook set and reports nothing.

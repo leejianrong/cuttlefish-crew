@@ -67,7 +67,9 @@ BACKEND_NOTES: tuple[tuple[str, str, str], ...] = (
         "Asks you live",
         "Every command that prompts is decided as it is asked, like kopicode; what Claude Code "
         "itself treats as read-only (ls) never prompts. Never-allowed prefixes are also denied "
-        "to it as tool rules. Its own questions are put to you too. Auto refuses curl and wget "
+        "to it as tool rules. In a terminal session its own questions are answered in the "
+        "terminal; Auto refuses them and tells the agent to decide or write a decision. "
+        "Auto refuses curl and wget "
         "outright. Read-only roles cannot edit files. {key} Over a sandbox provider, or with "
         "CUTTLEFISH_CLAUDE_CODE_TRANSPORT=print, it cannot pause and refuses a command nothing "
         "approves.",

@@ -72,6 +72,8 @@ def main(argv: list[str]) -> int:
                 "tool_use_id",
                 "error",
                 "error_details",
+                "notification_type",
+                "message",
             )
             if key in payload
         }
