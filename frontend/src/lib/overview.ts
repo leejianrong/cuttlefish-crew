@@ -3,6 +3,7 @@
 // convenience that is safe to lose (like the theme).
 
 import type { AutopilotStatus } from "./autopilot";
+import type { PostBoundary } from "./handoff";
 
 export type TimelineKind =
   | "needs_you"
@@ -19,6 +20,8 @@ export interface TimelineEvent {
   text: string;
   /** An artifact path for an image, a request id for a Needs you, a commit id for a commit. */
   ref: string | null;
+  /** A refresh's advisory post-boundary measures (CUT-313). */
+  handoff?: PostBoundary | null;
 }
 
 export interface OverviewData {

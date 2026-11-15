@@ -2,6 +2,7 @@
 // daemon's vocabulary; the person reading the log should not need them.
 
 import type { EpisodicEventView, RequestResolution } from "./api";
+import { checkedNote } from "./handoff";
 import { OUTCOMES } from "./requests";
 
 const LABELS: Record<string, string> = {
@@ -13,6 +14,7 @@ const LABELS: Record<string, string> = {
   SteeringMessage: "You",
   SteeringQueued: "You",
   HandoverWritten: "Checkpoint",
+  HandoverChecked: "Handoff check",
   LlmCallCompleted: "Summary",
   TaskCompleted: "Finished",
   TaskFailed: "Task failed",
@@ -264,6 +266,8 @@ export function summarize(event: EpisodicEventView): string {
       return String(p.text);
     case "HandoverWritten":
       return String(p.summary);
+    case "HandoverChecked":
+      return checkedNote(p);
     case "LlmCallCompleted": {
       // The summariser's own call, kept for what it cost; its prompt and answer are in the journal.
       const tokens = (value: unknown) => (typeof value === "number" ? value.toLocaleString("en-GB") : "?");
