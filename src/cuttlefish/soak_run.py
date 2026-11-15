@@ -145,6 +145,7 @@ def read_sample(
     steps = status.get("plan") or {}
     commits = carried.commits if carried else 0
     refreshes = carried.refreshes if carried else 0
+    handoff_rows = carried.handoff_rows if carried else ()
     if slow:
         timeline = api.get(f"/api/projects/{pid}/overview?since={started_iso}").get("timeline", [])
         events = [
@@ -158,6 +159,12 @@ def read_sample(
                 seen.add((str(kind), str(e.get("at")), str(e.get("text"))))
         commits = sum(1 for k, _, _ in seen if k == "commit")
         refreshes = sum(1 for k, _, _ in seen if k == "refresh")
+        # Measures keep changing while the builder works on, so the latest read of a refresh wins.
+        rows = {str(r.get("at")): r for r in handoff_rows}
+        for e in events:
+            if e.get("kind") == "refresh" and isinstance(e.get("handoff"), dict):
+                rows[str(e.get("at"))] = {"at": e.get("at"), **e["handoff"]}
+        handoff_rows = tuple(rows[when] for when in sorted(rows))
     tokens = status.get("tokens_used")
     sample = Sample(
         t=t,
@@ -169,6 +176,7 @@ def read_sample(
         waiting=len(pending) if isinstance(pending, list) else 0,
         commits=commits,
         refreshes=refreshes,
+        handoff_rows=handoff_rows,
     )
     return sample, pending if isinstance(pending, list) else []
 
