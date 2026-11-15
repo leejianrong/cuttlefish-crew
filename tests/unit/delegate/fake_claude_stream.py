@@ -10,6 +10,7 @@ after the first user message is read:
   ``{"api_call": true}``       POST ``$ANTHROPIC_BASE_URL/v1/messages`` with ``$ANTHROPIC_API_KEY``
   ``{"rate_limit": {...}}``    a ``rate_limit_event`` whose ``rate_limit_info`` is that object
   ``{"hang": true}``           waits for an ``interrupt`` request, acknowledges it, ends the turn
+``limit``: ``{"reset_in": s}`` ends the first turn on a rejected window and a 429 error result.
 ``crash``: exit with a message on stderr after reading the first message.
 ``handoff``: another user message (the handoff ask) is answered with this as the result text
 (default: a reply that is not a document); ``handoff_bash`` first asks to run that command, so a
@@ -19,6 +20,7 @@ test can see it denied.
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -180,13 +182,25 @@ for step in scenario.get("steps", []):
             }
         )
         stop = "tool_use"
+limit = scenario.get("limit")
+if limit:  # the turn ends on a usage limit (CUT-311): a rejected window, then a 429 result
+    at = int(time.time()) + int(limit["reset_in"])
+    send(
+        {
+            "type": "rate_limit_event",
+            "rate_limit_info": {"status": "rejected", "resetsAt": at, "rateLimitType": "five_hour"},
+            "uuid": "u",
+        }
+    )
 send({"type": "assistant", "message": {"content": [{"type": "text", "text": "done"}]}})
 send(
     {
         "type": "result",
         "subtype": "success",
-        "is_error": False,
-        "result": "done",
+        "is_error": bool(limit),
+        "result": f"API Error: 429 rate_limit_error retry-after: {limit['reset_in']}"
+        if limit
+        else "done",
         "stop_reason": stop,
         "permission_denials": denials,
         "session_id": "s1",

@@ -433,3 +433,19 @@ async def test_a_rate_limit_event_is_read_into_the_usage_board_and_not_into_the_
     assert shown["windows"][0]["used_percent"] == 82.0
     assert shown["windows"][0]["resets_at"] == 1_800_000_000
     BOARD.reset()
+
+
+async def test_a_turn_that_ends_on_a_usage_limit_leaves_the_reset_on_the_usage_board(
+    fake: Fake,
+) -> None:
+    import time
+
+    from cuttlefish.usage import BOARD
+
+    BOARD.reset()
+    outcome = await fake.run(fake.script({"steps": [], "limit": {"reset_in": 3600}}))
+    now = time.time()
+    assert outcome.kind != "completed"
+    reset = BOARD.blocked_until("claude-code", now)
+    assert reset is not None and 3500 < reset - now <= 3600
+    BOARD.reset()
