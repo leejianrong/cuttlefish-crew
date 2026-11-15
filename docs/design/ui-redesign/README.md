@@ -433,3 +433,10 @@ and this folder disagree after a slice lands, update this folder.
   viewer's local time (weekday and date when it is not today), recounted every 30 s; a provider backoff reads "Provider busy,
   retrying ...". With no reset time known it is the attention colour (`attention-container`, bell icon) and says "Usage limit
   reached, reset unknown, waiting for you". On a phone the same chip sits in the folded plan strip. `LimitChip.svelte`, `limitChip()`.
+
+- **Waiting on you (CUT-312, 2026-11-15).** When Autopilot is parked on a decision or a terminal dialog, the same chip slot as the
+  usage-limit chip shows a bell on `attention-container`: "Waiting for your decision (waiting 1 h 30 m)" or "The session is waiting on
+  a dialog in its terminal", with a `body-small` line under it: a terminal dialog "can only be answered in the terminal. Nothing here
+  can answer it", a decision points at its card. The project's Needs you tab gets a card with an attention left border for a plan
+  waiting or a blocked dialog (a decision already has its own card). The Permissions tab's decision wait adds a "30 min (suggested)"
+  choice that is never preselected. `LimitChip.svelte`, `NeedsYouTab.svelte`, `waitingChip()`.

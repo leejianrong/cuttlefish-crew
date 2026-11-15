@@ -103,7 +103,7 @@ def _status(
     phase = autopilot.phase if autopilot else ""
     if phase in ("stuck", "limit") or "failed" in states:
         return "stuck"
-    if waiting or phase == "awaiting_approval":
+    if waiting or phase in ("awaiting_approval", "waiting_on_you"):
         return "waiting"
     if "working" in states or phase in ("planning", "running"):
         return "working"
@@ -144,6 +144,9 @@ def build_digest(
     blocker_lines = [_text(r.title, scrub) for r in blockers[:MAX_BLOCKERS]]
     if autopilot and autopilot.phase in ("stuck", "limit") and len(blocker_lines) < MAX_BLOCKERS:
         blocker_lines.append(_text(f"Autopilot {autopilot.phase}: {autopilot.reason}", scrub))
+
+    if autopilot and autopilot.phase == "waiting_on_you" and len(blocker_lines) < MAX_BLOCKERS:
+        blocker_lines.append(_text(f"Autopilot waiting for you: {autopilot.reason}", scrub))
 
     totals = [cumulative_usage((e.payload for e in ordered), role=role) for role in roles]
     costs = [t.cost_usd for t in totals if t.cost_usd is not None]

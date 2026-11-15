@@ -124,6 +124,8 @@ def _autopilot_text(state: AutopilotUpdated) -> str:
         return "You gave the builder a goal. It is planning."
     if phase == "awaiting_approval":
         return "The plan is ready and waiting for you."
+    if phase == "waiting_on_you":
+        return _clip(state.reason)
     if phase == "limit_wait":
         return _clip(state.reason)  # "Usage limit reached. Will continue at ... UTC."
     if phase == "running":

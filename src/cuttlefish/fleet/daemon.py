@@ -164,7 +164,12 @@ from cuttlefish.usage import BOARD
 logger = logging.getLogger(__name__)
 
 #: Autopilot phases that send a push (CUT-312), and the title each carries.
-_NOTIFY_PHASES = {"limit": "Autopilot reached a limit", "stuck": "Autopilot is stuck"}
+_NOTIFY_PHASES = {
+    "limit": "Autopilot reached a limit",
+    "stuck": "Autopilot is stuck",
+    "awaiting_approval": "A plan is waiting for your approval",
+    "waiting_on_you": "Autopilot is waiting for you",
+}
 _WAKE_BATCH_S = 2.0
 _WAKE_SPACING_S = 30.0
 _WAKE_MESSAGE = (
@@ -1313,7 +1318,13 @@ class FleetDaemon:
         self.open_session_journal(project)
         scope = session_scope(project.id)
         self._team_stores[scope].append(scope, payload)
-        if isinstance(payload, AutopilotUpdated) and payload.phase in _NOTIFY_PHASES:
+        # A decision already has its own card, and so its own notice.
+        decision = isinstance(payload, AutopilotUpdated) and payload.waiting_kind == "decision"
+        if (
+            isinstance(payload, AutopilotUpdated)
+            and payload.phase in _NOTIFY_PHASES
+            and not decision
+        ):
             self.notifier.notify(
                 project.id, project.name, payload.phase, _NOTIFY_PHASES[payload.phase]
             )

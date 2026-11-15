@@ -102,7 +102,12 @@ export function nowLine(autopilot: AutopilotStatus): string {
   if (autopilot.phase === "planning") return "The builder is writing its plan.";
   const next = plan?.steps.find((step) => !step.done);
   if (autopilot.phase === "done") return "Every step of the plan is done.";
-  if (autopilot.phase === "stuck" || autopilot.phase === "limit" || autopilot.phase === "limit_wait") {
+  if (
+    autopilot.phase === "stuck" ||
+    autopilot.phase === "limit" ||
+    autopilot.phase === "limit_wait" ||
+    autopilot.phase === "waiting_on_you"
+  ) {
     return autopilot.reason ?? "";
   }
   if (autopilot.phase === "paused") return next ? `Paused. Next: ${next.text}.` : "Paused.";

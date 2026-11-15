@@ -530,8 +530,9 @@ class AutopilotUpdated:
     by reading that one back; there is no second store of it (ADR-0004). ``phase`` is one of
     ``planning``, ``awaiting_approval``, ``running``, ``paused``, ``done``, ``stopped``, ``limit``,
     ``stuck`` and ``limit_wait`` (the agent hit a provider usage limit and Autopilot will send it
-    its "continue" at ``resume_at``, CUT-299); ``reason`` says why it last moved, in words a person
-    reads. ``goal`` is redacted by the store at write time like any journaled text."""
+    its "continue" at ``resume_at``, CUT-299) and ``waiting_on_you`` (a running Autopilot is parked
+    on a decision or a dialog only a person can answer, CUT-312); ``reason`` says why it last moved,
+    in words a person reads. ``goal`` is redacted by the store at write time like journaled text."""
 
     EVENT_TYPE: ClassVar[str] = "AutopilotUpdated"
 
@@ -554,6 +555,12 @@ class AutopilotUpdated:
     resume_at: str | None = None
     #: How many times in a row the agent has stopped on a usage limit and been waited for.
     limit_waits: int = 0
+    #: CUT-312. What a person is being waited for (``plan``, ``decision`` or ``blocked``) and since
+    #: when (ISO 8601 UTC), set in ``awaiting_approval`` and ``waiting_on_you``.
+    waiting_kind: str = ""
+    waiting_since: str | None = None
+    #: Seconds parked on a person since the plan was approved. Autopilot's hours do not count them.
+    parked_s: float = 0.0
     #: What Autopilot is waiting out (CUT-311): ``window`` (a usage window), later ``backoff``.
     #: In ``running`` with no ``resume_at`` it means the reset time is unknown. Empty otherwise.
     kind: str = ""

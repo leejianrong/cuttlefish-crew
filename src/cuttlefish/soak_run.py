@@ -222,7 +222,13 @@ def run_soak(
     """
     pid = plan.project_id
     before = api.get(f"/api/projects/{pid}/autopilot")
-    if str(before.get("phase")) in ("planning", "awaiting_approval", "running", "paused"):
+    if str(before.get("phase")) in (
+        "planning",
+        "awaiting_approval",
+        "running",
+        "paused",
+        "waiting_on_you",
+    ):
         raise SoakError(f"project {pid} already has an Autopilot run ({before.get('phase')}).")
 
     started_iso = now_iso()

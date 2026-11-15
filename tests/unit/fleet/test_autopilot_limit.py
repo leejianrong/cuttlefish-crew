@@ -236,7 +236,8 @@ async def test_a_builder_waiting_on_a_decision_is_not_nudged_after_the_reset(
     await _limited(rig, clock.reset_in(600))
     rig.daemon.decisions.append({"role": "builder"})
     await clock.release()
-    assert rig.state.phase == "running" and len(rig.daemon.sent) == 1
+    assert rig.state.phase == "waiting_on_you" and rig.state.waiting_kind == "decision"
+    assert len(rig.daemon.sent) == 1
 
 
 async def test_it_gives_up_after_five_limited_stops_in_a_row(tmp_path: Any, clock: Clock) -> None:

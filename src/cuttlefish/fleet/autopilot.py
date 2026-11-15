@@ -135,9 +135,9 @@ class Autopilot:
             "backend": state.backend,
             "reason": state.reason,
             "approved_at": state.approved_at,
-            "elapsed_s": (self._clock() - started)
-            if started and state.phase == "running"
-            else None,
+            "elapsed_s": self._elapsed(state, started),
+            "waiting": self._waiting(state),
+            "parked_s": state.parked_s,
             "resume_at": state.resume_at if state.phase == "limit_wait" else None,
             "limit_kind": state.kind or None,
             "limit_source": state.source or None,
@@ -150,8 +150,27 @@ class Autopilot:
             "plan_path": PLAN_PATH,
         }
 
+    def _elapsed(self, state: AutopilotUpdated, started: float | None) -> float | None:
+        """How long Autopilot has run, not counting time parked on a person (CUT-312)."""
+        if started is None or state.phase not in ("running", "waiting_on_you"):
+            return None
+        since = _parse(state.waiting_since)
+        end = since if state.phase == "waiting_on_you" and since is not None else self._clock()
+        return max(0.0, end - started - state.parked_s)
+
+    def _waiting(self, state: AutopilotUpdated) -> dict[str, Any] | None:
+        """What a person is being waited for and for how long, or ``None``."""
+        since = _parse(state.waiting_since)
+        if state.phase not in ("awaiting_approval", "waiting_on_you") or since is None:
+            return None
+        return {
+            "kind": state.waiting_kind,
+            "since": state.waiting_since,
+            "age_s": max(0.0, self._clock() - since),
+        }
+
     async def _tokens_used(self, project: Project, run: _Run) -> int | None:
-        if run.state.phase not in ("running", "paused", "done", "limit", "stuck"):
+        if run.state.phase not in ("running", "paused", "done", "limit", "stuck", "waiting_on_you"):
             return None
         path = self._daemon.chat_transcript_path(project)
         if path is None:
@@ -164,6 +183,17 @@ class Autopilot:
     def _journal(self, project: Project, run: _Run, **changes: Any) -> None:
         if run.state.kind and "kind" not in changes and ("phase" in changes or "nudges" in changes):
             changes.update(kind="", source="")  # the limit it described is over
+        state = run.state
+        left = changes.get("phase", state.phase) != "waiting_on_you"
+        since = _parse(state.waiting_since)
+        if state.phase == "waiting_on_you" and left and since is not None:
+            # Time parked on a person is not Autopilot's time (CUT-312).
+            changes = {
+                "parked_s": state.parked_s + max(0.0, self._clock() - since),
+                "waiting_kind": "",
+                "waiting_since": None,
+                **changes,
+            }
         run.state = dataclasses.replace(run.state, **changes)
         self._daemon.append_session_event(project, run.state)
 
@@ -206,11 +236,14 @@ class Autopilot:
             nudges_since_progress=0,
             steps_done_before=plan.done,
             tokens_baseline=total,
+            parked_s=0.0,
+            waiting_kind="",
+            waiting_since=None,
         )
 
     async def pause(self, project: Project) -> None:
         run = await self._run(project)
-        if run is None or run.state.phase not in ("running", "limit_wait"):
+        if run is None or run.state.phase not in ("running", "limit_wait", "waiting_on_you"):
             raise AutopilotError("Autopilot is not running.")
         self._cancel(project.id)
         self._cancel_wait(project.id)
@@ -218,7 +251,13 @@ class Autopilot:
 
     async def resume(self, project: Project) -> None:
         run = await self._run(project)
-        if run is None or run.state.phase not in ("paused", "stuck", "limit", "limit_wait"):
+        if run is None or run.state.phase not in (
+            "paused",
+            "stuck",
+            "limit",
+            "limit_wait",
+            "waiting_on_you",
+        ):
             raise AutopilotError("Autopilot is not paused.")
         self._cancel_wait(project.id)
         self._journal(
@@ -229,7 +268,11 @@ class Autopilot:
             resume_at=None,
             nudges_since_progress=0,
             # A limit that was reached is lifted by a person resuming: time restarts from now.
-            **({"approved_at": _now(), "nudges": 0} if run.state.phase == "limit" else {}),
+            **(
+                {"approved_at": _now(), "nudges": 0, "parked_s": 0.0}
+                if run.state.phase == "limit"
+                else {}
+            ),
         )
         self._schedule(project)
 
@@ -258,6 +301,12 @@ class Autopilot:
         """Something other than a stop happened: a pending nudge is for a turn that is not over."""
         self._cancel(project.id)
         run = self._runs.get(project.id)
+        if (
+            run is not None
+            and run.state.phase == "waiting_on_you"
+            and not self._still_asked(project, run)
+        ):
+            self._journal(project, run, phase="running", reason="The builder is working again.")
         if run is not None and run.state.phase == "limit_wait":
             # The builder is working again (a person messaged it): the wait is over.
             self._cancel_wait(project.id)
@@ -268,6 +317,39 @@ class Autopilot:
                 resume_at=None,
                 reason="The builder is working again, so Autopilot stopped waiting for the limit.",
             )
+
+    def _still_asked(self, project: Project, run: _Run) -> bool:
+        """Whether what a parked Autopilot waits on is still unanswered: a decision card pending."""
+        return run.state.waiting_kind == "decision" and any(
+            p.record.kind == "decision" and p.record.role == "builder"
+            for p in self._daemon.requests.pending(project.id)
+        )
+
+    async def on_blocked(self, project: Project, message: str) -> None:
+        """The session is stopped on a terminal dialog nothing here can answer (CUT-312)."""
+        run = await self._run(project)
+        if run is None or run.state.phase != "running":
+            return
+        self._park(
+            project,
+            run,
+            "blocked",
+            "The session is waiting on a dialog in its terminal. Only the terminal can answer it.",
+        )
+
+    def _park(self, project: Project, run: _Run, kind: str, reason: str) -> None:
+        """Autopilot waits on a person, and says what for and since when (CUT-312)."""
+        if run.state.phase == "waiting_on_you":
+            self._journal(project, run, reason=reason[:200])
+            return
+        self._journal(
+            project,
+            run,
+            phase="waiting_on_you",
+            waiting_kind=kind,
+            waiting_since=_iso(self._clock()),
+            reason=reason[:200],
+        )
 
     # -- a usage limit ---------------------------------------------------------------------------
 
@@ -369,7 +451,7 @@ class Autopilot:
                 "so Autopilot gave up. Carry on when you are ready.",
             )
             return
-        started = _parse(state.approved_at) or self._clock()
+        started = (_parse(state.approved_at) or self._clock()) + state.parked_s
         if due - started >= state.limit_hours * 3600:
             self._journal(
                 project,
@@ -472,6 +554,10 @@ class Autopilot:
         try:
             await asyncio.sleep(self._settle_s)
             run = await self._run(project)
+            if run is not None and run.state.phase == "waiting_on_you":
+                if self._still_asked(project, run):
+                    return
+                self._journal(project, run, phase="running", reason="The builder stopped again.")
             if run is None or run.state.phase not in ("planning", "running"):
                 return
             if run.state.limit_waits:
@@ -511,12 +597,21 @@ class Autopilot:
                 with contextlib.suppress(Exception):
                     await self._daemon.send_chat(project.id, f"Your decision was not raised: {exc}")
                 return True
-            self._journal(project, run, reason=f"Waiting for your decision: {ask.question}"[:200])
+            self._wait_on_decision(project, run, f"Waiting for your decision: {ask.question}")
             return True
-        return any(
+        if any(
             p.record.kind == "decision" and p.record.role == "builder"
             for p in self._daemon.requests.pending(project.id)
-        )
+        ):
+            self._wait_on_decision(project, run, "Waiting for your decision.")
+            return True
+        return False
+
+    def _wait_on_decision(self, project: Project, run: _Run, reason: str) -> None:
+        if run.state.phase == "running":
+            self._park(project, run, "decision", reason)
+        else:
+            self._journal(project, run, reason=reason[:200])
 
     async def _plan_ready(self, project: Project, run: _Run) -> None:
         plan = await asyncio.to_thread(read_plan, goal_work_dir(project.root))
@@ -525,6 +620,8 @@ class Autopilot:
                 project,
                 run,
                 phase="awaiting_approval",
+                waiting_kind="plan",
+                waiting_since=_iso(self._clock()),
                 reason=f"The plan has {len(plan.steps)} steps and is waiting for you.",
             )
 
@@ -542,7 +639,7 @@ class Autopilot:
             steps_done_before=state.steps_done_before,
             nudges=state.nudges,
             nudges_since_progress=state.nudges_since_progress,
-            elapsed_s=self._clock() - started,
+            elapsed_s=self._clock() - started - state.parked_s,
             tokens_used=await self._tokens_used(project, run) or 0,
         )
         decision = rules.decide(facts, _limits(state))
