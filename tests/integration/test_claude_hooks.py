@@ -135,7 +135,9 @@ async def test_edits_inside_the_project_are_allowed_and_outside_it_are_refused(r
     assert await rig.cards() == []
 
 
-async def test_auto_mode_and_a_question_are_left_to_the_terminal(rig: Rig) -> None:
+async def test_auto_leaves_a_command_alone_and_standard_leaves_a_question_to_the_terminal(
+    rig: Rig,
+) -> None:
     rig.set_mode("auto")
     assert (
         await rig.hook("PermissionRequest", tool_name="Bash", tool_input={"command": "make x"})
@@ -144,6 +146,21 @@ async def test_auto_mode_and_a_question_are_left_to_the_terminal(rig: Rig) -> No
     rig.set_mode("standard")
     assert await rig.hook("PermissionRequest", tool_name="AskUserQuestion", tool_input={}) == {}
     assert await rig.cards() == []
+
+
+async def test_auto_denies_a_question_with_a_way_forward_and_journals_it(rig: Rig) -> None:
+    rig.set_mode("auto")
+    out = await rig.hook(
+        "PermissionRequest",
+        tool_name="AskUserQuestion",
+        tool_input={"questions": [{"question": "Which database?"}]},
+    )
+    assert out["decision"] == "deny" and "decision.json" in out["message"]
+    assert await rig.cards() == []  # nothing waits: no card, and no terminal dialog
+    assert rig.daemon._claude_hooks.activity(rig.project_id)[0] != "dialog"
+    (refused,) = await rig.history()
+    assert refused["title"] == "Auto refused a question to the person"
+    assert "Which database?" in refused["detail"]
 
 
 # -- what the session is doing, from its hooks (CUT-173) -------------

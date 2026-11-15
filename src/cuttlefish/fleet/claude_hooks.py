@@ -43,6 +43,10 @@ MAX_PENDING = 20
 _REMEMBERED_CALLS = 64
 #: How long the transcript is read for a call the terminal rejected.
 _TAIL_EVERY_S = 1.0
+QUESTION_REFUSAL = (
+    "Unattended (Auto) work cannot ask the person a question here. Decide yourself and say what "
+    "you chose, or write .cuttlefish/artifacts/decision.json to put the choice to them."
+)
 _DETAIL_CHARS = 1024
 _REJECTED = "doesn't want to proceed"
 #: A turn with no hook for this long is shown as unknown, not busy: Esc in the terminal ends a turn
@@ -224,6 +228,18 @@ class ClaudeHooks:
             "message": "Unattended work stays off the default branch; work on your goal's branch.",
         }
 
+    def _refuse_question(self, project: Project, tool_input: Mapping[str, Any]) -> dict[str, Any]:
+        """Auto has nobody to ask (CUT-312): a question left to the terminal would block the
+        session with no card and no deadline. It is denied with a way forward, and journaled."""
+        self._daemon.open_session_journal(project)
+        self._daemon.requests.journal_refusal(
+            session_scope(project.id),
+            title="Auto refused a question to the person",
+            line=summarise("AskUserQuestion", tool_input),
+            reason="Auto mode does not ask; the agent was told to decide or write decision.json.",
+        )
+        return {"decision": "deny", "message": QUESTION_REFUSAL}
+
     # -- the decision ------------------------------------------------------------------------
 
     async def _permission(
@@ -235,6 +251,8 @@ class ClaudeHooks:
         gone: Gone,
     ) -> dict[str, Any]:
         mode = project.mode
+        if mode == "auto" and tool == "AskUserQuestion":
+            return self._refuse_question(project, tool_input)
         if mode == "auto" or not tool or tool == "AskUserQuestion":
             return {}  # Auto never asks; a question belongs to the terminal (ADR-0040)
         if tool in EDIT_TOOLS:
