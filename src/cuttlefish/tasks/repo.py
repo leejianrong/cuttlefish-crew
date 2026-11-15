@@ -16,6 +16,8 @@ import os
 
 import satay
 
+from cuttlefish.plan import read_plan
+
 #: The heading the state block starts with; `handover` finds and strips it from an older summary.
 REPO_STATE_MARKER = "Repository state when this checkpoint was written"
 _TIMEOUT_S = 10.0
@@ -76,3 +78,11 @@ async def read_repo_state(root: str) -> str:
             *changes,
         ]
     )
+
+
+@satay.task()
+async def read_plan_step(root: str) -> str | None:
+    """The text of the plan's first unticked step under ``root``, or ``None`` without a plan or
+    once every step is ticked. Read so a handover can be checked against it (CUT-313)."""
+    plan = await asyncio.to_thread(read_plan, root)
+    return next((step.text for step in plan.steps if not step.done), None) if plan else None

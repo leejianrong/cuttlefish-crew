@@ -217,24 +217,26 @@ async def test_handover_fires_and_is_readable_from_the_journal(
     kinds = [type(event.payload).__name__ for event in events]
     assert kinds == [
         "TaskSubmitted",
+        "HandoverChecked",
         "HandoverWritten",
         "DelegationStarted",
         "DelegationFailed",
+        "HandoverChecked",
         "HandoverWritten",
         "TaskFailed",
     ]
-    first_handover = events[1].payload
+    first_handover = events[2].payload
     assert isinstance(first_handover, HandoverWritten)
     assert "A digest read from the journal" in first_handover.summary
     assert first_handover.covers_seq_from == 1
     assert first_handover.covers_seq_to == 1
 
-    # Covers both DelegationStarted (seq 3) and DelegationFailed (seq 4) -- the
+    # Covers both DelegationStarted (seq 4) and DelegationFailed (seq 5) -- the
     # whole window since the first handover.
-    second_handover = events[4].payload
+    second_handover = events[6].payload
     assert isinstance(second_handover, HandoverWritten)
-    assert second_handover.covers_seq_from == 3
-    assert second_handover.covers_seq_to == 4
+    assert second_handover.covers_seq_from == 4
+    assert second_handover.covers_seq_to == 5
     assert "## Failed or refused" in second_handover.summary
 
     episodic_store.close()
