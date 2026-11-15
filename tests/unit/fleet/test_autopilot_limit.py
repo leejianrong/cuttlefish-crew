@@ -6,6 +6,7 @@ can opt out."""
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -296,6 +297,43 @@ async def test_a_restarted_daemon_gets_the_timer_back_and_a_due_one_fires_at_onc
     for _ in range(10):
         await asyncio.sleep(0.01)
     assert rig.state.phase == "running" and rig.daemon.sent[-1] == NUDGE_TEXT
+
+
+async def test_a_codex_window_that_is_out_is_waited_for_from_the_usage_board(
+    tmp_path: Any, clock: Clock
+) -> None:
+    rig = _rig(tmp_path, clock)
+    await rig.approved()
+    rig.autopilot._runs[rig.project.id].state = dataclasses.replace(rig.state, backend="codex")
+    await rig.autopilot.on_board(rig.project, "claude-code")  # type: ignore[arg-type]
+    await rig.autopilot.on_board(rig.project, "codex")  # type: ignore[arg-type]
+    assert rig.state.phase == "running"  # nothing out yet: nothing happens
+    BOARD.report_codex(
+        {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": int(START + 1800)}}}
+    )
+    await rig.autopilot.on_board(rig.project, "codex")  # type: ignore[arg-type]
+    assert rig.state.phase == "limit_wait" and (rig.state.kind, rig.state.source) == (
+        "window",
+        "board",
+    )
+    assert rig.state.resume_at == "2026-11-12T10:31:00Z"
+    status = await rig.autopilot.status(rig.project)  # type: ignore[arg-type]
+    assert (status["limit_kind"], status["limit_source"]) == ("window", "board")
+    await clock.release()
+    assert rig.state.phase == "running" and rig.state.kind == "" and rig.state.source == ""
+    assert rig.daemon.sent[-1] == NUDGE_TEXT
+
+
+async def test_a_limit_with_no_reset_is_marked_so_the_page_can_say_it(
+    tmp_path: Any, clock: Clock
+) -> None:
+    rig = _rig(tmp_path, clock)
+    await rig.approved()
+    await _limited(rig, "try again later")
+    assert rig.state.phase == "running" and rig.state.resume_at is None
+    assert (rig.state.kind, rig.state.source) == ("window", "hook")
+    await rig.stopped()  # the builder is back: nothing is left to wait for
+    assert rig.state.kind == ""
 
 
 def test_a_reset_is_read_only_from_what_the_failure_says() -> None:

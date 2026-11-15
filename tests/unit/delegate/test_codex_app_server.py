@@ -570,6 +570,15 @@ async def test_a_rate_limit_update_is_merged_into_the_usage_board(fake: Fake) ->
     BOARD.reset()
 
 
+async def test_a_turn_that_fails_on_a_usage_limit_is_a_provider_rate_limit(fake: Fake) -> None:
+    message = "You've hit your usage limit. Try again later."
+    outcome = await fake.run(fake.script({"steps": [], "limit_error": message}))
+    assert outcome.kind == "failed" and outcome.failure_kind == "provider_rate_limit"
+    assert outcome.reason == message
+    other = await fake.run(fake.script({"steps": [], "limit_error": "the model crashed"}))
+    assert other.failure_kind is None
+
+
 async def test_the_limits_can_be_read_on_demand_without_starting_a_turn(
     fake: Fake, tmp_path: Path
 ) -> None:

@@ -17,6 +17,7 @@ is appended to ``<log>``. The scenario is a JSON object:
   this text as the final message (default: a reply that is not a document); ``handoff_command``
   first sends that command's approval request and waits for the reply, so a test can see it
   declined; ``handoff_tokens`` sends a usage update for that turn.
+``limit_error``: end the first turn ``failed`` with this turn error message (CUT-311).
 ``resume_fails``: answer ``thread/resume`` with an error, then expect ``thread/start``.
 ``final``: the final answer text (default ``done``). ``crash``: exit at once after the handshake.
 """
@@ -191,10 +192,13 @@ send(
         },
     }
 )
+error = None
+if scenario.get("limit_error"):
+    status, error = "failed", {"message": scenario["limit_error"]}
 send(
     {
         "method": "turn/completed",
-        "params": {"threadId": "th1", "turn": {"id": "tu1", "status": status, "error": None}},
+        "params": {"threadId": "th1", "turn": {"id": "tu1", "status": status, "error": error}},
     }
 )
 if True:  # a second turn (the handoff ask) is always answered, so no test waits out its timeout
