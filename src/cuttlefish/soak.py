@@ -54,6 +54,9 @@ class Sample:
     #: is the run's).
     commits: int = 0
     refreshes: int = 0
+    #: One row per context refresh seen so far (``at`` plus the advisory post-boundary measures
+    #: the timeline attaches, CUT-313); cumulative like the counts above.
+    handoff_rows: tuple[Mapping[str, Any], ...] = ()
 
     def to_json(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -61,7 +64,9 @@ class Sample:
     @classmethod
     def from_json(cls, data: Mapping[str, Any]) -> Sample:
         names = {f.name for f in dataclasses.fields(cls)}
-        return cls(**{k: v for k, v in data.items() if k in names})
+        fields = {k: v for k, v in data.items() if k in names}
+        fields["handoff_rows"] = tuple(fields.get("handoff_rows", ()))
+        return cls(**fields)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,7 +104,7 @@ class Score:
     steps_total: int
     nudges: int
     commits: int
-    handoffs: int
+    handoffs: tuple[Mapping[str, Any], ...]
     tokens: int | None
     tokens_per_day: int | None
     cost_per_day_usd: float | None
@@ -177,7 +182,7 @@ def score(
         steps_total=last.steps_total,
         nudges=max(0, last.nudges - first.nudges),
         commits=last.commits,
-        handoffs=last.refreshes,
+        handoffs=last.handoff_rows,
         tokens=tokens,
         tokens_per_day=per_day,
         cost_per_day_usd=cost,
@@ -264,7 +269,7 @@ def render_report(result: Score, meta: Mapping[str, Any] | None = None) -> str:
         f"| Steps ticked | {result.steps_done} of {result.steps_total} |",
         f"| Nudges sent | {result.nudges} |",
         f"| Commits | {result.commits} |",
-        f"| Handoffs (context refreshes) | {result.handoffs} |",
+        f"| Handoffs (context refreshes) | {len(result.handoffs)} |",
         f"| Tokens used | {_count(result.tokens)} |",
         f"| Tokens per day | {_count(result.tokens_per_day)} |",
         f"| Cost per day | {_usd(result.cost_per_day_usd)} |",
@@ -283,7 +288,41 @@ def render_report(result: Score, meta: Mapping[str, Any] | None = None) -> str:
     else:
         lines.append("None.")
     lines.append("")
+    if result.handoffs:
+        lines += _handoff_table(result.handoffs)
     return "\n".join(lines)
+
+
+def _handoff_table(rows: Iterable[Mapping[str, Any]]) -> list[str]:
+    """One line per handoff. Every figure is a string or timing check, not a verdict on whether
+    the handoff was good (CUT-313). A native compaction leaves no document to check, so it has
+    no checklist or recall: only what the builder did next."""
+    lines = [
+        "## Handoffs",
+        "",
+        "Advisory checks, not a quality score. A native compaction has no document to read, so "
+        "only what the builder did after it is measured.",
+        "",
+        "| At | Repeated commands | Repeated edits | Plan touched | Recovery | Nudges |",
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in rows:
+        ticked = row.get("plan_ticked")
+        ratio = row.get("recovery_ratio")
+        seconds = row.get("recovery_s")
+        recovery = (
+            "no move yet"
+            if seconds is None
+            else f"{_clock(seconds)}" + (f" ({ratio}x the usual gap)" if ratio is not None else "")
+        )
+        lines.append(
+            f"| {row.get('at', '?')} | {row.get('repeated_commands', 0)} "
+            f"| {row.get('repeated_edits', 0)} "
+            f"| {'n/a' if ticked is None else 'yes' if ticked else 'no'} "
+            f"| {recovery} | {row.get('nudges', 0)} |"
+        )
+    lines.append("")
+    return lines
 
 
 def _count(value: int | None) -> str:
