@@ -118,7 +118,7 @@ async def test_only_a_usage_limit_on_a_running_autopilot_is_waited_for(
     rig.plan("- [ ] one", "- [ ] two")
     await rig.stopped()
     await rig.autopilot.approve(rig.project)  # type: ignore[arg-type]
-    for other in ("overloaded", "billing_error", "server_error", "authentication_failed", None):
+    for other in ("billing_error", "server_error", "authentication_failed", None):
         await _limited(rig, clock.reset_in(60), error=other)  # type: ignore[arg-type]
         assert rig.state.phase == "running"
     await rig.autopilot.pause(rig.project)  # type: ignore[arg-type]
@@ -334,6 +334,55 @@ async def test_a_limit_with_no_reset_is_marked_so_the_page_can_say_it(
     assert (rig.state.kind, rig.state.source) == ("window", "hook")
     await rig.stopped()  # the builder is back: nothing is left to wait for
     assert rig.state.kind == ""
+
+
+async def test_a_provider_error_with_no_reset_backs_off_doubling_up_to_a_cap(
+    tmp_path: Any, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_LIMIT_BACKOFF_S", "1000")
+    rig = _rig(tmp_path, clock)
+    await rig.approved(Limits(hours=720))
+    waits = []
+    for done in range(4):
+        rig.plan(*[f"- [{'x' if i < done else ' '}] step {i}" for i in range(12)])
+        await rig.autopilot.on_stop_failure(rig.project, "overloaded", None)  # type: ignore[arg-type]
+        assert rig.state.phase == "limit_wait" and (rig.state.kind, rig.state.source) == (
+            "backoff",
+            "backoff",
+        )
+        waits.append(clock.now)
+        await clock.release()
+        assert rig.state.phase == "running" and rig.daemon.sent[-1] == NUDGE_TEXT
+    assert clock.slept == [1000, 2000, 3600, 3600]  # no grace added, and never past an hour
+    assert waits == sorted(waits)
+
+
+async def test_kopicode_and_codex_rate_limits_back_off_or_wait_for_a_named_window(
+    tmp_path: Any, clock: Clock
+) -> None:
+    rig = _rig(tmp_path, clock)
+    await rig.approved()
+    await rig.autopilot.on_failure_kind(rig.project, "provider_outage")  # type: ignore[arg-type]
+    assert rig.state.phase == "running"  # only a rate limit is waited for
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    assert rig.state.phase == "limit_wait" and rig.state.kind == "backoff"
+    assert rig.state.resume_at == "2026-11-12T10:05:00Z"
+    await clock.release()
+    BOARD.report("claude-code", {"p": Window("p", 100.0, int(clock.now + 7200), None, None)})
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    assert rig.state.kind == "window" and rig.state.source == "board"
+
+
+async def test_the_waits_in_a_row_cap_can_be_set_by_the_environment(
+    tmp_path: Any, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CUTTLEFISH_MAX_LIMIT_WAITS", "1")
+    rig = _rig(tmp_path, clock)
+    await rig.approved(Limits(hours=720))
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    await clock.release()
+    await rig.autopilot.on_failure_kind(rig.project, "provider_rate_limit")  # type: ignore[arg-type]
+    assert rig.state.phase == "limit" and "1 times in a row" in rig.state.reason
 
 
 def test_a_reset_is_read_only_from_what_the_failure_says() -> None:
