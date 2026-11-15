@@ -60,6 +60,7 @@ from cuttlefish.delegate import codex_live
 from cuttlefish.delegate.codex_app_server import read_rate_limits
 from cuttlefish.delegate.presets import DEFAULT_PRESETS
 from cuttlefish.episodic.events import (
+    AutopilotUpdated,
     DelegationStarted,
     EnvironmentPrepared,
     EnvironmentPrepareStarted,
@@ -85,6 +86,7 @@ from cuttlefish.fleet.cardstats import CardStats
 from cuttlefish.fleet.claude_hooks import ClaudeHooks, session_scope
 from cuttlefish.fleet.digest import DEFAULT_EVENTS, build_digest
 from cuttlefish.fleet.goaldiff import GoalDiff, goal_diff, goal_stat
+from cuttlefish.fleet.notifier import Notifier
 from cuttlefish.fleet.placement import Placement, RemoteTeam
 from cuttlefish.fleet.prstatus import PrComments, PrStatus, read_pr_comments, read_pr_status
 from cuttlefish.fleet.pullrequest import PullRequest, open_pull_request
@@ -161,6 +163,8 @@ from cuttlefish.usage import BOARD
 
 logger = logging.getLogger(__name__)
 
+#: Autopilot phases that send a push (CUT-312), and the title each carries.
+_NOTIFY_PHASES = {"limit": "Autopilot reached a limit", "stuck": "Autopilot is stuck"}
 _WAKE_BATCH_S = 2.0
 _WAKE_SPACING_S = 30.0
 _WAKE_MESSAGE = (
@@ -448,6 +452,9 @@ class FleetDaemon:
         self._last_wake = 0.0
         self.requests.on_permission = self._wake_manager
         self.requests.on_decision_resolved = self._tell_builder_the_choice
+        #: A push when the dashboard is not open (CUT-312); off unless CUTTLEFISH_NOTIFY_URL is set.
+        self.notifier = Notifier()
+        self.requests.on_raised = self._notify_card
         #: Hooks of a project's Claude Code session raise Needs you cards (ADR-0040).
         self._claude_hooks = ClaudeHooks(self)
         #: project id -> the Codex rollout its chat reads, and when it was last looked for.
@@ -1306,6 +1313,18 @@ class FleetDaemon:
         self.open_session_journal(project)
         scope = session_scope(project.id)
         self._team_stores[scope].append(scope, payload)
+        if isinstance(payload, AutopilotUpdated) and payload.phase in _NOTIFY_PHASES:
+            self.notifier.notify(
+                project.id, project.name, payload.phase, _NOTIFY_PHASES[payload.phase]
+            )
+
+    def _notify_card(self, request: PendingRequest) -> None:
+        """A Needs you card was raised: its title and the project's name go to the sink, no more."""
+        try:
+            name = self._projects.get(request.project_id).name
+        except Exception:
+            return
+        self.notifier.notify(request.project_id, name, request.id, request.record.title)
 
     def chat_transcript_path(self, project: Project) -> Path | None:
         """Where the builder's Claude Code transcript is, or ``None`` (no session or not Claude)."""
