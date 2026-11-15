@@ -160,8 +160,9 @@ When the builder needs a choice only you can make, it is told to write `.cuttlef
 meanwhile, and does not nudge while it waits. Pick an option and it is typed to the builder as a message. The card and who
 answered are in the journal.
 
-By default the card waits with no timer. On the project's Permissions tab, **Decisions the builder asks you** sets a wait
-(15 minutes to 24 hours; `PATCH /api/projects/{id}/decision-wait` with `{"decision_wait_minutes": 60}` is the Admin-tier
+By default the card waits with no timer, so a builder left alone stays stopped until you answer. On the project's
+Permissions tab, **Decisions the builder asks you** sets a wait (15 minutes to 24 hours, with 30 minutes suggested but
+never applied for you; `PATCH /api/projects/{id}/decision-wait` with `{"decision_wait_minutes": 60}` is the Admin-tier
 call). When it runs out the recommended option is taken, the card counts down to that, the journal records the answer as
 chosen by `timeout`, the history says "Chosen automatically after the wait", and the builder is told nobody answered. An
 option that deletes or overwrites work is never taken for you: the builder lists such options as `destructive`, and
