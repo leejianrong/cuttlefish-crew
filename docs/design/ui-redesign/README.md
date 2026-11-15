@@ -426,6 +426,8 @@ and this folder disagree after a slice lands, update this folder.
   UTC: missed by 95 minutes, past the 60 minute grace." Checked at 1280 (light, dark) and 390 px.
 
 
+- **Handoff notes (CUT-313).** A timeline row for a native context compaction carries a small `surface-container-high` note under its text ("No handoff document was asked for ... Afterwards: 2 repeated commands ..."), and the activity log has a "Handoff check" row beside each checkpoint ("Handoff: 3 of 4 headings, ..."; a digest says no handoff from the agent was kept and that one-shot transports cannot be asked). Advisory wording, no warning colour, never a prompt. Checked at desktop light and dark and at 390 px.
+
 - **Usage-limit chip (CUT-311, 2026-11-15).** While Autopilot waits on a usage window the Run section of the plan rail shows one chip
   in place of the phase label: a clock icon on `secondary-container`, "Waiting for usage limit, continues 14:18 (in 2 h 11 m)" in the
   viewer's local time (weekday and date when it is not today), recounted every 30 s; a provider backoff reads "Provider busy,

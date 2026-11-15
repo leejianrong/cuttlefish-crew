@@ -14,6 +14,7 @@
     type Control,
   } from "../autopilot";
   import type { FleetClient } from "../api";
+  import { refreshNote } from "../handoff";
   import {
     awayWorthShowing,
     dotTone,
@@ -184,6 +185,9 @@
             <span class="text body-medium">
               {event.text}
               {#if event.kind === "commit" && event.ref}<span class="mono label-small muted">{event.ref}</span>{/if}
+              {#if event.kind === "refresh" && event.text.startsWith("Context was compacted")}
+                <span class="handoff-note label-small">{refreshNote(event.handoff)}</span>
+              {/if}
               {#if event.kind === "needs_you" || event.kind === "image"}
                 <button class="link" onclick={() => open(event)}>
                   {event.kind === "needs_you" ? "Review" : "Open"}
@@ -322,6 +326,17 @@
     border-radius: 50%;
     margin-top: 0.35rem;
     background: var(--md-sys-color-outline);
+  }
+
+  .handoff-note {
+    display: block;
+    margin-top: 0.25rem;
+    padding: 0.2rem 0.55rem;
+    width: fit-content;
+    max-width: 100%;
+    border-radius: var(--md-sys-shape-corner-small);
+    background: var(--md-sys-color-surface-container-high);
+    color: var(--md-sys-color-on-surface-variant);
   }
 
   .dot.accent {
