@@ -622,7 +622,11 @@ class FleetDaemon:
             timeline.journal_events(journal),
             timeline.artifact_events(artifacts_found),
             commits,
-            timeline.transcript_events(chat_items),
+            timeline.transcript_events(
+                chat_items,
+                [datetime.fromisoformat(c.at) for c in commits],
+                timeline.nudge_times(journal),
+            ),
         )
         waiting = len(self.requests.pending(project.id))
         return {
