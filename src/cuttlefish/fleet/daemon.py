@@ -664,6 +664,8 @@ class FleetDaemon:
         except DelegationError as exc:
             raise FleetError(str(exc)) from exc
         BOARD.report_codex(result)
+        for project in self._projects.list():  # a running Autopilot on Codex that is out waits
+            await self.autopilot.on_board(project, "codex")
 
     async def autopilot_status(self, project_id: str) -> dict[str, Any]:
         return await self.autopilot.status(self._projects.get(project_id))

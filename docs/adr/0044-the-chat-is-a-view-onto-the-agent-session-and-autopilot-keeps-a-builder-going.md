@@ -103,3 +103,14 @@ there is a manager. It is a client of the daemon's HTTP API, adds no route, and 
 - Whether the agent's messages are also journaled (so history survives a deleted transcript).
 - Autopilot has been run against two short real Claude Code sessions (2026-10-23: plan-first followed, checklist ticked, `Stop`
   hook fired, "continue" worked) but not a long one. See `agent_docs/known-gaps.md`.
+
+## Addendum: rate limits in an unattended run (CUT-311, 2026-11-15)
+
+A usage limit is waited out by one entry, `Autopilot.on_limit`, whatever told it: Claude Code's `StopFailure` hook, or a usage board
+that says a window is out (Codex, on refresh). The reset is read from the failure's own words, then from the board, never guessed;
+with none, the run stays `running` and the page says the reset is unknown and it is waiting for a person. A provider error with no
+reset (API 529, kopicode `provider_rate_limit`) is retried after a bounded, doubling backoff (`CUTTLEFISH_LIMIT_BACKOFF_S`, capped at an
+hour). Both go through the same `limit_wait` phase, the same single fixed "continue", the same cap on waits in a row
+(`CUTTLEFISH_MAX_LIMIT_WAITS`, default 5) and the same run limits, so a weekly window past the run's hours still ends in `limit`.
+`AutopilotUpdated` gains additive `kind` (`window`, `backoff`) and `source` (`hook`, `board`, `backoff`) fields; the journal needs no
+migration. No backend gets a new wire format (ADR-0003, ADR-0005) and nothing here makes a model call. Checked against fakes only.

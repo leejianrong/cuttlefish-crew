@@ -25,10 +25,18 @@ def test_the_permission_hook_is_held_and_the_others_return_quickly() -> None:
         "UserPromptSubmit",
         "Stop",
         "StopFailure",  # a turn that ended on an API error, such as a usage limit (CUT-299)
+        "Notification",  # a dialog the terminal is showing (CUT-312)
     }
     held = hooks["PermissionRequest"][0]["hooks"][0]
     assert held["type"] == "command" and held["timeout"] == 615  # the window plus fifteen seconds
-    for event in ("PreToolUse", "PostToolUse", "UserPromptSubmit", "Stop", "StopFailure"):
+    for event in (
+        "PreToolUse",
+        "PostToolUse",
+        "UserPromptSubmit",
+        "Stop",
+        "StopFailure",
+        "Notification",
+    ):
         assert hooks[event][0]["hooks"][0]["timeout"] == 10
 
 

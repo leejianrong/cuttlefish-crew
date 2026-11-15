@@ -27,6 +27,9 @@ export interface AutopilotStatus {
   approved_at?: string | null;
   /** In `limit_wait`: when Autopilot will continue (ISO 8601, UTC). */
   resume_at?: string | null;
+  /** CUT-311: what is being waited out (`window` or `backoff`) and where the signal came from. */
+  limit_kind?: "window" | "backoff" | null;
+  limit_source?: "hook" | "board" | "backoff" | null;
   /** Whether this project continues after a usage limit resets (it can opt out). */
   continue_after_reset?: boolean;
   elapsed_s?: number | null;
@@ -136,6 +139,41 @@ export function planProgress(status: AutopilotStatus): number {
 export function currentStep(status: AutopilotStatus): number | null {
   const index = status.plan?.steps.findIndex((step) => !step.done) ?? -1;
   return index >= 0 ? index : null;
+}
+
+export interface LimitChip {
+  /** The chip's words, without the countdown. */
+  text: string;
+  /** `in 2 h 14 m`, or null when there is no time to count to. */
+  countdown: string | null;
+  /** A person has to act: there is no reset time to wait for. */
+  needsYou: boolean;
+}
+
+/** `14:05`, with the weekday and date when it is not today (a weekly window resets days away). */
+export function clockText(at: Date, now: Date): string {
+  const time = at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  if (at.toDateString() === now.toDateString()) return time;
+  return `${at.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} ${time}`;
+}
+
+/** The chip for a usage-limit wait (CUT-311), or null. The daemon holds the time; this words it. */
+export function limitChip(status: AutopilotStatus, now: Date): LimitChip | null {
+  if (status.phase === "limit_wait" && status.resume_at) {
+    const at = new Date(status.resume_at);
+    if (Number.isNaN(at.getTime())) return null;
+    const seconds = Math.max(0, Math.round((at.getTime() - now.getTime()) / 1000));
+    const lead = status.limit_kind === "backoff" ? "Provider busy, retrying" : "Waiting for usage limit, continues";
+    return {
+      text: `${lead} ${clockText(at, now)}`,
+      countdown: seconds < 60 ? "any moment" : `in ${elapsedText(seconds)}`,
+      needsYou: false,
+    };
+  }
+  if (status.phase === "running" && status.limit_kind === "window" && !status.resume_at) {
+    return { text: "Usage limit reached, reset unknown, waiting for you", countdown: null, needsYou: true };
+  }
+  return null;
 }
 
 /** What the plan card tells a person who is not happy with the plan: Autopilot does not edit it. */

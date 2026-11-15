@@ -48,9 +48,10 @@ MAX_LIMIT_WAITS = 5
 MAX_WAIT_S = 8 * 86400
 
 _EPOCH = re.compile(
-    r"(?:resetsAt|resets_at|anthropic-ratelimit-unified-reset)\W{1,4}(\d{9,11})", re.IGNORECASE
+    r"(?:resetsAt|resets_at|anthropic-ratelimit-unified-reset)\W{1,4}(\d{9,13})\b", re.IGNORECASE
 )
-_RETRY_AFTER = re.compile(r"retry-after\W{1,4}(\d{1,7})\b", re.IGNORECASE)
+_RETRY_AFTER = re.compile(r"retry[-_]after(?!\W{0,3}ms)\W{1,4}(\d{1,7})\b", re.IGNORECASE)
+_RETRY_AFTER_MS = re.compile(r"retry[-_]after[-_]ms\W{1,4}(\d{1,10})\b", re.IGNORECASE)
 _ISO = re.compile(r"\b(\d{4}-\d\d-\d\dT\d\d:\d\d(?::\d\d)?(?:\.\d+)?(?:Z|[+-]\d\d:?\d\d))")
 
 
@@ -63,7 +64,10 @@ def reset_from_failure(text: str | None, now: float) -> float | None:
         return None
     found: list[float] = []
     for match in _EPOCH.finditer(text):
-        found.append(float(match.group(1)))
+        epoch = float(match.group(1))
+        found.append(epoch / 1000 if epoch > 1e11 else epoch)  # a 13-digit one is milliseconds
+    for match in _RETRY_AFTER_MS.finditer(text):
+        found.append(now + float(match.group(1)) / 1000)
     for match in _RETRY_AFTER.finditer(text):
         found.append(now + float(match.group(1)))
     for match in _ISO.finditer(text):
