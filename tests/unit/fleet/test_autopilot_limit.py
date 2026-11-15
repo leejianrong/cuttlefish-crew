@@ -348,3 +348,38 @@ def test_the_continue_option_defaults_on_survives_a_reopen_and_has_a_route(tmp_p
         )
     store.close()
     assert ProjectStore.open(tmp_path / "p.db").get(project.id).continue_after_reset is False
+
+
+# Shaped like what Claude Code writes on a real limit (stub payloads: no real limit was hit).
+_STOP_FAILURE_DETAILS = (
+    'API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"Number of '
+    'request tokens has exceeded your 5-hour limit"}} retry-after: 5400 '
+    "anthropic-ratelimit-unified-reset: 1794483600"
+)
+_RATE_LIMIT_EVENT = {
+    "type": "rate_limit_event",
+    "rate_limit_info": {
+        "status": "rejected",
+        "resetsAt": 1794483600,
+        "rateLimitType": "five_hour",
+        "overageStatus": "rejected",
+        "isUsingOverage": False,
+    },
+    "uuid": "u",
+    "session_id": "s",
+}
+
+
+def test_a_reset_is_read_from_payloads_shaped_like_the_real_ones() -> None:
+    import json
+
+    assert reset_from_failure(_STOP_FAILURE_DETAILS, START) == 1794483600.0
+    assert reset_from_failure(json.dumps(_RATE_LIMIT_EVENT), START) == 1794483600.0
+    # milliseconds, an underscore name and a milliseconds retry are each one reading
+    assert reset_from_failure('{"resetsAt": 1794483600000}', START) == 1794483600.0
+    assert reset_from_failure('{"retry_after": 90}', START) == START + 90
+    assert reset_from_failure('{"retry-after-ms": 90000}', START) == START + 90
+    # the words a person sees carry no machine-readable time: not a guess
+    assert reset_from_failure("You've hit your limit · resets 3pm (Asia/Singapore)", START) is None
+    assert reset_from_failure('{"resetsAt": null}', START) is None
+    assert reset_from_failure('{"resetsAt": "soon", "retry-after": "x"}', START) is None
