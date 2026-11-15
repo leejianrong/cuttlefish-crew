@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import statistics
 import subprocess
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from itertools import pairwise
 from typing import Any, Literal
 
 from cuttlefish.artifacts import Artifact
@@ -51,6 +53,8 @@ class Event:
     text: str
     #: Where to look: an artifact path for an image, a commit id for a commit.
     ref: str | None = None
+    #: A refresh's advisory post-boundary measures (CUT-313, :func:`post_boundary`).
+    handoff: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return dataclasses.asdict(self)
@@ -201,11 +205,95 @@ def read_commits(root: str, env: Mapping[str, str]) -> tuple[str | None, list[Ev
 # -- the transcript -----------------------------------------------------------------------------
 
 
-def transcript_events(items: Sequence[Mapping[str, Any]]) -> list[Event]:
-    """Context refreshes, test runs and the builder's own recaps, from chat items."""
+#: Post-boundary windows (CUT-313): how many tool calls and minutes after a refresh count.
+_FIRST_CALLS = 15
+_PLAN_MINUTES = 30
+_NUDGE_MINUTES = 10
+_EDIT_TOOLS = ("Edit", "Write", "MultiEdit")
+
+
+def _when(at: object) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(at).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def nudge_times(events: Iterable[Any]) -> list[datetime]:
+    """When Autopilot nudged the builder or gave up on it as stuck, from the journal."""
+    times: list[datetime] = []
+    nudges = 0
+    for event in events:
+        payload = event.payload
+        if isinstance(payload, AutopilotUpdated):
+            if payload.nudges > nudges or payload.phase == "stuck":
+                times.append(event.ts)
+            nudges = payload.nudges
+    return times
+
+
+def post_boundary(
+    items: Sequence[Mapping[str, Any]],
+    index: int,
+    commits: Sequence[datetime] = (),
+    nudges: Sequence[datetime] = (),
+) -> dict[str, Any]:
+    """What the builder did after the divider at ``items[index]``, read from the transcript, the
+    commit times and the nudge times (CUT-313). All of it is a string or timing check and says
+    nothing about whether the handoff was good; nothing is stored.
+
+    ``repeated_*`` count distinct commands or edited paths in the first calls that the builder had
+    already run before the boundary. ``plan_ticked`` is whether it touched the plan file soon
+    after (``None`` when it never touches it). ``recovery_ratio`` is the time to its first commit
+    or plan edit against the median gap between commits (``None`` below three commits)."""
+    start = _when(items[index].get("at"))
+    if start is None:
+        return {}
+
+    def calls(span: Sequence[Mapping[str, Any]]) -> list[tuple[str, str, datetime | None]]:
+        return [
+            (str(i.get("name")), str(i.get("summary") or ""), _when(i.get("at")))
+            for i in span
+            if i.get("kind") == "tool"
+        ]
+
+    nxt = next((n for n in range(index + 1, len(items)) if items[n].get("kind") == "divider"), None)
+    before = {(n, s) for n, s, _ in calls(items[:index])}
+    after = calls(items[index + 1 : nxt])
+    first = {(n, s) for n, s, _ in after[:_FIRST_CALLS] if (n, s) in before}
+    plan = [
+        w
+        for n, s, w in calls(items)
+        if n in _EDIT_TOOLS and s.endswith("plan.md") and w is not None
+    ]
+    plan_after = [w for w in plan if w > start]
+    ordered = sorted(commits)
+    gaps = [(b - a).total_seconds() for a, b in pairwise(ordered)]
+    first_move = min([*(c for c in commits if c > start), *plan_after], default=None)
+    median = statistics.median(gaps) if len(gaps) >= 2 else 0
+    recovery = None if first_move is None else (first_move - start).total_seconds()
+    return {
+        "repeated_commands": sum(1 for n, _ in first if n == "Bash"),
+        "repeated_edits": sum(1 for n, _ in first if n in _EDIT_TOOLS),
+        "plan_ticked": (
+            any(w <= start + timedelta(minutes=_PLAN_MINUTES) for w in plan_after) if plan else None
+        ),
+        "recovery_s": None if recovery is None else round(recovery),
+        "recovery_ratio": round(recovery / median, 1) if recovery is not None and median else None,
+        "nudges": sum(1 for t in nudges if start < t <= start + timedelta(minutes=_NUDGE_MINUTES)),
+    }
+
+
+def transcript_events(
+    items: Sequence[Mapping[str, Any]],
+    commits: Sequence[datetime] = (),
+    nudges: Sequence[datetime] = (),
+) -> list[Event]:
+    """Context refreshes, test runs and the builder's own recaps, from chat items. A refresh
+    carries its advisory post-boundary measures (:func:`post_boundary`)."""
     calls: dict[str, str] = {}
     found: list[Event] = []
-    for item in items:
+    for position, item in enumerate(items):
         kind, at = item.get("kind"), item.get("at")
         if not isinstance(at, str):
             continue
@@ -215,6 +303,7 @@ def transcript_events(items: Sequence[Mapping[str, Any]]) -> list[Event]:
                     at,
                     "refresh",
                     f"{item.get('text')}. The builder carries on from its own summary.",
+                    handoff=post_boundary(items, position, commits, nudges),
                 )
             )
         elif kind == "note" and isinstance(item.get("text"), str):
