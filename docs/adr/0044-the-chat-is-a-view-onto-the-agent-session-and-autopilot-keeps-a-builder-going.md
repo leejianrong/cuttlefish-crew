@@ -114,3 +114,23 @@ hour). Both go through the same `limit_wait` phase, the same single fixed "conti
 (`CUTTLEFISH_MAX_LIMIT_WAITS`, default 5) and the same run limits, so a weekly window past the run's hours still ends in `limit`.
 `AutopilotUpdated` gains additive `kind` (`window`, `backoff`) and `source` (`hook`, `board`, `backoff`) fields; the journal needs no
 migration. No backend gets a new wire format (ADR-0003, ADR-0005) and nothing here makes a model call. Checked against fakes only.
+
+## Addendum: a card nobody answers in Auto (CUT-312, 2026-11-15)
+
+Decided by Jian: Auto never asks, so Autopilot must not wait on a person invisibly and without end.
+
+- **Auto denies `AskUserQuestion`** with "decide, or write decision.json" and journals the refusal, instead of falling through to a
+  terminal dialog that blocks with no card. A dialog the hooks never decided (an edge permission prompt, an elicitation) is seen through
+  Claude Code's `Notification` hook and journaled once as `SessionBlocked`; it cannot be answered from the dashboard, only shown.
+- **`waiting_on_you`** is a phase of a running Autopilot parked on a builder decision or a blocked terminal dialog. `AutopilotUpdated`
+  gains `waiting_kind` (`plan`, `decision`, `blocked`), `waiting_since` and `parked_s`. Plan approval keeps its own phase,
+  `awaiting_approval`, and carries the same kind and time, so the page can say how long any wait has been going. Parked time is added to
+  `parked_s` when the wait ends and is **not** counted against Autopilot's hours (a one hour run parked for two is not at its limit).
+  The soak score reports it as `blocked_on_person_s` (blocked plus plan-approval time).
+- **Never taken for a person:** a plan is not approved on a timeout, and a destructive decision option is not chosen. The decision
+  deadline stays opt-in per project; the UI suggests 30 minutes and says what is taken.
+- **A push, not a bell tab:** `CUTTLEFISH_NOTIFY_URL` (webhook or ntfy) gets the project name and a title when a card is raised, a plan
+  waits, Autopilot is parked, hits a limit or is stuck. It is a daemon environment variable, not a secret in the store, because shared
+  secrets reach every project's agents. **Web Push through the relay is not built and needs its own ADR** (a push service holds a
+  subscription per device, which touches ADR-0037's "the relay holds no project data").
+- Deferred: the manager agent answering decisions, and queueing a question while the agent continues on another step.

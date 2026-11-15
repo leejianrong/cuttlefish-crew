@@ -164,6 +164,11 @@ To be told when the dashboard is closed, set `CUTTLEFISH_NOTIFY_URL` (a webhook 
 it gets one POST with the project's name and the card's title when a card is raised or Autopilot reaches a limit or is stuck, and
 nothing else (see the [CLI reference](cli-reference.md)). Push to a phone through the relay is not built.
 
+When Autopilot is parked on a decision, or Claude Code's terminal shows a dialog in Auto that nothing here can answer, the run reads
+**Waiting for you** with how long it has waited. That time is not counted against Autopilot's hours. A terminal dialog can only be
+answered in the terminal. In Auto, a question from the agent is refused with "decide, or write decision.json" rather than left as a
+dialog. A plan is never approved for you, and an option that deletes or overwrites work is never chosen for you.
+
 By default the card waits with no timer, so a builder left alone stays stopped until you answer. On the project's
 Permissions tab, **Decisions the builder asks you** sets a wait (15 minutes to 24 hours, with 30 minutes suggested but
 never applied for you; `PATCH /api/projects/{id}/decision-wait` with `{"decision_wait_minutes": 60}` is the Admin-tier

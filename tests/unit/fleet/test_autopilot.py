@@ -372,3 +372,97 @@ async def test_the_projects_wait_and_the_builders_destructive_options_go_with_th
     await rig.stopped()
     assert rig.daemon.decisions[0]["wait_s"] == 1800
     assert rig.daemon.decisions[0]["destructive"] == frozenset({"b"})
+
+
+# -- waiting on a person (CUT-312) ------------------------------------------------------------
+
+
+class _Clock:
+    def __init__(self) -> None:
+        self.now = float(int(time.time()))  # approve stamps the wall clock
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def _timed(tmp_path: Path) -> tuple[Rig, _Clock]:
+    rig = Rig(tmp_path)
+    clock = _Clock()
+    rig.autopilot = Autopilot(rig.daemon, settle_s=0.02, clock=clock)  # type: ignore[arg-type]
+    return rig, clock
+
+
+def _decision_file(rig: Rig) -> None:
+    (rig.tmp / DECISION_PATH).write_text(
+        json.dumps({"question": "q", "options": ["a", "b"], "recommended": "a"})
+    )
+
+
+async def test_a_plan_waiting_for_approval_says_what_for_and_since_when(tmp_path: Path) -> None:
+    rig, clock = _timed(tmp_path)
+    await rig.begin()
+    rig.plan("- [ ] one", "- [ ] two")
+    await rig.stopped()
+    clock.now += 300
+    waiting = (await rig.autopilot.status(rig.project))["waiting"]  # type: ignore[arg-type]
+    assert waiting["kind"] == "plan" and waiting["age_s"] == 300
+
+
+async def test_a_pending_decision_parks_autopilot_and_the_wait_is_not_its_time(
+    tmp_path: Path,
+) -> None:
+    rig, clock = _timed(tmp_path)
+    await rig.approved(Limits(hours=1))
+    clock.now += 600  # ten minutes of work
+    _decision_file(rig)
+    await rig.stopped()
+    assert rig.state.phase == "waiting_on_you" and rig.state.waiting_kind == "decision"
+    clock.now += 2 * 3600  # two hours of nobody answering
+    status = await rig.autopilot.status(rig.project)  # type: ignore[arg-type]
+    assert status["waiting"]["kind"] == "decision" and status["waiting"]["age_s"] == 7200
+    assert status["elapsed_s"] == pytest.approx(600, abs=2)  # frozen while parked
+    rig.daemon.decisions.clear()  # answered
+    rig.autopilot.on_activity(rig.project)  # type: ignore[arg-type]
+    assert rig.state.phase == "running" and rig.state.parked_s == 7200
+    assert rig.state.waiting_since is None
+    await rig.stopped()
+    # Two hours parked would have ended a one hour run; they are not counted, so it is nudged.
+    assert rig.state.phase == "running" and rig.daemon.sent[-1] == NUDGE_TEXT
+    status = await rig.autopilot.status(rig.project)  # type: ignore[arg-type]
+    assert status["parked_s"] == 7200 and status["elapsed_s"] == pytest.approx(600, abs=2)
+
+
+async def test_activity_while_the_decision_is_still_unanswered_does_not_end_the_wait(
+    tmp_path: Path,
+) -> None:
+    rig, _ = _timed(tmp_path)
+    await rig.approved()
+    _decision_file(rig)
+    await rig.stopped()
+    rig.autopilot.on_activity(rig.project)  # type: ignore[arg-type]
+    assert rig.state.phase == "waiting_on_you"
+    await rig.stopped()  # a stop with the card still pending does not nudge either
+    assert rig.state.phase == "waiting_on_you" and NUDGE_TEXT not in rig.daemon.sent
+
+
+async def test_a_session_blocked_on_a_terminal_dialog_parks_until_it_moves_on(
+    tmp_path: Path,
+) -> None:
+    rig, clock = _timed(tmp_path)
+    await rig.autopilot.on_blocked(rig.project, "x")  # type: ignore[arg-type]  # no run: ignored
+    await rig.approved()
+    await rig.autopilot.on_blocked(rig.project, "x")  # type: ignore[arg-type]
+    assert rig.state.phase == "waiting_on_you" and rig.state.waiting_kind == "blocked"
+    assert "terminal" in rig.state.reason
+    clock.now += 90
+    rig.autopilot.on_activity(rig.project)  # type: ignore[arg-type]
+    assert rig.state.phase == "running" and rig.state.parked_s == 90
+
+
+async def test_pausing_a_parked_autopilot_keeps_the_parked_time(tmp_path: Path) -> None:
+    rig, clock = _timed(tmp_path)
+    await rig.approved()
+    await rig.autopilot.on_blocked(rig.project, "")  # type: ignore[arg-type]
+    clock.now += 45
+    await rig.autopilot.pause(rig.project)  # type: ignore[arg-type]
+    assert rig.state.phase == "paused" and rig.state.parked_s == 45

@@ -376,3 +376,19 @@ def test_the_command_will_not_start_without_being_asked(
         main([*args[:3], "http://127.0.0.1:8420", *args[4:], "--out", str(tmp_path), "--yes"]) == 2
     )
     assert "8420" in capsys.readouterr().err
+
+
+def test_a_parked_autopilot_counts_as_waiting_on_a_person_with_plan_approval() -> None:
+    """CUT-312: ``waiting_on_you`` is blocked time, and the plan wait joins it in one figure."""
+    result = soak.score(
+        [
+            Sample(t=0, phase="awaiting_approval"),
+            Sample(t=100, phase="running"),
+            Sample(t=200, phase="waiting_on_you"),
+            Sample(t=500, phase="running"),
+            Sample(t=600, phase="done"),
+        ]
+    )
+    assert (result.awaiting_approval_s, result.blocked_s) == (100, 300)
+    assert result.blocked_on_person_s == 400
+    assert result.to_json()["blocked_on_person_s"] == 400

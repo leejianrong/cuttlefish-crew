@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FleetClient, NeedsYouRequest, ProjectSummary } from "../api";
+  import { waitingChip, type AutopilotStatus } from "../autopilot";
   import { commandText, formatWhen } from "../events";
   import { outcomeLabel } from "../requests";
   import RequestCard from "./RequestCard.svelte";
@@ -22,16 +23,42 @@
     offline?: boolean;
   } = $props();
 
+  // What Autopilot is waiting on that has no card (CUT-312): a plan to approve, or a dialog only the
+  // session's own terminal can answer. A decision has its card below, with its own countdown.
+  let autopilot = $state<AutopilotStatus | null>(null);
+  let now = $state(new Date());
+  $effect(() => {
+    void fetchedAt;
+    now = new Date();
+    client
+      .getAutopilot(project.id)
+      .then((status) => (autopilot = status))
+      .catch(() => (autopilot = null));
+  });
+  $effect(() => {
+    if (!autopilot?.waiting) return;
+    const timer = setInterval(() => (now = new Date()), 30_000);
+    return () => clearInterval(timer);
+  });
+  const wait = $derived(autopilot ? waitingChip(autopilot, now, ["plan", "blocked"]) : null);
 </script>
 
 <section class="stack" aria-labelledby="needs-heading">
   <h2 id="needs-heading" class="title-large">Waiting on you</h2>
   <p class="body-medium muted">
-    An agent that wants to run a command it isn't allowed to pauses here until you answer, and so does an agent with a
-    question for you (kopicode and Claude Code; a Codex question is not asked live yet).
+    An agent that wants to run a command it isn't allowed to pauses here until you answer, and so does a kopicode
+    question for you. A Claude Code question is answered in its terminal (Auto refuses it), and a Codex question is not
+    asked live yet.
     An agent that kept failing on the project's environment shows as Stuck: it was stopped, so there is nothing to
     answer.
   </p>
+
+  {#if wait}
+    <div class="card filled wait" role="status">
+      <p class="title-medium">{wait.text}</p>
+      <p class="body-medium muted">{wait.age}{wait.hint ? `. ${wait.hint}` : ""}</p>
+    </div>
+  {/if}
 
   {#if pending.length === 0}
     <div class="card filled empty">
@@ -77,8 +104,17 @@
     margin: 0;
   }
 
-  .empty {
+  .empty,
+  .wait {
     padding: 20px;
+  }
+
+  .wait {
+    border-left: 4px solid var(--md-sys-color-attention);
+  }
+
+  .wait p {
+    margin: 0 0 4px;
   }
 
   .empty p {

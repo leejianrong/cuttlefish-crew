@@ -12,7 +12,11 @@ export type AutopilotPhase =
   | "limit"
   | "stuck"
   /** CUT-299: the builder hit a usage limit; Autopilot continues it at `resume_at`. */
-  | "limit_wait";
+  | "limit_wait"
+  /** CUT-312: running, parked on a decision or a terminal dialog only a person can answer. */
+  | "waiting_on_you";
+
+export type WaitKind = "plan" | "decision" | "blocked" | "";
 
 export interface PlanStep {
   text: string;
@@ -30,6 +34,10 @@ export interface AutopilotStatus {
   /** CUT-311: what is being waited out (`window` or `backoff`) and where the signal came from. */
   limit_kind?: "window" | "backoff" | null;
   limit_source?: "hook" | "board" | "backoff" | null;
+  /** CUT-312: what a person is being waited for and how long, in `awaiting_approval` and `waiting_on_you`. */
+  waiting?: { kind: WaitKind; since: string; age_s: number } | null;
+  /** Seconds parked on a person; Autopilot's hours do not count them. */
+  parked_s?: number;
   /** Whether this project continues after a usage limit resets (it can opt out). */
   continue_after_reset?: boolean;
   elapsed_s?: number | null;
@@ -68,6 +76,8 @@ export function phaseLabel(phase: AutopilotPhase): string {
       return "Stuck";
     case "limit_wait":
       return "Waiting for the usage limit";
+    case "waiting_on_you":
+      return "Waiting for you";
     default:
       return "Off";
   }
@@ -75,7 +85,7 @@ export function phaseLabel(phase: AutopilotPhase): string {
 
 /** Whether the pill should draw attention: something is waiting on a person. */
 export function needsPerson(phase: AutopilotPhase): boolean {
-  return phase === "awaiting_approval" || phase === "stuck" || phase === "limit";
+  return phase === "awaiting_approval" || phase === "stuck" || phase === "limit" || phase === "waiting_on_you";
 }
 
 export type Control = "approve" | "pause" | "resume" | "stop" | "nudge";
@@ -93,6 +103,7 @@ export function controlsFor(phase: AutopilotPhase): Control[] {
     case "stuck":
     case "limit":
     case "limit_wait":
+    case "waiting_on_you":
       return ["resume", "stop"];
     default:
       return [];
@@ -174,6 +185,47 @@ export function limitChip(status: AutopilotStatus, now: Date): LimitChip | null 
     return { text: "Usage limit reached, reset unknown, waiting for you", countdown: null, needsYou: true };
   }
   return null;
+}
+
+export interface WaitingChip {
+  text: string;
+  /** `waiting 12 m`: how long, counted from when the daemon says it began. */
+  age: string;
+  /** What to do, and for a terminal dialog the honest limit of this page. */
+  hint: string | null;
+}
+
+/** The chip for a wait on a person (CUT-312), or null. `kinds` picks which waits to word. */
+export function waitingChip(
+  status: AutopilotStatus,
+  now: Date,
+  kinds: WaitKind[] = ["decision", "blocked"],
+): WaitingChip | null {
+  const waiting = status.waiting;
+  if (!waiting || !kinds.includes(waiting.kind)) return null;
+  const since = new Date(waiting.since);
+  const age = Number.isNaN(since.getTime())
+    ? waiting.age_s
+    : Math.max(0, (now.getTime() - since.getTime()) / 1000);
+  const age_text = `waiting ${elapsedText(age)}`;
+  switch (waiting.kind) {
+    case "blocked":
+      return {
+        text: "The session is waiting on a dialog in its terminal",
+        age: age_text,
+        hint: "A terminal dialog can only be answered in the terminal. Nothing here can answer it.",
+      };
+    case "decision":
+      return {
+        text: "Waiting for your decision",
+        age: age_text,
+        hint: "Answer the card under Needs you. Autopilot's hours do not count this wait.",
+      };
+    case "plan":
+      return { text: "The plan is waiting for your approval", age: age_text, hint: null };
+    default:
+      return null;
+  }
 }
 
 /** What the plan card tells a person who is not happy with the plan: Autopilot does not edit it. */

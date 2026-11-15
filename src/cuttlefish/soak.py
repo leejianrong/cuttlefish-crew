@@ -11,8 +11,9 @@ What a score means, so two runs can be compared:
 * **Working** is time Autopilot was ``running`` with nothing waiting on a person. **Stalled** is the
   part of that where the builder's token count did not move for longer than ``stall_after_s``: it
   was running on paper and doing nothing. **Useful** is working minus stalled.
-* **Blocked** is ``running`` with a request waiting in Needs you. **Stuck** is Autopilot's own
-  ``stuck`` phase. Both are time a person was needed.
+* **Blocked** is ``running`` with a request waiting in Needs you, or ``waiting_on_you``. **Stuck**
+  is Autopilot's own ``stuck`` phase. Both are time a person was needed. ``blocked_on_person_s`` is
+  blocked plus the wait for plan approval: every second the run waited on someone (CUT-312).
 * An **intervention** is something a person (or the driver standing in for one) did. Approving the
   plan is expected, so it is counted apart from the rest; ``human`` counts the rest.
 * Tokens are Autopilot's own figure (cache reads left out), a guard and not a bill. A cost per day
@@ -119,6 +120,11 @@ class Score:
         return max(0.0, self.working_s - self.stalled_s)
 
     @property
+    def blocked_on_person_s(self) -> float:
+        """Time the run waited on a person: a plan to approve, or a request or dialog (CUT-312)."""
+        return self.blocked_s + self.awaiting_approval_s
+
+    @property
     def stuck_total_s(self) -> float:
         """Time a person was needed or the builder was going nowhere: stuck, blocked and stalled."""
         return self.stuck_s + self.blocked_s + self.stalled_s
@@ -127,6 +133,7 @@ class Score:
         data = dataclasses.asdict(self)
         data["interventions"] = [i.to_json() for i in self.interventions]
         data["useful_s"] = self.useful_s
+        data["blocked_on_person_s"] = self.blocked_on_person_s
         data["stuck_total_s"] = self.stuck_total_s
         return data
 
@@ -196,6 +203,8 @@ def score(
 
 def _bucket(sample: Sample) -> str:
     phase = sample.phase
+    if phase == "waiting_on_you":
+        return "blocked"
     if phase == "running":
         return "blocked" if sample.waiting > 0 else "working"
     if phase in ("planning", "off"):
@@ -259,7 +268,9 @@ def render_report(result: Score, meta: Mapping[str, Any] | None = None) -> str:
         "| --- | --- |",
         f"| Useful work | {_clock(result.useful_s)} ({_share(result.useful_s, wall)} of the run) |",
         f"| Stalled (running, no tokens moving) | {_clock(result.stalled_s)} |",
-        f"| Blocked on a permission | {_clock(result.blocked_s)} |",
+        f"| Blocked on a permission or a dialog | {_clock(result.blocked_s)} |",
+        f"| Waiting on a person in all (blocked and plan approval) | "
+        f"{_clock(result.blocked_on_person_s)} |",
         f"| Stuck | {_clock(result.stuck_s)} |",
         f"| Paused | {_clock(result.paused_s)} |",
         f"| Planning and waiting for approval | "

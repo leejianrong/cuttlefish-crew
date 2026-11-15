@@ -27,6 +27,7 @@ Phase = Literal[
     "limit",
     "stuck",
     "limit_wait",
+    "waiting_on_you",
 ]
 
 #: Phases in which nothing more will happen without a person.

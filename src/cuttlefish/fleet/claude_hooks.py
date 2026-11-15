@@ -186,7 +186,7 @@ class ClaudeHooks:
                 project, _str(payload.get("error")), _str(payload.get("error_details"))
             )
         elif event == "Notification":
-            self._note_blocked(project, payload)
+            await self._note_blocked(project, payload)
         tool = str(payload.get("tool_name") or "")
         raw = payload.get("tool_input")
         tool_input: Mapping[str, Any] = raw if isinstance(raw, dict) else {}
@@ -210,7 +210,7 @@ class ClaudeHooks:
             return answer
         return {}
 
-    def _note_blocked(self, project: Project, payload: Mapping[str, Any]) -> None:
+    async def _note_blocked(self, project: Project, payload: Mapping[str, Any]) -> None:
         """An Auto session showing a dialog the hooks never decided (an edge permission prompt, an
         elicitation) is stuck until someone is at its terminal. No card can answer it, so it is
         journaled once per block (CUT-312) and the session reads as ``dialog`` until it moves on."""
@@ -224,6 +224,7 @@ class ClaudeHooks:
             project,
             SessionBlocked(kind=kind or "", message=(_str(payload.get("message")) or "")[:500]),
         )
+        await self._daemon.autopilot.on_blocked(project, _str(payload.get("message")) or "")
 
     async def _refuse_default_branch(
         self, project: Project, payload: Mapping[str, Any], tool_input: Mapping[str, Any]

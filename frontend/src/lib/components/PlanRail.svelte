@@ -9,6 +9,7 @@
     currentStep,
     elapsedText,
     limitChip,
+    waitingChip,
     needsPerson,
     phaseLabel,
     planProgress,
@@ -32,7 +33,9 @@
   const controls = $derived(controlsFor(status.phase));
   const current = $derived(currentStep(status));
   const progress = $derived(planProgress(status));
-  const limited = $derived(limitChip(status, new Date()) !== null);
+  const limited = $derived(
+    limitChip(status, new Date()) !== null || waitingChip(status, new Date()) !== null,
+  );
 </script>
 
 <aside class="rail" aria-label="Plan and run">

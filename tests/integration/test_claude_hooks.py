@@ -275,6 +275,35 @@ async def test_a_new_prompt_right_after_a_stop_means_no_nudge_is_pending(rig: Ri
     assert rig.project_id not in rig.daemon.autopilot._tasks
 
 
+async def test_a_blocked_auto_session_parks_a_running_autopilot_until_it_moves_on(
+    rig: Rig,
+) -> None:
+    from cuttlefish.autopilot import Limits
+    from cuttlefish.plan import PLAN_PATH
+
+    project = rig.daemon.projects.get(rig.project_id)
+    rig.daemon.autopilot._settle_s = 0.02
+    await rig.daemon.autopilot.begin(project, "Build it", "claude-code", Limits())
+    plan = rig.root / PLAN_PATH
+    plan.parent.mkdir(parents=True)
+    plan.write_text("- [ ] one\n- [ ] two\n")
+    await rig.hook("Stop")
+    await asyncio.sleep(0.3)
+
+    async def delivered(project_id: str, text: str) -> dict[str, str]:
+        return {"sent": "delivered"}
+
+    rig.daemon.send_chat = delivered  # type: ignore[method-assign,assignment]
+    await rig.daemon.autopilot.approve(project)
+    rig.set_mode("auto")
+    await rig.hook("Notification", notification_type="permission_prompt", message="Allow it?")
+    status = await rig.daemon.autopilot.status(project)
+    assert status["phase"] == "waiting_on_you" and status["waiting"]["kind"] == "blocked"
+    assert "terminal" in status["reason"]
+    await rig.hook("PostToolUse", tool_name="Bash", tool_input={})
+    assert (await rig.daemon.autopilot.status(project))["phase"] == "running"
+
+
 # -- a card, held until a person answers ----------------------------
 
 

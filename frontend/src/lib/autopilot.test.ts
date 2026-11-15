@@ -8,6 +8,7 @@ import {
   currentStep,
   elapsedText,
   limitChip,
+  waitingChip,
   needsPerson,
   phaseLabel,
   planProgress,
@@ -122,5 +123,33 @@ describe("waiting for a usage limit (CUT-299)", () => {
     });
     expect(limitChip(status([false], "running"), now)).toBeNull();
     expect(limitChip({ ...status([false], "limit_wait"), resume_at: "nonsense" }, now)).toBeNull();
+  });
+});
+
+describe("waitingChip (CUT-312)", () => {
+  const now = new Date(2026, 10, 12, 10, 0, 0);
+  const since = new Date(2026, 10, 12, 8, 30, 0).toISOString();
+  const parked = (kind: "plan" | "decision" | "blocked") => ({
+    ...status([false], "waiting_on_you"),
+    waiting: { kind, since, age_s: 0 },
+  });
+
+  it("says how long and, for a terminal dialog, that only the terminal can answer it", () => {
+    const chip = waitingChip(parked("blocked"), now);
+    expect(chip?.age).toBe("waiting 1 h 30 m");
+    expect(chip?.hint).toMatch(/only be answered in the terminal/);
+  });
+
+  it("points a decision at its card and words a plan wait only when asked for", () => {
+    expect(waitingChip(parked("decision"), now)?.hint).toMatch(/Needs you/);
+    expect(waitingChip(parked("plan"), now)).toBeNull();
+    expect(waitingChip(parked("plan"), now, ["plan"])?.text).toMatch(/plan is waiting/);
+    expect(waitingChip(status([false], "running"), now)).toBeNull();
+  });
+
+  it("is a phase that needs a person and offers Carry on and Stop", () => {
+    expect(needsPerson("waiting_on_you")).toBe(true);
+    expect(phaseLabel("waiting_on_you")).toBe("Waiting for you");
+    expect(controlsFor("waiting_on_you")).toEqual(["resume", "stop"]);
   });
 });
