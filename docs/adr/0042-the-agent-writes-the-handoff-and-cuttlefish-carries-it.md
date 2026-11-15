@@ -77,3 +77,12 @@ Not handovers. Its job is a manager's: consolidating progress across projects an
 - **The summariser is deleted:** `cuttlefish.llm`, `tasks.llm.call_llm`, `Runtime.llm_provider`, `CUTTLEFISH_LLM_PROVIDER`,
   `CUTTLEFISH_LLM_MODEL`, `CUTTLEFISH_HANDOFF=summary` and the `anthropic` and `openai` dependencies. A continuation needs no key.
   `LlmCallCompleted` and `LlmCallFailed` stay as event types so journals written before this still decode.
+
+## Addendum 2026-11-15 (CUT-313): the checks on a handoff are advisory
+
+cuttlefish now measures handoffs, and the measures stay inside this ADR's line: no model call, nothing cuttlefish writes in its own words.
+
+- **What is measured.** String and set checks on the handoff text (headings present, Remaining non-trivial, Done naming an edited path, "unconfirmed" markers, length, and recall of the files edited, recent failures, open requests and next plan step), journaled as `HandoverChecked` beside each `HandoverWritten`. For Claude Code's own compaction, which leaves only a "Context was compacted" divider and no document, timing and repeat checks on what the builder did next, derived at read time and stored nowhere (ADR-0004).
+- **They are advice, never proof.** A word match does not show a handoff is right, and a miss does not show it is wrong. A failed check never blocks a round, never asks the agent again and never changes what the next session is told. The one thing it tightens is `handoff_is_usable`, which now needs text under Done and Remaining, not only the headings.
+- **Native compaction is observe-only.** There is nothing to re-ask and no document to replace.
+- **The re-ask slice is deferred.** Asking the agent again when a check fails would be a second prompt in a live session, with the cost and the one-shot-transport limits above; it needs its own decision if the numbers ever justify it.
