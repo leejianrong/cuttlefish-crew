@@ -132,17 +132,20 @@ its next stop or for **Nudge now**. `GET /api/projects/{id}/autopilot` and `POST
 are the same for a script; the goal route takes `"autopilot": true` or `{"hours": 8, "tokens": 2000000, "nudges": 100}`.
 
 **A usage limit.** If a Claude Code builder stops because its plan's usage limit was hit, Autopilot does not nudge it into
-the wall. It shows **Waiting for the usage limit** with the time it will continue (`Will continue at 2026-11-12 11:01 UTC`,
-a minute after the reset, in the rail, the goal card and the timeline), sends the one usual "continue" then, and tries again
+the wall. It shows a chip, **Waiting for usage limit, continues 14:18 (in 2 h 11 m)**, in your local time with a countdown
+(the rail, the folded plan strip on a phone, and the goal card and timeline in UTC words: `Will continue at 2026-11-12 11:01 UTC`,
+a minute after the reset), sends the one usual "continue" then, and tries again
 after another limit up to five times in a row before it gives up and says so. It happens only for an Autopilot you approved,
 only when the stop was the usage limit (Claude Code's `StopFailure` hook, error `rate_limit`), and never past Autopilot's own
 time, token and nudge limits. **Pause**, **Stop Autopilot**, **Carry on now** and the kill switch end the wait, and a message
 you send the builder ends it too. If the stop does not say when the limit resets and the usage card has not seen it either,
-nothing is guessed: the rail says the reset time is not known and the builder waits for you. The switch **Continue after a
+nothing is guessed: the chip says **Usage limit reached, reset unknown, waiting for you** and the builder waits for you. The switch **Continue after a
 usage limit resets** on the goal card is per project and on by default, because Autopilot is already your yes to unattended
 continuing and the wait is bounded and visible; turn it off and a limited builder just stays stopped
-(`PATCH /api/projects/{id}/continue-after-reset`, Admin). Only Claude Code reports the stop; Codex and kopicode sessions have no
-such hook. A session started before this version needs a restart to pick the new hook up. The wait survives a daemon restart.
+(`PATCH /api/projects/{id}/continue-after-reset`, Admin). Claude Code reports the stop itself. An API 529 (`overloaded`) stop, and a provider rate limit that names no reset
+(kopicode's `provider_rate_limit`), are retried after a doubling wait instead (`CUTTLEFISH_LIMIT_BACKOFF_S`, default 300 s, at most an
+hour; the chip says **Provider busy, retrying**); `CUTTLEFISH_MAX_LIMIT_WAITS` (default 5) is how many in a row it waits out. Codex
+is waited for when its usage card, refreshed, shows the window out; a Codex or kopicode session in tmux has no stop hook. A session started before this version needs a restart to pick the new hook up. The wait survives a daemon restart.
 
 **Stop everything.** A **Stop all agents** button at the top of the Projects page, and **Stop everything here** on each
 project page, end every running builder at once and ask a running team to stop. Each is two taps (the second is **Stop now**),
